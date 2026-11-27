@@ -10,11 +10,13 @@
 import { type VaultFieldProblems, vaultAuthOf, vaultFieldProblems, vaultProblemOf } from '@whombat/client';
 import { CreateVaultEntryBody } from '@whombat/core/contracts';
 import {
-  VAULT_COPY,
   VAULT_NEW_TEMPLATES,
   VAULT_TEMPLATE_DEFS,
   type VaultAuth,
   type VaultAuthType,
+  vaultCopy,
+  vaultEntryLabel,
+  vaultTemplateDescription,
 } from '@whombat/core/vault';
 import type { z } from 'zod';
 import { mobileTranslator } from '../i18n/translate';
@@ -37,8 +39,8 @@ export function vaultFormText(locale?: string) {
     username: t('vaultForm.vaultFormText.username'),
     namePlaceholder: {
       token: 'Grafana',
-      basic: 'Printer admin',
-      login: 'Supplier portal',
+      basic: t('data.vaultForm.placeholder.basic'),
+      login: t('data.vaultForm.placeholder.login'),
     } satisfies Record<PhoneVaultTemplate, string>,
     addressPlaceholder: {
       token: 'https://api.example.com/v1',
@@ -89,9 +91,16 @@ export function phoneVaultTemplates(): PhoneVaultTemplate[] {
 }
 
 /** The template choice's row: “MCP server” and what it is. */
-export function vaultTemplateChoice(template: PhoneVaultTemplate): { title: string; body: string } {
+export function vaultTemplateChoice(
+  template: PhoneVaultTemplate,
+  locale?: string,
+): { title: string; body: string } {
   const def = VAULT_TEMPLATE_DEFS[template];
-  return { title: def.label, body: def.description };
+  const auth = TEMPLATE_AUTHS[template][0] ?? null;
+  return {
+    title: vaultEntryLabel({ kind: def.kind, auth: auth ? { type: auth } : null }, locale),
+    body: vaultTemplateDescription(template, mobileTranslator(locale).t('data.vaultForm.theAgent'), locale),
+  };
 }
 
 /** The Add to Vault form, as typed. */
@@ -137,30 +146,42 @@ export interface VaultFormFields {
   queryWarning: string | null;
 }
 
-export function vaultFormFields(template: PhoneVaultTemplate, form: VaultForm): VaultFormFields {
+export function vaultFormFields(
+  template: PhoneVaultTemplate,
+  form: VaultForm,
+  locale?: string,
+): VaultFormFields {
+  const text = vaultFormText(locale);
+  const copy = vaultCopy(locale);
   const login = template === 'login';
   const withUsername = template === 'basic' || login;
   const auths = TEMPLATE_AUTHS[template];
   return {
-    addressLabel: login ? VAULT_FORM_TEXT.signInPage : VAULT_FORM_TEXT.address,
+    addressLabel: login ? text.signInPage : text.address,
     auths: auths.length > 1 ? auths : [],
     headerName: form.auth === 'header',
     queryName: form.auth === 'query',
     username: withUsername,
     secret: form.auth !== 'none',
-    secretLabel: withUsername ? VAULT_FORM_TEXT.secretLabel.password : VAULT_FORM_TEXT.secretLabel.token,
-    httpWarning: /^\s*http:\/\//i.test(form.url) ? VAULT_COPY.httpWarning : null,
-    queryWarning: form.auth === 'query' ? VAULT_COPY.queryWarning : null,
+    secretLabel: withUsername ? text.secretLabel.password : text.secretLabel.token,
+    httpWarning: /^\s*http:\/\//i.test(form.url) ? copy.httpWarning : null,
+    queryWarning: form.auth === 'query' ? copy.queryWarning : null,
   };
 }
 
 /** A public address needs https; addresses on your network need the home network list (VT-11, VT-12). */
-export function vaultAddressHint(networks: readonly { cidr: string; ports: readonly number[] }[]): string {
+export function vaultAddressHint(
+  networks: readonly { cidr: string; ports: readonly number[] }[],
+  locale?: string,
+): string {
+  const { t, tp } = mobileTranslator(locale);
   return networks.length
-    ? `Public addresses need https. On your network: ${networks
-        .map((n) => `${n.cidr} · ${n.ports.length === 1 ? 'port' : 'ports'} ${n.ports.join(', ')}`)
-        .join('; ')}.`
-    : 'Public addresses need https. Nothing on your network is on the home network list yet.';
+    ? t('data.vaultForm.addressHint', {
+        networks: networks
+          .map((n) => `${n.cidr} · ${tp('data.vault.ports', n.ports.length, { ports: n.ports.join(', ') })}`)
+          .join('; '),
+      })
+    : t('data.vaultForm.addressHintNone');
 }
 
 export type CreateVaultBody = z.input<typeof CreateVaultEntryBody>;
@@ -184,9 +205,13 @@ export function vaultCreateBody(template: PhoneVaultTemplate, form: VaultForm): 
 export type FieldProblems = VaultFieldProblems;
 
 /** The contract's own refusals of the body (`CreateVaultEntryBody`): what the server would say, before sending. */
-export function vaultFormProblems(template: PhoneVaultTemplate, form: VaultForm): FieldProblems {
+export function vaultFormProblems(
+  template: PhoneVaultTemplate,
+  form: VaultForm,
+  locale?: string,
+): FieldProblems {
   const parsed = CreateVaultEntryBody.safeParse(vaultCreateBody(template, form));
-  return parsed.success ? {} : vaultFieldProblems(parsed.error.issues);
+  return parsed.success ? {} : vaultFieldProblems(parsed.error.issues, locale);
 }
 
 /** Whether Save runs “Check connection” after creating (nothing checks a login or an SSH key from here). */
@@ -206,13 +231,14 @@ export interface ReplaceSecretModel {
   label: string;
 }
 
-export function replaceSecretModel(auth: VaultAuth | null): ReplaceSecretModel {
+export function replaceSecretModel(auth: VaultAuth | null, locale?: string): ReplaceSecretModel {
+  const text = vaultFormText(locale);
   const withUsername = auth?.type === 'basic' || auth?.type === 'form';
   return {
     none: auth?.type === 'none',
     withUsername,
     username: withUsername ? auth.username : '',
-    label: withUsername ? VAULT_FORM_TEXT.secretLabel.password : VAULT_FORM_TEXT.secretLabel.secret,
+    label: withUsername ? text.secretLabel.password : text.secretLabel.secret,
   };
 }
 
@@ -232,11 +258,14 @@ export function setSecretBody(
 }
 
 /** A Replace refusal where it shows: the value's problem under the secret field. */
-export function replaceProblemOf(error: unknown): { message: string | null; fields: FieldProblems } {
-  const p = vaultProblemOf(error);
+export function replaceProblemOf(
+  error: unknown,
+  locale?: string,
+): { message: string | null; fields: FieldProblems } {
+  const p = vaultProblemOf(error, locale);
   const fields = p.fields.value ? { secret: p.fields.value } : p.fields;
   return {
-    message: p.message ?? (Object.keys(fields).length ? null : VAULT_FORM_TEXT.failed),
+    message: p.message ?? (Object.keys(fields).length ? null : vaultFormText(locale).failed),
     fields,
   };
 }

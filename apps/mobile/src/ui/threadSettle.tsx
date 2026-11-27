@@ -5,8 +5,8 @@
  */
 
 import { Platform, View } from 'react-native';
-import { SETTLE_COPY } from '../data/threadSettle';
-import { useMobileT } from '../i18n';
+import { settleCopy } from '../data/threadSettle';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from './glanceColors';
@@ -17,9 +17,11 @@ import { hitSlopFor } from './touchTarget';
 /** “Settled” after the time of a settled thread still in its room (AP-6251): the time's mono, in the `ok` tone. */
 export function SettledMark() {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = settleCopy(rawLocale);
   return (
     <Text size={11.5} mono color={theme.colors.ok}>
-      {SETTLE_COPY.mark}
+      {copy.mark}
     </Text>
   );
 }
@@ -27,13 +29,15 @@ export function SettledMark() {
 /** The thread screen's Settle (the mock's `.hbtn.ok`): ✓ and the word in `ok`, on an `ok` hairline, 44dp. */
 export function SettleButton({ onPress }: { onPress: () => void }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = settleCopy(rawLocale);
   return (
     <Touchable
       onPress={onPress}
       feedback="wash"
       ringRadius={9}
-      accessibilityLabel={SETTLE_COPY.settleThread}
-      accessibilityHint={SETTLE_COPY.settleHint}
+      accessibilityLabel={copy.settleThread}
+      accessibilityHint={copy.settleHint}
       hitSlop={hitSlopFor(34)}
       style={{
         height: 34,
@@ -48,7 +52,7 @@ export function SettleButton({ onPress }: { onPress: () => void }) {
     >
       <CircleCheck size={15} color={theme.colors.ok} strokeWidth={1.7} />
       <Text size={13} weight={500} color={theme.colors.ok}>
-        {SETTLE_COPY.settle}
+        {copy.settle}
       </Text>
     </Touchable>
   );
@@ -80,6 +84,8 @@ export function ShareThreadButton({ onPress }: { onPress: () => void }) {
 /** A settled thread, opened (AP-6154; the mock's `.state`): ✓ “Settled 2 hours ago” and Open again, on the `ok` tint. */
 export function SettledThreadLine({ when, onOpenAgain }: { when: string; onOpenAgain: () => void }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = settleCopy(rawLocale);
   return (
     <View
       style={{
@@ -111,7 +117,7 @@ export function SettledThreadLine({ when, onOpenAgain }: { when: string; onOpenA
         onPress={onOpenAgain}
         feedback="wash"
         ringRadius={8}
-        accessibilityHint={SETTLE_COPY.openAgainHint}
+        accessibilityHint={copy.openAgainHint}
         hitSlop={hitSlopFor(32)}
         style={{
           height: 32,
@@ -123,7 +129,7 @@ export function SettledThreadLine({ when, onOpenAgain }: { when: string; onOpenA
         }}
       >
         <Text size={13} weight={600}>
-          {SETTLE_COPY.openAgain}
+          {copy.openAgain}
         </Text>
       </Touchable>
     </View>

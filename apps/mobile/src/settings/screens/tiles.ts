@@ -13,43 +13,46 @@ import {
   ownWidgetName,
 } from '@whombat/client/desk';
 import { type Grid, serverShow } from '@whombat/screen';
+import { mobileTranslator } from '../../i18n/translate';
 
 /** The phone's words for Settings → Screens and the editor, beyond the shared ones (`DESK_SCREENS_TEXT`). */
-export const PHONE_SCREENS_TEXT = {
-  add: 'Add a screen',
-  addHint: 'A tablet, or a computer by a monitor',
-  full: 'This Whombat has as many screens as it can show. Remove one to add another.',
-  lettersIo: 'There’s never an I or an O in a screen’s letters. Check them on the screen.',
-  demoLetters: 'In the demo world the tablet shows {letters}.',
-  open: 'Open {name}',
-  editLayoutLine: 'Pages, widgets and their sizes',
-  tapHint: 'Touch a widget to move it, size it or change what it shows.',
-  emptyPage: 'Nothing on this page yet. Add a widget to start.',
-  didntFit: '{n} didn’t fit here after rearranging. {they} wait in Add a widget.',
-  didntFitOne: 'It',
-  didntFitMany: 'They',
-  page: 'This page',
-  pageName: 'Page name',
-  pageNameHint: 'Up to 24 letters. The top bar shows it.',
-  screen: 'This screen',
-  sizeHint: 'Larger draws everything bigger, with fewer cells.',
-  move: 'Move',
-  moveTo: {
-    left: 'Move {name} left',
-    right: 'Move {name} right',
-    up: 'Move {name} up',
-    down: 'Move {name} down',
-  },
-  where: '{w} × {h}, from column {x}, row {y}',
-  done: 'Done',
-  trying: 'On the screen for a minute, with “Preview from Settings” on it.',
-  tryIt: 'On the screen now for a minute, with “Preview from Settings” on it.',
-  newPage: 'A new page. Add widgets to it.',
-  pairFirst: 'Pair this Whombat’s screen first, on its page. Then you can choose what shows here.',
-  pageMore: 'More for {name}',
-  orderUp: 'Move {name} up',
-  orderDown: 'Move {name} down',
-} as const;
+export function phoneScreensText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    add: t('settings2.screens.add'),
+    addHint: t('settings2.screens.addHint'),
+    full: t('settings2.screens.full'),
+    lettersIo: t('settings2.screens.lettersIo'),
+    demoLetters: t('settings2.screens.demoLetters'),
+    open: t('settings2.screens.open'),
+    editLayoutLine: t('settings2.screens.editLayoutLine'),
+    tapHint: t('settings2.screens.tapHint'),
+    emptyPage: t('settings2.screens.emptyPage'),
+    page: t('settings2.screens.page'),
+    pageName: t('settings2.screens.pageName'),
+    pageNameHint: t('settings2.screens.pageNameHint'),
+    screen: t('settings2.screens.screen'),
+    sizeHint: t('settings2.screens.sizeHint'),
+    move: t('settings2.screens.move'),
+    moveTo: {
+      left: t('settings2.screens.moveLeft'),
+      right: t('settings2.screens.moveRight'),
+      up: t('settings2.screens.moveUp'),
+      down: t('settings2.screens.moveDown'),
+    },
+    where: t('settings2.screens.where'),
+    done: t('settings2.screens.done'),
+    trying: t('settings2.screens.trying'),
+    tryIt: t('settings2.screens.tryIt'),
+    newPage: t('settings2.screens.newPage'),
+    pairFirst: t('settings2.screens.pairFirst'),
+    pageMore: t('settings2.screens.pageMore'),
+    orderUp: t('settings2.screens.moveUp'),
+    orderDown: t('settings2.screens.moveDown'),
+  } as const;
+}
+
+export const PHONE_SCREENS_TEXT = phoneScreensText();
 
 /**
  * The smallest a cell is drawn (dp) and the gap between cells: with a 4dp slop on each side every tile is 44dp to the
@@ -179,8 +182,8 @@ export function tileSpoken(
 }
 
 /** “4 × 2, from column 5, row 1”: where the chosen widget is, under its name in its sheet. */
-export function tileWhere(w: Pick<DeskWidget, 'x' | 'y' | 'w' | 'h'>): string {
-  return fillDeskWords(PHONE_SCREENS_TEXT.where, { w: w.w, h: w.h, x: w.x + 1, y: w.y + 1 });
+export function tileWhere(w: Pick<DeskWidget, 'x' | 'y' | 'w' | 'h'>, locale?: string | null): string {
+  return fillDeskWords(phoneScreensText(locale).where, { w: w.w, h: w.h, x: w.x + 1, y: w.y + 1 });
 }
 
 /** “From 2 × 1 to 6 × 3. It shows more as it grows.” */
@@ -195,10 +198,7 @@ export function sizesLine(
 }
 
 /** Under the grid when a rearranging left widgets out: “2 didn’t fit here after rearranging. They wait in …”. */
-export function didntFitLine(n: number): string | null {
+export function didntFitLine(n: number, locale?: string | null): string | null {
   if (n <= 0) return null;
-  return fillDeskWords(PHONE_SCREENS_TEXT.didntFit, {
-    n,
-    they: n === 1 ? PHONE_SCREENS_TEXT.didntFitOne : PHONE_SCREENS_TEXT.didntFitMany,
-  });
+  return mobileTranslator(locale).t('settings2.screens.didntFit', { n });
 }

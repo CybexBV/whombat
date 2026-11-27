@@ -7,56 +7,73 @@
  * Pure, no DOM and no React Native.
  */
 import type { JobResult, JobResultAnswer, Message } from '@whombat/core';
-import { OPEN_IN_T3_CODE, T3_CODE_NAME } from './handoff';
+import { interpolate } from '@whombat/core/i18n';
+import { handoffWords, T3_CODE_NAME } from './handoff';
+import { clientTree } from './i18n/catalog';
+import { WORK_AREA_WORDS } from './i18n/messages/chatWork/work';
 import { stageTime } from './job';
 
-export const JOB_RESULT_WORDS = {
-  /** The name over the report: the program that wrote it. */
-  author: T3_CODE_NAME,
-  /** A point's advice, said by the council when the report says so. */
-  council: 'Council:',
-  advice: 'Advice:',
-  left: {
-    /** Under “Left for you”, while points wait for an answer. */
-    intro: 'Choose here, then send your answers together. They’re carried out in one go.',
-    reply: 'Reply in words',
-    replyPlaceholder: 'Your answer in your own words',
-    replyLabel: (title: string) => `Your answer to “${title}”`,
-    send: (marked: number) =>
-      marked === 0 ? 'Send answers' : `Send ${marked} ${marked === 1 ? 'answer' : 'answers'}`,
-    hintNone: 'Nothing is sent until you press Send.',
-    hintOpen: (open: number) => `${open} still open. You can answer ${open === 1 ? 'it' : 'them'} later.`,
-    hintAll: `${T3_CODE_NAME} does them in one go.`,
-    chose: (choice: string) => `You chose ${choice}`,
-    wrote: 'You answered in your own words',
-    /** While T3 Code works on what was sent; `time` is how long ago (`2m`). */
-    sent: (answers: number, time: string) =>
-      `${answers} ${answers === 1 ? 'answer' : 'answers'} sent to ${T3_CODE_NAME}. It’s on ${answers === 1 ? 'it' : 'them'} · ${time}`,
-    /** Once it carried them out; `time` is a clock time (`23:44`). */
-    done: (time: string) => `Done at ${time}. The report above is updated.`,
-    problem: `${T3_CODE_NAME} ran into a problem with your answers.`,
-    stopped: `${T3_CODE_NAME} was stopped before it finished your answers.`,
-    failed: 'Couldn’t send them. Try again.',
-  },
-  facts: {
-    testsPassed: 'Tests passed',
-    testsFailed: 'Tests failed',
-    files: (n: number) => `${count(n)} ${n === 1 ? 'file' : 'files'}`,
-    fewer: (n: number) => `${count(n)} ${n === 1 ? 'line' : 'lines'} fewer`,
-    more: (n: number) => `${count(n)} ${n === 1 ? 'line' : 'lines'} more`,
-    pullRequest: (n: number, state: string) => `Pull request #${n} ${state}`,
-    prState: { open: 'open', draft: 'is a draft', merged: 'merged', closed: 'closed' },
-    problem: 'Ran into a problem',
-    stopped: 'Stopped',
-    detail: 'Technical detail',
-    hideDetail: 'Hide technical detail',
-    open: OPEN_IN_T3_CODE,
-    rest: `The rest is in ${T3_CODE_NAME}`,
-  },
-} as const;
+/** A job result's words, in a locale (English when none). */
+export function jobResultWords(locale?: string | null) {
+  const w = clientTree(locale, WORK_AREA_WORDS).jobResult;
+  const t3 = T3_CODE_NAME;
+  const n = (value: number) => count(value, locale);
+  return {
+    /** The name over the report: the program that wrote it. */
+    author: T3_CODE_NAME,
+    /** A point's advice, said by the council when the report says so. */
+    council: w.council,
+    advice: w.advice,
+    left: {
+      /** Under “Left for you”, while points wait for an answer. */
+      intro: w.left.intro,
+      reply: w.left.reply,
+      replyPlaceholder: w.left.replyPlaceholder,
+      replyLabel: (title: string) => interpolate(w.left.replyLabel, { title }),
+      send: (marked: number) => (marked === 0 ? w.left.sendNone : w.left.send(marked)),
+      hintNone: w.left.hintNone,
+      hintOpen: (open: number) => w.left.hintOpen(open),
+      hintAll: interpolate(w.left.hintAll, { t3 }),
+      chose: (choice: string) => interpolate(w.left.chose, { choice }),
+      wrote: w.left.wrote,
+      /** While T3 Code works on what was sent; `time` is how long ago (`2m`). */
+      sent: (answers: number, time: string) => w.left.sent(answers, { t3, time }),
+      /** Once it carried them out; `time` is a clock time (`23:44`). */
+      done: (time: string) => interpolate(w.left.done, { time }),
+      problem: interpolate(w.left.problem, { t3 }),
+      stopped: interpolate(w.left.stopped, { t3 }),
+      failed: w.left.failed,
+    },
+    facts: {
+      testsPassed: w.facts.testsPassed,
+      testsFailed: w.facts.testsFailed,
+      files: (value: number) => w.facts.files(value, { n: n(value) }),
+      fewer: (value: number) => w.facts.fewer(value, { n: n(value) }),
+      more: (value: number) => w.facts.more(value, { n: n(value) }),
+      pullRequest: (num: number, state: string) => interpolate(w.facts.pullRequest, { n: num, state }),
+      prState: {
+        open: w.facts.prState.open,
+        draft: w.facts.prState.draft,
+        merged: w.facts.prState.merged,
+        closed: w.facts.prState.closed,
+      },
+      problem: w.facts.problem,
+      stopped: w.facts.stopped,
+      detail: w.facts.detail,
+      hideDetail: w.facts.hideDetail,
+      open: handoffWords(locale).openInT3Code,
+      rest: interpolate(w.facts.rest, { t3 }),
+    },
+  };
+}
 
-function count(n: number): string {
-  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** A job result's words, in English. */
+export const JOB_RESULT_WORDS = jobResultWords();
+
+const wordsIn = (locale?: string | null) => (locale ? jobResultWords(locale) : JOB_RESULT_WORDS);
+
+function count(n: number, locale?: string | null): string {
+  return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, locale?.toLowerCase().startsWith('nl') ? '.' : ',');
 }
 
 /* The report ----------------------------------------------------------------------------------------------------------- */
@@ -329,8 +346,8 @@ export interface JobResultView {
 export const isJobResult = (m: Pick<Message, 'jobResult' | 'deletedAt'>): boolean =>
   !!m.jobResult && !m.deletedAt;
 
-export function jobResultFacts(r: JobResult): JobResultFact[] {
-  const W = JOB_RESULT_WORDS.facts;
+export function jobResultFacts(r: JobResult, locale?: string | null): JobResultFact[] {
+  const W = wordsIn(locale).facts;
   const facts: JobResultFact[] = [];
   if (r.outcome !== 'completed')
     facts.push({
@@ -366,7 +383,10 @@ export function jobResultFacts(r: JobResult): JobResultFact[] {
 }
 
 /** A result message as the apps draw it; null for any other message. */
-export function jobResultView(m: Pick<Message, 'text' | 'jobResult' | 'deletedAt'>): JobResultView | null {
+export function jobResultView(
+  m: Pick<Message, 'text' | 'jobResult' | 'deletedAt'>,
+  locale?: string | null,
+): JobResultView | null {
   const r = m.jobResult;
   if (!r || m.deletedAt) return null;
   const report = jobReport(m.text);
@@ -382,7 +402,7 @@ export function jobResultView(m: Pick<Message, 'text' | 'jobResult' | 'deletedAt
     open: points.filter((p) => !p.answer).length,
     pending: pending ? { answers: pending.answers.length, at: pending.at } : null,
     done: last?.doneAt && last.outcome ? { at: last.doneAt, outcome: last.outcome } : null,
-    facts: jobResultFacts(r),
+    facts: jobResultFacts(r, locale),
     tone: r.outcome === 'failed' ? 'bad' : r.outcome === 'stopped' ? 'quiet' : 'ok',
     url: r.url,
     cut: r.cut,
@@ -414,9 +434,10 @@ export function jobAnswersOf(
 export function jobSendBar(
   view: Pick<JobResultView, 'open' | 'pending'>,
   marked: number,
+  locale?: string | null,
 ): { button: string; enabled: boolean; hint: string } | null {
   if (view.pending || view.open === 0) return null;
-  const W = JOB_RESULT_WORDS.left;
+  const W = wordsIn(locale).left;
   const left = view.open - marked;
   return {
     button: W.send(marked),

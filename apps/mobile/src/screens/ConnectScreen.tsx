@@ -23,13 +23,13 @@ import {
   asksAccess,
   asServerNote,
   authNameOf,
-  CATALOG_REASON_TEXT,
-  CONNECT_FORM_TEXT,
   type ConnectDraft,
   type ConnectProblem,
+  catalogReasonText,
   codeShown,
   connectableEntry,
   connectBase,
+  connectFormText,
   connectionWords,
   connectProblem,
   connectReturnTo,
@@ -94,7 +94,7 @@ import {
 import { connectionLogo, connectionsWebPath } from '../data/connections';
 import { useAgentWords } from '../data/useAgent';
 import { useWebUrl } from '../data/useWebUrl';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { OFFER_LINK } from '../managed/useReach';
@@ -137,27 +137,31 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Connect'>;
 
 export function ConnectScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
+  const catalogReasonTextHere = catalogReasonText(rawLocale);
+  const connectFormTextHere = connectFormText(rawLocale);
   const connectScreenTextHere = connectScreenText(rawLocale);
 
   const insets = useSafeAreaInsets();
   const { slug } = useBurrow();
   const { catalogId } = route.params;
   // The screen under this one (a link opened it from anywhere): its name on “‹ …”.
-  const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key));
+  const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key, rawLocale));
   const entry = connectableEntry(catalogId);
   const catalog = useConnectionsCatalog({}, { retry: false });
   const list = useCatalogConnections({ params: { burrow: slug } }, { retry: false });
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Connections'));
   const url = linkedAddress(route.params.url) ?? undefined;
   // A sign-in elsewhere that came back refused (`connect_error=`): said above the form, once.
-  const [returned, setReturned] = useState(() => catalogConnectErrorText(connectErrorOf(route.params.error)));
+  const [returned, setReturned] = useState(() =>
+    catalogConnectErrorText(connectErrorOf(route.params.error), rawLocale),
+  );
   useEffect(() => {
-    const text = catalogConnectErrorText(connectErrorOf(route.params.error));
+    const text = catalogConnectErrorText(connectErrorOf(route.params.error), rawLocale);
     if (text) {
       setReturned(text);
       navigation.setParams({ error: undefined });
     }
-  }, [route.params.error, navigation]);
+  }, [route.params.error, navigation, rawLocale]);
 
   if (!entry)
     return (
@@ -169,12 +173,13 @@ export function ConnectScreen({ route, navigation }: Props) {
 
   const status = catalog.data?.entries.find((e) => e.catalogId === entry.id);
   const appMethod = entry.signIn.find((m) => m.kind === 'app_oauth');
-  const gate = list.data || list.error ? connectGate({ entry, status, offerLink: OFFER_LINK }) : null;
+  const gate =
+    list.data || list.error ? connectGate({ entry, status, offerLink: OFFER_LINK, locale: rawLocale }) : null;
   // The level the assistant's card chose (`&access=`); else the form chooses by risk.
   const access = connectAccessOf(route.params.access) ?? undefined;
   const returnTo = connectReturnPathOf(route.params.returnTo) ?? undefined;
   // Proxmox VE, its Backup Server and Unraid: Add as a server first (connect-in-chat.md).
-  const server = asServerNote(entry, url);
+  const server = asServerNote(entry, url, rawLocale);
   const appSetup =
     appMethod && status?.app ? <AppSetup entry={entry} method={appMethod} app={status.app} /> : null;
   const top = (
@@ -214,14 +219,14 @@ export function ConnectScreen({ route, navigation }: Props) {
             {addressReasonOf(status) === 'needs_secure_address' ? (
               // One way forward: This Whombat → About → REACH, where Tailscale (and Link) are turned on.
               <Button
-                label={CATALOG_REASON_TEXT.needsSecureAddressAction}
+                label={catalogReasonTextHere.needsSecureAddressAction}
                 variant="secondary"
                 onPress={() => navigation.navigate('WhombatAbout', { at: 'reach' })}
               />
             ) : addressReasonOf(status) === 'needs_mac' ? (
               // Find My reads through a Mac: Add a server, where the Mac is added (findmy-connection.md §1.2).
               <Button
-                label={CATALOG_REASON_TEXT.needsMacAction}
+                label={catalogReasonTextHere.needsMacAction}
                 variant="secondary"
                 onPress={() => navigation.navigate('AddServer', { back: entry.name })}
               />
@@ -239,7 +244,7 @@ export function ConnectScreen({ route, navigation }: Props) {
             top={top}
             bottomInset={insets.bottom}
             onConnected={(connectionId, label) => {
-              showNotice(CONNECT_FORM_TEXT.connected(label));
+              showNotice(connectFormTextHere.connected(label));
               const target = returnTo ? appScreenUrlForPath(returnTo) : null;
               if (target && openAppUrl(target)) return;
               navigation.replace('Thing', {
@@ -307,14 +312,16 @@ function ConnectForm({
   bottomInset: number;
   onConnected: (connectionId: string, label: string) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
   const connectScreenTextHere = connectScreenText(rawLocale);
 
   const theme = useTheme();
   const managed = useManaged();
   const webUrl = useWebUrl();
   const assistant = useAgentWords();
-  const words = connectionWords(assistant.name);
+  const words = connectionWords(assistant.name, { locale: rawLocale });
   // The steps, sign in once, Look only and the guided token (CS-50, AP-843).
   // Signing in on the service's own page (Plex's) where the runtime has it; an older one offers the entry's token (CT-744).
   const list = useCatalogConnections({ params: { burrow: slug } }, { retry: false });
@@ -368,7 +375,7 @@ function ConnectForm({
     startService.isPending ||
     allowNetwork.isPending ||
     identify.isPending;
-  const warning = httpWarning(fields, choice.kind, method, entry.id);
+  const warning = httpWarning(fields, choice.kind, method, entry.id, rawLocale);
   const sameServiceExists = (list.data?.connections ?? []).some((c) => c.catalogId === entry.id);
   const placeholderLabel = defaultConnectionLabel(entry, fields, {
     onlyOne: !sameServiceExists && entry.category !== 'custom',
@@ -404,12 +411,21 @@ function ConnectForm({
   async function runIdentify(raw: string = fields.url ?? '') {
     const address = raw.trim();
     if (!address) {
-      setProblem({ ...NO_PROBLEM, fields: { url: `${urlField?.label ?? 'Address'} is needed.` } });
+      setProblem({
+        ...NO_PROBLEM,
+        fields: {
+          url: tMobile('screens2.connect.isNeeded', {
+            label: urlField?.label ?? tMobile('screens2.connect.address'),
+          }),
+        },
+      });
       return;
     }
     // An address with its scheme is checked here first (TrueNAS refuses `http://`): its reason under the field.
     const local =
-      urlField && /^[a-z][a-z0-9+.-]*:\/\//i.test(address) ? fieldProblem(urlField, address) : null;
+      urlField && /^[a-z][a-z0-9+.-]*:\/\//i.test(address)
+        ? fieldProblem(urlField, address, rawLocale)
+        : null;
     if (local) {
       asked.current = null;
       setProblem({ ...NO_PROBLEM, fields: { url: local } });
@@ -434,7 +450,7 @@ function ConnectForm({
       setRevealed(true);
     } catch (err) {
       asked.current = null;
-      const p = connectProblem(err);
+      const p = connectProblem(err, undefined, undefined, rawLocale);
       setProblem(p);
       // Only a refused or unreadable address holds the form back; anything else, the person can still go on.
       if (!p.network && !p.fields.url) setRevealed(true);
@@ -481,7 +497,7 @@ function ConnectForm({
   async function connect(current: Record<string, string> = fields) {
     if (busy) return;
     if (!revealed) return runIdentify();
-    const local = draftProblems(entry, choice, shown, draft(current));
+    const local = draftProblems(entry, choice, shown, draft(current), rawLocale);
     if (Object.keys(local).length) {
       setProblem({ ...NO_PROBLEM, fields: local });
       if (opensMore(local)) setMore(true);
@@ -495,7 +511,7 @@ function ConnectForm({
           body: createBody(entry, choice, shown, draft(current)),
         });
         if (result.status !== 'ok') {
-          setProblem({ ...NO_PROBLEM, message: CONNECT_FORM_TEXT.notThrough });
+          setProblem({ ...NO_PROBLEM, message: connectFormTextHere.notThrough });
           return;
         }
         // The secrets go with the connection: the form doesn't keep them.
@@ -510,7 +526,7 @@ function ConnectForm({
           body: connectBase(entry, shown, draft(current)),
         });
         if (result.status !== 'ok') {
-          setProblem({ ...NO_PROBLEM, message: CONNECT_FORM_TEXT.notThrough });
+          setProblem({ ...NO_PROBLEM, message: connectFormTextHere.notThrough });
           return;
         }
         setLogin({ kind: 'nextcloud', flow: result.data });
@@ -522,7 +538,7 @@ function ConnectForm({
           body: serviceLoginBody(entry, shown, draft(current)),
         });
         if (result.status !== 'ok') {
-          setProblem({ ...NO_PROBLEM, message: CONNECT_FORM_TEXT.notThrough });
+          setProblem({ ...NO_PROBLEM, message: connectFormTextHere.notThrough });
           return;
         }
         setLogin({ kind: 'service', flow: result.data, name: entry.name });
@@ -543,7 +559,7 @@ function ConnectForm({
       }
     } catch (err) {
       // A session's password keeps the server's words for a refusal (AP-3805).
-      show(connectProblem(err, undefined, method));
+      show(connectProblem(err, undefined, method, rawLocale));
     }
   }
 
@@ -554,14 +570,14 @@ function ConnectForm({
         body: { cidr: problem.network.cidr, port: problem.network.port, note: entry.name },
       });
       if (result.status !== 'ok') return;
-      showNotice(CONNECT_FORM_TEXT.networkAdded(problem.network.cidr, problem.network.port));
+      showNotice(connectFormTextHere.networkAdded(problem.network.cidr, problem.network.port));
       if (revealed) await connect();
       else {
         asked.current = null;
         await runIdentify();
       }
     } catch (err) {
-      show(connectProblem(err));
+      show(connectProblem(err, undefined, undefined, rawLocale));
     }
   }
 
@@ -575,7 +591,7 @@ function ConnectForm({
 
   async function runProbe() {
     const address = fields.url?.trim() ?? '';
-    const p = urlField ? fieldProblem(urlField, address) : null;
+    const p = urlField ? fieldProblem(urlField, address, rawLocale) : null;
     if (p) {
       setProblem({ ...NO_PROBLEM, fields: { url: p } });
       return;
@@ -588,13 +604,13 @@ function ConnectForm({
       const next = probedChoice(choices, result.data);
       if (next !== null) pick(next);
     } catch (err) {
-      setProblem(connectProblem(err));
+      setProblem(connectProblem(err, undefined, undefined, rawLocale));
     }
   }
 
   /** A paste or a picked file for the guided token (CS-15): fills what it finds, says what it filled. */
   function fill(m: GuidedMethod, text: string): string | null {
-    const found = pasteFill(entry, m, text);
+    const found = pasteFill(entry, m, text, rawLocale);
     if (!found) return null;
     if (Object.keys(found.fields).length) setFields((f) => ({ ...f, ...found.fields }));
     if (found.secret) setSecret(found.secret);
@@ -636,11 +652,11 @@ function ConnectForm({
   const certificate =
     identified?.certificate && !identified.certificate.trusted ? identified.certificate : null;
   const pinned = !!certificate && fields.fingerprint === certificate.sha256;
-  const note = identified ? identifyNote(entry, identified) : null;
-  const headers = stepHeaders(entry, { steps: true, revealed, words, identified });
-  const fixes = fixButtons(entry, problem, choices, index);
-  const levelNote = elsewhereLevelNote(entry, choice, access);
-  const limit = limitNote(entry, method, words);
+  const note = identified ? identifyNote(entry, identified, rawLocale) : null;
+  const headers = stepHeaders(entry, { steps: true, revealed, words, identified, locale: rawLocale });
+  const fixes = fixButtons(entry, problem, choices, index, rawLocale);
+  const levelNote = elsewhereLevelNote(entry, choice, access, rawLocale);
+  const limit = limitNote(entry, method, words, rawLocale);
   const elsewhere = !connectsHere(choice) && !waitsHere(choice);
 
   const where = urlField ? (
@@ -666,14 +682,16 @@ function ConnectForm({
       />
       {entry.id === 'custom_mcp' ? (
         <Button
-          label={CONNECT_FORM_TEXT.checkAddress}
+          label={connectFormTextHere.checkAddress}
           variant="secondary"
           disabled={probe.isPending || busy}
           onPress={() => void runProbe()}
         />
       ) : null}
-      {probed ? <Note tone={probeNote(probed).tone}>{probeNote(probed).text}</Note> : null}
-      {identify.isPending ? <Busy text={CONNECT_FORM_TEXT.identifying} /> : null}
+      {probed ? (
+        <Note tone={probeNote(probed, rawLocale).tone}>{probeNote(probed, rawLocale).text}</Note>
+      ) : null}
+      {identify.isPending ? <Busy text={connectFormTextHere.identifying} /> : null}
       {note && !identify.isPending ? <FoundNote note={note} /> : null}
       {certificate && !identify.isPending ? (
         <CertificateNote
@@ -695,7 +713,7 @@ function ConnectForm({
         value={access}
         onChange={setAccess}
         disabled={busy}
-        options={accessChoices(entry).map((a) => ({
+        options={accessChoices(entry, rawLocale).map((a) => ({
           value: a.value,
           title: a.label,
           line: words.access(a.text),
@@ -711,14 +729,14 @@ function ConnectForm({
       // A code the service asked for takes the focus (CS-03).
       key={codeAsked === null ? 'optional' : 'asked'}
       autoFocus={codeAsked !== null}
-      label={codeAsked === null ? CONNECT_FORM_TEXT.codeOptional : CONNECT_FORM_TEXT.code}
+      label={codeAsked === null ? connectFormTextHere.codeOptional : connectFormTextHere.code}
       value={code}
       onChangeText={(v) => {
         setCode(v);
         clearProblem('code');
       }}
-      placeholder={CONNECT_FORM_TEXT.codePlaceholder}
-      hint={codeAsked ?? CONNECT_FORM_TEXT.codeHelp}
+      placeholder={connectFormTextHere.codePlaceholder}
+      hint={codeAsked ?? connectFormTextHere.codeHelp}
       error={problem.fields.code}
       keyboardType="number-pad"
       autoComplete="one-time-code"
@@ -733,22 +751,22 @@ function ConnectForm({
     <View style={{ gap: 14 }}>
       {choices.length > 1 ? (
         <RadioCards
-          label={CONNECT_FORM_TEXT.howSignsIn}
+          label={connectFormTextHere.howSignsIn}
           value={index}
           onChange={pick}
           disabled={busy}
           options={choices.map((ch) => ({
             value: ch.index,
             title: ch.label,
-            tag: recommended(ch) ? CONNECT_FORM_TEXT.recommended : null,
-            line: signInNote(entry, ch.method),
+            tag: recommended(ch) ? connectFormTextHere.recommended : null,
+            line: signInNote(entry, ch.method, rawLocale),
           }))}
         />
       ) : null}
       {choices.length === 1 && method.kind === 'password' ? <Note>{method.creates}</Note> : null}
       {/* One sign-in elsewhere: its line, so the step isn't empty (the web's card line, AP-2903). */}
       {choices.length === 1 && signsInElsewhere(choice) && !waitsHere(choice) ? (
-        <Note>{signInNote(entry, method)}</Note>
+        <Note>{signInNote(entry, method, rawLocale)}</Note>
       ) : null}
       {method.kind === 'password' ? (
         <>
@@ -781,11 +799,11 @@ function ConnectForm({
           )}
           {/* A secret with its own name (T3 Code's pairing code): the steps to make one, like a token's. */}
           <GuideSteps
-            label={CONNECT_FORM_TEXT.making(secretWords(method).label)}
-            steps={guidedSteps(entry, secretWords(method), fields)}
+            label={connectFormTextHere.making(secretWords(method, rawLocale).label)}
+            steps={guidedSteps(entry, secretWords(method, rawLocale), fields)}
           />
           <FormField
-            label={method.secret?.label ?? CONNECT_FORM_TEXT.password}
+            label={method.secret?.label ?? connectFormTextHere.password}
             value={password}
             onChangeText={(v) => {
               setPassword(v);
@@ -793,7 +811,7 @@ function ConnectForm({
               clearProblem('password');
             }}
             placeholder={method.secret?.placeholder}
-            hint={method.secret?.help ?? CONNECT_FORM_TEXT.passwordHelp}
+            hint={method.secret?.help ?? connectFormTextHere.passwordHelp}
             error={problem.fields.password}
             secret
             maxLength={1024}
@@ -851,14 +869,16 @@ function ConnectForm({
       {ownAuth && method.kind === 'token' ? (
         <FormField
           label={
-            method.auth.type === 'query' ? CONNECT_FORM_TEXT.parameterName : CONNECT_FORM_TEXT.headerName
+            method.auth.type === 'query' ? connectFormTextHere.parameterName : connectFormTextHere.headerName
           }
           value={authName}
           onChangeText={(v) => {
             setAuthName(v);
             clearProblem('authName');
           }}
-          hint={method.auth.type === 'query' ? CONNECT_FORM_TEXT.parameterHelp : CONNECT_FORM_TEXT.headerHelp}
+          hint={
+            method.auth.type === 'query' ? connectFormTextHere.parameterHelp : connectFormTextHere.headerHelp
+          }
           error={problem.fields.authName}
           mono
           {...PLAIN_INPUT}
@@ -889,11 +909,11 @@ function ConnectForm({
         </View>
       ) : null}
       {method.kind === 'token' ? codeField : null}
-      {method.kind === 'nextcloud_login' ? <Note>{CONNECT_FORM_TEXT.nextcloudPhone}</Note> : null}
+      {method.kind === 'nextcloud_login' ? <Note>{connectFormTextHere.nextcloudPhone}</Note> : null}
       {method.kind === 'service_login' ? (
-        <Note>{CONNECT_FORM_TEXT.serviceLoginPhone(entry.name)}</Note>
+        <Note>{connectFormTextHere.serviceLoginPhone(entry.name)}</Note>
       ) : null}
-      {method.kind === 'ha_oauth' ? <Note>{CONNECT_FORM_TEXT.homeAssistant}</Note> : null}
+      {method.kind === 'ha_oauth' ? <Note>{connectFormTextHere.homeAssistant}</Note> : null}
       {elsewhere && way === 'web' ? <Note>{connectScreenTextHere.onTheWeb}</Note> : null}
       {levelNote ? <Note>{levelNote}</Note> : null}
     </View>
@@ -927,10 +947,10 @@ function ConnectForm({
             </View>
           ) : null}
           {create.isPending && method.kind === 'password' ? (
-            <Busy text={signingInText(entry, method)} />
+            <Busy text={signingInText(entry, method, rawLocale)} />
           ) : null}
           <Button
-            label={submitLabel(entry, choice, revealed)}
+            label={submitLabel(entry, choice, revealed, rawLocale)}
             size="lg"
             busy={busy}
             disabled={!!problem.choice && !fields[problem.choice.field]}
@@ -952,20 +972,20 @@ function ConnectForm({
         <View style={{ gap: 12 }}>
           <MoreToggle
             open={more}
-            summary={CONNECT_FORM_TEXT.moreSummary(label.trim() || placeholderLabel)}
+            summary={connectFormTextHere.moreSummary(label.trim() || placeholderLabel)}
             onPress={() => setMore((m) => !m)}
           />
           {more ? (
             <View style={{ gap: 16 }}>
               <FormField
-                label={CONNECT_FORM_TEXT.name}
+                label={connectFormTextHere.name}
                 value={label}
                 onChangeText={(v) => {
                   setLabel(v);
                   clearProblem('label');
                 }}
                 placeholder={placeholderLabel}
-                hint={nameHelp(entry, words)}
+                hint={nameHelp(entry, words, rawLocale)}
                 error={problem.fields.label}
                 maxLength={80}
               />
@@ -990,12 +1010,12 @@ function ConnectForm({
         <View style={{ gap: 8 }}>
           <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
             {(
-              entry.fields.find((f) => f.id === problem.choice?.field)?.label ?? CONNECT_FORM_TEXT.chooseOne
+              entry.fields.find((f) => f.id === problem.choice?.field)?.label ?? connectFormTextHere.chooseOne
             ).toUpperCase()}
           </Text>
           <RadioCards
             label={
-              entry.fields.find((f) => f.id === problem.choice?.field)?.label ?? CONNECT_FORM_TEXT.chooseOne
+              entry.fields.find((f) => f.id === problem.choice?.field)?.label ?? connectFormTextHere.chooseOne
             }
             value={fields[problem.choice.field] ?? ''}
             onChange={(v) => setFields((f) => ({ ...f, [problem.choice?.field ?? '']: v }))}

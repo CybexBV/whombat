@@ -5,9 +5,10 @@
  * thread loads. The rows themselves are the shared `inboxRows`. Pure; the screen is `screens/ChatInbox.tsx`.
  */
 import { type HumanTone, toneFor } from '@whombat/avatars';
-import { INBOX_WORDS, type InboxFilter, type InboxRow, newCountLabel, PROMPT_WORDS } from '@whombat/client';
+import { type InboxFilter, type InboxRow, inboxWords, newCountLabel, promptWords } from '@whombat/client';
 import { CHAT_THREAD_TEXT_MAX, type ChatThread, type Message, type ThreadView } from '@whombat/core';
-import { SETTLE_COPY } from './threadSettle';
+import { mobileTranslator } from '../i18n/translate';
+import { settleCopy } from './threadSettle';
 
 /**
  * “Firmware for the access points, 2 new messages, waiting for you, Neo: Shall I…, 10:48”. The name before the line is
@@ -17,18 +18,20 @@ import { SETTLE_COPY } from './threadSettle';
 export function inboxRowLabel(
   row: Pick<InboxRow, 'title' | 'who' | 'line' | 'when' | 'unread' | 'waiting' | 'working'> &
     Partial<Pick<InboxRow, 'repoName'>>,
+  locale?: string,
 ): string {
+  const words = inboxWords(locale);
   const status = row.waiting
-    ? INBOX_WORDS.waitingForYou.toLowerCase()
+    ? words.waitingForYou.toLowerCase()
     : row.working
-      ? INBOX_WORDS.working.toLowerCase()
+      ? words.working.toLowerCase()
       : null;
   const line = row.line ? (row.who ? `${row.who}: ${row.line}` : row.line) : null;
   const repo =
     row.repoName && !row.title.toLocaleLowerCase().includes(row.repoName.toLocaleLowerCase())
       ? row.repoName
       : null;
-  return [row.title, repo, row.unread > 0 ? newCountLabel(row.unread) : null, status, line, row.when]
+  return [row.title, repo, row.unread > 0 ? newCountLabel(row.unread, locale) : null, status, line, row.when]
     .filter(Boolean)
     .join(', ');
 }
@@ -66,13 +69,19 @@ export interface InboxAction {
  * A row's actions, as the swipes have them and then the thread's link: Settle, Mark as unread or as read, Copy link
  * (where the thread has a web address) and Share (Chat on a box).
  */
-export function inboxActions(swipe: InboxSwipe, options: { link: boolean; share: boolean }): InboxAction[] {
+export function inboxActions(
+  swipe: InboxSwipe,
+  options: { link: boolean; share: boolean },
+  locale?: string,
+): InboxAction[] {
+  const words = inboxWords(locale);
+  const { t } = mobileTranslator(locale);
   const out: InboxAction[] = [];
-  if (swipe.settle) out.push({ id: 'settle', title: SETTLE_COPY.settleThread });
-  if (swipe.mark === 'unread') out.push({ id: 'mark_unread', title: INBOX_WORDS.markUnread });
-  if (swipe.mark === 'read') out.push({ id: 'mark_read', title: INBOX_WORDS.markRead });
-  if (options.link) out.push({ id: 'copy_link', title: 'Copy link' });
-  if (options.share) out.push({ id: 'share', title: 'Share' });
+  if (swipe.settle) out.push({ id: 'settle', title: settleCopy(locale).settleThread });
+  if (swipe.mark === 'unread') out.push({ id: 'mark_unread', title: words.markUnread });
+  if (swipe.mark === 'read') out.push({ id: 'mark_read', title: words.markRead });
+  if (options.link) out.push({ id: 'copy_link', title: t('data.common.copyLink') });
+  if (options.share) out.push({ id: 'share', title: t('data.common.share') });
   return out;
 }
 
@@ -84,10 +93,11 @@ export function parseInboxAction(id: string): InboxActionId | null {
 }
 
 /** The words under the filters when a filter shows nothing: a title and, for some, a line under it. */
-export function inboxEmpty(filter: InboxFilter): { title: string; hint: string | null } {
-  if (filter === 'unread') return { title: INBOX_WORDS.nothingNew, hint: INBOX_WORDS.nothingNewHint };
-  if (filter === 'waiting') return { title: INBOX_WORDS.nothingWaits, hint: null };
-  return { title: INBOX_WORDS.allSettled, hint: INBOX_WORDS.allSettledHint };
+export function inboxEmpty(filter: InboxFilter, locale?: string): { title: string; hint: string | null } {
+  const words = inboxWords(locale);
+  if (filter === 'unread') return { title: words.nothingNew, hint: words.nothingNewHint };
+  if (filter === 'waiting') return { title: words.nothingWaits, hint: null };
+  return { title: words.allSettled, hint: words.allSettledHint };
 }
 
 /* The “New” line in a thread ------------------------------------------------------------------------------------ */
@@ -123,17 +133,21 @@ export const COMPOSER_SCREEN_SHARE = 0.4;
 
 /** The “+” line that opens the saved prompts, and what it does for a screen reader. */
 export const PROMPTS_ADD = 'prompts';
-export const PROMPTS_HINT = 'Opens your prompts';
+export function promptsHint(locale?: string): string {
+  return mobileTranslator(locale).t('data.chatInbox.promptsHint');
+}
+export const PROMPTS_HINT = promptsHint();
 
 /**
  * What a screen reader calls the message box's “+”, by what it offers: the paperclip's words when it has only files,
  * the prompts' when only those, both otherwise.
  */
-export function plusLabel(ids: readonly string[]): string {
+export function plusLabel(ids: readonly string[], locale?: string): string {
+  const { t } = mobileTranslator(locale);
   const prompts = ids.includes(PROMPTS_ADD);
   const files = ids.some((id) => id !== PROMPTS_ADD);
-  if (files && prompts) return 'Attach a photo or file, or use a prompt';
-  return prompts ? PROMPT_WORDS.title : 'Attach a photo or file';
+  if (files && prompts) return t('data.chatInbox.attachOrPrompt');
+  return prompts ? promptWords(locale).title : t('data.chatInbox.attach');
 }
 
 /** How tall the message box's text may grow on a screen `height` tall: 40 % of it, never under 120. */

@@ -50,7 +50,7 @@ import { Touchable } from '../ui/Touchable';
 import { backupErrorText } from './BackupDestination';
 import { Tag } from './BackupsOverview';
 import {
-  BACKUP_PHONE_TEXT,
+  backupPhoneText,
   bringBackResume,
   chooseRows,
   defaultCheckpoint,
@@ -186,6 +186,7 @@ function Hint({ text }: { text: string }) {
 
 export function BringBackFlow(props: BringBackProps) {
   const { rawLocale } = useI18n();
+  const backupPhoneTextHere = backupPhoneText(rawLocale);
   const B = backupOptionsText(rawLocale).bringBack;
   const { session, control, platform, later } = props;
   const theme = useTheme();
@@ -278,7 +279,7 @@ export function BringBackFlow(props: BringBackProps) {
       setError(
         e instanceof PasskeyError && e.code === 'unsupported'
           ? B.noPrf
-          : (passkeyErrorText(e) ?? B.unlockFailed),
+          : (passkeyErrorText(e, rawLocale) ?? B.unlockFailed),
       );
     } finally {
       setBusy(false);
@@ -435,7 +436,7 @@ export function BringBackFlow(props: BringBackProps) {
         <Frame
           title={L.confirmTitle}
           sub={L.confirmLead(props.thisName ?? 'this Whombat')}
-          back={{ label: BACKUP_PHONE_TEXT.back, onPress: () => props.onCancel?.() }}
+          back={{ label: backupPhoneTextHere.back, onPress: () => props.onCancel?.() }}
         >
           <Button label={L.confirm} size="lg" onPress={() => go({ kind: 'source' })} />
           <Button label={L.cancel} variant="quiet" onPress={() => props.onCancel?.()} />
@@ -447,7 +448,7 @@ export function BringBackFlow(props: BringBackProps) {
         <Frame
           title={kit ? B.openTitle(who) : B.findTitle}
           sub={kit ? B.openLead(who) : B.findLead}
-          back={{ label: BACKUP_PHONE_TEXT.back, onPress: backToStart }}
+          back={{ label: backupPhoneTextHere.back, onPress: backToStart }}
         >
           {kit ? <KitCard kit={kit} name={who} email={props.email} /> : null}
           {kit && platform?.prf ? (
@@ -499,7 +500,7 @@ export function BringBackFlow(props: BringBackProps) {
       return (
         <Frame
           title={B.pasteTitle}
-          back={{ label: BACKUP_PHONE_TEXT.back, onPress: () => go({ kind: 'source' }) }}
+          back={{ label: backupPhoneTextHere.back, onPress: () => go({ kind: 'source' }) }}
         >
           <Field
             label={B.pasteLabel}
@@ -536,7 +537,7 @@ export function BringBackFlow(props: BringBackProps) {
         <Frame
           title={B.chooseTitle(who)}
           sub={B.chooseLead(place)}
-          back={{ label: BACKUP_PHONE_TEXT.back, onPress: () => go({ kind: 'source' }) }}
+          back={{ label: backupPhoneTextHere.back, onPress: () => go({ kind: 'source' }) }}
         >
           <ChooseList
             rows={shown}
@@ -560,7 +561,7 @@ export function BringBackFlow(props: BringBackProps) {
       return (
         <Frame title={B.workingTitle(who)} sub={B.workingLead}>
           <Steps steps={restoreSteps(state, reachable, place, rawLocale)} />
-          {!reachable ? <Hint text={BACKUP_PHONE_TEXT.waiting(who)} /> : null}
+          {!reachable ? <Hint text={backupPhoneTextHere.waiting(who)} /> : null}
           <Hint text={B.workingFoot(place)} />
         </Frame>
       );
@@ -616,6 +617,7 @@ export function BringBackFlow(props: BringBackProps) {
 /** The passkey's copy found (the account's, or next to the backups on this network). */
 function KitCard({ kit, name, email }: { kit: BringBackKit; name: string; email: string }) {
   const { rawLocale } = useI18n();
+  const backupPhoneTextHere = backupPhoneText(rawLocale);
   const B = backupOptionsText(rawLocale).bringBack;
   const theme = useTheme();
   return (
@@ -650,7 +652,7 @@ function KitCard({ kit, name, email }: { kit: BringBackKit; name: string; email:
         <Text size={13} color={theme.colors.mut}>
           {kit.from === 'network'
             ? B.foundNear(longDate(kit.createdAt, rawLocale))
-            : BACKUP_PHONE_TEXT.saved(longDate(kit.createdAt, rawLocale))}
+            : backupPhoneTextHere.saved(longDate(kit.createdAt, rawLocale))}
         </Text>
       </View>
     </View>
@@ -958,7 +960,7 @@ function Done({
           platform,
           appliance,
           me: connection.status === 'open' ? (connection.info.account?.id ?? null) : null,
-          name: passkeyName(phoneLabel()),
+          name: passkeyName(phoneLabel(rawLocale)),
         }
       : null,
     rawLocale,

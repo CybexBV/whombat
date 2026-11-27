@@ -7,6 +7,7 @@
  */
 import { sha256 } from '@noble/hashes/sha2.js';
 import { z } from 'zod';
+import { coreTranslator } from '../i18n/catalog.js';
 import {
   classifyAddress,
   formatIp,
@@ -111,35 +112,41 @@ class SshReader {
 export const VAULT_SSH_SERVER_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 export const VAULT_SSH_USERNAME_PATTERN = /^[A-Za-z_][A-Za-z0-9._-]*\$?$/;
 
+const VAULT_SSH_FIELDS = ['name', 'nameTaken', 'username', 'host', 'port', 'address', 'addressUser'] as const;
+
+/**
+ * The words for each field a server form can get wrong, in a locale. `address` and `addressUser` are
+ * `vault_add_server`'s address (0.112.0, CT-781).
+ */
+export function vaultSshFieldText(
+  locale?: string | null,
+): Readonly<Record<(typeof VAULT_SSH_FIELDS)[number], string>> {
+  const tr = coreTranslator(locale);
+  const max = { name: VAULT_SSH_SERVER_NAME_MAX, username: VAULT_SSH_USERNAME_MAX } as Record<string, number>;
+  return Object.fromEntries(
+    VAULT_SSH_FIELDS.map((field) => [field, tr.t(`vaultSsh.field.${field}`, { max: max[field] ?? '' })]),
+  ) as Record<(typeof VAULT_SSH_FIELDS)[number], string>;
+}
+
 /** The words for each field a server form can get wrong. */
-export const VAULT_SSH_FIELD_TEXT = {
-  name: `Use 1–${VAULT_SSH_SERVER_NAME_MAX} letters, digits, dots, dashes and underscores, starting with a letter or digit.`,
-  nameTaken: 'This key already has a server with that name.',
-  username: `Use 1–${VAULT_SSH_USERNAME_MAX} letters, digits, dots, dashes and underscores, starting with a letter or underscore.`,
-  host: 'That isn’t a host name or IP address. Write it like web1.example.com or 192.168.1.10.',
-  port: 'Use a port between 1 and 65535.',
-  /** `vault_add_server`'s address (0.112.0, CT-781). */
-  address:
-    'That isn’t a host name or IP address with an optional port. Write it like web1.example.com, 192.168.1.10 or 192.168.1.10:2222.',
-  addressUser: 'Put the user in username: the address is only the host and its port.',
-} as const;
+export const VAULT_SSH_FIELD_TEXT = vaultSshFieldText('en');
 
 /** Why a server name can't be used, or null: 1–40, `^[A-Za-z0-9][A-Za-z0-9._-]*$` (VT-S04, CT-319). */
-export function vaultSshServerNameProblem(name: string): string | null {
+export function vaultSshServerNameProblem(name: string, locale?: string | null): string | null {
   return name.length >= 1 &&
     name.length <= VAULT_SSH_SERVER_NAME_MAX &&
     VAULT_SSH_SERVER_NAME_PATTERN.test(name)
     ? null
-    : VAULT_SSH_FIELD_TEXT.name;
+    : vaultSshFieldText(locale).name;
 }
 
 /** Why a username can't be signed in as, or null: 1–32, `^[A-Za-z_][A-Za-z0-9._-]*\$?$` (VT-S04). */
-export function vaultSshUsernameProblem(username: string): string | null {
+export function vaultSshUsernameProblem(username: string, locale?: string | null): string | null {
   return username.length >= 1 &&
     username.length <= VAULT_SSH_USERNAME_MAX &&
     VAULT_SSH_USERNAME_PATTERN.test(username)
     ? null
-    : VAULT_SSH_FIELD_TEXT.username;
+    : vaultSshFieldText(locale).username;
 }
 
 /** A server's host as stored: lowercase name, dotted IPv4 or IPv6 without brackets. */
@@ -211,11 +218,13 @@ export function parseVaultSshAddress(text: string): ParsedVaultSshAddress | null
 }
 
 /** Why `vault_add_server` can't take an address, or null (`parseVaultSshAddress`): a user in it says where it goes. */
-export function vaultSshAddressProblem(text: string): string | null {
+export function vaultSshAddressProblem(text: string, locale?: string | null): string | null {
   if (parseVaultSshAddress(text)) return null;
-  return text.includes('@') ? VAULT_SSH_FIELD_TEXT.addressUser : VAULT_SSH_FIELD_TEXT.address;
+  const words = vaultSshFieldText(locale);
+  return text.includes('@') ? words.addressUser : words.address;
 }
 
+// Validation errors from the schemas reach the server and the agent's tools, so they stay English.
 const refineWith = (problem: (value: string) => string | null) => (value: string, ctx: z.RefinementCtx) => {
   const message = problem(value);
   if (message) ctx.addIssue({ code: 'custom', message });
@@ -487,23 +496,16 @@ export const VAULT_SSH_KEY_PROBLEMS = [
 ] as const;
 export type VaultSshKeyProblemCode = (typeof VAULT_SSH_KEY_PROBLEMS)[number];
 
-export const VAULT_SSH_KEY_PROBLEM_TEXT: Record<VaultSshKeyProblemCode, string> = {
-  empty: 'Paste the private key.',
-  too_long: 'That’s longer than any SSH key Whombat accepts.',
-  not_a_key:
-    'That isn’t a private key. Paste the whole file, from -----BEGIN to the -----END line, like ~/.ssh/id_ed25519.',
-  public_key: 'That’s the public key. Paste the private key: the file without .pub.',
-  putty:
-    'That’s a PuTTY key. Export it in OpenSSH format first (PuTTYgen → Conversions → Export OpenSSH key).',
-  certificate: 'SSH certificates aren’t supported. Paste the private key itself.',
-  several_keys: 'Paste one private key at a time.',
-  fido: 'Security-key (FIDO) SSH keys can’t be used: they need the key plugged in.',
-  unsupported_type: 'Use an Ed25519, ECDSA or RSA key. DSA and other kinds aren’t accepted.',
-  rsa_too_short: 'That RSA key is shorter than 2048 bits. Use a longer one or generate a new key.',
-  passphrase_needed: 'That key is protected by a passphrase. Enter it below: it is used once and not kept.',
-  wrong_passphrase: 'That passphrase doesn’t open the key.',
-  unreadable: 'Whombat couldn’t read that key. Paste it again, or generate a new key.',
-};
+export const VAULT_SSH_KEY_PROBLEM_TEXT: Record<VaultSshKeyProblemCode, string> =
+  vaultSshKeyProblemText('en');
+
+/** `VAULT_SSH_KEY_PROBLEM_TEXT` in a locale. */
+export function vaultSshKeyProblemText(locale?: string | null): Record<VaultSshKeyProblemCode, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(
+    VAULT_SSH_KEY_PROBLEMS.map((code) => [code, tr.t(`vaultSsh.keyProblem.${code}`)]),
+  ) as Record<VaultSshKeyProblemCode, string>;
+}
 
 export interface VaultSshPrivateKeyFacts {
   format: VaultSshPrivateKeyFormat;
@@ -522,9 +524,10 @@ export interface VaultSshPrivateKeyFacts {
  */
 export function inspectVaultSshPrivateKey(
   text: string,
+  locale?: string | null,
 ): { ok: true; key: VaultSshPrivateKeyFacts } | { ok: false; code: VaultSshKeyProblemCode; message: string } {
   const fail = (code: VaultSshKeyProblemCode) =>
-    ({ ok: false, code, message: VAULT_SSH_KEY_PROBLEM_TEXT[code] }) as const;
+    ({ ok: false, code, message: coreTranslator(locale).t(`vaultSsh.keyProblem.${code}`) }) as const;
   const trimmed = text.trim();
   if (trimmed === '') return fail('empty');
   if (text.length > VAULT_SSH_PRIVATE_KEY_MAX) return fail('too_long');

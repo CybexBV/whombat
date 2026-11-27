@@ -14,19 +14,24 @@ import {
   type GuideField,
   guideCardLabel,
 } from '@whombat/core/domain';
+import { mobileTranslator } from '../i18n/translate';
 import { connectCardAppUrl } from '../navigation/connectionLinks';
 import { addServerAppUrl } from '../navigation/routes';
 
-export const GUIDE_TEXT = {
-  expired: 'This expired. Ask me any time.',
-  fillIn: 'Fill this in.',
-  copy: 'Copy',
-  copied: 'Copied',
-  chooseFile: 'Choose the JSON file',
-  fileTooBig: 'That file is too big to be Google’s client_secret JSON.',
-  fileUnreadable: 'That file couldn’t be read. Try again.',
-  failed: 'That didn’t go through',
-} as const;
+export function guideText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    expired: t('data.guides.expired'),
+    fillIn: t('data.guides.fillIn'),
+    copy: t('data.guides.copy'),
+    copied: t('data.guides.copied'),
+    chooseFile: t('data.guides.chooseFile'),
+    fileTooBig: t('data.guides.fileTooBig'),
+    fileUnreadable: t('data.guides.fileUnreadable'),
+    failed: t('data.guides.failed'),
+  } as const;
+}
+export const GUIDE_TEXT = guideText();
 
 export interface GuideView {
   /** `SET UP · EMAIL · STEP 2 OF 6`. */
@@ -44,9 +49,12 @@ export interface GuideView {
 }
 
 /** The quiet row of a locked card: “You chose Google”, a button's label as is, or the expiry note. */
-export function guideAnswerText(card: Pick<GuideCard, 'state' | 'answer'>): string | null {
-  if (card.answer) return card.answer.optionIds ? `You chose ${card.answer.label}` : card.answer.label;
-  return card.state === 'expired' ? GUIDE_TEXT.expired : null;
+export function guideAnswerText(card: Pick<GuideCard, 'state' | 'answer'>, locale?: string): string | null {
+  if (card.answer)
+    return card.answer.optionIds
+      ? mobileTranslator(locale).t('data.guides.youChose', { label: card.answer.label })
+      : card.answer.label;
+  return card.state === 'expired' ? guideText(locale).expired : null;
 }
 
 export function guideParagraphs(body: string): string[] {
@@ -56,14 +64,14 @@ export function guideParagraphs(body: string): string[] {
     .filter(Boolean);
 }
 
-export function guideView(card: GuideCard): GuideView {
+export function guideView(card: GuideCard, locale?: string): GuideView {
   return {
     label: guideCardLabel(card),
     title: card.title,
     paragraphs: guideParagraphs(card.body),
     blocks: card.blocks,
     locked: card.state !== 'open',
-    answer: card.state === 'open' ? null : guideAnswerText(card),
+    answer: card.state === 'open' ? null : guideAnswerText(card, locale),
     chosen: card.answer?.optionIds ?? [],
   };
 }
@@ -79,9 +87,11 @@ export function toggleOption(selected: readonly string[], id: string): string[] 
 export function missingFields(
   fields: readonly GuideField[],
   values: Readonly<Record<string, string>>,
+  locale?: string,
 ): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const f of fields) if (!f.optional && !(values[f.id] ?? '').trim()) out[f.id] = GUIDE_TEXT.fillIn;
+  const fillIn = guideText(locale).fillIn;
+  for (const f of fields) if (!f.optional && !(values[f.id] ?? '').trim()) out[f.id] = fillIn;
   return out;
 }
 
@@ -102,27 +112,33 @@ export type ClientSecretFile =
   | { ok: true; clientId: string; clientSecret: string }
   | { ok: false; error: string };
 
-export const DESKTOP_CLIENT_ERROR = 'This is a Desktop app client. Create one of type Web application.';
-export const NOT_A_CLIENT_FILE = 'That isn’t the client_secret JSON file Google lets you download.';
+export function desktopClientError(locale?: string): string {
+  return mobileTranslator(locale).t('data.guides.desktopClient');
+}
+export function notAClientFile(locale?: string): string {
+  return mobileTranslator(locale).t('data.guides.notAClientFile');
+}
+export const DESKTOP_CLIENT_ERROR = desktopClientError();
+export const NOT_A_CLIENT_FILE = notAClientFile();
 
 /**
  * Google's `client_secret_*.json`, read on the phone (as the web's `parseClientSecretFile`): a Web application
  * client has a `web` key; a Desktop client has `installed` and doesn't work with a redirect URI.
  */
-export function parseClientSecretFile(text: string): ClientSecretFile {
+export function parseClientSecretFile(text: string, locale?: string): ClientSecretFile {
   let data: unknown;
   try {
     data = JSON.parse(text);
   } catch {
-    return { ok: false, error: NOT_A_CLIENT_FILE };
+    return { ok: false, error: notAClientFile(locale) };
   }
-  if (!data || typeof data !== 'object') return { ok: false, error: NOT_A_CLIENT_FILE };
+  if (!data || typeof data !== 'object') return { ok: false, error: notAClientFile(locale) };
   const record = data as Record<string, unknown>;
-  if ('installed' in record && !('web' in record)) return { ok: false, error: DESKTOP_CLIENT_ERROR };
+  if ('installed' in record && !('web' in record)) return { ok: false, error: desktopClientError(locale) };
   const web = record.web as Record<string, unknown> | undefined;
   const clientId = typeof web?.client_id === 'string' ? web.client_id.trim() : '';
   const clientSecret = typeof web?.client_secret === 'string' ? web.client_secret.trim() : '';
-  if (!clientId || !clientSecret) return { ok: false, error: NOT_A_CLIENT_FILE };
+  if (!clientId || !clientSecret) return { ok: false, error: notAClientFile(locale) };
   return { ok: true, clientId, clientSecret };
 }
 
@@ -135,9 +151,10 @@ export function applyClientFile(
   fields: readonly GuideField[],
   fileField: string,
   text: string,
+  locale?: string,
 ): { values: Record<string, string>; error: string | null } {
-  if (text.length > GUIDE_VALUE_MAX) return { values: {}, error: GUIDE_TEXT.fileTooBig };
-  const file = parseClientSecretFile(text);
+  if (text.length > GUIDE_VALUE_MAX) return { values: {}, error: guideText(locale).fileTooBig };
+  const file = parseClientSecretFile(text, locale);
   if (!file.ok) return { values: {}, error: file.error };
   const values: Record<string, string> = { [fileField]: text };
   const id = fields.find((f) => f.kind === 'text');
@@ -194,25 +211,35 @@ export function connectWebUrl(web: GuideWeb, block: Pick<GuideConnectBlock, 'ret
 
 const PROVIDER_NAMES: Record<string, string> = { google: 'Google', microsoft: 'Microsoft' };
 
-export function connectLabel(block: Pick<GuideConnectBlock, 'provider' | 'reconnect'>): string {
+export function connectLabel(
+  block: Pick<GuideConnectBlock, 'provider' | 'reconnect'>,
+  locale?: string,
+): string {
   const name = PROVIDER_NAMES[block.provider] ?? block.provider;
-  return `${block.reconnect ? 'Reconnect' : 'Connect'} ${name} on the web`;
+  const { t } = mobileTranslator(locale);
+  return block.reconnect
+    ? t('data.guides.reconnectOnWeb', { name })
+    : t('data.guides.connectOnWeb', { name });
 }
 
 /** The phone's own sign-in (PC-05, AP-2907): the web card's “Connect Google” / “Reconnect Google”. */
-export function connectAppLabel(block: Pick<GuideConnectBlock, 'provider' | 'reconnect'>): string {
-  if (block.provider === 'imap') return 'Connect email';
+export function connectAppLabel(
+  block: Pick<GuideConnectBlock, 'provider' | 'reconnect'>,
+  locale?: string,
+): string {
+  const { t } = mobileTranslator(locale);
+  if (block.provider === 'imap') return t('data.guides.connectEmail');
   const name = PROVIDER_NAMES[block.provider] ?? block.provider;
-  return `${block.reconnect ? 'Reconnect' : 'Connect'} ${name}`;
+  return block.reconnect ? t('data.guides.reconnect', { name }) : t('data.guides.connect', { name });
 }
 
 /** When the sign-in couldn't start: “Couldn’t start connecting Google. Try again in a moment.” */
-export function connectStartProblem(block: Pick<GuideConnectBlock, 'provider'>): string {
+export function connectStartProblem(block: Pick<GuideConnectBlock, 'provider'>, locale?: string): string {
   const name = PROVIDER_NAMES[block.provider] ?? block.provider;
-  return `Couldn’t start connecting ${name}. Try again in a moment.`;
+  return mobileTranslator(locale).t('data.guides.startProblem', { name });
 }
 
-export function connectNote(block: Pick<GuideConnectBlock, 'provider'>): string {
+export function connectNote(block: Pick<GuideConnectBlock, 'provider'>, locale?: string): string {
   const name = PROVIDER_NAMES[block.provider] ?? block.provider;
-  return `${name} sign-in opens in your browser.`;
+  return mobileTranslator(locale).t('data.guides.note', { name });
 }

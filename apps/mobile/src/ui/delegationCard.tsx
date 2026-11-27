@@ -11,13 +11,13 @@
  * ⋯, never a button above the work; it still asks first.
  */
 import {
-  CARD_FRAME_WORDS,
-  DELEGATION_AI_WORDS,
-  DELEGATION_WORDS,
+  cardFrameWords,
   type DelegationCardView,
   type DelegationItemView,
   type DelegationTaskView,
+  delegationAiWords,
   delegationFrame,
+  delegationWords,
 } from '@whombat/client';
 import { type DelegationCard, formatClock } from '@whombat/core';
 import { useContext, useState } from 'react';
@@ -26,6 +26,7 @@ import type { CardPicture } from '../data/cardPictures';
 import { delegationTaskMenu, parseDelegationTaskPick } from '../data/delegation';
 import type { FileAccess } from '../data/fileAccess';
 import type { MessageFileActions } from '../data/useFiles';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import {
@@ -86,6 +87,8 @@ function PickRow({
   disabled: boolean;
   onPick: (taskId: string, picked: boolean) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const delegationWordsHere = delegationWords(rawLocale);
   const theme = useTheme();
   const on = task.picked;
   return (
@@ -95,7 +98,7 @@ function PickRow({
       feedback="wash"
       ringRadius={theme.radii.button}
       accessibilityRole="checkbox"
-      accessibilityLabel={[DELEGATION_WORDS.tick(task.title), task.why, after].filter(Boolean).join(', ')}
+      accessibilityLabel={[delegationWordsHere.tick(task.title), task.why, after].filter(Boolean).join(', ')}
       accessibilityState={{ checked: on, disabled }}
       style={{
         minHeight: CARD_TARGET,
@@ -152,6 +155,8 @@ function AiChip({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const delegationAiWordsHere = delegationAiWords(rawLocale);
   const theme = useTheme();
   const chosen = task.ai !== null;
   return (
@@ -161,7 +166,7 @@ function AiChip({
       feedback="wash"
       ringRadius={12}
       accessibilityRole="button"
-      accessibilityLabel={DELEGATION_AI_WORDS.openTask(task.title, task.ai)}
+      accessibilityLabel={delegationAiWordsHere.openTask(task.title, task.ai)}
       hitSlop={hitSlopFor(24)}
       style={{
         minHeight: 24,
@@ -183,7 +188,7 @@ function AiChip({
         numberOfLines={2}
         style={{ textAlign: 'right' }}
       >
-        {task.ai ?? DELEGATION_AI_WORDS.chipDefault}
+        {task.ai ?? delegationAiWordsHere.chipDefault}
       </Text>
     </Touchable>
   );
@@ -194,6 +199,8 @@ function AiChip({
  * arrow is off with Hand over (nothing ticked, or a press on its way).
  */
 function HandOver({ view, actions }: { view: DelegationCardView; actions: DelegationCardActions }) {
+  const { rawLocale } = useI18n();
+  const delegationAiWordsHere = delegationAiWords(rawLocale);
   const theme = useTheme();
   // A council looking at the list holds it until it answers.
   const off = view.picked === 0 || actions.busy !== null || view.held;
@@ -221,7 +228,7 @@ function HandOver({ view, actions }: { view: DelegationCardView; actions: Delega
         feedback="fade"
         ringRadius={12}
         accessibilityRole="button"
-        accessibilityLabel={DELEGATION_AI_WORDS.openAll(view.ai)}
+        accessibilityLabel={delegationAiWordsHere.openAll(view.ai)}
         style={{
           width: 44,
           minHeight: 44,
@@ -276,6 +283,8 @@ interface RowEnv {
 
 /** A handed-over task: what it does and how it went, then its pull request, its pictures and its ⋯. */
 function TaskRow({ task, env }: { task: DelegationTaskView; env: RowEnv }) {
+  const { rawLocale } = useI18n();
+  const delegationWordsHere = delegationWords(rawLocale);
   const theme = useTheme();
   // A copy of the card as it was (card-moves.md) shows no clocks: they would count on from long ago.
   const elapsed = useContext(CardStillContext) ? null : task.elapsed;
@@ -291,7 +300,7 @@ function TaskRow({ task, env }: { task: DelegationTaskView; env: RowEnv }) {
         ? theme.colors.ink2
         : theme.colors.ink;
   const stopping = actions.stopping.has(task.id);
-  const menu = delegationTaskMenu(task, stopping || actions.busy !== null);
+  const menu = delegationTaskMenu(task, stopping || actions.busy !== null, rawLocale);
   const pictures = task.shots.length ? (env.pictures[task.id] ?? []) : [];
   const links = task.pr || pictures.length || menu;
   return (
@@ -353,9 +362,9 @@ function TaskRow({ task, env }: { task: DelegationTaskView; env: RowEnv }) {
         >
           {task.pr ? (
             <Button
-              label={DELEGATION_WORDS.pullRequest}
+              label={delegationWordsHere.pullRequest}
               variant="quiet"
-              accessibilityLabel={`${DELEGATION_WORDS.pullRequest}: ${task.title}`}
+              accessibilityLabel={`${delegationWordsHere.pullRequest}: ${task.title}`}
               accessibilityHint={task.pr}
               onPress={() => {
                 if (task.pr) actions.openUrl(task.pr);
@@ -365,8 +374,8 @@ function TaskRow({ task, env }: { task: DelegationTaskView; env: RowEnv }) {
           ) : null}
           {pictures.length ? (
             <QuietToggle
-              label={DELEGATION_WORDS.pictures(pictures.length)}
-              spoken={`${DELEGATION_WORDS.pictures(pictures.length)}: ${task.title}`}
+              label={delegationWordsHere.pictures(pictures.length)}
+              spoken={`${delegationWordsHere.pictures(pictures.length)}: ${task.title}`}
               open={shown}
               onPress={() => setShown((o) => !o)}
             />
@@ -383,7 +392,7 @@ function TaskRow({ task, env }: { task: DelegationTaskView; env: RowEnv }) {
         <View style={{ marginLeft: INDENT, paddingTop: 2, paddingBottom: 10 }}>
           <CardPictures
             pictures={pictures}
-            hint={DELEGATION_WORDS.picturesHint}
+            hint={delegationWordsHere.picturesHint}
             access={env.access}
             files={env.files}
           />
@@ -494,8 +503,10 @@ function TaskMore({
   busy: boolean;
   env: RowEnv;
 }) {
+  const { rawLocale } = useI18n();
+  const delegationWordsHere = delegationWords(rawLocale);
   const theme = useTheme();
-  const label = DELEGATION_WORDS.more(task.title);
+  const label = delegationWordsHere.more(task.title);
   const face = busy ? (
     <ActivityIndicator size="small" color={theme.colors.mut} />
   ) : (
@@ -541,6 +552,8 @@ function pickForTask(task: DelegationTaskView, id: string, actions: DelegationCa
 
 /** The tasks that finished well, in one line (“4 merged”) under the rest, which opens to their rows. */
 function FoldedLine({ label, open, onPress }: { label: string; open: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const delegationWordsHere = delegationWords(rawLocale);
   const theme = useTheme();
   const Chevron = open ? ChevronUp : ChevronDown;
   return (
@@ -550,7 +563,7 @@ function FoldedLine({ label, open, onPress }: { label: string; open: boolean; on
       ringRadius={theme.radii.button}
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityHint={open ? DELEGATION_WORDS.hideFolded : DELEGATION_WORDS.showFolded}
+      accessibilityHint={open ? delegationWordsHere.hideFolded : delegationWordsHere.showFolded}
       accessibilityState={{ expanded: open }}
       style={{
         minHeight: 44,
@@ -633,15 +646,18 @@ export function DelegationCardPanel({
   access: FileAccess | null;
   files: MessageFileActions | null;
 }) {
+  const { rawLocale } = useI18n();
+  const cardFrameWordsHere = cardFrameWords(rawLocale);
+  const delegationWordsHere = delegationWords(rawLocale);
   const theme = useTheme();
   const [unfolded, setUnfolded] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<DelegationTaskView | null>(null);
   const env: RowEnv = { actions, pictures, access, files, more: setMenuFor };
   const menu = menuFor
-    ? delegationTaskMenu(menuFor, actions.stopping.has(menuFor.id) || actions.busy !== null)
+    ? delegationTaskMenu(menuFor, actions.stopping.has(menuFor.id) || actions.busy !== null, rawLocale)
     : null;
-  const frame = delegationFrame(card, useContext(CardStillContext));
+  const frame = delegationFrame(card, useContext(CardStillContext), rawLocale);
   const head: CardHead = { ...frame, time: frame.at ? formatClock(frame.at, timeZone) : null };
   const handed = view.tasks.length > 0 || view.folded !== null;
   const project = view.project ? (
@@ -654,7 +670,7 @@ export function DelegationCardPanel({
     view.aiChoosable || project ? (
       <>
         {view.aiChoosable ? (
-          <CardSection title={CARD_FRAME_WORDS.aiPerTask}>
+          <CardSection title={cardFrameWordsHere.aiPerTask}>
             <View style={{ gap: 6 }}>
               {view.tasks.map((t) => (
                 <View
@@ -683,7 +699,7 @@ export function DelegationCardPanel({
     ) : null
   ) : handed ? (
     <>
-      <CardSection title={CARD_FRAME_WORDS.tasks}>
+      <CardSection title={cardFrameWordsHere.tasks}>
         <View style={{ gap: 6 }}>
           {view.tasks.map((t) => (
             <TaskRow key={t.id} task={t} env={env} />
@@ -703,9 +719,9 @@ export function DelegationCardPanel({
   );
   const others: CardButton[] = view.offer
     ? [
-        { label: DELEGATION_WORDS.change, onPress: actions.change },
+        { label: delegationWordsHere.change, onPress: actions.change },
         {
-          label: DELEGATION_WORDS.notNow,
+          label: delegationWordsHere.notNow,
           busy: actions.busy === 'stop',
           disabled: actions.busy !== null,
           onPress: actions.notNow,
@@ -725,7 +741,7 @@ export function DelegationCardPanel({
               view.offer ? (
                 <HandOver view={view} actions={actions} />
               ) : handed ? (
-                { label: CARD_FRAME_WORDS.openTasks, onPress: () => setDetailsOpen(true) }
+                { label: cardFrameWordsHere.openTasks, onPress: () => setDetailsOpen(true) }
               ) : null
             }
             others={others}
@@ -738,8 +754,8 @@ export function DelegationCardPanel({
         endAction={
           stop ? (
             <CardStopButton
-              label={DELEGATION_WORDS.stop}
-              spoken={`${DELEGATION_WORDS.stop}: ${head.title}`}
+              label={delegationWordsHere.stop}
+              spoken={`${delegationWordsHere.stop}: ${head.title}`}
               busy={actions.busy === 'stop'}
               disabled={actions.busy !== null}
               onPress={stop}
@@ -783,7 +799,7 @@ export function DelegationCardPanel({
         <MenuSheet
           spec={menu}
           visible={menu !== null}
-          label={menuFor ? DELEGATION_WORDS.more(menuFor.title) : DELEGATION_WORDS.stop}
+          label={menuFor ? delegationWordsHere.more(menuFor.title) : delegationWordsHere.stop}
           onClose={() => setMenuFor(null)}
           onPick={(id) => {
             if (menuFor) pickForTask(menuFor, id, actions);

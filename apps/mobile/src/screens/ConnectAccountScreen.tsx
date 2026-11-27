@@ -16,7 +16,7 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { imapAvailable, imapConnection, problemText, withBurrow } from '@whombat/client';
-import { ACCOUNT_TEXT, CONNECT_FORM_TEXT } from '@whombat/client/connections';
+import { accountText, connectFormText } from '@whombat/client/connections';
 import {
   useCheckConnection,
   useConnectors,
@@ -37,7 +37,7 @@ import {
   accountErrorText,
   accountHead,
   accountLine,
-  BUILTIN_TEXT,
+  builtinText,
   checkLine,
   disconnectAsk,
   isAccountProvider,
@@ -78,7 +78,7 @@ export function ConnectAccountScreen({ route, navigation }: Props) {
 
   const insets = useSafeAreaInsets();
   const { page, thingId } = route.params;
-  const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key));
+  const [back] = useState(() => route.params.back ?? backUnder(navigation.getState(), route.key, rawLocale));
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Connections'));
   // A sign-in's refusal (`connect_error=`), said once.
   const [error, setError] = useState(() => connectErrorOf(route.params.error));
@@ -111,7 +111,7 @@ export function ConnectAccountScreen({ route, navigation }: Props) {
             provider={page}
             header={header}
             below={below}
-            error={accountErrorText(page, error)}
+            error={accountErrorText(page, error, rawLocale)}
           />
         ) : page === 'imap' ? (
           <ImapPage
@@ -174,6 +174,8 @@ function ProviderAccount({
   error: string | null;
 }) {
   const { rawLocale } = useI18n();
+  const accountTextHere = accountText(rawLocale);
+  const connectFormTextHere = connectFormText(rawLocale);
   const connectScreenTextHere = connectScreenText(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -213,7 +215,7 @@ function ProviderAccount({
     return (
       <Panel footer={null}>
         {header}
-        <Note>{ACCOUNT_TEXT.microsoftUpdate}</Note>
+        <Note>{accountTextHere.microsoftUpdate}</Note>
       </Panel>
     );
 
@@ -235,23 +237,23 @@ function ProviderAccount({
         if (result.status === 'ok') openOutside(result.data.authorizeUrl);
       }
     } catch (err) {
-      setProblem(problemText(err, ACCOUNT_TEXT.couldNotStart(name), rawLocale));
+      setProblem(problemText(err, accountTextHere.couldNotStart(name), rawLocale));
     }
   }
 
   function disconnect() {
     if (!connection) return;
-    Alert.alert(ACCOUNT_TEXT.disconnectNamed(name), disconnectAsk(provider), [
-      { text: ACCOUNT_TEXT.cancel, style: 'cancel' },
+    Alert.alert(accountTextHere.disconnectNamed(name), disconnectAsk(provider, rawLocale), [
+      { text: accountTextHere.cancel, style: 'cancel' },
       {
-        text: ACCOUNT_TEXT.disconnectNamed(name),
+        text: accountTextHere.disconnectNamed(name),
         style: 'destructive',
         onPress: () =>
           void remove.mutateAsync({ params: { connectionId: connection.id } }).then(
             (result) => {
-              if (result.status === 'ok') showNotice(ACCOUNT_TEXT.disconnected(name));
+              if (result.status === 'ok') showNotice(accountTextHere.disconnected(name));
             },
-            () => showFailure(CONNECT_FORM_TEXT.notThrough),
+            () => showFailure(connectFormTextHere.notThrough, rawLocale),
           ),
       },
     ]);
@@ -263,9 +265,9 @@ function ProviderAccount({
     <Panel footer={null}>
       {header}
       <FormMessage text={error ?? problem} />
-      <SectionTitle>{ACCOUNT_TEXT.yourAccount}</SectionTitle>
+      <SectionTitle>{accountTextHere.yourAccount}</SectionTitle>
       {status.data.mode === 'off' ? (
-        <Note>{ACCOUNT_TEXT.off}</Note>
+        <Note>{accountTextHere.off}</Note>
       ) : (
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
@@ -274,10 +276,10 @@ function ProviderAccount({
                 color={!connection ? theme.colors.mut : active ? theme.colors.ok : theme.colors.warn}
                 label={
                   !connection
-                    ? ACCOUNT_TEXT.notConnected
+                    ? accountTextHere.notConnected
                     : active
-                      ? ACCOUNT_TEXT.connected
-                      : ACCOUNT_TEXT.needsConnecting
+                      ? accountTextHere.connected
+                      : accountTextHere.needsConnecting
                 }
               />
             </View>
@@ -286,19 +288,19 @@ function ProviderAccount({
                 {connection ? `${name} · ${connection.email}` : name}
               </Text>
               <Text size={13} lh={1.4} color={connection && !active ? theme.colors.warn : theme.colors.mut}>
-                {connection ? accountLine(connection, provider) : ACCOUNT_TEXT.pickServices}
+                {connection ? accountLine(connection, provider, rawLocale) : accountTextHere.pickServices}
               </Text>
             </View>
           </View>
           {active && connection && connection.checks.length > 0 && !picking ? (
             <View style={{ gap: 6 }}>
               {connection.checks.map((item) => {
-                const line = checkLine(item, provider);
+                const line = checkLine(item, provider, rawLocale);
                 return (
                   <View key={item.service} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <StatusDot color={toneColor(theme, line.tone)} label={line.text} size={7} />
                     <Text size={13.5} weight={500}>
-                      {serviceLabel(item.service, provider)}
+                      {serviceLabel(item.service, provider, rawLocale)}
                     </Text>
                     <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
                       {line.text}
@@ -317,25 +319,25 @@ function ProviderAccount({
                 locked={connection?.services ?? []}
                 disabled={!connectable || busy}
               />
-              {connection ? <Note>{ACCOUNT_TEXT.keepServices}</Note> : null}
-              {!connectable ? <Note>{ACCOUNT_TEXT.setUpFirst(name)}</Note> : null}
-              {connectable && services.length === 0 ? <Note>{ACCOUNT_TEXT.tickOne}</Note> : null}
+              {connection ? <Note>{accountTextHere.keepServices}</Note> : null}
+              {!connectable ? <Note>{accountTextHere.setUpFirst(name)}</Note> : null}
+              {connectable && services.length === 0 ? <Note>{accountTextHere.tickOne}</Note> : null}
               <Button
-                label={connection ? ACCOUNT_TEXT.continueTo(name) : ACCOUNT_TEXT.connect(name)}
+                label={connection ? accountTextHere.continueTo(name) : accountTextHere.connect(name)}
                 busy={busy}
                 disabled={!connectable || services.length === 0}
                 onPress={() => void connect(services)}
               />
               {connection ? (
-                <Button label={ACCOUNT_TEXT.cancel} variant="quiet" onPress={() => setPicking(false)} />
+                <Button label={accountTextHere.cancel} variant="quiet" onPress={() => setPicking(false)} />
               ) : null}
             </View>
           ) : (
             <View style={{ gap: 10 }}>
-              {!connectable ? <Note>{ACCOUNT_TEXT.setUpFirst(name)}</Note> : null}
+              {!connectable ? <Note>{accountTextHere.setUpFirst(name)}</Note> : null}
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <Button
-                  label={ACCOUNT_TEXT.reconnect}
+                  label={accountTextHere.reconnect}
                   variant={active ? 'secondary' : 'primary'}
                   disabled={!connectable || busy}
                   onPress={() => {
@@ -344,19 +346,21 @@ function ProviderAccount({
                   }}
                   style={{ flex: 1 }}
                 />
-                <Button label={ACCOUNT_TEXT.disconnect} variant="secondary" onPress={disconnect} />
+                <Button label={accountTextHere.disconnect} variant="secondary" onPress={disconnect} />
               </View>
               {active && connection ? (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                   <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
                     {check.isPending
-                      ? ACCOUNT_TEXT.checking
+                      ? accountTextHere.checking
                       : connection.checkedAt
-                        ? `Checked ${formatAgo(connection.checkedAt, now, timeZone, rawLocale)}`
-                        : ACCOUNT_TEXT.notChecked}
+                        ? tMobile('screens2.connect.checked', {
+                            when: formatAgo(connection.checkedAt, now, timeZone, rawLocale),
+                          })
+                        : accountTextHere.notChecked}
                   </Text>
                   <Button
-                    label={ACCOUNT_TEXT.checkAgain}
+                    label={accountTextHere.checkAgain}
                     variant="secondary"
                     disabled={check.isPending}
                     onPress={() => check.mutate({ params: { connectionId: connection.id } })}
@@ -393,6 +397,7 @@ function ServicePicker({
   locked: readonly ConnectorService[];
   disabled: boolean;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const all = providerServices(provider);
@@ -410,7 +415,7 @@ function ServicePicker({
       {all.map((service, i) => {
         const fixed = locked.includes(service);
         const checked = fixed || value.includes(service);
-        const label = serviceLabel(service, provider);
+        const label = serviceLabel(service, provider, rawLocale);
         return (
           <Touchable
             key={service}
@@ -467,6 +472,7 @@ function ImapPage({
   onOpenProvider: (provider: 'google' | 'microsoft') => void;
 }) {
   const { rawLocale } = useI18n();
+  const accountTextHere = accountText(rawLocale);
   const connectScreenTextHere = connectScreenText(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -497,7 +503,7 @@ function ImapPage({
     return (
       <Panel footer={null}>
         {header}
-        <Note>{ACCOUNT_TEXT.off}</Note>
+        <Note>{accountTextHere.off}</Note>
       </Panel>
     );
   return connection ? (
@@ -511,7 +517,9 @@ function ImapPage({
 
 function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) {
   const { rawLocale } = useI18n();
+  const accountTextHere = accountText(rawLocale);
   const connectScreenTextHere = connectScreenText(rawLocale);
+  const builtinTextHere = builtinText(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrow();
@@ -526,28 +534,28 @@ function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) 
       {!gh && !github.error ? (
         <SkeletonRows count={1} lines={2} label={connectScreenTextHere.loading} />
       ) : gh?.mode === 'off' ? (
-        <Note>{BUILTIN_TEXT.github.off}</Note>
+        <Note>{builtinTextHere.github.off}</Note>
       ) : (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
           <View style={{ paddingTop: 6 }}>
             <StatusDot
               color={connected ? (gh?.error ? theme.colors.warn : theme.colors.ok) : theme.colors.mut}
-              label={connected ? ACCOUNT_TEXT.connected : ACCOUNT_TEXT.notConnected}
+              label={connected ? accountTextHere.connected : accountTextHere.notConnected}
             />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text size={15} weight={600}>
-              {connected ? ACCOUNT_TEXT.connected : BUILTIN_TEXT.github.notConnected}
+              {connected ? accountTextHere.connected : builtinTextHere.github.notConnected}
             </Text>
             {connected ? (
               <Text size={13} lh={1.4} mono color={theme.colors.mut}>
-                {BUILTIN_TEXT.github.connected(gh?.login ?? null, count)}
+                {builtinTextHere.github.connected(gh?.login ?? null, count)}
               </Text>
             ) : null}
           </View>
         </View>
       )}
-      <Note>{BUILTIN_TEXT.github.elsewhere}</Note>
+      <Note>{builtinTextHere.github.elsewhere}</Note>
       {below}
     </Panel>
   );
@@ -556,6 +564,7 @@ function GitHubPage({ header, below }: { header: ReactNode; below: ReactNode }) 
 function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }) {
   const { rawLocale } = useI18n();
   const connectScreenTextHere = connectScreenText(rawLocale);
+  const builtinTextHere = builtinText(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrow();
@@ -567,7 +576,7 @@ function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }
       {!list.data && !list.error ? (
         <SkeletonRows count={2} lines={1} label={connectScreenTextHere.loading} />
       ) : items.length === 0 ? (
-        <Note>{BUILTIN_TEXT.feedback.none}</Note>
+        <Note>{builtinTextHere.feedback.none}</Note>
       ) : (
         <View style={{ gap: 8 }}>
           {items.map(({ integration: i }) => (
@@ -585,7 +594,7 @@ function FeedbackPage({ header, below }: { header: ReactNode; below: ReactNode }
         </View>
       )}
       <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-        {BUILTIN_TEXT.feedback.elsewhere}
+        {builtinTextHere.feedback.elsewhere}
       </Text>
       {below}
     </Panel>

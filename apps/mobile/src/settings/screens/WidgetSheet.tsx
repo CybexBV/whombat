@@ -50,10 +50,8 @@ import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { DeskMiddleCard, DeskServersCard } from '../DeskShowsPart';
-import { PHONE_SCREENS_TEXT, sizesLine, type TileLabel, tileWhere } from './tiles';
+import { phoneScreensText, sizesLine, type TileLabel, tileWhere } from './tiles';
 import { WidgetLogo } from './WidgetLogo';
-
-const M = PHONE_SCREENS_TEXT;
 
 export interface WidgetSheetActions {
   nudge(dx: number, dy: number): void;
@@ -121,6 +119,7 @@ export function WidgetSheet({
 }) {
   const { rawLocale } = useI18n();
   const E = deskScreensText(rawLocale).editor;
+  const M = phoneScreensText(rawLocale);
   const theme = useTheme();
   const [dragging, setDragging] = useState(false);
   const name = label?.name ?? '';
@@ -140,7 +139,7 @@ export function WidgetSheet({
                 {label.name}
               </Text>
               <Text size={13} lh={1.4} color={theme.colors.mut}>
-                {[label.of, tileWhere(widget)].filter(Boolean).join(' · ')}
+                {[label.of, tileWhere(widget, rawLocale)].filter(Boolean).join(' · ')}
               </Text>
             </View>
           </View>
@@ -183,7 +182,12 @@ export function WidgetSheet({
 
 /* Move and Size ---------------------------------------------------------------------------------------------------- */
 
-const ARROWS: readonly { key: keyof typeof M.moveTo; dx: number; dy: number; icon: LucideIcon }[] = [
+const ARROWS: readonly {
+  key: keyof ReturnType<typeof phoneScreensText>['moveTo'];
+  dx: number;
+  dy: number;
+  icon: LucideIcon;
+}[] = [
   { key: 'left', dx: -1, dy: 0, icon: ArrowLeft },
   { key: 'up', dx: 0, dy: -1, icon: ArrowUp },
   { key: 'down', dx: 0, dy: 1, icon: ArrowDown },
@@ -191,6 +195,8 @@ const ARROWS: readonly { key: keyof typeof M.moveTo; dx: number; dy: number; ico
 ];
 
 function MovePart({ name, actions }: { name: string; actions: WidgetSheetActions }) {
+  const { rawLocale } = useI18n();
+  const M = phoneScreensText(rawLocale);
   return (
     <View style={{ gap: 8 }}>
       <SectionLabel>{M.move.toUpperCase()}</SectionLabel>
@@ -448,6 +454,7 @@ function OwnSettings({
 }) {
   const { rawLocale } = useI18n();
   const E = deskScreensText(rawLocale).editor;
+  const M = phoneScreensText(rawLocale);
   const theme = useTheme();
   const opt = (key: string, value: string) => actions.setOpts({ ...widget.opts, [key]: value });
   if ((widget.type === 'now' || widget.type === 'strip') && pairFirst)

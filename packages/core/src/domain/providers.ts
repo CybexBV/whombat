@@ -4,7 +4,8 @@
  * `codex` is ChatGPT (2.1, CT-1450): its turns run on Hermes's own loop and it needs nothing installed.
  */
 import { z } from 'zod';
-import { AgentProvider } from './agent.js';
+import { coreWords } from '../i18n/catalog.js';
+import { AGENT_PROVIDERS, AgentProvider } from './agent.js';
 import { Timestamp } from './common.js';
 import type { LocalModelView } from './local-model.js';
 import { ProviderModels } from './models.js';
@@ -18,11 +19,12 @@ export const LIVE_PROVIDERS = ['claude', 'codex'] as const;
 export const LiveProvider = z.enum(LIVE_PROVIDERS);
 export type LiveProvider = z.infer<typeof LiveProvider>;
 
-export const PROVIDER_LABELS: Record<AgentProvider, string> = {
-  claude: 'Claude Code',
-  codex: 'ChatGPT',
-  local: 'Custom AI model',
-};
+/** What each provider is called, in a locale: brand names stay as they are. */
+export function providerLabels(locale?: string | null): Readonly<Record<AgentProvider, string>> {
+  return coreWords(locale, 'provider.label', AGENT_PROVIDERS);
+}
+
+export const PROVIDER_LABELS: Record<AgentProvider, string> = providerLabels('en');
 
 /** What the runner found: `missing` (not installed / not on its PATH), `logged_out`, or another `error`. */
 export const ProviderState = z.enum(['ready', 'logged_out', 'missing', 'error']);

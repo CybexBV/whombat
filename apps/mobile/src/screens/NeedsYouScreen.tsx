@@ -11,7 +11,7 @@
  */
 
 import type { NeedsYouButton, NeedsYouGlyph, NeedsYouListGroupView, NeedsYouListRow } from '@whombat/client';
-import { needsYouApprovalCard, needsYouWords, TEAM_REPORT_WORDS } from '@whombat/client';
+import { needsYouApprovalCard, needsYouWords, teamReportWords } from '@whombat/client';
 import { useHomeOverview, useStartChat } from '@whombat/client/react';
 import type { NeedsYouItem } from '@whombat/core';
 import { approvalCardWords } from '@whombat/core/approvals';
@@ -744,6 +744,7 @@ function ApprovalRow({
   onMenu: (buttons: NeedsYouButton[]) => void;
 }) {
   const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const approvalCardWordsHere = approvalCardWords(rawLocale);
 
   const needsYouTabHere = needsYouTab(rawLocale);
@@ -755,7 +756,7 @@ function ApprovalRow({
   const navigation = useAppNavigation();
   const { timeZone } = useBurrowBase();
   const words = useAgentWords();
-  const card = needsYouApprovalCard(row, { timeZone, assistant: words.name });
+  const card = needsYouApprovalCard(row, { timeZone, assistant: words.name, locale: rawLocale });
   // The assistant's draft report: Edit opens the form with it; too long for its yes here, its own screen takes it.
   const doors = approvalRowDoors(row);
   if (!card) return null;
@@ -839,7 +840,7 @@ function ApprovalRow({
           ) : null}
           {doors.draftId ? (
             <Button
-              label={TEAM_REPORT_WORDS.edit}
+              label={teamReportWordsHere.edit}
               variant="secondary"
               size="lg"
               wrap

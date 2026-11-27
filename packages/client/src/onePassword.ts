@@ -6,8 +6,8 @@
  * are here. Pure.
  */
 import { type CatalogEntry, isVaultSyncConnection } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import {
-  ONEPASSWORD_WORDS,
   type OnePasswordDisconnectChoice,
   type OnePasswordRemovalAnswer,
   type OnePasswordSyncView,
@@ -17,33 +17,40 @@ import {
   onePasswordKeptLine,
   onePasswordSkipText,
   onePasswordStatusLines,
+  onePasswordWords,
   type VaultEntry,
 } from '@whombat/core/vault';
 import { ApiError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** The words the spec leaves to the apps. */
-export const ONEPASSWORD_APP_TEXT = {
-  /** The connection page's section with the sync. */
-  section: 'KEPT IN STEP',
-  /** Above the vault's name. */
-  vaultLabel: 'VAULT IN 1PASSWORD',
-  /** Before the first check named the vault. */
-  vaultUnknown: 'Your 1Password vault',
-  /** The footer while a pass runs or is asked for. */
-  syncing: 'Syncing with 1Password…',
-  /** What Remove asks first, above the two choices. */
-  removeAsk: (label: string) =>
-    `Remove ${label}? Your Vault stops following it. Nothing changes in 1Password.`,
-  /** The two choices' group, for screen readers. */
-  removeChoice: 'The entries it keeps in step',
-  /** After the guard's answer. */
-  removed: 'Removed them from your Vault too.',
-  kept: 'Kept them in your Vault.',
-  /** The set changed since the person saw it (`conflict`): the new one is shown, nothing was changed. */
-  changed: 'The list changed since you saw it. Look again before you choose.',
-  /** The page part didn't load. */
-  failed: 'Couldn’t read how 1Password is kept in step. Try again in a moment.',
-} as const;
+/** The words the spec leaves to the apps, in a locale (English when none). */
+export function onePasswordAppText(locale?: string | null) {
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).onePassword;
+  return {
+    /** The connection page's section with the sync. */
+    section: w.section,
+    /** Above the vault's name. */
+    vaultLabel: w.vaultLabel,
+    /** When the vault's name isn't known yet. */
+    vaultUnknown: w.vaultUnknown,
+    /** A pass is running or asked for. */
+    syncing: w.syncing,
+    /** What removing the connection asks, above the two choices. */
+    removeAsk: (label: string) => interpolate(w.removeAsk, { label }),
+    /** The two choices' group, for screen readers. */
+    removeChoice: w.removeChoice,
+    /** After the guard's answer. */
+    removed: w.removed,
+    kept: w.kept,
+    /** The set changed since the person saw it (`conflict`): the new one is shown, nothing was changed. */
+    changed: w.changed,
+    /** The page part didn't load. */
+    failed: w.failed,
+  };
+}
+
+export const ONEPASSWORD_APP_TEXT = onePasswordAppText();
 
 /** The guard's answer was refused because the set changed since it was shown (`conflict`): nothing was removed. */
 export function onePasswordSetChanged(error: unknown): boolean {
@@ -53,17 +60,20 @@ export function onePasswordSetChanged(error: unknown): boolean {
 /* The Vault ------------------------------------------------------------------------------------------------------ */
 
 /** A Vault entry's tag after its name: “1Password” while it is kept in step there, else null. */
-export function vaultEntryTag(entry: Pick<VaultEntry, 'source'>): string | null {
-  return entry.source?.kind === 'onepassword' ? ONEPASSWORD_WORDS.tag : null;
+export function vaultEntryTag(entry: Pick<VaultEntry, 'source'>, locale?: string | null): string | null {
+  return entry.source?.kind === 'onepassword' ? onePasswordWords(locale).tag : null;
 }
 
 /**
  * What removing a synced entry also does, said in its confirmation: only for an entry paired with an item now (one
  * waiting to go, or from a box that doesn't say, has no item there to archive); null otherwise.
  */
-export function vaultEntryRemoveNote(entry: Pick<VaultEntry, 'source'>): string | null {
+export function vaultEntryRemoveNote(
+  entry: Pick<VaultEntry, 'source'>,
+  locale?: string | null,
+): string | null {
   return entry.source?.kind === 'onepassword' && entry.source.paired === true
-    ? ONEPASSWORD_WORDS.removeArchives
+    ? onePasswordWords(locale).removeArchives
     : null;
 }
 
@@ -82,11 +92,12 @@ export function vaultEntrySourceLine(
   entry: Pick<VaultEntry, 'source'>,
   now: Date | number | string,
   timeZone: string,
+  locale?: string | null,
 ): ToneLine | null {
   const source = entry.source;
   if (source?.kind !== 'onepassword') return null;
   return {
-    text: onePasswordEntryLine(source, now, timeZone),
+    text: onePasswordEntryLine(source, now, timeZone, locale),
     tone: source.state === 'problem' ? 'warn' : 'plain',
   };
 }
@@ -115,29 +126,29 @@ export function onePasswordPage(
   view: OnePasswordSyncView,
   now: Date | number | string,
   timeZone: string,
+  locale?: string | null,
 ): OnePasswordPage {
+  const words = onePasswordWords(locale);
+  const app = onePasswordAppText(locale);
   const paused = view.outcome === 'paused' && view.removals ? view.removals : null;
   // The paused line is the removals' own title, with their names and the two answers under it: not here again. A sync
   // failing now (the second pass in a row that couldn't finish) has stopped keeping them in step (`bad`), as the head
   // says; one failed pass, waiting for the limit and a read-only token need a look.
-  const status = onePasswordStatusLines({ ...view, removals: null }, timeZone).map(
+  const status = onePasswordStatusLines({ ...view, removals: null }, timeZone, locale).map(
     (text): ToneLine => ({
       text,
-      tone:
-        text !== ONEPASSWORD_WORDS.readOnly && view.outcome === 'failing' && view.failing ? 'bad' : 'warn',
+      tone: text !== words.readOnly && view.outcome === 'failing' && view.failing ? 'bad' : 'warn',
     }),
   );
   return {
-    vault: view.vaultTitle?.trim() || ONEPASSWORD_APP_TEXT.vaultUnknown,
-    kept: onePasswordKeptLine(view.kept),
+    vault: view.vaultTitle?.trim() || app.vaultUnknown,
+    kept: onePasswordKeptLine(view.kept, locale),
     status,
-    checked: view.syncing
-      ? ONEPASSWORD_APP_TEXT.syncing
-      : onePasswordCheckedLine(view.checkedAt, now, timeZone),
+    checked: view.syncing ? app.syncing : onePasswordCheckedLine(view.checkedAt, now, timeZone, locale),
     syncing: view.syncing,
     removals: paused
       ? {
-          title: onePasswordGoneTitle(paused.entries.length),
+          title: onePasswordGoneTitle(paused.entries.length, locale),
           names: paused.entries.map((e) => e.name),
           token: paused.token,
         }
@@ -145,7 +156,7 @@ export function onePasswordPage(
     notInVault: view.notInVault.map((item) => ({
       id: item.itemId,
       title: item.title,
-      reason: onePasswordSkipText(item.reason),
+      reason: onePasswordSkipText(item.reason, locale),
     })),
   };
 }
@@ -153,13 +164,17 @@ export function onePasswordPage(
 /* Removing the connection ---------------------------------------------------------------------------------------- */
 
 /** The two choices Remove offers for the Vault's sync, “Keep the entries in your Vault” first (the default). */
-export const ONEPASSWORD_DISCONNECT_OPTIONS: readonly {
-  value: OnePasswordDisconnectChoice;
-  label: string;
-}[] = [
-  { value: 'keep', label: ONEPASSWORD_WORDS.disconnectKeep },
-  { value: 'remove', label: ONEPASSWORD_WORDS.disconnectRemove },
-];
+export function onePasswordDisconnectOptions(
+  locale?: string | null,
+): readonly { value: OnePasswordDisconnectChoice; label: string }[] {
+  const words = onePasswordWords(locale);
+  return [
+    { value: 'keep', label: words.disconnectKeep },
+    { value: 'remove', label: words.disconnectRemove },
+  ];
+}
+
+export const ONEPASSWORD_DISCONNECT_OPTIONS = onePasswordDisconnectOptions();
 
 /**
  * What `connections.disconnect` carries: the person's choice for the Vault's sync, nothing for any other connection (the
@@ -173,6 +188,7 @@ export function disconnectQuery(
 }
 
 /** The toast after the guard's answer. */
-export function onePasswordAnsweredText(answer: OnePasswordRemovalAnswer): string {
-  return answer === 'remove' ? ONEPASSWORD_APP_TEXT.removed : ONEPASSWORD_APP_TEXT.kept;
+export function onePasswordAnsweredText(answer: OnePasswordRemovalAnswer, locale?: string | null): string {
+  const app = onePasswordAppText(locale);
+  return answer === 'remove' ? app.removed : app.kept;
 }

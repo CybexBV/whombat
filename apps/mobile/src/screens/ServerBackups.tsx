@@ -60,18 +60,21 @@ export function ServerBackups({
   const facts: { label: string; value: string }[] = [];
   if (b?.lastJob)
     facts.push({
-      label: 'Last run',
-      value: `${formatRelativeDay(Date.parse(b.lastJob.at), now, timeZone, rawLocale)} · ${b.lastJob.guestsOk} of ${b.lastJob.guestsTotal} guests${b.lastJob.result === 'ok' ? ', went fine' : `, ${b.lastJob.result}`}`,
+      label: tMobile('screens2.serverBackups.lastRun'),
+      value: `${formatRelativeDay(Date.parse(b.lastJob.at), now, timeZone, rawLocale)} · ${tMobile('screens2.serverBackups.guests', { ok: b.lastJob.guestsOk, total: b.lastJob.guestsTotal })}, ${b.lastJob.result === 'ok' ? tMobile('screens2.serverBackups.wentFine') : b.lastJob.result}`,
     });
   if (b?.nextRun)
     facts.push({
-      label: 'Next run',
+      label: tMobile('screens2.serverBackups.nextRun'),
       value: formatRelativeDay(Date.parse(b.nextRun), now, timeZone, rawLocale),
     });
-  if (b?.target) facts.push({ label: 'Saves to', value: b.target });
+  if (b?.target) facts.push({ label: tMobile('screens2.serverBackups.savesTo'), value: b.target });
   const items: HostBackupJob[] = jobsQ.data?.op === 'backupjob.list' ? jobsQ.data.items : [];
-  const jobRows = backupJobRows(items, guests, now, timeZone);
-  const latest = list.data?.op === 'backup.list' ? latestBackups(list.data.items, guests, now, timeZone) : [];
+  const jobRows = backupJobRows(items, guests, now, timeZone, rawLocale);
+  const latest =
+    list.data?.op === 'backup.list'
+      ? latestBackups(list.data.items, guests, now, timeZone, undefined, rawLocale)
+      : [];
   return (
     <>
       {facts.length ? (
@@ -101,11 +104,13 @@ export function ServerBackups({
                   meta={r.next}
                   chevron={canChange}
                   label={r.label}
-                  {...(canChange ? { hint: 'Run it now, or pause it', onPress: () => setOpen(r) } : {})}
+                  {...(canChange
+                    ? { hint: tMobile('screens2.serverBackups.runOrPause'), onPress: () => setOpen(r) }
+                    : {})}
                 />
               ))
             ) : (
-              <CardQuiet>{`No backup plan on ${serverName} yet. Ask your assistant to make one, or make one in Whombat on a computer.`}</CardQuiet>
+              <CardQuiet>{tMobile('screens2.serverBackups.none', { name: serverName })}</CardQuiet>
             )}
           </OneCard>
         )
@@ -147,6 +152,7 @@ function JobSheet({
   row: BackupJobRowView<HostBackupJob>;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { send, busy } = useManageChange(serverId);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -163,7 +169,7 @@ function JobSheet({
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      badge={row.enabled ? row.next : 'Paused'}
+      badge={row.enabled ? row.next : tMobile('screens2.serverBackups.paused')}
       tone={row.enabled ? 'ok' : 'mut'}
       title={row.title}
       body={row.line}
@@ -171,14 +177,14 @@ function JobSheet({
       buttons={[
         {
           id: 'run',
-          label: 'Run now',
+          label: tMobile('screens2.common.runNow'),
           variant: 'primary',
           onPress: () =>
             go('run', send({ op: 'backupjob.run', params: { jobId: job.id }, name: serverName })),
         },
         {
           id: 'toggle',
-          label: row.enabled ? 'Pause it' : 'Resume it',
+          label: tMobile(row.enabled ? 'screens2.serverBackups.pauseIt' : 'screens2.serverBackups.resumeIt'),
           variant: 'secondary',
           onPress: () =>
             go(
@@ -189,12 +195,12 @@ function JobSheet({
                 ...(job.digest ? { digest: job.digest } : {}),
                 name: serverName,
                 done: row.enabled
-                  ? 'The backup plan is paused.'
-                  : 'The backup plan runs on its schedule again.',
+                  ? tMobile('screens2.serverBackups.pausedDone')
+                  : tMobile('screens2.serverBackups.resumedDone'),
               }),
             ),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />

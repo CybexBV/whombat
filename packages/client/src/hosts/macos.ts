@@ -13,7 +13,10 @@ import {
   hostScreenProblemText,
   screenMessageText,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { utf8ByteLength } from '@whombat/core/text/utf8';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_MAC_WORDS } from '../i18n/messages/connectionsHosts/mac';
 import { formatAgoIso } from './format';
 import type { HostTone } from './thresholds';
 
@@ -68,14 +71,21 @@ export function macServerTabs(findMyOnMac: boolean): readonly MacServerTab[] {
   return findMyOnMac ? MAC_SERVER_TABS_WITH_FIND_MY : MAC_SERVER_TABS;
 }
 
-export const MAC_SERVER_TAB_WORDS: Record<MacServerTab, string> = {
-  summary: 'Summary',
-  screen: 'Screen',
-  findmy: 'Find My',
-  storage: 'Storage',
-  sensors: 'Sensors',
-  system: 'System',
-};
+/** A Mac's tabs' names, in a locale (English when none is given). */
+export function macServerTabWords(locale?: string | null): Record<MacServerTab, string> {
+  return { ...clientTree(locale, HOSTS_MAC_WORDS).tabs };
+}
+
+export const MAC_SERVER_TAB_WORDS: Record<MacServerTab, string> = macServerTabWords('en');
+
+/** The Mac's tabs on the phone with their names: its own Find My too only on an older Whombat (`withFindMy`). */
+export function macPhoneTabs(
+  locale?: string | null,
+  withFindMy = false,
+): { id: MacServerTab; label: string }[] {
+  const words = macServerTabWords(locale);
+  return (withFindMy ? MAC_PHONE_TABS_WITH_FIND_MY : MAC_PHONE_TABS).map((id) => ({ id, label: words[id] }));
+}
 
 /** The tab an address asks for, if the Mac's page has it (`tabs`, its own Find My only on an older Whombat). */
 export function parseMacServerTab(v: unknown, tabs: readonly MacServerTab[] = MAC_SERVER_TABS): MacServerTab {
@@ -92,34 +102,17 @@ export function findMyOnMac(statuses: readonly { catalogId: string }[] | null | 
 }
 
 /** The words of a Mac's page that aren't built from its state. */
-export const MAC_WORDS = {
-  screenTitle: 'Screen',
-  passwordTitle: 'The Mac’s password',
-  helperTitle: 'Whombat Helper',
-  sharingHow: 'On the Mac, open System Settings → General → Sharing and switch on Screen Sharing.',
-  openScreen: 'Open the screen',
-  lookAgain: 'Look again',
-  look: 'Look at the screen',
-  unlock: 'Unlock the screen',
-  setPassword: 'Set the Mac’s password',
-  check: 'Check',
-  forget: 'Forget',
-  openSetting: 'Open the setting on the Mac',
-  passwordHint:
-    'Whombat keeps it on the Mac only, to open and unlock its screen. It never shows it to anyone.',
-  user: 'User on the Mac',
-  password: 'Password',
-  save: 'Save',
-  noHelper: 'Without it Whombat can still see and use the screen, but can’t press buttons by name.',
-  helperStarts: 'It starts when someone signs in at the Mac.',
-  needsAccess:
-    'It needs Accessibility to press buttons by name. Open the setting on the Mac, then switch on Whombat Helper in the screen.',
-  forgetTitle: (server: string) => `Forget the password for ${server}’s screen?`,
-  forgetBody: (server: string) => `Whombat can’t open or unlock ${server}’s screen until it’s set again.`,
-  forgetConfirm: 'Forget it',
-  phoneNoLive: 'The live screen opens on the web. Here you see a picture of it.',
-  lookAlt: (server: string) => `${server}’s screen`,
-} as const;
+export function macWords(locale?: string | null) {
+  const w = clientTree(locale, HOSTS_MAC_WORDS).words;
+  return {
+    ...w,
+    forgetTitle: (server: string) => interpolate(w.forgetTitle, { server }),
+    forgetBody: (server: string) => interpolate(w.forgetBody, { server }),
+    lookAlt: (server: string) => interpolate(w.lookAlt, { server }),
+  };
+}
+
+export const MAC_WORDS = macWords('en');
 
 /* This Mac ----------------------------------------------------------------------------------------- */
 
@@ -135,7 +128,10 @@ export function macModelLine(m: Pick<HostMacosDetail, 'model' | 'modelName'>): s
   return m.modelName ?? m.model ?? null;
 }
 
-const onOff = (v: boolean | null): string => (v === null ? 'Not known' : v ? 'On' : 'Off');
+function onOff(v: boolean | null, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_MAC_WORDS);
+  return v === null ? w.notKnown : v ? w.on : w.off;
+}
 
 export interface MacFact {
   label: string;
@@ -147,14 +143,15 @@ export interface MacFact {
  * whether it signs in by itself after a restart. Its macOS is the System line above them; who is at the screen is on
  * the Screen tab.
  */
-export function macFacts(m: HostMacosDetail): MacFact[] {
+export function macFacts(m: HostMacosDetail, locale?: string | null): MacFact[] {
+  const w = clientTree(locale, HOSTS_MAC_WORDS).facts;
   const out: MacFact[] = [];
   const model = macModelLine(m);
-  if (model) out.push({ label: 'Model', value: model });
-  if (m.chip) out.push({ label: 'Chip', value: m.chip });
-  out.push({ label: 'System Integrity Protection', value: onOff(m.sip) });
-  out.push({ label: 'FileVault', value: onOff(m.filevault) });
-  out.push({ label: 'Signs in by itself', value: m.autoLogin ? `Yes, as ${m.autoLogin}` : 'No' });
+  if (model) out.push({ label: w.model, value: model });
+  if (m.chip) out.push({ label: w.chip, value: m.chip });
+  out.push({ label: w.sip, value: onOff(m.sip, locale) });
+  out.push({ label: w.fileVault, value: onOff(m.filevault, locale) });
+  out.push({ label: w.autoLogin, value: m.autoLogin ? interpolate(w.yesAs, { user: m.autoLogin }) : w.no });
   return out;
 }
 
@@ -212,6 +209,8 @@ export interface MacScreenInput {
   owner: boolean;
   /** Now in ms (how long ago the password was checked). */
   now: number;
+  /** The language the words are in (English when none is given). */
+  locale?: string | null;
 }
 
 /**
@@ -222,7 +221,9 @@ export interface MacScreenInput {
 export function macScreenView(d: HostServerDetail, input: MacScreenInput): MacScreenView | null {
   const m = d.macos;
   if (!m) return null;
-  const { name, owner, now } = input;
+  const { name, owner, now, locale } = input;
+  const words = macWords(locale);
+  const w = clientTree(locale, HOSTS_MAC_WORDS).screen;
   const s = m.screen;
   const h = m.helper;
   const rc = d.server.remoteControl;
@@ -231,113 +232,101 @@ export function macScreenView(d: HostServerDetail, input: MacScreenInput): MacSc
   const lines: MacLine[] = [
     {
       key: 'sharing',
-      title: 'Screen Sharing',
-      text: s.sharing ? 'On' : 'Off',
+      title: w.sharing,
+      text: onOff(s.sharing, locale),
       tone: s.sharing ? 'ok' : 'warn',
     },
   ];
   lines.push({
     key: 'lock',
-    title: 'The screen',
-    text: s.locked === null ? 'Can’t tell if it’s locked' : s.locked ? 'Locked' : 'Unlocked',
+    title: w.lock,
+    text: s.locked === null ? w.cantTell : s.locked ? w.locked : w.unlocked,
     tone: s.locked === null ? 'mut' : s.locked ? 'warn' : 'ok',
   });
   lines.push({
     key: 'user',
-    title: 'At the screen',
-    text: m.consoleUser ?? 'Nobody: the Mac shows its login window',
+    title: w.atScreen,
+    text: m.consoleUser ?? w.nobody,
     tone: m.consoleUser ? 'ok' : 'mut',
   });
 
-  const checked = s.signInAt ? ` · checked ${formatAgoIso(s.signInAt, now)}` : '';
+  const checked = s.signInAt ? interpolate(w.checked, { ago: formatAgoIso(s.signInAt, now, locale) }) : '';
   const account: MacLine = !s.account
-    ? { key: 'account', title: MAC_WORDS.passwordTitle, text: 'Not set yet', tone: 'warn' }
+    ? { key: 'account', title: words.passwordTitle, text: w.notSet, tone: 'warn' }
     : s.signIn === 'failed'
       ? {
           key: 'account',
-          title: MAC_WORDS.passwordTitle,
-          text: `The Mac didn’t take it for ${s.account}. Set it again.`,
+          title: words.passwordTitle,
+          text: interpolate(w.notTaken, { account: s.account }),
           tone: 'bad',
         }
       : s.signIn === 'ok'
         ? {
             key: 'account',
-            title: MAC_WORDS.passwordTitle,
-            text: `Signs in as ${s.account}${checked}`,
+            title: words.passwordTitle,
+            text: interpolate(w.signsInAs, { account: s.account, checked }),
             tone: 'ok',
           }
         : {
             key: 'account',
-            title: MAC_WORDS.passwordTitle,
-            text: `Set for ${s.account}, not checked yet`,
+            title: words.passwordTitle,
+            text: interpolate(w.notChecked, { account: s.account }),
             tone: 'mut',
           };
 
   const helper: MacLine[] = [];
   let helperNote: string | null = null;
   if (!h.installed) {
-    helper.push({ key: 'helper', title: 'On the Mac', text: 'Not installed', tone: 'mut' });
-    helperNote = MAC_WORDS.noHelper;
+    helper.push({ key: 'helper', title: w.onTheMac, text: w.notInstalled, tone: 'mut' });
+    helperNote = words.noHelper;
   } else if (!h.running) {
-    helper.push({ key: 'helper', title: 'On the Mac', text: 'Installed, not running', tone: 'warn' });
-    helperNote = MAC_WORDS.helperStarts;
+    helper.push({ key: 'helper', title: w.onTheMac, text: w.notRunning, tone: 'warn' });
+    helperNote = words.helperStarts;
   } else {
-    const who = h.user ? ` for ${h.user}` : '';
-    const version = h.version ? ` · version ${h.version}` : '';
-    helper.push({ key: 'helper', title: 'On the Mac', text: `Running${who}${version}`, tone: 'ok' });
+    const running = h.user ? interpolate(w.runningFor, { user: h.user }) : w.running;
+    const version = h.version ? interpolate(w.version, { version: h.version }) : '';
+    helper.push({ key: 'helper', title: w.onTheMac, text: `${running}${version}`, tone: 'ok' });
     helper.push({
       key: 'access',
-      title: 'Accessibility',
-      text: onOff(h.ax),
+      title: w.accessibility,
+      text: onOff(h.ax, locale),
       tone: h.ax === null ? 'mut' : h.ax ? 'ok' : 'warn',
     });
-    if (h.ax === false) helperNote = MAC_WORDS.needsAccess;
+    if (h.ax === false) helperNote = words.needsAccess;
   }
   const needsAccess = h.installed && h.running && h.ax === false;
 
   // What stands in the way, first to last: the Mac not checking in, the switch, Screen Sharing, the password.
   const shellOff =
-    rc.hostShell === false
-      ? rc.hostShellReason?.trim() || `The screen goes with the shell, which is switched off for ${name}.`
-      : null;
-  const reach: MacMay = offline
-    ? no(`${name} isn’t checking in, so its screen can’t be reached now.`)
-    : shellOff
-      ? no(shellOff)
-      : yes;
-  const ownerOnly = 'Only an owner of this Whombat can do this.';
+    rc.hostShell === false ? rc.hostShellReason?.trim() || interpolate(w.shellOff, { name }) : null;
+  const reach: MacMay = offline ? no(interpolate(w.offline, { name })) : shellOff ? no(shellOff) : yes;
+  const ownerOnly = w.ownerOnly;
   const screen: MacMay = !owner
     ? no(ownerOnly)
     : !reach.can
       ? reach
       : !s.sharing
-        ? no('Screen Sharing is off on the Mac.')
+        ? no(w.sharingOff)
         : !s.account
-          ? no('Set the Mac’s password first.')
+          ? no(w.passwordFirst)
           : s.signIn === 'failed'
-            ? no('The Mac didn’t take its password. Set it again.')
+            ? no(w.passwordRefused)
             : yes;
-  const password: MacMay = !owner
-    ? no(ownerOnly)
-    : !reach.can
-      ? reach
-      : !s.sharing
-        ? no('Screen Sharing is off on the Mac.')
-        : yes;
+  const password: MacMay = !owner ? no(ownerOnly) : !reach.can ? reach : !s.sharing ? no(w.sharingOff) : yes;
   const unlock: MacMay = screen;
   const helperStep: MacMay = !owner
     ? no(ownerOnly)
     : !reach.can
       ? reach
       : !h.installed || !h.running
-        ? no('Whombat Helper isn’t running on the Mac.')
+        ? no(w.helperNotRunning)
         : yes;
 
   return {
     lines,
     maybeLocked: s.locked !== false,
     sharing: s.sharing,
-    sharingHow: s.sharing ? null : MAC_WORDS.sharingHow,
+    sharingHow: s.sharing ? null : words.sharingHow,
     account,
     accountUser: s.account ?? m.consoleUser ?? m.autoLogin ?? '',
     hasAccount: !!s.account,
@@ -348,9 +337,7 @@ export function macScreenView(d: HostServerDetail, input: MacScreenInput): MacSc
     unlock,
     password,
     helperStep,
-    fileVaultNote: m.filevault
-      ? 'FileVault is on, so after a restart the Mac waits for its password at its own screen.'
-      : null,
+    fileVaultNote: m.filevault ? w.fileVault : null,
   };
 }
 
@@ -360,12 +347,13 @@ export function macScreenView(d: HostServerDetail, input: MacScreenInput): MacSc
  * What is wrong with the Mac's user and password before they are sent, or null: Apple's sign-in takes at most 63 bytes
  * of each (a letter with an accent counts as two).
  */
-export function macAccountProblem(user: string, password: string): string | null {
-  if (!user.trim()) return 'Type the user’s name on the Mac.';
-  if (!password) return 'Type the password.';
+export function macAccountProblem(user: string, password: string, locale?: string | null): string | null {
+  const w = clientTree(locale, HOSTS_MAC_WORDS).account;
+  if (!user.trim()) return w.user;
+  if (!password) return w.password;
   const max = HOST_SCREEN_LIMITS.accountBytes;
-  if (utf8ByteLength(user.trim()) > max) return `The Mac takes a user name of at most ${max} letters.`;
-  if (utf8ByteLength(password) > max) return `The Mac takes a password of at most ${max} letters.`;
+  if (utf8ByteLength(user.trim()) > max) return interpolate(w.userTooLong, { max });
+  if (utf8ByteLength(password) > max) return interpolate(w.passwordTooLong, { max });
   return null;
 }
 
@@ -381,14 +369,17 @@ export function macStepText(
   body: Pick<HostScreenBody, 'op' | 'target'> & { account?: { user: string } },
   result: Pick<HostScreenResult, 'ok' | 'code' | 'message' | 'status'>,
   server: string,
+  locale?: string | null,
 ): { ok: boolean; text: string } {
+  const w = clientTree(locale, HOSTS_MAC_WORDS).step;
+  const user = body.account?.user ?? w.thatUser;
   if (!result.ok) {
     if (body.op === 'account.set' && result.code === 'sign_in_failed')
-      return {
-        ok: false,
-        text: `${server} didn’t take that password for ${body.account?.user ?? 'that user'}.`,
-      };
-    return { ok: false, text: hostScreenProblemText(result.code ?? 'failed', server, result.message) };
+      return { ok: false, text: interpolate(w.refused, { server, user }) };
+    return {
+      ok: false,
+      text: hostScreenProblemText(result.code ?? 'failed', server, result.message, locale),
+    };
   }
   const said = screenMessageText(result.message);
   const plus = (text: string) => (said ? `${text} ${said}` : text);
@@ -396,36 +387,29 @@ export function macStepText(
     case 'account.set':
       return {
         ok: true,
-        text: plus(`Whombat signs in to ${server}’s screen as ${body.account?.user ?? 'that user'} now.`),
+        text: plus(interpolate(w.set, { server, user })),
       };
     case 'account.check':
       return result.status?.signIn === 'failed'
-        ? { ok: false, text: `${server} didn’t take the password. Set it again.` }
-        : { ok: true, text: plus(`The password for ${server}’s screen works.`) };
+        ? { ok: false, text: interpolate(w.checkFailed, { server }) }
+        : { ok: true, text: plus(interpolate(w.works, { server })) };
     case 'account.clear':
-      return { ok: true, text: plus(`Whombat forgot the password for ${server}’s screen.`) };
+      return { ok: true, text: plus(interpolate(w.cleared, { server })) };
     case 'unlock': {
       const locked = result.status?.locked;
-      if (locked === true)
-        return { ok: false, text: plus(`${server}’s screen is still locked. Look at it to see why.`) };
-      if (locked === false) return { ok: true, text: plus(`${server}’s screen is unlocked.`) };
-      return {
-        ok: true,
-        text: plus(`Whombat typed the password on ${server}’s screen. Look at it to see if it’s unlocked.`),
-      };
+      if (locked === true) return { ok: false, text: plus(interpolate(w.stillLocked, { server })) };
+      if (locked === false) return { ok: true, text: plus(interpolate(w.unlocked, { server })) };
+      return { ok: true, text: plus(interpolate(w.typed, { server })) };
     }
     case 'ui.open':
       return body.target === 'accessibility'
-        ? {
-            ok: true,
-            text: plus(`Accessibility is open on ${server}’s screen. Switch on Whombat Helper there.`),
-          }
-        : { ok: true, text: plus(`It’s open on ${server}’s screen.`) };
+        ? { ok: true, text: plus(interpolate(w.accessibility, { server })) }
+        : { ok: true, text: plus(interpolate(w.opened, { server })) };
     case 'status':
     case 'look':
       return { ok: true, text: '' };
     default:
-      return { ok: true, text: said ?? 'Done.' };
+      return { ok: true, text: said ?? w.done };
   }
 }
 

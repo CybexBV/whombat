@@ -8,27 +8,25 @@
  * (`backupFileSave.ts` binds them), so all of it is unit-tested in Node.
  */
 import {
-  BACKUP_FILE_TEXT,
   type BackupDownloadRow,
   type BackupFileSink,
   type BackupProgressView,
   type BackupRestoreLink,
   type BackupRestoreRow,
+  backupFileText,
   backupRestoreFileLine,
 } from '@whombat/client';
 import type { SyncStorage } from '@whombat/client/managed';
 import type { BackupMaker, BackupRestorer, DismissedRestores } from '@whombat/client/react';
 import {
-  BACKUP_COPY,
-  BACKUP_ON_DIFFERENT_LABELS,
   type BackupOnDifferent,
+  backupCopy,
   backupDownloadLabel,
   backupFileErrorText,
+  backupOnDifferentLabels,
 } from '@whombat/core/backup';
-import { HOST_REPOINT_WORDS } from '@whombat/core/domain';
-import { COPY } from './copy';
-
-const T = COPY.backupFile;
+import { hostRepointWords } from '@whombat/core/domain';
+import { managedCopy } from './copy';
 
 /* Download a backup ------------------------------------------------------------------------------------------------ */
 
@@ -96,7 +94,9 @@ type MakerView = Pick<
   | 'downloaded'
 >;
 
-export function backupDownloadPanel(maker: MakerView): BackupDownloadPanel {
+export function backupDownloadPanel(maker: MakerView, locale?: string | null): BackupDownloadPanel {
+  const BACKUP_COPY = backupCopy(locale);
+  const BACKUP_FILE_TEXT = backupFileText(locale);
   const passwordShort = maker.error === BACKUP_COPY.download.passwordShort;
   if (maker.step === 'making' && maker.file) {
     const progress = maker.progress ?? { pct: 0, text: BACKUP_COPY.download.making };
@@ -122,7 +122,7 @@ export function backupDownloadPanel(maker: MakerView): BackupDownloadPanel {
         : {
             label: maker.downloaded
               ? BACKUP_COPY.download.downloadAgain
-              : backupDownloadLabel(maker.file.size ?? 0),
+              : backupDownloadLabel(maker.file.size ?? 0, locale),
             busy: false,
             primary: !maker.downloaded,
           },
@@ -258,13 +258,20 @@ type RestorerView = Pick<
   | 'errorCode'
 >;
 
-const LINK_LABELS: Record<BackupRestoreLink, string> = {
-  connections: BACKUP_FILE_TEXT.openConnections,
-  automations: BACKUP_FILE_TEXT.openAutomations,
-};
+function linkLabels(locale?: string | null): Record<BackupRestoreLink, string> {
+  const text = backupFileText(locale);
+  return { connections: text.openConnections, automations: text.openAutomations };
+}
 
 /** What the restore panel shows; `timeZone` (the viewer's) dates a running or finished restore's file. */
-export function backupRestorePanel(restorer: RestorerView, timeZone: string): BackupRestorePanel {
+export function backupRestorePanel(
+  restorer: RestorerView,
+  timeZone: string,
+  locale?: string | null,
+): BackupRestorePanel {
+  const BACKUP_COPY = backupCopy(locale);
+  const BACKUP_FILE_TEXT = backupFileText(locale);
+  const HOST_REPOINT_WORDS = hostRepointWords(locale);
   const cancel = { label: BACKUP_COPY.restore.cancel, busy: restorer.cancelling };
   const r = restorer.restoreView;
   switch (restorer.step) {
@@ -316,7 +323,7 @@ export function backupRestorePanel(restorer: RestorerView, timeZone: string): Ba
           value: restorer.onDifferent,
           options: (['keep', 'replace'] as const).map((value) => ({
             value,
-            label: BACKUP_ON_DIFFERENT_LABELS[value],
+            label: backupOnDifferentLabels(locale)[value],
           })),
         },
         address: restorer.serversQuestion
@@ -350,11 +357,12 @@ export function backupRestorePanel(restorer: RestorerView, timeZone: string): Ba
       const failed = o?.failed ?? restorer.step === 'failed';
       return {
         step: 'outcome',
-        file: r ? { name: r.fileName, line: backupRestoreFileLine(r, timeZone), pct: null } : null,
+        file: r ? { name: r.fileName, line: backupRestoreFileLine(r, timeZone, locale), pct: null } : null,
         failed,
-        title: o?.title ?? (failed ? backupFileErrorText('restore_failed') : BACKUP_COPY.restore.done),
+        title:
+          o?.title ?? (failed ? backupFileErrorText('restore_failed', locale) : BACKUP_COPY.restore.done),
         lines: o?.lines ?? [],
-        links: (o?.links ?? []).map((link) => ({ link, label: LINK_LABELS[link] })),
+        links: (o?.links ?? []).map((link) => ({ link, label: linkLabels(locale)[link] })),
         toPoint: (o?.toPoint ?? []).map((server) => ({
           id: server.id,
           name: server.name,
@@ -396,10 +404,14 @@ export function restoreRowLabel(row: Pick<BackupRestoreRow, 'label' | 'chips' | 
 /* Leaving while a file moves -------------------------------------------------------------------------------------- */
 
 /** What to ask before leaving while a file downloads or uploads (leaving stops it); null when nothing moves. */
-export function backupLeaveQuestion(state: {
-  downloading: boolean;
-  uploading: boolean;
-}): { title: string; text: string; stay: string; stop: string } | null {
+export function backupLeaveQuestion(
+  state: {
+    downloading: boolean;
+    uploading: boolean;
+  },
+  locale?: string,
+): { title: string; text: string; stay: string; stop: string } | null {
+  const T = managedCopy(locale).backupFile;
   if (state.downloading)
     return {
       title: T.leave.downloadTitle,
@@ -477,14 +489,17 @@ export function documentSink(docs: WritableDocuments, uri: string): BackupFileSi
 /* The file to restore --------------------------------------------------------------------------------------------- */
 
 /** The picked document (`expo-document-picker`, not copied) as an upload source, or why it can't be one. */
-export function pickedBackupFile(asset: {
-  uri: string;
-  name?: string | null;
-  size?: number | null;
-  mimeType?: string | null;
-}): { file: { uri: string; name: string; type: string; size: number } } | { problem: string } {
+export function pickedBackupFile(
+  asset: {
+    uri: string;
+    name?: string | null;
+    size?: number | null;
+    mimeType?: string | null;
+  },
+  locale?: string,
+): { file: { uri: string; name: string; type: string; size: number } } | { problem: string } {
   // The size is staged before the first byte (BF-10); a provider that doesn't say it can't be uploaded from.
-  if (!asset.size || asset.size <= 0) return { problem: T.noSize };
+  if (!asset.size || asset.size <= 0) return { problem: managedCopy(locale).backupFile.noSize };
   return {
     file: {
       uri: asset.uri,

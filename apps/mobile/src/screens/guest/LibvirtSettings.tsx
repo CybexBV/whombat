@@ -6,10 +6,9 @@
  * review again.” over the review of what is there now. Hardware stays on the web, and the screen says so.
  */
 
-import { CHANGED_MEANWHILE, isEmptyDraft } from '@whombat/client/hosts';
+import { isEmptyDraft } from '@whombat/client/hosts';
 import {
   isoChoices,
-  LIBVIRT_WEB_ONLY,
   type LibvirtEditKind,
   libvirtEditDraft,
   libvirtEditSpec,
@@ -17,13 +16,14 @@ import {
   libvirtReviewLines,
   libvirtReviewNote,
   libvirtSettingGroups,
+  libvirtWebOnly,
 } from '@whombat/client/hosts/mobile';
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { useMobileT } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { OneCard } from '../../ui/assistant';
 import { FormField, FormMessage } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -44,10 +44,11 @@ export function LibvirtSettings({
   /** An edit, with the CD/DVD drive it changes. */
   onEdit: (kind: LibvirtEditKind, key?: string) => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   return (
     <>
-      {libvirtSettingGroups(config).map((group) => (
+      {libvirtSettingGroups(config, rawLocale).map((group) => (
         <OneCard key={group.id} label={group.title}>
           {group.rows.map((r, i) => {
             const edit = r.edit;
@@ -63,7 +64,7 @@ export function LibvirtSettings({
                   canChange && edit ? (
                     <RowAction
                       label={tMobile('screens.change')}
-                      spoken={`Change ${r.label.toLowerCase()}`}
+                      spoken={tMobile('screens2.guest.changeX', { what: r.label.toLowerCase() })}
                       onPress={() => onEdit(edit, r.key)}
                     />
                   ) : null
@@ -73,7 +74,7 @@ export function LibvirtSettings({
           })}
         </OneCard>
       ))}
-      <WebLine text={LIBVIRT_WEB_ONLY} url={webUrl} />
+      <WebLine text={libvirtWebOnly(rawLocale)} url={webUrl} />
     </>
   );
 }
@@ -95,9 +96,10 @@ export function LibvirtEditSheet({
   cdrom?: string;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
-  const spec = libvirtEditSpec(kind, guest.name, config);
+  const spec = libvirtEditSpec(kind, guest.name, config, rawLocale);
   const [input, setInput] = useState(() => libvirtEditStart(config, kind, cdrom));
   const [step, setStep] = useState<'edit' | 'review'>('edit');
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -112,11 +114,11 @@ export function LibvirtEditSheet({
   );
   const isos =
     choices.data?.op === 'choices'
-      ? isoChoices(choices.data.choices.isos, libvirtEditStart(config, 'cdrom', cdrom).iso)
+      ? isoChoices(choices.data.choices.isos, libvirtEditStart(config, 'cdrom', cdrom).iso, rawLocale)
       : null;
-  const { draft, error: checkError } = libvirtEditDraft(config, kind, input, cdrom);
+  const { draft, error: checkError } = libvirtEditDraft(config, kind, input, cdrom, rawLocale);
   const empty = !draft || isEmptyDraft(draft);
-  const lines = draft ? libvirtReviewLines(config, draft) : [];
+  const lines = draft ? libvirtReviewLines(config, draft, rawLocale) : [];
 
   const apply = async () => {
     if (!draft || empty) return;
@@ -131,7 +133,7 @@ export function LibvirtEditSheet({
       name: guest.name,
     });
     if (out.ok || out.waiting) return onClose();
-    if (out.conflict) setNotice(CHANGED_MEANWHILE);
+    if (out.conflict) setNotice(mobileTranslator(rawLocale).t('screens2.guest.changedMeanwhile'));
     else if (Object.keys(out.fields).length) {
       setFieldError(Object.values(out.fields).join(' '));
       setStep('edit');
@@ -146,8 +148,19 @@ export function LibvirtEditSheet({
         title={spec.title}
         busy={busy ? 'apply' : null}
         buttons={[
-          { id: 'apply', label: 'Apply', variant: 'primary', disabled: empty, onPress: () => void apply() },
-          { id: 'back', label: 'Back', variant: 'quiet', onPress: () => setStep('edit') },
+          {
+            id: 'apply',
+            label: tMobile('screens2.common.apply'),
+            variant: 'primary',
+            disabled: empty,
+            onPress: () => void apply(),
+          },
+          {
+            id: 'back',
+            label: tMobile('screens2.common.back'),
+            variant: 'quiet',
+            onPress: () => setStep('edit'),
+          },
         ]}
         note={error}
       >
@@ -156,7 +169,7 @@ export function LibvirtEditSheet({
             <FormMessage text={notice} />
           </View>
         ) : null}
-        <ReviewList lines={lines} note={draft ? libvirtReviewNote(config, draft) : null} />
+        <ReviewList lines={lines} note={draft ? libvirtReviewNote(config, draft, rawLocale) : null} />
       </OneSheet>
     );
 
@@ -169,7 +182,7 @@ export function LibvirtEditSheet({
       buttons={[
         {
           id: 'review',
-          label: 'Review',
+          label: tMobile('screens2.common.review'),
           variant: 'primary',
           disabled: empty,
           onPress: () => {
@@ -177,9 +190,9 @@ export function LibvirtEditSheet({
             setStep('review');
           },
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
-      note={draft && empty ? 'Nothing changed yet.' : null}
+      note={draft && empty ? tMobile('screens2.guest.nothingChanged') : null}
     >
       <View style={{ marginTop: 16 }}>
         {spec.kind === 'switch' ? (

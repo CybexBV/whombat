@@ -6,7 +6,7 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { parseThingId } from '@whombat/core';
-import { OVERVIEW_TITLE } from '../data/shell';
+import { overviewTitle } from '../data/shell';
 import { thingPageCopy } from '../data/thingPage';
 import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
@@ -21,7 +21,7 @@ export function ThingScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
   const thingPageCopyHere = thingPageCopy(rawLocale);
 
-  const { thingId, title, back = OVERVIEW_TITLE, tab } = route.params;
+  const { thingId, title, back = overviewTitle(rawLocale), tab } = route.params;
   const thing = parseThingId(thingId);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   if (thing?.kind === 'server')

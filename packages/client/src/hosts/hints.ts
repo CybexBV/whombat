@@ -5,8 +5,11 @@
  * guest hints per kind and names the guests in the detail (“web, db (2 changes), …”). Pure.
  */
 import type { HostGuest, HostHint } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
 import { incusHintFixes } from './incus';
-import { SERVER_TAB_WORDS, SERVER_TABS, type ServerTab } from './model';
+import { SERVER_TABS, type ServerTab, serverTabWords } from './model';
 
 export type HintFix =
   | { kind: 'tab'; tab: ServerTab; label: string }
@@ -35,8 +38,15 @@ function tabOf(section: string | null | undefined): ServerTab | null {
   return (SERVER_TABS as readonly string[]).includes(s) ? (s as ServerTab) : null;
 }
 
+/** A button that only opens one of the server's tabs (“Open Storage”). */
+export function hintOpenTabLabel(tab: ServerTab, locale?: string | null): string {
+  return interpolate(clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).hints.openTab, {
+    tab: serverTabWords(locale)[tab],
+  });
+}
+
 /** What a hint's buttons do. */
-export function hintFixes(h: HostHint, guests: readonly HostGuest[]): HintFix[] {
+export function hintFixes(h: HostHint, guests: readonly HostGuest[], locale?: string | null): HintFix[] {
   // Incus's hints (IU-08): no snapshot schedule → the instance's Snapshots, a full pool → Storage, a warning → System.
   const incus = incusHintFixes(h, guests);
   if (incus) return incus;
@@ -49,30 +59,32 @@ export function hintFixes(h: HostHint, guests: readonly HostGuest[]): HintFix[] 
     return [];
   };
   const each = (make: (g: HostGuest) => HintFix) => named().slice(0, HINT_GUESTS).map(make);
+  const w = clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).hints;
+  const nameIn = (words: string, g: HostGuest) => interpolate(words, { name: g.name });
   switch (h.kind) {
     case 'storage.overcommit':
-      return [{ kind: 'tab', tab: 'storage', label: 'Open Storage' }];
+      return [{ kind: 'tab', tab: 'storage', label: hintOpenTabLabel('storage', locale) }];
     case 'guest.no_backup_job':
-      return [{ kind: 'tab', tab: 'backups', label: 'Add to a backup plan' }];
+      return [{ kind: 'tab', tab: 'backups', label: w.addToPlan }];
     case 'guest.backup_old':
-      return each((g) => ({ kind: 'backup', guestId: g.id, label: `Back up ${g.name} now` }));
+      return each((g) => ({ kind: 'backup', guestId: g.id, label: nameIn(w.backUpNow, g) }));
     case 'guest.pending_changes':
-      return each((g) => ({ kind: 'guest', guestId: g.id, label: `See ${g.name}’s changes` }));
+      return each((g) => ({ kind: 'guest', guestId: g.id, label: nameIn(w.changes, g) }));
     case 'guest.snapshot_old':
       return each((g) => ({
         kind: 'guest',
         guestId: g.id,
         gtab: 'snapshots',
-        label: `See ${g.name}’s snapshots`,
+        label: nameIn(w.snapshots, g),
       }));
     case 'guest.agent_down':
-      return each((g) => ({ kind: 'guest', guestId: g.id, label: `See ${g.name}` }));
+      return each((g) => ({ kind: 'guest', guestId: g.id, label: nameIn(w.see, g) }));
     // A libvirt VM without a backup or a snapshot in 30 days (IU-13): its Backups tab.
     case 'libvirt.no_backup':
-      return each((g) => ({ kind: 'guest', guestId: g.id, gtab: 'backups', label: `Back up ${g.name}` }));
+      return each((g) => ({ kind: 'guest', guestId: g.id, gtab: 'backups', label: nameIn(w.backUp, g) }));
     default: {
       const tab = tabOf(h.section);
-      return tab && tab !== 'summary' ? [{ kind: 'tab', tab, label: `Open ${SERVER_TAB_WORDS[tab]}` }] : [];
+      return tab && tab !== 'summary' ? [{ kind: 'tab', tab, label: hintOpenTabLabel(tab, locale) }] : [];
     }
   }
 }

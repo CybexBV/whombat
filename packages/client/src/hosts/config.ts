@@ -8,6 +8,9 @@
  * Whombat has no field for stay as they are. Pure; the web's dialogs and Android use the same rules.
  */
 import type { HostGuestConfig } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
 import { editProps, formatProps, getProp, isOn, type PropItem, parseProps } from './props';
 
 export * from './props';
@@ -198,18 +201,23 @@ export function diskSize(v: string | undefined): number | undefined {
   return parseSize(getProp(parseProps(v ?? ''), 'size'));
 }
 
+/** A guest setting's words in a locale (English when none is given). */
+const words = (locale?: string | null) => clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).config;
+
 /** A number field's value and what is wrong with it. */
 export function checkNumber(
   s: string,
   o: { min?: number; max?: number; optional?: boolean; decimal?: boolean } = {},
+  locale?: string | null,
 ): { n: number | null; error: string | null } {
+  const w = words(locale);
   const v = s.trim();
-  if (!v) return { n: null, error: o.optional ? null : 'Fill this in.' };
+  if (!v) return { n: null, error: o.optional ? null : w.fillIn };
   if (!(o.decimal ? /^\d+(\.\d+)?$/ : /^\d+$/).test(v))
-    return { n: null, error: o.decimal ? 'Use a number.' : 'Use a whole number.' };
+    return { n: null, error: o.decimal ? w.number : w.wholeNumber };
   const n = Number(v);
-  if (o.min != null && n < o.min) return { n, error: `At least ${o.min}.` };
-  if (o.max != null && n > o.max) return { n, error: `At most ${o.max}.` };
+  if (o.min != null && n < o.min) return { n, error: interpolate(w.atLeast, { n: o.min }) };
+  if (o.max != null && n > o.max) return { n, error: interpolate(w.atMost, { n: o.max }) };
   return { n, error: null };
 }
 
@@ -358,11 +366,10 @@ export function diskOptsWords(v: string | undefined, skip: readonly string[] = [
 export const attachValue = (unused: string | undefined): string => diskFile(unused);
 
 /** Why a disk can't move to another storage now, or null. */
-export function moveBlocked(cfg: Cfg, key: string): string | null {
+export function moveBlocked(cfg: Cfg, key: string, locale?: string | null): string | null {
   if (!cfg?.running) return null;
-  if (cfg.kind === 'container')
-    return 'Stop it first: Proxmox moves a container’s disks only while it’s stopped.';
-  if (key === 'tpmstate0') return 'Shut it down first: Proxmox moves the TPM state only while the VM is off.';
+  if (cfg.kind === 'container') return words(locale).moveStopped;
+  if (key === 'tpmstate0') return words(locale).moveTpm;
   return null;
 }
 
@@ -378,9 +385,9 @@ export function withCdromFile(v: string, file: string): string {
 }
 
 /** What a drive holds, in words. */
-export function discName(file: string): string {
-  if (!file || file === 'none') return 'No disc';
-  if (file === 'cdrom') return 'The server’s own drive';
+export function discName(file: string, locale?: string | null): string {
+  if (!file || file === 'none') return words(locale).noDisc;
+  if (file === 'cdrom') return words(locale).ownDrive;
   return file.slice(file.lastIndexOf('/') + 1);
 }
 
@@ -517,24 +524,28 @@ export function writeNic(v: string, n: NicFields, was: NicFields, kind: 'vm' | '
 }
 
 /** What is wrong with a network device's fields, by field. */
-export function nicErrors(n: NicFields, kind: 'vm' | 'container'): Record<string, string | null> {
+export function nicErrors(
+  n: NicFields,
+  kind: 'vm' | 'container',
+  locale?: string | null,
+): Record<string, string | null> {
   return {
-    tag: checkNumber(n.tag, { min: 1, max: 4094, optional: true }).error,
-    rate: checkNumber(n.rate, { min: 0, optional: true, decimal: true }).error,
-    mtu: checkNumber(n.mtu, { min: 576, max: 65_520, optional: true }).error,
-    mac: n.mac.trim() ? macError(n.mac.trim()) : null,
+    tag: checkNumber(n.tag, { min: 1, max: 4094, optional: true }, locale).error,
+    rate: checkNumber(n.rate, { min: 0, optional: true, decimal: true }, locale).error,
+    mtu: checkNumber(n.mtu, { min: 576, max: 65_520, optional: true }, locale).error,
+    mac: n.mac.trim() ? macError(n.mac.trim(), locale) : null,
     name:
       kind === 'container' && !/^[A-Za-z][A-Za-z0-9_.-]{0,14}$/.test(n.name.trim())
-        ? 'Up to 15 letters, digits, “_”, “.” or “-”, starting with a letter.'
+        ? words(locale).nicName
         : null,
-    ...(kind === 'container' ? ipErrors(n.ip) : {}),
+    ...(kind === 'container' ? ipErrors(n.ip, locale) : {}),
   };
 }
 
-export function macError(s: string): string | null {
+export function macError(s: string, locale?: string | null): string | null {
   const m = /^([0-9a-f]{2})(:[0-9a-f]{2}){5}$/i.exec(s);
-  if (!m) return 'A MAC address, like BC:24:11:00:00:01.';
-  return Number.parseInt(m[1] ?? '0', 16) & 1 ? 'That’s a group address: the first pair must be even.' : null;
+  if (!m) return words(locale).mac;
+  return Number.parseInt(m[1] ?? '0', 16) & 1 ? words(locale).macGroup : null;
 }
 
 /** A network device in words: model (or name), network, VLAN, addresses. */
@@ -606,16 +617,15 @@ export function ipWords(v: string | undefined): string {
   return [v4, v6].filter(Boolean).join(', ');
 }
 
-export function cidr4Error(s: string): string | null {
+export function cidr4Error(s: string, locale?: string | null): string | null {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(s.trim());
-  if (!m || m.slice(1, 5).some((x) => Number(x) > 255) || Number(m[5]) > 32)
-    return 'An IPv4 address with its prefix, like 10.0.0.5/24.';
+  if (!m || m.slice(1, 5).some((x) => Number(x) > 255) || Number(m[5]) > 32) return words(locale).cidr4;
   return null;
 }
 
-export function ip4Error(s: string): string | null {
+export function ip4Error(s: string, locale?: string | null): string | null {
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s.trim());
-  if (!m || m.slice(1).some((x) => Number(x) > 255)) return 'An IPv4 address, like 10.0.0.1.';
+  if (!m || m.slice(1).some((x) => Number(x) > 255)) return words(locale).ip4;
   return null;
 }
 
@@ -636,29 +646,31 @@ function isIp6(s: string): boolean {
   return halves.length === 2 ? count <= 7 : count === 8;
 }
 
-export function ip6Error(s: string): string | null {
-  return isIp6(s.trim()) ? null : 'An IPv6 address, like fd00::1.';
+export function ip6Error(s: string, locale?: string | null): string | null {
+  return isIp6(s.trim()) ? null : words(locale).ip6;
 }
 
-export function cidr6Error(s: string): string | null {
+export function cidr6Error(s: string, locale?: string | null): string | null {
   const m = /^([^/]+)\/(\d{1,3})$/.exec(s.trim());
-  if (!m || !isIp6(m[1] ?? '') || Number(m[2]) > 128)
-    return 'An IPv6 address with its prefix, like fd00::5/64.';
+  if (!m || !isIp6(m[1] ?? '') || Number(m[2]) > 128) return words(locale).cidr6;
   return null;
 }
 
 /** What is wrong with the address fields of a container's network device or a cloud-init config. */
-export function ipErrors(c: IpConfig): {
+export function ipErrors(
+  c: IpConfig,
+  locale?: string | null,
+): {
   ip: string | null;
   gw: string | null;
   ip6: string | null;
   gw6: string | null;
 } {
   return {
-    ip: c.v4 === 'static' ? cidr4Error(c.ip) : null,
-    gw: c.v4 === 'static' && c.gw.trim() ? ip4Error(c.gw) : null,
-    ip6: c.v6 === 'static' ? cidr6Error(c.ip6) : null,
-    gw6: c.v6 === 'static' && c.gw6.trim() ? ip6Error(c.gw6) : null,
+    ip: c.v4 === 'static' ? cidr4Error(c.ip, locale) : null,
+    gw: c.v4 === 'static' && c.gw.trim() ? ip4Error(c.gw, locale) : null,
+    ip6: c.v6 === 'static' ? cidr6Error(c.ip6, locale) : null,
+    gw6: c.v6 === 'static' && c.gw6.trim() ? ip6Error(c.gw6, locale) : null,
   };
 }
 
@@ -669,17 +681,17 @@ export const dnsServerList = (text: string): string[] =>
     .split(/[\s,]+/)
     .filter(Boolean);
 
-export function dnsServersError(text: string): string | null {
+export function dnsServersError(text: string, locale?: string | null): string | null {
   const bad = dnsServerList(text).find((s) => ip4Error(s) && ip6Error(s));
-  return bad ? `${bad} isn’t an IP address.` : null;
+  return bad ? interpolate(words(locale).dns, { value: bad }) : null;
 }
 
-export function domainError(text: string): string | null {
+export function domainError(text: string, locale?: string | null): string | null {
   return /^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?( [A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?)*$/.test(
     text.trim(),
   )
     ? null
-    : 'A domain like lab.example (several with spaces).';
+    : words(locale).domain;
 }
 
 /* Mount points (containers) ------------------------------------------------------------------------- */
@@ -722,9 +734,9 @@ export function newMountValue(storage: string, sizeGb: string, m: MountFields): 
   });
 }
 
-export function mountPathError(path: string): string | null {
+export function mountPathError(path: string, locale?: string | null): string | null {
   const p = path.trim();
-  return /^\/[^\s,]+$/.test(p) && p !== '/' ? null : 'A folder inside the container, like /mnt/data.';
+  return /^\/[^\s,]+$/.test(p) && p !== '/' ? null : words(locale).mountPath;
 }
 
 /* Processors, display, machine ---------------------------------------------------------------------- */
@@ -970,16 +982,19 @@ export function formatTags(tags: readonly string[]): string {
   return tags.join(';');
 }
 
-export function tagError(tag: string): string | null {
-  return /^[a-z0-9_][a-z0-9_+.-]*$/i.test(tag)
-    ? null
-    : 'A tag starts with a letter, digit or “_” and uses letters, digits, “_”, “+”, “.” and “-”.';
+/** Why a tag isn't valid, or null; passed straight to `Array.map`, the index it gets reads as English. */
+export function tagError(tag: string, locale?: string | number | null): string | null {
+  return /^[a-z0-9_][a-z0-9_+.-]*$/i.test(tag) ? null : words(typeof locale === 'string' ? locale : null).tag;
 }
 
 /** Tags typed into the chip editor added to `list` (duplicates ignoring case dropped), or why not. */
-export function addTags(list: readonly string[], raw: string): { tags: string[]; error: string | null } {
+export function addTags(
+  list: readonly string[],
+  raw: string,
+  locale?: string | null,
+): { tags: string[]; error: string | null } {
   const next = parseTags(raw);
-  const error = next.map(tagError).find(Boolean) ?? null;
+  const error = next.map((t) => tagError(t, locale)).find(Boolean) ?? null;
   if (error) return { tags: [...list], error };
   const out = [...list];
   for (const t of next) if (!out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
@@ -1025,26 +1040,22 @@ export function sshKeyLabel(line: string): string {
 const SSH_KEY_RE = /^(ssh-[a-z0-9-]+|ecdsa-sha2-[a-z0-9-]+|sk-[a-z0-9@.-]+)\s+[A-Za-z0-9+/=]+(\s.*)?$/;
 
 /** The first line that isn't an OpenSSH public key, in words. */
-export function sshKeysError(text: string): string | null {
+export function sshKeysError(text: string, locale?: string | null): string | null {
   const lines = sshKeyLines(text);
   const bad = lines.findIndex((l) => !SSH_KEY_RE.test(l));
-  return bad < 0 ? null : `Line ${bad + 1} isn’t an SSH public key (its type, the key, a comment).`;
+  return bad < 0 ? null : interpolate(words(locale).sshKey, { line: bad + 1 });
 }
 
 /** Cloud-init addresses in words (“DHCP”, “10.0.0.5/24 via 10.0.0.1, IPv6 automatic”). */
-export function ipConfigWords(v: string | undefined): string {
-  if (!v) return 'Not set';
+export function ipConfigWords(v: string | undefined, locale?: string | null): string {
+  const w = words(locale);
+  if (!v) return w.notSet;
   const c = parseIpConfig(v);
-  const v4 = c.v4 === 'dhcp' ? 'DHCP' : c.v4 === 'static' ? `${c.ip}${c.gw ? ` via ${c.gw}` : ''}` : '';
+  const via = (ip: string, gw: string) => (gw ? interpolate(w.via, { ip, gw }) : ip);
+  const v4 = c.v4 === 'dhcp' ? 'DHCP' : c.v4 === 'static' ? via(c.ip, c.gw) : '';
   const v6 =
-    c.v6 === 'auto'
-      ? 'IPv6 automatic'
-      : c.v6 === 'dhcp'
-        ? 'IPv6 DHCP'
-        : c.v6 === 'static'
-          ? `${c.ip6}${c.gw6 ? ` via ${c.gw6}` : ''}`
-          : '';
-  return [v4, v6].filter(Boolean).join(', ') || 'None';
+    c.v6 === 'auto' ? w.v6Auto : c.v6 === 'dhcp' ? w.v6Dhcp : c.v6 === 'static' ? via(c.ip6, c.gw6) : '';
+  return [v4, v6].filter(Boolean).join(', ') || w.none;
 }
 
 /* Boot order ---------------------------------------------------------------------------------------- */
@@ -1095,10 +1106,13 @@ export function haForm(ha: HaNow | null | undefined): HaForm {
   };
 }
 
-export function haErrors(f: HaForm): { maxRestart: string | null; maxRelocate: string | null } {
+export function haErrors(
+  f: HaForm,
+  locale?: string | null,
+): { maxRestart: string | null; maxRelocate: string | null } {
   return {
-    maxRestart: checkNumber(f.maxRestart, { min: 0, max: 10 }).error,
-    maxRelocate: checkNumber(f.maxRelocate, { min: 0, max: 10 }).error,
+    maxRestart: checkNumber(f.maxRestart, { min: 0, max: 10 }, locale).error,
+    maxRelocate: checkNumber(f.maxRelocate, { min: 0, max: 10 }, locale).error,
   };
 }
 

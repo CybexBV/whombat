@@ -25,11 +25,11 @@
  * The agent asking wears its face, labelled with its name (Whombat one-agent.md OA-08; AP-4995).
  */
 import {
-  AUTOMATION_ASKING,
   type AutomationAsker,
   agentFaceOf,
   approveToastFor,
   automationAsker,
+  automationAskerWords,
   canManageAgent,
   OutcomeRedactedError,
   OutcomeUnknownError,
@@ -45,18 +45,19 @@ import {
   approvalView,
   type CommandScope,
   formatClock,
-  keyRiskRow,
+  keyRiskRowIn,
   lastingWordsAt,
   type Tone,
 } from '@whombat/core';
 import {
-  APPROVAL_CARD_WORDS,
   type ApprovalTonightView,
   type ApprovalUnmetView,
+  approvalCardWords,
   approvalPermissionText,
   approvalTonight,
   approvalUnmet,
 } from '@whombat/core/approvals';
+import { mobileTranslator } from '../i18n/translate';
 import { approvalContext, type ViewContext } from './people';
 
 export interface ApprovalConditionRow {
@@ -161,8 +162,9 @@ export interface ApprovalScreenModel {
 }
 
 /** Where a lasting yes changes back from the phone: a server's own page, else the web. */
-function lastingWhere(server: { name: string } | null): string {
-  return server ? `on ${server.name}’s page in Overview` : 'on the web';
+function lastingWhere(server: { name: string } | null, locale?: string): string {
+  const { t } = mobileTranslator(locale);
+  return server ? t('data.approval.onServerPage', { server: server.name }) : t('data.approval.onTheWeb');
 }
 
 /**
@@ -184,7 +186,9 @@ export function approvalScreen(
   const view = approvalView(approval, approvalContext(ctx, approval, where));
   const requester = ctx.people.get(approval.requesterId);
   // An automation's own principal is a system one (OA-17): it asks as an automation, not as the agent (AP-999).
-  const automation = automationAsker(approval, requester);
+  const automation = automationAsker(approval, requester, ctx.locale);
+  const { t } = mobileTranslator(ctx.locale);
+  const cardWords = approvalCardWords(ctx.locale);
   const agent = requester?.kind === 'agent' && !automation ? requester : null;
   const command = approval.action.type === 'run_command';
   // A risk row and a Servers call that may stop asking offer the lasting yes; their choices aren't a command's.
@@ -199,8 +203,11 @@ export function approvalScreen(
   const agentName = requester?.name ?? 'Neo';
   const words =
     view.lasting ??
-    (riskRow && always ? alwaysAllowConfirm(agentName, keyRiskRow(riskRow).verb, always) : null);
-  const lasting = always && words ? lastingWordsAt(words, lastingWhere(server)) : null;
+    (riskRow && always
+      ? alwaysAllowConfirm(agentName, keyRiskRowIn(riskRow, ctx.locale).verb, always, ctx.locale)
+      : null);
+  const lasting =
+    always && words ? lastingWordsAt(words, lastingWhere(server, ctx.locale), ctx.locale) : null;
   const W = approvalAskWords(ctx.locale);
   const editDraft = view.ask && view.canApprove ? teamReportDraftOf(approval) : null;
   const later = Boolean(view.ask && tonight && view.canApprove && !editDraft);
@@ -212,18 +219,22 @@ export function approvalScreen(
   return {
     number: approval.number,
     requesterFace: agent ? agentFaceOf(agent) : null,
-    requesterName: automation ? (automation.name ?? 'An automation') : (requester?.name ?? 'Someone'),
+    requesterName: automation
+      ? (automation.name ?? t('data.approval.anAutomation'))
+      : (requester?.name ?? t('data.approval.someone')),
     automation,
     // The web modal's kicker while it waits: the mark alone doesn't say who asks.
     // An everyday ask in plain words (handle-it.md): “Neo needs your OK”, Yes, do it and No.
     label:
-      automation && approval.state === 'pending' ? AUTOMATION_ASKING : (view.ask?.needs ?? view.mobileLabel),
+      automation && approval.state === 'pending'
+        ? automationAskerWords(ctx.locale).asking
+        : (view.ask?.needs ?? view.mobileLabel),
     tone: view.tone,
     // Written from the action; a stored wording that disagrees gets "What actually runs: …" first.
     question: view.question,
     // The sentences say “The automation”; the byline names which one.
     context: approvalByline(
-      automation ? (automation.name ?? 'An automation') : (requester?.name ?? null),
+      automation ? (automation.name ?? t('data.approval.anAutomation')) : (requester?.name ?? null),
       where,
       formatClock(approval.createdAt, ctx.timeZone),
     ),
@@ -243,14 +254,17 @@ export function approvalScreen(
     why: view.why,
     target: command ? view.target : null,
     // An everyday ask's tool and target, folded under Technical details (handle-it.md).
-    technical: view.ask ? { label: APPROVAL_CARD_WORDS.details, text: view.target } : null,
+    technical: view.ask ? { label: cardWords.details, text: view.target } : null,
     facts: view.ask
       ? {
           happens: view.whatHappens.map((h) => h.text),
-          permission: { label: APPROVAL_CARD_WORDS.permission, text: approvalPermissionText(approval.keyId) },
+          permission: {
+            label: cardWords.permission,
+            text: approvalPermissionText(approval.keyId, ctx.locale),
+          },
           unmet: approvalUnmet(view),
-          unmetLabel: APPROVAL_CARD_WORDS.waiting,
-          tonight: approvalTonight(later ? tonight : null, ctx.timeZone),
+          unmetLabel: cardWords.waiting,
+          tonight: approvalTonight(later ? tonight : null, ctx.timeZone, ctx.locale),
         }
       : null,
     // An everyday ask says what happens in its facts: only a stored wording that disagrees adds a line.

@@ -12,8 +12,8 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ApiError } from '@whombat/client';
 import {
   fileBytes,
-  SKILL_LIBRARY_TEXT,
   skillLibraryEndpoints,
+  skillLibraryText,
   skillPanel,
 } from '@whombat/client/skill-library';
 import {
@@ -25,8 +25,9 @@ import { useMemo } from 'react';
 import { Alert, RefreshControl, ScrollView, Switch, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
-import { removeConfirm, restoreConfirm, SKILLS_PHONE_TEXT, type SkillConfirm } from '../data/skillLibrary';
+import { removeConfirm, restoreConfirm, type SkillConfirm, skillsPhoneText } from '../data/skillLibrary';
 import { useSkillLibraryAgent, useSkillsAbsentText } from '../data/useSkillLibraryHere';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -40,14 +41,17 @@ import { errorText, outcomeText, showNotice, useDecisionFeedback } from './feedb
 type Props = NativeStackScreenProps<RootStackParamList, 'Skill'>;
 
 /** Ask first, then run `go` (Cancel does nothing). */
-function ask(confirm: SkillConfirm, go: () => void) {
+function ask(confirm: SkillConfirm, cancel: string, go: () => void) {
   Alert.alert(confirm.title, confirm.body ?? undefined, [
-    { text: SKILLS_PHONE_TEXT.cancel, style: 'cancel' },
+    { text: cancel, style: 'cancel' },
     { text: confirm.action, style: confirm.destructive ? 'destructive' : 'default', onPress: go },
   ]);
 }
 
 export function SkillScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const skillLibraryTextHere = skillLibraryText(rawLocale);
+  const phone = skillsPhoneText(rawLocale);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const { slug } = useBurrowBase();
@@ -74,40 +78,48 @@ export function SkillScreen({ route, navigation }: Props) {
   const words = library.data?.agentName ?? agent?.name ?? '';
   const panel = useMemo(
     () =>
-      detail ? skillPanel(detail, { now: ctx.now, timeZone: ctx.timeZone, categories, agent: words }) : null,
-    [detail, ctx.now, ctx.timeZone, categories, words],
+      detail
+        ? skillPanel(detail, {
+            now: ctx.now,
+            timeZone: ctx.timeZone,
+            categories,
+            agent: words,
+            locale: rawLocale,
+          })
+        : null,
+    [detail, ctx.now, ctx.timeZone, categories, words, rawLocale],
   );
 
   if (!detail || !panel) {
     const gone = query.error instanceof ApiError && query.error.status === 404;
     return (
       <Screen>
-        <BackBar label={SKILLS_PHONE_TEXT.title} onPress={goBack} />
+        <BackBar label={phone.title} onPress={goBack} />
         {!agent ? (
           <QuietText>{absent}</QuietText>
         ) : gone ? (
-          <QuietText>{SKILLS_PHONE_TEXT.gone}</QuietText>
+          <QuietText>{phone.gone}</QuietText>
         ) : query.error ? (
-          <ErrorState text={SKILLS_PHONE_TEXT.skillFailed} onRetry={() => void query.refetch()} />
+          <ErrorState text={phone.skillFailed} onRetry={() => void query.refetch()} />
         ) : (
-          <SkeletonRows count={4} lines={2} label={SKILLS_PHONE_TEXT.loadingSkill} />
+          <SkeletonRows count={4} lines={2} label={phone.loadingSkill} />
         )}
       </Screen>
     );
   }
 
   const { item } = detail;
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryTextHere;
   const busy = toggle.isPending || restore.isPending || remove.isPending;
-  const failed = (error: unknown) => Alert.alert(SKILLS_PHONE_TEXT.failedChange, errorText(error));
+  const failed = (error: unknown) => Alert.alert(phone.failedChange, errorText(error, rawLocale));
 
   const askRestore = () =>
-    ask(restoreConfirm(panel, item.status === 'removed', words), () =>
+    ask(restoreConfirm(panel, item.status === 'removed', words, rawLocale), phone.cancel, () =>
       restore.mutate(
         { params, body: { name: item.name } },
         {
           onSuccess: (result) => {
-            const text = outcomeText(result);
+            const text = outcomeText(result, rawLocale);
             if (text) return Alert.alert(text.title, text.body);
             if (result.status === 'ok') showNotice(T.restored(item.name));
           },
@@ -115,15 +127,15 @@ export function SkillScreen({ route, navigation }: Props) {
         },
       ),
     );
-  const removing = removeConfirm(panel, words);
+  const removing = removeConfirm(panel, words, rawLocale);
   const askRemove = () =>
     removing &&
-    ask(removing, () =>
+    ask(removing, phone.cancel, () =>
       remove.mutate(
         { params, body: { name: item.name } },
         {
           onSuccess: (result) => {
-            const text = outcomeText(result);
+            const text = outcomeText(result, rawLocale);
             if (text) return Alert.alert(text.title, text.body);
             if (result.status !== 'ok') return;
             showNotice(T.removed(item.name));
@@ -137,7 +149,7 @@ export function SkillScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <BackBar label={SKILLS_PHONE_TEXT.title} onPress={goBack} />
+      <BackBar label={phone.title} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
@@ -200,7 +212,7 @@ export function SkillScreen({ route, navigation }: Props) {
                     )
                   }
                   accessibilityLabel={T.uses(words)}
-                  accessibilityHint={SKILLS_PHONE_TEXT.switchHint(item.name, words, panel.on)}
+                  accessibilityHint={phone.switchHint(item.name, words, panel.on)}
                   accessibilityRole="switch"
                   {...switchColors(theme, panel.on)}
                   style={{ minHeight: 44 }}
@@ -257,7 +269,7 @@ export function SkillScreen({ route, navigation }: Props) {
         ) : null}
 
         {detail.files.length > 0 ? (
-          <Section title={SKILLS_PHONE_TEXT.files}>
+          <Section title={phone.files}>
             {detail.files.map((f) => (
               <ListRow key={f.path} title={f.path} titleMono trailing={fileBytes(f.bytes)} />
             ))}

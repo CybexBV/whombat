@@ -9,7 +9,7 @@ import { backupGuestName, incusBackupRows, noScheduleGuests } from '@whombat/cli
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostGuest, HostHint } from '@whombat/core';
 import { useState } from 'react';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
@@ -36,6 +36,7 @@ export function IncusServerBackups({
   canChange: boolean;
   onOpenGuest: (g: HostGuest, tab: 'snapshots' | 'backups') => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const list = useHostManageRead(
@@ -46,7 +47,7 @@ export function IncusServerBackups({
   const incus = guests.filter((g) => g.platform === 'incus');
   const rows =
     list.data?.op === 'backup.list'
-      ? incusBackupRows(list.data.items, now, timeZone, (b) => backupGuestName(b, incus))
+      ? incusBackupRows(list.data.items, now, timeZone, (b) => backupGuestName(b, incus), rawLocale)
       : [];
   const unscheduled = noScheduleGuests(hints, serverId, incus);
   const owner = open ? incus.find((g) => g.id === open.guest || g.name === open.guest) : undefined;
@@ -61,9 +62,9 @@ export function IncusServerBackups({
               leading={<Dot tone={null} />}
               title={g.name}
               titleMono
-              line="No schedule and no backup in 30 days"
+              line={tMobile('screens2.server.incusNoBackup')}
               chevron
-              label={`${g.name}: no snapshot schedule and no backup in 30 days`}
+              label={tMobile('screens2.server.incusNoBackupName', { name: g.name })}
               hint={tMobile('screens.opens-its-snapshots-to-set-a-schedule')}
               onPress={() => onOpenGuest(g, 'snapshots')}
             />
@@ -85,7 +86,9 @@ export function IncusServerBackups({
                 meta={r.line}
                 chevron={canChange}
                 label={r.label}
-                {...(canChange ? { hint: 'Restore it or remove it', onPress: () => setOpen(r.backup) } : {})}
+                {...(canChange
+                  ? { hint: tMobile('screens2.backups.restoreOrRemove'), onPress: () => setOpen(r.backup) }
+                  : {})}
               />
             ))
           ) : (
@@ -100,7 +103,7 @@ export function IncusServerBackups({
         <IncusBackupSheet
           serverId={serverId}
           guestId={owner?.id ?? open.guest ?? ''}
-          guestName={owner?.name ?? backupGuestName(open, incus) ?? 'the instance'}
+          guestName={owner?.name ?? backupGuestName(open, incus) ?? tMobile('screens2.server.theInstance')}
           backup={open}
           onClose={() => setOpen(null)}
         />

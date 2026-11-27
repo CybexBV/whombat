@@ -14,18 +14,19 @@ import { useIsFocused } from '@react-navigation/native';
 import Constants from 'expo-constants';
 import type { ReactNode } from 'react';
 import { Linking, Platform } from 'react-native';
+import { useI18n } from '../i18n';
 import { UI_ORIGINS } from '../managed/config';
 import { useManaged } from '../managed/context';
 import { Card, Row } from '../managed/ui';
 import { useUpdateCheck } from '../managed/useAppUpdate';
 import { Button } from '../ui/primitives';
 import { UpdateRow } from './UpdateCard';
-import { appVersionText, VERSION_TEXT, versionRows } from './version';
+import { appVersionText, versionRows, versionText } from './version';
 
-function ownVersion(): string | null {
+function ownVersion(locale?: string | null): string | null {
   const config = Constants.expoConfig;
   const build = Platform.OS === 'ios' ? config?.ios?.buildNumber : config?.android?.versionCode;
-  return appVersionText(config?.version, build);
+  return appVersionText(config?.version, build, locale);
 }
 
 /** The Whombat's version, or null while nobody says. */
@@ -36,7 +37,7 @@ function useWhombatVersion(known: string | null | undefined): string | null {
 export function VersionCard({
   runtime,
   hermes,
-  label = VERSION_TEXT.label,
+  label,
   children,
 }: {
   runtime?: string | null;
@@ -48,9 +49,17 @@ export function VersionCard({
 }) {
   // Asked again as the card shows, once the last answer is five minutes old (AP-2971).
   const check = useUpdateCheck(useManaged()?.updates, useIsFocused());
-  const [app, ...rest] = versionRows(ownVersion(), useWhombatVersion(runtime), check?.status ?? null, hermes);
+  const { rawLocale } = useI18n();
+  const text = versionText(rawLocale);
+  const [app, ...rest] = versionRows(
+    ownVersion(rawLocale),
+    useWhombatVersion(runtime),
+    check?.status ?? null,
+    hermes,
+    rawLocale,
+  );
   return (
-    <Card label={label}>
+    <Card label={label ?? text.label}>
       {app ? (
         <Row
           first
@@ -59,8 +68,8 @@ export function VersionCard({
           action={
             check && !check.update ? (
               <Button
-                label={VERSION_TEXT.check}
-                accessibilityLabel={VERSION_TEXT.checkLabel}
+                label={text.check}
+                accessibilityLabel={text.checkLabel}
                 variant="secondary"
                 // Not `busy`: a spinner for the label would narrow the button and move the line beside it.
                 disabled={check.status === 'checking'}
@@ -76,12 +85,12 @@ export function VersionCard({
       ))}
       {children}
       <Row
-        title={VERSION_TEXT.privacy}
-        meta={VERSION_TEXT.privacyWhat}
+        title={text.privacy}
+        meta={text.privacyWhat}
         action={
           <Button
-            label={VERSION_TEXT.privacyOpen}
-            accessibilityLabel={VERSION_TEXT.privacyLabel}
+            label={text.privacyOpen}
+            accessibilityLabel={text.privacyLabel}
             variant="secondary"
             onPress={() =>
               void Linking.openURL(`${UI_ORIGINS[0] ?? 'https://app.whombat.com'}/legal/privacy`)

@@ -6,7 +6,7 @@
  * it needs an update. The card itself follows by `message.updated`.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { COUNCIL_WORDS, type CommitResult, councilMemberView } from '@whombat/client';
+import { type CommitResult, councilMemberView, councilWords } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useApiMutation } from '@whombat/client/react';
 import { api } from '@whombat/core';
@@ -16,6 +16,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { type CouncilItem, councilActionProblem, councilNextTick } from '../data/council';
 import type { FileAccess } from '../data/fileAccess';
 import type { MessageFileActions } from '../data/useFiles';
+import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { CouncilCardPanel } from '../ui/councilCard';
 import { haptic } from '../ui/haptics';
@@ -48,26 +49,29 @@ export function CouncilCard({
   files: MessageFileActions | null;
   openUrl: (url: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const councilWordsHere = councilWords(rawLocale);
   const { slug, timeZone } = useBurrowBase();
   const navigation = useAppNavigation();
   const qc = useQueryClient();
   const nowMs = useCouncilClock(item, clock);
   const members = useMemo(
-    () => (item.ticking ? item.card.members.map((m) => councilMemberView(m, nowMs)) : item.view.members),
-    [item, nowMs],
+    () =>
+      item.ticking ? item.card.members.map((m) => councilMemberView(m, nowMs, rawLocale)) : item.view.members,
+    [item, nowMs, rawLocale],
   );
   const done = (result: CommitResult<unknown>) => {
-    const text = outcomeText(result);
+    const text = outcomeText(result, rawLocale);
     if (text) return showHeldBack(text);
     haptic('success');
     // The card follows by `message.updated`; read the thread again in case that was missed.
     for (const id of ['messages.list', 'messages.thread'])
       void qc.invalidateQueries({ queryKey: queryKeys.scope(id, { burrow: slug }) });
   };
-  const failed = (error: unknown) => showFailure(councilActionProblem(error));
+  const failed = (error: unknown) => showFailure(councilActionProblem(error, rawLocale), rawLocale);
   const stop = useApiMutation(api.councils.stop, { onSuccess: done, onError: failed });
   const input = { params: { burrow: slug }, body: { councilId: item.councilId } };
-  const ask = COUNCIL_WORDS.stopAsk;
+  const ask = councilWordsHere.stopAsk;
   return (
     <CouncilCardPanel
       item={item}
@@ -82,7 +86,7 @@ export function CouncilCard({
         stop: () =>
           Alert.alert(ask.title, ask.body, [
             { text: ask.keep, style: 'cancel' },
-            { text: COUNCIL_WORDS.stop, style: 'destructive', onPress: () => stop.mutate(input) },
+            { text: councilWordsHere.stop, style: 'destructive', onPress: () => stop.mutate(input) },
           ]),
       }}
     />

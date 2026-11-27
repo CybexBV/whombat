@@ -73,7 +73,8 @@ export function useServerFacts(): ServerFacts[] {
   const status = useHostsStatus({ params: { burrow: slug } }, { retry: false });
   const present = status.data?.present === true;
   const fleet = useHostsFleet(present ? { params: { burrow: slug } } : null, { retry: false });
-  return useMemo(() => serverFacts(fleet.data?.servers ?? []), [fleet.data?.servers]);
+  const { rawLocale } = useI18n();
+  return useMemo(() => serverFacts(fleet.data?.servers ?? [], rawLocale), [fleet.data?.servers, rawLocale]);
 }
 
 const OPENER = 'places-opener';

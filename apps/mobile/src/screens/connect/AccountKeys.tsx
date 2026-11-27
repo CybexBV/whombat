@@ -4,9 +4,9 @@
  * saved at once with every other key as it is.
  */
 import {
-  ACCOUNT_TIER_LABELS,
   accountKeyGroups,
   accountKeysText,
+  accountTierLabels,
   withAccountTier,
 } from '@whombat/client/connections';
 import { useAgent, useSetAgentKeys } from '@whombat/client/react';
@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { useTheAgentHere } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { CardLine } from '../../ui/facts';
@@ -34,6 +35,8 @@ export function AccountKeys({
   /** The screen's own section title. */
   title: (text: string) => React.ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const accountTierLabelsHere = accountTierLabels(rawLocale);
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const agent = useTheAgentHere()?.name ?? '';
@@ -42,8 +45,8 @@ export function AccountKeys({
   const [problem, setProblem] = useState<string | null>(null);
   const profile = query.data;
   if (!profile) return null;
-  const t = accountKeysText(agent);
-  const groups = accountKeyGroups(profile.grants, services, agent);
+  const t = accountKeysText(agent, rawLocale);
+  const groups = accountKeyGroups(profile.grants, services, agent, rawLocale);
   if (groups.length === 0) return null;
 
   async function change(keyId: KeyId, tier: Tier) {
@@ -77,7 +80,7 @@ export function AccountKeys({
               description={row.note}
               tier={row.tier}
               disabled={setKeys.isPending}
-              options={row.choices.map((value) => ({ value, label: ACCOUNT_TIER_LABELS[value] }))}
+              options={row.choices.map((value) => ({ value, label: accountTierLabelsHere[value] }))}
               onChange={(tier) => void change(row.keyId, tier)}
             />
           ))}

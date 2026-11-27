@@ -10,14 +10,14 @@
  * ones (`useBackupMaker`, `useBackupRestorer`); what each step shows is `backupFile.ts`.
  */
 import {
-  BACKUP_FILE_TEXT,
   type BackupDownloadRow,
   type BackupProgressView,
   type BackupRestoreRow,
+  backupFileText,
 } from '@whombat/client';
 import { thisWhombatText } from '@whombat/client/managed';
 import { useBackupMaker, useBackupRestorer } from '@whombat/client/react';
-import { BACKUP_COPY, type BackupRestoreChip } from '@whombat/core/backup';
+import { type BackupRestoreChip, backupCopy } from '@whombat/core/backup';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -43,12 +43,10 @@ import {
   storedDismissedRestores,
 } from './backupFile';
 import { chooseBackupSink, keepScreenOn, pickBackupSource } from './backupFileSave';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { documentTextFile } from './expoStores';
 import { preloadedStorage } from './stores';
 import { Card, ErrorLine, Note } from './ui';
-
-const T = COPY.backupFile;
 
 let dismissedStore: ReturnType<typeof storedDismissedRestores> | null = null;
 /** The restores put away on this phone, in a small file next to the registry's (AP-1219). */
@@ -81,6 +79,9 @@ function BackupFilePanels({
   back: ReactNode;
   navigation: AppNavigation;
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).backupFile;
+  const backupFileTextHere = backupFileText(rawLocale);
   const bottomRoom = useBottomRoom();
   const maker = useBackupMaker(slug);
   const restorer = useBackupRestorer(slug, { dismissed: dismissedRestores() });
@@ -88,10 +89,13 @@ function BackupFilePanels({
   const [pickError, setPickError] = useState<string | null>(null);
 
   // Leaving stops a download or an upload: ask first, and keep the screen on while one runs (AP-1215).
-  const question = backupLeaveQuestion({
-    downloading: maker.download.status === 'downloading',
-    uploading: restorer.uploading !== null,
-  });
+  const question = backupLeaveQuestion(
+    {
+      downloading: maker.download.status === 'downloading',
+      uploading: restorer.uploading !== null,
+    },
+    rawLocale,
+  );
   useLeaveQuestion(navigation, question);
   const moving = question !== null;
   useEffect(() => {
@@ -118,9 +122,9 @@ function BackupFilePanels({
     setPickError(null);
     let picked: Awaited<ReturnType<typeof pickBackupSource>>;
     try {
-      picked = await pickBackupSource();
+      picked = await pickBackupSource(rawLocale);
     } catch {
-      setPickError(BACKUP_FILE_TEXT.failed);
+      setPickError(backupFileTextHere.failed);
       return;
     }
     if (!picked) return;
@@ -197,11 +201,14 @@ function DownloadPanel({
   onSave: () => void;
   saveError: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).backupFile;
+  const backupCopyHere = backupCopy(rawLocale);
   const theme = useTheme();
-  const panel = backupDownloadPanel(maker);
+  const panel = backupDownloadPanel(maker, rawLocale);
   return (
     <View style={{ gap: 14 }}>
-      <PanelHead title={BACKUP_COPY.download.title} intro={BACKUP_COPY.download.intro} />
+      <PanelHead title={backupCopyHere.download.title} intro={backupCopyHere.download.intro} />
       {panel.step === 'choose' ? (
         <>
           <Card>
@@ -216,19 +223,19 @@ function DownloadPanel({
             ))}
           </Card>
           <FormField
-            label={BACKUP_COPY.download.passwordLabel}
+            label={backupCopyHere.download.passwordLabel}
             value={maker.password}
             onChangeText={maker.setPassword}
             secret
             error={panel.passwordError}
-            hint={BACKUP_COPY.download.passwordHint}
+            hint={backupCopyHere.download.passwordHint}
             returnKeyType="go"
             onSubmitEditing={() => void maker.make()}
           />
           <Button label={panel.make.label} busy={panel.make.busy} onPress={() => void maker.make()} />
           {panel.defaults.offer ? (
             <Button
-              label={BACKUP_COPY.download.makeDefault}
+              label={backupCopyHere.download.makeDefault}
               variant="secondary"
               busy={panel.defaults.saving}
               onPress={() => void maker.defaults.save()}
@@ -275,7 +282,11 @@ function DownloadPanel({
               onPress={onSave}
             />
           ) : (
-            <Button label={BACKUP_COPY.restore.cancel} variant="secondary" onPress={maker.cancelDownload} />
+            <Button
+              label={backupCopyHere.restore.cancel}
+              variant="secondary"
+              onPress={maker.cancelDownload}
+            />
           )}
           <Button
             label={panel.remove.label}
@@ -363,11 +374,14 @@ function RestorePanel({
   /** “Point it here”: Add a server, filled in with the server's address (AP-4420). */
   onPointHere: (address: string | null) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).backupFile;
+  const backupCopyHere = backupCopy(rawLocale);
   const theme = useTheme();
-  const panel = backupRestorePanel(restorer, timeZone);
+  const panel = backupRestorePanel(restorer, timeZone, rawLocale);
   const cancel = (busy: boolean) => (
     <Button
-      label={BACKUP_COPY.restore.cancel}
+      label={backupCopyHere.restore.cancel}
       variant="secondary"
       busy={busy}
       onPress={() => void restorer.cancel()}
@@ -375,7 +389,7 @@ function RestorePanel({
   );
   return (
     <View style={{ gap: 14 }}>
-      <PanelHead title={BACKUP_COPY.restore.title} intro={BACKUP_COPY.restore.intro} />
+      <PanelHead title={backupCopyHere.restore.title} intro={backupCopyHere.restore.intro} />
       {panel.step === 'choose' ? (
         <>
           {panel.stopped ? <FileCard file={panel.stopped} /> : null}
@@ -392,7 +406,7 @@ function RestorePanel({
         <>
           <FileCard file={panel.file} />
           <FormField
-            label={BACKUP_COPY.restore.passwordLabel}
+            label={backupCopyHere.restore.passwordLabel}
             value={restorer.password}
             onChangeText={restorer.setPassword}
             secret
@@ -436,10 +450,10 @@ function RestorePanel({
           {panel.different.show ? (
             <View style={{ gap: 8 }}>
               <Text size={14} weight={600} style={{ paddingHorizontal: 6 }}>
-                {BACKUP_COPY.restore.whenDifferent}
+                {backupCopyHere.restore.whenDifferent}
               </Text>
               <Segmented
-                label={BACKUP_COPY.restore.whenDifferent}
+                label={backupCopyHere.restore.whenDifferent}
                 options={panel.different.options}
                 value={panel.different.value}
                 onChange={restorer.setOnDifferent}

@@ -7,12 +7,12 @@
  */
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  JOB_RESULT_WORDS,
   type JobReportSection,
   type JobResultFact,
   type JobResultPoint,
   type JobResultView,
   jobAnswersOf,
+  jobResultWords,
   jobSendBar,
 } from '@whombat/client';
 import { upsertMessageEverywhere } from '@whombat/client/query';
@@ -36,6 +36,7 @@ import {
   typeWords,
 } from '../data/jobResult';
 import { showToast } from '../data/toast';
+import { useI18n } from '../i18n';
 import { useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -101,6 +102,8 @@ export const JobResultMessage = memo(function JobResultMessage({
   accessibilityActions,
   onAccessibilityAction,
 }: JobResultMessageProps) {
+  const { rawLocale } = useI18n();
+  const jobResultWordsHere = jobResultWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
   const { slug, timeZone } = useBurrowBase();
@@ -116,7 +119,7 @@ export const JobResultMessage = memo(function JobResultMessage({
     try {
       const r = await send.mutateAsync({ messageId, answers });
       if (r.status !== 'ok') {
-        showToast(JOB_RESULT_WORDS.left.failed);
+        showToast(jobResultWordsHere.left.failed);
         return;
       }
       // The answer is the message as it is now; the `message.updated` frame follows, but the thread shows it at once.
@@ -124,26 +127,26 @@ export const JobResultMessage = memo(function JobResultMessage({
       setMarks(() => NO_MARKS);
       // Said once, as they go; the line itself then ticks each minute without being read again.
       AccessibilityInfo.announceForAccessibility(
-        JOB_RESULT_WORDS.left.sent(answers.length, '').replace(/ · $/, ''),
+        jobResultWordsHere.left.sent(answers.length, '').replace(/ · $/, ''),
       );
     } catch {
-      showToast(JOB_RESULT_WORDS.left.failed);
+      showToast(jobResultWordsHere.left.failed);
     }
   };
 
   const hasLeft = view.report.sections.some((s) => s.kind === 'left');
   const pendingLine = view.pending ? <SentLine pending={view.pending} open={view.open} /> : null;
-  const done = !view.pending && view.done ? doneLine(view.done, timeZone) : null;
+  const done = !view.pending && view.done ? doneLine(view.done, timeZone, rawLocale) : null;
 
   return (
     <View style={{ gap: 8 }} testID="job-result">
       <View
         accessible
-        accessibilityLabel={`${JOB_RESULT_WORDS.author}, ${time}`}
+        accessibilityLabel={`${jobResultWordsHere.author}, ${time}`}
         accessibilityActions={accessibilityActions}
         onAccessibilityAction={onAccessibilityAction}
       >
-        <AuthorLine avatar={<T3Tile size={24} />} name={JOB_RESULT_WORDS.author} time={time} />
+        <AuthorLine avatar={<T3Tile size={24} />} name={jobResultWordsHere.author} time={time} />
       </View>
       <View style={{ gap: 10, marginTop: 2 }}>
         {lead ? (
@@ -181,10 +184,10 @@ export const JobResultMessage = memo(function JobResultMessage({
       {!hasLeft && pendingLine ? <View style={{ marginTop: 6 }}>{pendingLine}</View> : null}
       {view.cut ? (
         url ? (
-          <LinkText label={JOB_RESULT_WORDS.facts.rest} onPress={() => openUrl(url)} brand />
+          <LinkText label={jobResultWordsHere.facts.rest} onPress={() => openUrl(url)} brand />
         ) : (
           <Text size={14} color={theme.colors.mut}>
-            {JOB_RESULT_WORDS.facts.rest}
+            {jobResultWordsHere.facts.rest}
           </Text>
         )
       ) : null}
@@ -389,11 +392,13 @@ function LeftSection({
   /** The sent line, in place of the send bar while T3 Code works on the answers. */
   after: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const jobResultWordsHere = jobResultWords(rawLocale);
   const theme = useTheme();
   const numbers = new Set(section.points.map((p) => p.n));
   const points = view.points.filter((p) => numbers.has(p.n));
   const marked = markedCount(view.points, marks);
-  const bar = jobSendBar(view, marked);
+  const bar = jobSendBar(view, marked, rawLocale);
   // Only the last “Left for you” carries the bar, under all the points it sends.
   const last = view.report.sections.filter((s) => s.kind === 'left').at(-1) === section;
   const locked = !!view.pending || sending;
@@ -417,7 +422,7 @@ function LeftSection({
         {section.intro ? <Body text={section.intro} /> : null}
         {bar && last ? (
           <Text size={15} lh={1.5} color={theme.colors.ink2}>
-            {JOB_RESULT_WORDS.left.intro}
+            {jobResultWordsHere.left.intro}
           </Text>
         ) : null}
       </View>
@@ -502,10 +507,12 @@ function PointView({
   /** Answers are on their way or with T3 Code: nothing more can be marked until it is done. */
   locked: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const jobResultWordsHere = jobResultWords(rawLocale);
   const theme = useTheme();
   const reveal = useRevealInList();
   const fieldRef = useRef<View>(null);
-  const answered = answeredLine(point);
+  const answered = answeredLine(point, rawLocale);
   const mark = marks.marks[point.n];
   const writing = marks.writing.includes(point.n);
   return (
@@ -530,7 +537,7 @@ function PointView({
         <Text size={14.5} lh={1.5} style={{ marginTop: 10 }} testID={`job-result-answered-${point.n}`}>
           {point.answer?.choice ? (
             <>
-              {JOB_RESULT_WORDS.left.chose('')}
+              {jobResultWordsHere.left.chose('')}
               <Text size={14.5} lh={1.5} weight={600}>
                 {point.answer.choice}
               </Text>
@@ -558,7 +565,7 @@ function PointView({
               {point.council ? <CouncilFaces size={18} /> : null}
               <View style={{ flex: 1, minWidth: 0 }}>
                 <RichText
-                  text={`**${point.council ? JOB_RESULT_WORDS.council : JOB_RESULT_WORDS.advice}** ${point.advice}`}
+                  text={`**${point.council ? jobResultWordsHere.council : jobResultWordsHere.advice}** ${point.advice}`}
                   color={theme.colors.ink2}
                   accentColor={theme.colors.brand}
                   codeBackground={theme.colors.bg}
@@ -611,7 +618,7 @@ function PointView({
             disabled={locked}
             feedback="fade"
             accessibilityRole="button"
-            accessibilityLabel={JOB_RESULT_WORDS.left.reply}
+            accessibilityLabel={jobResultWordsHere.left.reply}
             accessibilityState={{ expanded: writing, disabled: locked }}
             style={{
               alignSelf: 'flex-start',
@@ -627,7 +634,7 @@ function PointView({
               color={theme.colors.brand}
               style={{ textDecorationLine: 'underline' }}
             >
-              {JOB_RESULT_WORDS.left.reply}
+              {jobResultWordsHere.left.reply}
             </Text>
           </Touchable>
           {writing ? (
@@ -639,9 +646,9 @@ function PointView({
                 onFocus={() => reveal?.(fieldRef.current)}
                 editable={!locked}
                 multiline
-                placeholder={JOB_RESULT_WORDS.left.replyPlaceholder}
+                placeholder={jobResultWordsHere.left.replyPlaceholder}
                 placeholderTextColor={theme.colors.placeholder}
-                accessibilityLabel={JOB_RESULT_WORDS.left.replyLabel(point.title)}
+                accessibilityLabel={jobResultWordsHere.left.replyLabel(point.title)}
                 selectionColor={theme.colors.brand}
                 style={{
                   minHeight: TARGET + 20,
@@ -667,8 +674,10 @@ function PointView({
 
 /** Answers with T3 Code: how many and for how long, ticking each minute; the points still open say they can wait. */
 function SentLine({ pending, open }: { pending: NonNullable<JobResultView['pending']>; open: number }) {
+  const { rawLocale } = useI18n();
+  const jobResultWordsHere = jobResultWords(rawLocale);
   const theme = useTheme();
-  const text = useNowLabel((now) => sentLine(pending, now.getTime()));
+  const text = useNowLabel((now) => sentLine(pending, now.getTime(), rawLocale));
   return (
     <View style={{ gap: 6 }} testID="job-result-sent">
       <View
@@ -684,7 +693,7 @@ function SentLine({ pending, open }: { pending: NonNullable<JobResultView['pendi
       </View>
       {open > 0 ? (
         <Text size={14} lh={1.45} color={theme.colors.mut}>
-          {JOB_RESULT_WORDS.left.hintOpen(open)}
+          {jobResultWordsHere.left.hintOpen(open)}
         </Text>
       ) : null}
     </View>
@@ -768,6 +777,8 @@ function FactText({ fact }: { fact: JobResultFact }) {
  * in place, and Open in T3 Code.
  */
 function Facts({ view }: { view: JobResultView }) {
+  const { rawLocale } = useI18n();
+  const jobResultWordsHere = jobResultWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
   const [open, setOpen] = useState(false);
@@ -806,13 +817,13 @@ function Facts({ view }: { view: JobResultView }) {
             onPress={() => setOpen((o) => !o)}
             feedback="fade"
             accessibilityRole="button"
-            accessibilityLabel={JOB_RESULT_WORDS.facts.detail}
+            accessibilityLabel={jobResultWordsHere.facts.detail}
             accessibilityState={{ expanded: open }}
             style={{ minHeight: TARGET, flexDirection: 'row', alignItems: 'center', gap: 4 }}
             testID="job-result-detail-toggle"
           >
             <Text size={13.5} weight={500} color={theme.colors.ink2}>
-              {open ? JOB_RESULT_WORDS.facts.hideDetail : JOB_RESULT_WORDS.facts.detail}
+              {open ? jobResultWordsHere.facts.hideDetail : jobResultWordsHere.facts.detail}
             </Text>
             {open ? (
               <ChevronDown size={14} color={theme.colors.mut} strokeWidth={2} />
@@ -826,7 +837,7 @@ function Facts({ view }: { view: JobResultView }) {
             onPress={() => openUrl(url)}
             feedback="fade"
             accessibilityRole="link"
-            accessibilityLabel={JOB_RESULT_WORDS.facts.open}
+            accessibilityLabel={jobResultWordsHere.facts.open}
             style={{ minHeight: TARGET, flexDirection: 'row', alignItems: 'center', gap: 5 }}
           >
             <Text
@@ -835,7 +846,7 @@ function Facts({ view }: { view: JobResultView }) {
               color={theme.colors.ink2}
               style={{ textDecorationLine: 'underline', textDecorationColor: theme.colors.line2 }}
             >
-              {JOB_RESULT_WORDS.facts.open}
+              {jobResultWordsHere.facts.open}
             </Text>
             <ExternalLink size={13} color={theme.colors.mut} strokeWidth={2} />
           </Touchable>

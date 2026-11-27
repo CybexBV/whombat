@@ -4,23 +4,24 @@
  * field. Pure.
  */
 import {
-  WEB_SEARCH_COPY,
   type WebSearchCheck,
   type WebSearchCheckState,
   webSearchCheckText,
+  webSearchCopy,
 } from '@whombat/core';
 
 export type WebSearchTone = 'ok' | 'warn' | 'bad' | 'mut';
 
 /** The contracts' words with `{assistant}` filled in: the name mid-sentence, capitalised where a sentence starts. */
-export function webSearchWords(assistant: { name: string; Name: string }) {
+export function webSearchWords(assistant: { name: string; Name: string }, locale?: string | null) {
+  const copy = webSearchCopy(locale);
   const fill = (text: string) =>
     text
       .replace(/(^|[.!?]\s+)\{assistant\}/g, `$1${assistant.Name}`)
       .replaceAll('{assistant}', assistant.name);
   return {
-    hint: fill(WEB_SEARCH_COPY.hint),
-    removeBody: fill(WEB_SEARCH_COPY.removeBody),
+    hint: fill(copy.hint),
+    removeBody: fill(copy.removeBody),
   };
 }
 
@@ -32,12 +33,15 @@ const TONES: Record<WebSearchCheckState, WebSearchTone> = {
 };
 
 /** The dot and the line under “On, with your Brave Search key.”; not checked since it was saved: no line. */
-export function webSearchCheckLine(check: WebSearchCheck | null): {
+export function webSearchCheckLine(
+  check: WebSearchCheck | null,
+  locale?: string | null,
+): {
   tone: WebSearchTone;
   text: string | null;
 } {
   return check
-    ? { tone: TONES[check.state], text: webSearchCheckText(check.state) }
+    ? { tone: TONES[check.state], text: webSearchCheckText(check.state, locale) }
     : { tone: 'ok', text: null };
 }
 

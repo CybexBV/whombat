@@ -5,6 +5,7 @@
  * (`STARTER_PROMPTS`), which the person changes or removes like their own.
  */
 import { z } from 'zod';
+import { coreTranslator, tCore } from '../i18n/catalog.js';
 import { idSchema } from '../ids.js';
 import { Timestamp } from './common.js';
 
@@ -91,8 +92,11 @@ export const PROMPT_MERGE_LINES = `${PROMPT_MERGE_MARK} into the default branch 
  * only what is theirs to choose. A thread whose T3 Code has a council skill uses it; any other asks three reviewers
  * itself.
  */
-export const PROMPT_COUNCIL_LINES =
-  'Don’t hand what you aren’t sure about back to me. Put those points together to a council first: three independent reviewers on different AI models (use your council skill if you have one), each given the points, the code they concern and your own view. Do what the council agrees on, with the tests still passing. Leave for me only what the council can’t settle or says is mine to choose, such as a product decision or something that can’t be undone, each with the council’s advice. Finish with what you changed, what the council decided and what is left for me.';
+export function promptCouncilLines(locale?: string | null): string {
+  return tCore(locale, 'starter.council');
+}
+
+export const PROMPT_COUNCIL_LINES = promptCouncilLines('en');
 
 export interface StarterPrompt {
   key: string;
@@ -108,128 +112,43 @@ export interface StarterPrompt {
  * so improving one here improves it everywhere. The ones that used to end with a list for the person to review end
  * with `PROMPT_COUNCIL_LINES` instead.
  */
-export const STARTER_PROMPTS: readonly StarterPrompt[] = [
-  {
-    key: 'audit',
-    title: 'Find what’s broken',
-    text: [
-      'Read this entire project and find everything that’s broken, inconsistent, inefficient, or no longer needed. Fix what you’re sure about.',
-      '',
-      PROMPT_COUNCIL_LINES,
-    ].join('\n'),
+const STARTER_PROMPT_KEYS = [
+  'audit',
+  'prune-tests',
+  'simplify',
+  'refactor',
+  'bugs',
+  'security',
+  'dependencies',
+  'faster',
+  'faster-build',
+  'docs',
+  'agent-instructions',
+] as const;
+
+/** The shipped prompts in a locale: their titles and the words a thread is given. */
+export function starterPrompts(locale?: string | null): readonly StarterPrompt[] {
+  const tr = coreTranslator(locale);
+  const council = tr.t('starter.council');
+  return STARTER_PROMPT_KEYS.map((key) => ({
+    key,
+    title: tr.t(`starter.${key}.title`),
+    text: tr.t(`starter.${key}.text`, { council }),
     onRepository: true,
-  },
-  {
-    key: 'prune-tests',
-    title: 'Prune the tests',
-    text: [
-      'Remove 20% of the least useful tests while maintaining code coverage within 2%.',
-      '',
-      'Measure coverage before you start and again at the end, with the same command. Coverage shows that a line ran, not that anything checked it, so keep every test that guards security, permissions, a contract between parts, a migration, stored data or a named regression, however slow it is. Delete tests; don’t skip or weaken them, and don’t change production code.',
-      '',
-      'Finish with the number of tests and the coverage before and after, and the list of what you removed.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'simplify',
-    title: 'Remove needless complexity',
-    text: [
-      'Find and remove unnecessary complexity in this repository: wrappers that do nothing, the same logic written twice, abstractions with a single use, dead code and unused dependencies. Behaviour stays the same and the tests still pass. Leave alone what is fine as it is: fewer lines is not the goal.',
-      '',
-      PROMPT_COUNCIL_LINES,
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'refactor',
-    title: 'Refactor until you’re happy',
-    text: [
-      'Refactor until you are happy with the architecture. Test live after each significant step, review your own change and commit it. Track progress in /tmp/refactor-<project name>.md.',
-      '',
-      'What the software does for the people who use it stays the same. Finish with what you changed and why, and what you would still change.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'bugs',
-    title: 'Hunt for bugs',
-    text: [
-      'Find and fix correctness bugs in this repository, starting with what people use most. Fix the cause, not the symptom, and add a test that fails without the fix.',
-      '',
-      `What you suspect but couldn’t confirm counts as something you aren’t sure about. ${PROMPT_COUNCIL_LINES}`,
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'security',
-    title: 'Review the security',
-    text: [
-      'Review the security of this repository: keys and passwords in the code or its history, missing sign-in and permission checks, input that is trusted without checking, data of one person that another can reach, and packages with known vulnerabilities. Confirm each finding in the code before you report it.',
-      '',
-      'Rank what you find by how bad it is, explain each in plain English, and fix the top three, each with a test that fails without the fix. Work only in this repository and a local environment: don’t rotate keys, don’t touch production and don’t write exploit code. List the rest for me to review.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'dependencies',
-    title: 'Check the dependencies',
-    text: [
-      'Check this repository’s dependencies against known vulnerabilities. For each advisory, check whether the installed version is affected and whether the code can reach the vulnerable part, and quote the line that decides it. Rank by the real risk here, not by the advisory’s score.',
-      '',
-      'Upgrade what matters on a branch, one dependency per commit, with the tests passing. Leave an upgrade that needs code changes as an entry in a list, with what it would take. Don’t write exploit code.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'faster',
-    title: 'Make it faster',
-    text: [
-      'Find and implement performance improvements in this repository. Measure first: find the slow parts with a profile, a trace, a query plan or a benchmark instead of guessing, and write down the baseline.',
-      '',
-      'Keep a change only when the same measurement shows it is faster and the tests still pass; behaviour stays the same. Finish with the numbers before and after each change, and what you tried that didn’t help.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'faster-build',
-    title: 'Speed up the build and tests',
-    text: [
-      'Reduce the time this repository’s build and tests take by 30%.',
-      '',
-      'Time them three times before you start and take the average. You are done when three runs in the same environment average 30% less, with every test still passing. Don’t remove, skip or weaken tests, and don’t drop a step that checks something. If 30% is out of reach, stop and say what is in the way.',
-      '',
-      'Finish with the times before and after, and what you changed.',
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'docs',
-    title: 'Make the docs match the code',
-    text: [
-      'Read the documentation in this repository (the README, the docs folder, comments that explain how something works) and compare it with what the code does today. Fix what is out of date and remove what describes things that are gone.',
-      '',
-      `What you couldn’t settle from the code counts as something you aren’t sure about. ${PROMPT_COUNCIL_LINES}`,
-    ].join('\n'),
-    onRepository: true,
-  },
-  {
-    key: 'agent-instructions',
-    title: 'Check the agent instructions',
-    text: 'Read the instructions this repository gives coding agents (AGENTS.md, CLAUDE.md, skills and rules files). Find the ones that contradict each other, name files or commands that no longer exist, repeat what the code makes obvious, or work around problems older models had. Give me the changes as a list and change nothing until I say so.',
-    onRepository: true,
-  },
-];
+  }));
+}
+
+export const STARTER_PROMPTS: readonly StarterPrompt[] = starterPrompts('en');
 
 export function starterPromptId(key: string): string {
   return `starter-${key}`;
 }
 
-/** The shipped prompt behind a `starter-<key>` id, or null. */
-export function starterPromptOf(id: string): StarterPrompt | null {
+/** The shipped prompt behind a `starter-<key>` id, or null; in a locale (English by default). */
+export function starterPromptOf(id: string, locale?: string | null): StarterPrompt | null {
   if (!id.startsWith('starter-')) return null;
   const key = id.slice('starter-'.length);
-  return STARTER_PROMPTS.find((s) => s.key === key) ?? null;
+  return (locale ? starterPrompts(locale) : STARTER_PROMPTS).find((s) => s.key === key) ?? null;
 }
 
 const day = (iso: string) => iso.slice(0, 10);

@@ -16,6 +16,7 @@ import { Fragment, useMemo } from 'react';
 import { Linking, View } from 'react-native';
 import { useBurrow, useBurrowBase, useNow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n, useMobileT } from '../i18n';
 import { AiProviders } from '../managed/AiProviders';
 import { AiSignInCard } from '../managed/AiSignIn';
 import { UI_ORIGINS } from '../managed/config';
@@ -25,7 +26,7 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FoldText, MoreFold } from '../ui/fold';
 import { Button, StatusDot } from '../ui/primitives';
-import { AI_TEXT, type AiProviderCardView, type AiTone, aiProviderCards, meterLabel } from './ai';
+import { type AiProviderCardView, type AiTone, aiProviderCards, aiText, meterLabel } from './ai';
 import { LocalModelCard } from './LocalModelCard';
 import { WebSearchCard } from './WebSearchCard';
 
@@ -54,6 +55,7 @@ export function useAiProviderCards(
   const clients = useClients({}, { retry: false });
   const usage = useUsageList({ params: { burrow: slug } }, { retry: false });
   const now = useNow().getTime();
+  const { rawLocale } = useI18n();
   return useMemo(
     () =>
       signIns.data
@@ -63,9 +65,10 @@ export function useAiProviderCards(
             usage: usage.data?.mine,
             now,
             timeZone,
+            locale: rawLocale,
           })
         : undefined,
-    [signIns.data, clients.data, usage.data, now, timeZone],
+    [signIns.data, clients.data, usage.data, now, timeZone, rawLocale],
   );
 }
 
@@ -93,6 +96,7 @@ export function AiSignIns() {
   const words = useAgentWords();
   const webUrl = useAiWebUrl();
   const cards = useAiProviderCards(30_000) ?? [];
+  const { rawLocale } = useI18n();
   const { client } = useWhombat();
   const clients = useClients({}, { retry: false });
   const signIns = useSignIns({}, { retry: false });
@@ -103,7 +107,7 @@ export function AiSignIns() {
   return (
     <>
       <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-        {AI_TEXT.help(words.Name)}
+        {aiText(rawLocale).help(words.Name)}
       </Text>
       {cards.map((c) => (
         <Fragment key={c.provider}>
@@ -138,6 +142,8 @@ export function AiOnThisWhombat() {
 
 function ProviderCard({ card, webUrl }: { card: AiProviderCardView; webUrl: string | null }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const { t } = useMobileT();
   return (
     <View
       style={{
@@ -166,7 +172,7 @@ function ProviderCard({ card, webUrl }: { card: AiProviderCardView; webUrl: stri
         </Text>
       </View>
       {card.meters.map((m) => (
-        <View key={m.key} accessible accessibilityLabel={meterLabel(m)} style={{ gap: 2 }}>
+        <View key={m.key} accessible accessibilityLabel={meterLabel(m, rawLocale)} style={{ gap: 2 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
             <Text size={12.5} mono color={theme.colors.ink2}>
               {m.label}
@@ -190,14 +196,14 @@ function ProviderCard({ card, webUrl }: { card: AiProviderCardView; webUrl: stri
       ) : null}
       {card.signIn && webUrl ? (
         <Button
-          label={`Sign in to ${card.name} on the web`}
+          label={t('settings2.ai.signInWeb', { name: card.name })}
           variant="secondary"
           accessibilityHint={webUrl}
           onPress={() => void Linking.openURL(webUrl)}
         />
       ) : null}
       {card.details.length ? (
-        <MoreFold label={AI_TEXT.details} open={card.trouble}>
+        <MoreFold label={aiText(rawLocale).details} open={card.trouble}>
           {card.details.map((d) => (
             <FoldText key={d}>{d}</FoldText>
           ))}

@@ -4,6 +4,9 @@
  * its replies. Pure; web and phone share it.
  */
 import type { ChatThread } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
 
 /** In the order one wins over another: what waits for the person first, a settled thread last. */
 export const THREAD_STAGES = ['waiting', 'working', 'handedOver', 'settled'] as const;
@@ -21,21 +24,28 @@ export function threadStage(flags: ThreadStageFlags | null | undefined): ThreadS
   return null;
 }
 
-/** The words of a thread's stage and of its replies row. */
-export const THREAD_STAGE_WORDS = {
-  waiting: 'Waiting for you',
-  working: (assistant: string) => `${assistant} is working`,
-  handedOver: 'Handed over',
-  settled: 'Settled',
-  /** A thread's first message nobody answered yet. */
-  noReplies: 'No replies yet',
-  /** The end of a replies row's name for screen readers. */
-  open: 'open the thread',
-} as const;
+/** The words of a thread's stage and of its replies row, in a locale (English when none). */
+export function threadStageWords(locale?: string | null) {
+  const w = clientTree(locale, CHAT_AREA_WORDS).stage;
+  return {
+    waiting: w.waiting,
+    working: (assistant: string) => interpolate(w.working, { assistant }),
+    handedOver: w.handedOver,
+    settled: w.settled,
+    /** A thread's first message nobody answered yet. */
+    noReplies: w.noReplies,
+    /** The end of a replies row's name for screen readers. */
+    open: w.open,
+  };
+}
+
+/** The words of a thread's stage and of its replies row, in English. */
+export const THREAD_STAGE_WORDS = threadStageWords();
 
 /** “Waiting for you”, “Neo is working”, “Handed over”, “Settled”. */
-export function threadStageWord(stage: ThreadStage, assistant: string): string {
-  return stage === 'working' ? THREAD_STAGE_WORDS.working(assistant) : THREAD_STAGE_WORDS[stage];
+export function threadStageWord(stage: ThreadStage, assistant: string, locale?: string | null): string {
+  const w = locale ? threadStageWords(locale) : THREAD_STAGE_WORDS;
+  return stage === 'working' ? w.working(assistant) : w[stage];
 }
 
 /**
@@ -50,13 +60,15 @@ export function threadRowLabel(parts: {
   text?: string | null;
   /** “New replies” where the unread marker says so (thread-unread.md TU-05). */
   unread?: string | null;
+  /** The person's language (English when none). */
+  locale?: string | null;
 }): string {
   return [
     parts.replies,
     parts.unread ?? null,
-    parts.stage ? threadStageWord(parts.stage, parts.assistant) : null,
+    parts.stage ? threadStageWord(parts.stage, parts.assistant, parts.locale) : null,
     parts.text?.trim() || null,
-    THREAD_STAGE_WORDS.open,
+    (parts.locale ? threadStageWords(parts.locale) : THREAD_STAGE_WORDS).open,
   ]
     .filter(Boolean)
     .join(', ');

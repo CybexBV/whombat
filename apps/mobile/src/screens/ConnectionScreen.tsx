@@ -19,10 +19,10 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   aiGatewayOf,
-  GATEWAY_TEXT,
   gatewayConfirm,
   gatewaySavedText,
   gatewaySwitches,
+  gatewayText,
   gatewayUsedBy,
 } from '@whombat/client';
 import { codeSignInOf } from '@whombat/client/connections';
@@ -33,7 +33,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow, useViewContext } from '../data/BurrowProvider';
 import { connectionDetail, connectionsText } from '../data/connections';
-import { QUIET_COPY, quietNote } from '../data/quiet';
+import { quietCopy, quietNote } from '../data/quiet';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
 import { useI18n, useMobileT } from '../i18n';
@@ -56,6 +56,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Connection'>;
 
 export function ConnectionScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
+  const gatewayTextHere = gatewayText(rawLocale);
   const connectionsTextHere = connectionsText(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -63,7 +64,8 @@ export function ConnectionScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
   const { now, timeZone } = useViewContext();
-  const { connectionId, title, back = 'Back', thingId } = route.params;
+  const { connectionId, title, back: backParam, thingId } = route.params;
+  const back = backParam ?? tMobile('screens2.common.back');
   // An AI gateway's switches (AIG-05, AP-1123): a runtime with `ai.gateway`.
   const query = useConnectionTools({ params: { burrow: slug, connectionId } });
   const setGateway = useSetAiGateway(slug);
@@ -83,8 +85,8 @@ export function ConnectionScreen({ route, navigation }: Props) {
   const quiet = useQuietActions(slug, watchThing, { timeZone, note: quietNote(showToast) });
   const watchGone = !!watch.error && 'status' in watch.error && watch.error.status === 404;
   const model = useMemo(
-    () => (query.data ? connectionDetail(query.data, now, timeZone, slug) : null),
-    [query.data, now, timeZone, slug],
+    () => (query.data ? connectionDetail(query.data, now, timeZone, slug, rawLocale) : null),
+    [query.data, now, timeZone, slug, rawLocale],
   );
   // The burrow's gateway, when it is this connection (one per burrow, AIG-01).
   const burrowGateway = aiGatewayOf(bootstrap.burrow);
@@ -98,24 +100,25 @@ export function ConnectionScreen({ route, navigation }: Props) {
       { params: { burrow: slug }, body: provider === 'claude' ? { claude: on } : { codex: on } },
       {
         onSuccess: (result) => {
-          const text = outcomeText(result);
+          const text = outcomeText(result, rawLocale);
           if (text) return Alert.alert(text.title, text.body);
-          showNotice(gatewaySavedText(provider, model.title, on));
+          showNotice(gatewaySavedText(provider, model.title, on, rawLocale));
         },
-        onError: (error) => Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error)),
+        onError: (error) =>
+          Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error, rawLocale)),
       },
     );
   };
   const change = (provider: GatewayProvider, on: boolean) => {
     if (!model || !gateway) return;
-    const confirm = gatewayConfirm(burrowGateway?.kind ?? gateway.kind, provider, model.title, on);
+    const confirm = gatewayConfirm(burrowGateway?.kind ?? gateway.kind, provider, model.title, on, rawLocale);
     if (!confirm) return save(provider, on);
     Alert.alert(confirm.title, confirm.body, [
       { text: confirm.cancel, style: 'cancel' },
       { text: confirm.confirm, onPress: () => save(provider, true) },
     ]);
   };
-  const usedBy = gatewayUsedBy(switchedOn);
+  const usedBy = gatewayUsedBy(switchedOn, rawLocale);
 
   const conn = query.data?.connection ?? null;
   const entry = conn ? catalogEntry(conn.catalogId) : null;
@@ -239,9 +242,9 @@ export function ConnectionScreen({ route, navigation }: Props) {
               {conn && entry ? <ChoiceBlocks slug={slug} entry={entry} conn={conn} /> : null}
 
               {gateway ? (
-                <Section title={GATEWAY_TEXT.section}>
+                <Section title={gatewayTextHere.section}>
                   <ListRow title={usedBy.title} body={usedBy.text} />
-                  {gatewaySwitches(model.title).map((sw) => (
+                  {gatewaySwitches(model.title, rawLocale).map((sw) => (
                     <KeySwitchRow
                       key={sw.provider}
                       label={sw.label}
@@ -254,7 +257,7 @@ export function ConnectionScreen({ route, navigation }: Props) {
               ) : null}
 
               {!watchGone ? (
-                <Section title={QUIET_COPY.watchTitle.toUpperCase()}>
+                <Section title={quietCopy(rawLocale).watchTitle.toUpperCase()}>
                   <WhatWhombatWatches
                     watch={watch.data}
                     pending={watch.isPending}

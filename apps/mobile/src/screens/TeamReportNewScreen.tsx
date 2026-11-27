@@ -11,10 +11,10 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQuery } from '@tanstack/react-query';
 import {
   TEAM_REPORT_SECURITY_URL,
-  TEAM_REPORT_WORDS,
   teamReportClientContext,
   teamReportSentWith,
   teamReportsUnavailableText,
+  teamReportWords,
 } from '@whombat/client';
 import { readUpdatesChannel } from '@whombat/client/managed';
 import {
@@ -31,7 +31,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { phoneDeviceWords, phoneLanguage } from '../data/teamReports';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import { ErrorLine } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
@@ -90,6 +90,8 @@ function useUpdateChannel() {
 }
 
 export function TeamReportNewScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -105,11 +107,14 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
   const context = useMemo(phoneContext, []);
   const runtimeVersion = useRuntimeVersion();
   const channel = useUpdateChannel();
-  const sentWith = teamReportSentWith({
-    ...context,
-    ...(runtimeVersion ? { runtimeVersion } : {}),
-    ...(channel ? { channel } : {}),
-  });
+  const sentWith = teamReportSentWith(
+    {
+      ...context,
+      ...(runtimeVersion ? { runtimeVersion } : {}),
+      ...(channel ? { channel } : {}),
+    },
+    rawLocale,
+  );
 
   // Each of the assistant's drafts fills the form in once; one already sent or put aside fills in nothing.
   const filled = useRef<string | null>(null);
@@ -124,14 +129,15 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
   const draftNote = !draftId
     ? null
     : drafted?.done
-      ? TEAM_REPORT_WORDS.draftDone
+      ? teamReportWordsHere.draftDone
       : draft.isError
-        ? TEAM_REPORT_WORDS.draftFailed
+        ? teamReportWordsHere.draftFailed
         : null;
 
   // As on the web: a Whombat that doesn't speak reports, or a person who can't send now, gets the reason, not Send.
-  const unavailable = list.data && !list.data.available ? teamReportsUnavailableText(list.data.reason) : null;
-  const blocked = !list.supported ? TEAM_REPORT_WORDS.updateFirst : unavailable;
+  const unavailable =
+    list.data && !list.data.available ? teamReportsUnavailableText(list.data.reason, rawLocale) : null;
+  const blocked = !list.supported ? teamReportWordsHere.updateFirst : unavailable;
   const ready = !blocked && text.trim().length > 0 && !create.isPending;
   const send = () => {
     if (!ready) return;
@@ -146,7 +152,11 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
       {
         // Its page opens in the form's place, so back goes to the list.
         onSuccess: (report) =>
-          navigation.replace('TeamReport', { reportId: report.id, sent: true, back: TEAM_REPORT_WORDS.back }),
+          navigation.replace('TeamReport', {
+            reportId: report.id,
+            sent: true,
+            back: teamReportWordsHere.back,
+          }),
       },
     );
   };
@@ -175,7 +185,7 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
             accessibilityRole="header"
             style={{ paddingHorizontal: 6 }}
           >
-            {TEAM_REPORT_WORDS.formTitle}
+            {teamReportWordsHere.formTitle}
           </Text>
           {blocked ? (
             <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
@@ -190,11 +200,11 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
 
           <View style={{ gap: 8 }}>
             <Text size={13} weight={500} color={theme.colors.ink2} style={{ paddingHorizontal: 2 }}>
-              {TEAM_REPORT_WORDS.kindQuestion}
+              {teamReportWordsHere.kindQuestion}
             </Text>
             <View
               accessibilityRole="radiogroup"
-              accessibilityLabel={TEAM_REPORT_WORDS.kindQuestion}
+              accessibilityLabel={teamReportWordsHere.kindQuestion}
               style={{ flexDirection: 'row', gap: 10 }}
             >
               {(['bug', 'idea'] as const).map((k) => (
@@ -204,7 +214,7 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
           </View>
 
           <FormField
-            label={TEAM_REPORT_WORDS.textLabel[kind]}
+            label={teamReportWordsHere.textLabel[kind]}
             value={text}
             onChangeText={setText}
             multiline
@@ -213,7 +223,7 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
           />
           {kind === 'bug' ? (
             <FormField
-              label={`${TEAM_REPORT_WORDS.expectedLabel} (${TEAM_REPORT_WORDS.optional.toLowerCase()})`}
+              label={`${teamReportWordsHere.expectedLabel} (${teamReportWordsHere.optional.toLowerCase()})`}
               value={expected}
               onChangeText={setExpected}
               multiline
@@ -226,18 +236,18 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
 
           <View style={{ gap: 4, paddingHorizontal: 6 }}>
             <Text size={13} lh={1.45} color={theme.colors.mut}>
-              {TEAM_REPORT_WORDS.warning}
+              {teamReportWordsHere.warning}
             </Text>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 4 }}>
               <Text size={13} lh={1.45} color={theme.colors.mut}>
-                {TEAM_REPORT_WORDS.securityQuestion}
+                {teamReportWordsHere.securityQuestion}
               </Text>
               <Touchable
                 onPress={() => void Linking.openURL(TEAM_REPORT_SECURITY_URL)}
                 feedback="wash"
                 ringRadius={6}
                 accessibilityRole="link"
-                accessibilityLabel={`${TEAM_REPORT_WORDS.securityQuestion} ${TEAM_REPORT_WORDS.securityLink}`}
+                accessibilityLabel={`${teamReportWordsHere.securityQuestion} ${teamReportWordsHere.securityLink}`}
                 hitSlop={{ top: 12, bottom: 12 }}
                 style={{ minHeight: 20, justifyContent: 'center' }}
               >
@@ -248,15 +258,15 @@ export function TeamReportNewScreen({ navigation, route }: Props) {
                   color={theme.colors.brand}
                   style={{ textDecorationLine: 'underline' }}
                 >
-                  {TEAM_REPORT_WORDS.securityLink}
+                  {teamReportWordsHere.securityLink}
                 </Text>
               </Touchable>
             </View>
           </View>
 
-          <ErrorLine text={create.isError ? teamReportErrorText(create.error) : null} />
+          <ErrorLine text={create.isError ? teamReportErrorText(create.error, rawLocale) : null} />
           <Button
-            label={create.isPending ? TEAM_REPORT_WORDS.sending : TEAM_REPORT_WORDS.send}
+            label={create.isPending ? teamReportWordsHere.sending : teamReportWordsHere.send}
             size="lg"
             disabled={!ready}
             busy={create.isPending}
@@ -278,8 +288,10 @@ function KindCard({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const theme = useTheme();
-  const words = TEAM_REPORT_WORDS.kinds[kind];
+  const words = teamReportWordsHere.kinds[kind];
   const Icon = KIND_ICONS[kind];
   return (
     <Touchable
@@ -323,6 +335,8 @@ function SentWith({
   open: boolean;
   onToggle: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const theme = useTheme();
   const Chevron = open ? ChevronUp : ChevronDown;
   return (
@@ -340,7 +354,7 @@ function SentWith({
         feedback="wash"
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={TEAM_REPORT_WORDS.sentWith}
+        accessibilityLabel={teamReportWordsHere.sentWith}
         style={{
           minHeight: 48,
           flexDirection: 'row',
@@ -350,7 +364,7 @@ function SentWith({
         }}
       >
         <Text size={14} weight={500} color={theme.colors.ink2} style={{ flex: 1 }}>
-          {TEAM_REPORT_WORDS.sentWith}
+          {teamReportWordsHere.sentWith}
         </Text>
         <Chevron size={18} color={theme.colors.mut} />
       </Touchable>
@@ -367,7 +381,7 @@ function SentWith({
             </View>
           ))}
           <Text size={12.5} lh={1.4} color={theme.colors.mut} style={{ paddingTop: 2 }}>
-            {TEAM_REPORT_WORDS.sentWithNothingElse}
+            {teamReportWordsHere.sentWithNothingElse}
           </Text>
         </View>
       ) : null}

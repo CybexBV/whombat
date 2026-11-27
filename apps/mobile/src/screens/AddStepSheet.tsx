@@ -50,7 +50,7 @@ export function AddStepSheet({
 }
 
 function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -58,7 +58,7 @@ function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
   const [title, setTitle] = useState('');
   const [refusal, setRefusal] = useState<string | null>(null);
   const busy = add.isPending;
-  const problem = addStepProblem(title);
+  const problem = addStepProblem(title, rawLocale);
 
   const submit = async () => {
     if (problem || busy) return;
@@ -68,14 +68,14 @@ function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
         body: addStepBody(title),
       });
       if (result.status !== 'ok') {
-        const text = outcomeText(result);
+        const text = outcomeText(result, rawLocale);
         if (text) Alert.alert(text.title, text.body);
         return;
       }
-      showNotice(addStepDoneText(title));
+      showNotice(addStepDoneText(title, rawLocale));
       onClose();
     } catch (error) {
-      setRefusal(addStepRefusal(error) ?? errorText(error));
+      setRefusal(addStepRefusal(error, rawLocale) ?? errorText(error, rawLocale));
     }
   };
 
@@ -113,7 +113,7 @@ function AddStepFields({ plan, onClose }: { plan: Plan; onClose: () => void }) {
             style={{ flex: 1 }}
           />
           <Button
-            label={addStepLabel(busy)}
+            label={addStepLabel(busy, rawLocale)}
             busy={busy}
             disabled={problem !== null}
             accessibilityHint={problem ?? undefined}

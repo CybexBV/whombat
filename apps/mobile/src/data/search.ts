@@ -278,12 +278,13 @@ export function searchSettings(input: {
   const { t } = clientTranslator(input.locale);
   const copy = searchCopy(input.locale);
   const settings = settingsText(input.locale);
+  const own = mobileTranslator(input.locale);
   const rows: SearchSetting[] = [
     {
       key: 'you',
       title: groups.you,
       line: input.you,
-      terms: 'profile photo name',
+      terms: own.t('data.search.terms.you'),
       icon: 'you',
       target: { kind: 'page', name: 'SettingsProfile' },
     },
@@ -293,7 +294,7 @@ export function searchSettings(input: {
             key: 'notifications',
             title: copy.notifications,
             line: copy.notificationsLine,
-            terms: 'alerts push quiet hours',
+            terms: own.t('data.search.terms.notifications'),
             icon: 'bell',
             target: { kind: 'page', name: 'SettingsNotifications' },
           } satisfies SearchSetting,
@@ -303,7 +304,7 @@ export function searchSettings(input: {
       key: 'theme',
       title: copy.theme,
       line: copy.themeLine,
-      terms: 'appearance light dark',
+      terms: own.t('data.search.terms.theme'),
       icon: 'theme',
       target: { kind: 'tab' },
     },
@@ -322,8 +323,8 @@ export function searchSettings(input: {
     {
       key: 'assistant',
       title: groups.agent,
-      line: 'Name and face, AI sign-in, memory and what it may do',
-      terms: 'assistant',
+      line: own.t('data.search.assistantLine'),
+      terms: own.t('data.search.terms.assistant'),
       icon: 'assistant',
       target: { kind: 'page', name: 'SettingsAgent' },
     },
@@ -339,15 +340,15 @@ export function searchSettings(input: {
     {
       key: 'connections',
       title: settings.rows.connections,
-      line: 'What is connected and how',
+      line: own.t('data.search.connectionsLine'),
       icon: 'connections',
       target: { kind: 'page', name: 'Connections' },
     },
     {
       key: 'appliance',
       title: settings.rows.appliance,
-      line: 'Backups, updates and this box',
-      terms: 'whombat backup update',
+      line: own.t('data.search.applianceLine'),
+      terms: own.t('data.search.terms.appliance'),
       icon: 'box',
       target: { kind: 'page', name: input.managed ? 'Whombat' : 'SettingsWhombat' },
     },
@@ -357,7 +358,7 @@ export function searchSettings(input: {
             key: 'news',
             title: settings.rows.news,
             line: settings.newsLine,
-            terms: 'weather place headlines feeds sources',
+            terms: own.t('data.search.terms.news'),
             icon: 'news',
             target: { kind: 'page', name: 'SettingsNews' },
           } satisfies SearchSetting,
@@ -368,8 +369,8 @@ export function searchSettings(input: {
           {
             key: 'screen',
             title: input.screen,
-            line: 'What the box’s screen shows',
-            terms: 'display desk',
+            line: own.t('data.search.screenLine'),
+            terms: own.t('data.search.terms.screen'),
             icon: 'screen',
             target: { kind: 'page', name: 'SettingsDesk' },
           } satisfies SearchSetting,

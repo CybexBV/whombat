@@ -5,13 +5,15 @@
  */
 
 import { clientTranslator } from '@whombat/client/i18n';
-import { claimStepKicker, COPY as SHARED, managedText as sharedStatus } from '@whombat/client/managed';
-import { VERSION_REFUSAL_COPY } from '@whombat/protocol/session';
+import { claimStepKicker, managedCopyText, managedText as sharedStatus } from '@whombat/client/managed';
+import { versionRefusalCopy } from '@whombat/protocol/session';
 import { mobileTranslator } from '../i18n/translate';
 
 export function managedCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
   const { t: shared } = clientTranslator(locale);
+  const SHARED = managedCopyText(locale);
+  const refusal = versionRefusalCopy(locale);
   return {
     ...SHARED,
     appliances: {
@@ -79,7 +81,7 @@ export function managedCopy(locale?: string) {
     },
     /** Signing in by the computer's QR code (CT-190, AP-530…AP-539). */
     phone: {
-      kicker: 'SIGN IN',
+      kicker: t('managed2.copy.signInKicker'),
       scanTitle: t('copy.copy.phone.scanTitle'),
       scanWrong: t('copy.copy.phone.scanWrong'),
       scanDenied: t('copy.copy.phone.scanDenied'),
@@ -227,8 +229,8 @@ export function managedCopy(locale?: string) {
       signIn: shared('managed.connection.signIn'),
       clientTooOldTitle: t('copy.copy.connection.clientTooOldTitle'),
       /** A box of another protocol major (HE-52): the contracts' words. */
-      clientTooOld: VERSION_REFUSAL_COPY.client,
-      applianceTooOld: VERSION_REFUSAL_COPY.appliance,
+      clientTooOld: refusal.client,
+      applianceTooOld: refusal.appliance,
       unsupported: t('copy.copy.connection.unsupported'),
       belowFloor: t('copy.copy.connection.belowFloor'),
     },
@@ -245,20 +247,24 @@ export function managedCopy(locale?: string) {
       available: t('copy.copy.update.available'),
       /** “0.37.0 · 58 MB · Download and install it over this app.” */
       availableMeta: (version: string, size: number) =>
-        `${version} · ${Math.max(1, Math.round(size / 1_000_000))} MB · Download and install it over this app.`,
+        t('managed2.copy.availableMeta', { version, mb: Math.max(1, Math.round(size / 1_000_000)) }),
       /** The row's button: downloads the APK. */
       install: t('copy.copy.update.install'),
       /** The pop-up when a newer build is out, once per version (update-check.md). */
       newTitle: t('copy.copy.update.newTitle'),
       /** “Version 3.155.0 (37 MB) is ready. It takes a minute, and you stay signed in.” */
       newLead: (version: string, size: number) =>
-        `Version ${version} (${Math.max(1, Math.round(size / 1_000_000))} MB) is ready. It takes a minute, and you stay signed in.`,
+        t('managed2.copy.newLead', { version, mb: Math.max(1, Math.round(size / 1_000_000)) }),
       later: t('copy.copy.update.later'),
       /** The app updates itself (AP-813): the button while the APK downloads into the app. */
       downloading: (percent: number) => t('copy.copy.update.downloading', { percent }),
       /** “0.44.0 · 34 of 96 MB” */
       downloadingMeta: (version: string, received: number, total: number) =>
-        `${version} · ${Math.round(received / 1_000_000)} of ${Math.max(1, Math.round(total / 1_000_000))} MB`,
+        t('managed2.copy.downloadingMeta', {
+          version,
+          received: Math.round(received / 1_000_000),
+          total: Math.max(1, Math.round(total / 1_000_000)),
+        }),
       /** Android asks once whether Whombat may install apps (“Install unknown apps”). */
       allow: t('copy.copy.update.allow'),
       /** Where Android sent the person to allow installs: the setting, the app's page instead, or nowhere. */

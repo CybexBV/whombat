@@ -6,7 +6,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, type StyleProp, TextInput, View, type ViewStyle } from 'react-native';
-import { RENAME_COPY } from '../data/rename';
+import { renameCopy } from '../data/rename';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { type FontWeight, textMetrics } from '../theme/type';
@@ -42,6 +43,8 @@ export function InlineRename({
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = renameCopy(rawLocale);
   const input = useRef<TextInput>(null);
   const [typed, setTyped] = useState(value);
   const [problem, setProblem] = useState<string | null>(null);
@@ -78,7 +81,7 @@ export function InlineRename({
   const save = async () => {
     if (done.current || saving.current) return;
     saving.current = true;
-    const why = await onSave(typed).catch(() => RENAME_COPY.failed);
+    const why = await onSave(typed).catch(() => copy.failed);
     saving.current = false;
     if (why) {
       setProblem(why);
@@ -159,12 +162,12 @@ export function InlineRename({
           onPress={close}
           feedback="fade"
           ringRadius={8}
-          accessibilityLabel={RENAME_COPY.cancel}
+          accessibilityLabel={copy.cancel}
           hitSlop={4}
           style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' }}
         >
           <Text size={13.5} weight={500} color={theme.colors.brand}>
-            {RENAME_COPY.cancel}
+            {copy.cancel}
           </Text>
         </Touchable>
       </View>

@@ -4,13 +4,25 @@
  * it does now. Shared by web and mobile. Pure, no DOM and no React Native.
  */
 import type { Handoff, HandoffStep } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { formatDuration } from '@whombat/core/text';
+import { clientTree } from './i18n/catalog';
+import { WORK_AREA_WORDS } from './i18n/messages/chatWork/work';
+
+const words = (locale?: string | null) => clientTree(locale, WORK_AREA_WORDS).handoff;
 
 /** The program's name, beside its mark. */
 export const T3_CODE_NAME = 'T3 Code';
-export const OPEN_IN_T3_CODE = 'Open in T3 Code';
-export const SHOW_STEPS = 'Show the steps';
-export const HIDE_STEPS = 'Hide the steps';
+
+/** The hand-over's few fixed words (open it, its steps), in a locale (English when none). */
+export function handoffWords(locale?: string | null) {
+  const w = words(locale);
+  return { openInT3Code: w.open, showSteps: w.showSteps, hideSteps: w.hideSteps, answering: w.answering };
+}
+
+export const OPEN_IN_T3_CODE = handoffWords().openInT3Code;
+export const SHOW_STEPS = handoffWords().showSteps;
+export const HIDE_STEPS = handoffWords().hideSteps;
 
 const ms = (iso: string | null): number | null => {
   if (!iso) return null;
@@ -60,9 +72,10 @@ export function pullRequestLabel(pr: string): string | null {
   return m ? `#${m[1]}` : null;
 }
 
-const checksOn = (h: Handoff): string => {
+const checksOn = (h: Handoff, locale?: string | null): string => {
   const labels = h.pullRequests.map(pullRequestLabel).filter((l): l is string => !!l);
-  return labels.length ? `is waiting for the checks on ${labels.join(', ')}` : 'is waiting for the checks';
+  const w = words(locale);
+  return labels.length ? interpolate(w.checksOn, { prs: labels.join(', ') }) : w.checks;
 };
 
 /**
@@ -78,33 +91,34 @@ export interface HandoffRow {
   since: number | null;
 }
 
-export function handoffRow(shown: readonly Handoff[]): HandoffRow | null {
+export function handoffRow(shown: readonly Handoff[], locale?: string | null): HandoffRow | null {
   const active = shown.filter((h) => h.state !== 'ended');
   const first = active[0];
   if (!first) return null;
-  if (active.some((h) => h.state === 'needs_ok')) return { text: 'needs your OK', tone: 'warn', since: null };
+  const w = words(locale);
+  if (active.some((h) => h.state === 'needs_ok')) return { text: w.needsOk, tone: 'warn', since: null };
   if (active.length > 1) {
     const starts = active.map((h) => ms(h.since)).filter((t): t is number => t !== null);
     return {
-      text: `· ${active.length} jobs`,
+      text: interpolate(w.jobs, { count: active.length }),
       tone: 'live',
       since: starts.length ? Math.min(...starts) : null,
     };
   }
   switch (first.state) {
     case 'working':
-      return { text: 'is working on it', tone: 'live', since: ms(first.since) };
+      return { text: w.working, tone: 'live', since: ms(first.since) };
     case 'finishing':
-      return { text: 'is finishing up', tone: 'live', since: null };
+      return { text: w.finishing, tone: 'live', since: null };
     case 'asked':
-      return { text: 'asked a question', tone: 'live', since: null };
+      return { text: w.asked, tone: 'live', since: null };
     default:
-      return { text: checksOn(first), tone: 'calm', since: null };
+      return { text: checksOn(first, locale), tone: 'calm', since: null };
   }
 }
 
 /** The reply row's words while the agent answers T3 Code's question there. */
-export const ANSWERING_T3_CODE = 'is answering T3 Code';
+export const ANSWERING_T3_CODE = handoffWords().answering;
 
 /** The step T3 Code is on: its last one not done, else its last. */
 export function currentStep(h: Pick<Handoff, 'steps'>): HandoffStep | null {
@@ -130,27 +144,29 @@ export interface HandoffLine {
   hasSteps: boolean;
 }
 
-export function handoffLine(h: Handoff, agentName: string): HandoffLine {
+export function handoffLine(h: Handoff, agentName: string, locale?: string | null): HandoffLine {
+  const w = words(locale);
+  const t3 = T3_CODE_NAME;
   const step = currentStep(h);
   const meta = [h.title, h.program].filter(Boolean).join(' · ');
   const base = { meta, hasSteps: h.steps.length > 0, clockFrom: null, live: false };
-  const doing = step ? `Now: ${lowerFirst(step.text)}` : null;
+  const doing = step ? interpolate(w.now, { step: lowerFirst(step.text) }) : null;
   switch (h.state) {
     case 'working':
       return {
         ...base,
-        title: `${T3_CODE_NAME} is working on it`,
+        title: interpolate(w.lineWorking, { t3 }),
         now: doing,
         tone: 'live',
         live: true,
         clockFrom: ms(h.since),
       };
     case 'finishing':
-      return { ...base, title: `${T3_CODE_NAME} is finishing up`, now: doing, tone: 'live', live: true };
+      return { ...base, title: interpolate(w.lineFinishing, { t3 }), now: doing, tone: 'live', live: true };
     case 'asked':
       return {
         ...base,
-        title: `${T3_CODE_NAME} asked ${agentName} something`,
+        title: interpolate(w.lineAsked, { t3, agentName }),
         now: h.asks,
         tone: 'live',
         live: true,
@@ -158,32 +174,38 @@ export function handoffLine(h: Handoff, agentName: string): HandoffLine {
     case 'needs_ok':
       return {
         ...base,
-        title: `${T3_CODE_NAME} needs your OK`,
-        now: h.asks ? `Approve it in ${T3_CODE_NAME}: ${h.asks}` : `Approve it in ${T3_CODE_NAME}.`,
+        title: interpolate(w.lineNeedsOk, { t3 }),
+        now: h.asks ? interpolate(w.approveAsks, { t3, asks: h.asks }) : interpolate(w.approve, { t3 }),
         tone: 'warn',
       };
     case 'checks':
       return {
         ...base,
-        title: `${T3_CODE_NAME} ${checksOn(h)}`,
-        now: `${agentName} hears when they finish.`,
+        title: interpolate(w.lineChecks, { t3, checks: checksOn(h, locale) }),
+        now: interpolate(w.hears, { agentName }),
         tone: 'calm',
       };
     default:
-      return { ...base, title: endedWords(h), now: null, tone: 'done' };
+      return { ...base, title: endedWords(h, locale), now: null, tone: 'done' };
   }
 }
 
 /** `T3 Code finished in 14m`, `T3 Code ran into a problem after 3m`, `T3 Code was stopped`. */
-export function endedWords(h: Pick<Handoff, 'outcome' | 'since' | 'endedAt'>): string {
-  if (h.outcome === 'stopped') return `${T3_CODE_NAME} was stopped`;
+export function endedWords(
+  h: Pick<Handoff, 'outcome' | 'since' | 'endedAt'>,
+  locale?: string | null,
+): string {
+  const w = words(locale);
+  const t3 = T3_CODE_NAME;
+  if (h.outcome === 'stopped') return interpolate(w.stopped, { t3 });
   const from = ms(h.since);
   const to = ms(h.endedAt);
   const took = from !== null && to !== null && to > from ? handoffMinutes(from, to) : null;
   if (h.outcome === 'failed')
-    return took ? `${T3_CODE_NAME} ran into a problem after ${took}` : `${T3_CODE_NAME} ran into a problem`;
-  return took ? `${T3_CODE_NAME} finished in ${took}` : `${T3_CODE_NAME} finished`;
+    return took ? interpolate(w.problemAfter, { t3, took }) : interpolate(w.problem, { t3 });
+  return took ? interpolate(w.finishedIn, { t3, took }) : interpolate(w.finished, { t3 });
 }
 
 /** The line's clock: `6m 12s` (`formatDuration`). */
-export const handoffClock = (fromMs: number, nowMs: number): string => formatDuration(nowMs - fromMs);
+export const handoffClock = (fromMs: number, nowMs: number, locale?: string | null): string =>
+  formatDuration(nowMs - fromMs, locale);

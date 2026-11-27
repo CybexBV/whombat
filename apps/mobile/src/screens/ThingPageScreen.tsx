@@ -195,13 +195,17 @@ export function ThingPageScreen({
   const putBack = usePutBack(thingId);
   const putBackRef = useRef(putBack);
   putBackRef.current = putBack;
-  const note = useCallback((message: string, outcome: 'done' | 'failed', undo?: { changeId: string }) => {
-    const text = pressNote(message, outcome);
-    if (!text) return;
-    if (undo) toasts.show(text, { action: putBackAction(() => putBackRef.current(undo.changeId)) });
-    else if (outcome === 'failed') showFailure(text);
-    else showNotice(text);
-  }, []);
+  const note = useCallback(
+    (message: string, outcome: 'done' | 'failed', undo?: { changeId: string }) => {
+      const text = pressNote(message, outcome, rawLocale);
+      if (!text) return;
+      if (undo)
+        toasts.show(text, { action: putBackAction(() => putBackRef.current(undo.changeId), rawLocale) });
+      else if (outcome === 'failed') showFailure(text, rawLocale);
+      else showNotice(text);
+    },
+    [rawLocale],
+  );
   const buttons = useThingButtons(slug, thingId, note);
   // Ignore, Remind me tomorrow, Stop watching and Undo on its lines (quiet-notices-mobile.md AP-4861): on a Whombat
   // with `things.quiet`; the toast says how it went, with Undo.
@@ -226,9 +230,9 @@ export function ThingPageScreen({
   );
   // Until it answers the first time, the head as the Connections tab's row says it (AP-2650).
   const early = useCachedThingHead(slug, thingId);
-  const ranges = useMemo(() => rangeOptions(page?.ranges), [page?.ranges]);
+  const ranges = useMemo(() => rangeOptions(page?.ranges, rawLocale), [page?.ranges, rawLocale]);
   const shownRange = range ?? page?.range ?? DEFAULT_RANGE;
-  const tabs = useMemo(() => (page ? phoneThingTabs(page) : []), [page]);
+  const tabs = useMemo(() => (page ? phoneThingTabs(page, rawLocale) : []), [page, rawLocale]);
   const [tab, setTab] = useState<string | null>(wanted ?? null);
   useEffect(() => {
     if (wanted) setTab(wanted);
@@ -324,7 +328,7 @@ export function ThingPageScreen({
   const [menu, setMenu] = useState(false);
   // Keep quiet… in the ⋯: for who may manage it; a page kept quiet already offers End now under its head.
   const canKeepQuiet = !!page && keepsQuiet && (!!watch.data?.mayChange || !!page.keptQuiet?.canEnd);
-  const hold = page && keepsQuiet ? holdView(page) : null;
+  const hold = page && keepsQuiet ? holdView(page, rawLocale) : null;
   // The hold under the state: kept quiet with who and End now; quiet with its server in its words. Down
   // because of something else says so as its state already.
   const holdLine =
@@ -431,7 +435,7 @@ export function ThingPageScreen({
             {service ? (
               <ServiceHead
                 page={page}
-                problem={problemLine(page, now, timeZone)}
+                problem={problemLine(page, now, timeZone, rawLocale)}
                 onAsk={subject ? askAbout : null}
                 wide={widePage.wide}
                 cause={causeLink}
@@ -441,7 +445,7 @@ export function ThingPageScreen({
               <>
                 <ServiceHead
                   page={page}
-                  problem={problemLine(page, now, timeZone)}
+                  problem={problemLine(page, now, timeZone, rawLocale)}
                   onAsk={null}
                   wide={false}
                   withButtons={false}
@@ -875,7 +879,7 @@ function CopyAddress({ address }: { address: string }) {
   const theme = useTheme();
   return (
     <Touchable
-      onPress={() => void copyToClipboard(address, thingPageCopyHere.addressCopied)}
+      onPress={() => void copyToClipboard(address, thingPageCopyHere.addressCopied, rawLocale)}
       feedback="fade"
       ringRadius={8}
       accessibilityRole="button"
@@ -1054,13 +1058,13 @@ function ConfirmSheet({
     act.mutateAsync(action.id).then(
       (result) => {
         if (result.status !== 'ok') {
-          const text = outcomeText(result);
+          const text = outcomeText(result, rawLocale);
           return setError(text ? `${text.title}. ${text.body}` : thingPageCopyHere.failed);
         }
         onClose();
         showNotice(result.data.message);
       },
-      (e: unknown) => setError(errorText(e)),
+      (e: unknown) => setError(errorText(e, rawLocale)),
     );
   };
   return (
@@ -1128,7 +1132,7 @@ function KeepQuietMore({ name, onKeepQuiet }: { name: string; onKeepQuiet: () =>
 
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const spec = thingMoreMenu();
+  const spec = thingMoreMenu(rawLocale);
   const onPick = (id: string) => {
     if (parseMonitoringPick(id) === 'keep_quiet') onKeepQuiet();
   };

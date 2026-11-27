@@ -10,6 +10,7 @@ import { type AutomationPlanView, type AutomationSample, api } from '@whombat/co
 import { useCallback } from 'react';
 import { newestSample, runNowBody } from '../data/automationPlan';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { errorText, outcomeText } from './feedback';
 
 /** The issues, pull requests or reports to try an automation on, newest first. */
@@ -24,6 +25,7 @@ export type StartOutcome =
   | { ok: false; text: string };
 
 export function useStartAutomation() {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrowBase();
   const { queries } = useWhombat();
   const qc = useQueryClient();
@@ -51,12 +53,12 @@ export function useStartAutomation() {
       try {
         const result = await mutate({ params, body: runNowBody(how.test, sample) });
         if (result.status === 'ok') return { ok: true, runNumber: result.data.run.number, sample };
-        return { ok: false, text: outcomeText(result)?.body ?? errorText(null) };
+        return { ok: false, text: outcomeText(result, rawLocale)?.body ?? errorText(null, rawLocale) };
       } catch (error) {
-        return { ok: false, text: errorText(error) };
+        return { ok: false, text: errorText(error, rawLocale) };
       }
     },
-    [slug, queries, qc, mutate],
+    [slug, queries, qc, mutate, rawLocale],
   );
   return { start, busy: runNow.isPending };
 }

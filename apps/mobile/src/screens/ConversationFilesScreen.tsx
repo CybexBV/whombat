@@ -51,7 +51,7 @@ import {
 } from '../data/files';
 import { filesCopy } from '../data/filesCopy';
 import { fileMenu, type NativeMenuSpec } from '../data/nativeMenu';
-import { PAGES_COPY } from '../data/pageSets';
+import { pagesCopy } from '../data/pageSets';
 import { useFilesSpace, useFilesUploads } from '../data/useFiles';
 import { useI18n, useMobileT } from '../i18n';
 import { useOpenLink } from '../navigation/hooks';
@@ -72,8 +72,6 @@ import { FilesConversationMark, FilesGroup, FilesTitle, FileTile, FolderTile } f
 import { showNotice, useDecisionFeedback } from './feedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'ConversationFiles'>;
-
-const WRITE_FAILED = 'That didn’t go through. Try again.';
 
 /** “Files › Drawings › 2024”: every step above the folder on screen opens it. */
 function Breadcrumbs({ folder, onOpen }: { folder: string; onOpen: (path: string) => void }) {
@@ -96,7 +94,9 @@ function Breadcrumbs({ folder, onOpen }: { folder: string; onOpen: (path: string
             feedback="wash"
             ringRadius={8}
             accessibilityRole="link"
-            accessibilityLabel={c.path ? `Folder ${c.name}` : filesCopyHere.top}
+            accessibilityLabel={
+              c.path ? tMobile('screens2.files.folder', { name: c.name }) : filesCopyHere.top
+            }
             style={{ minHeight: 44, paddingHorizontal: 6, justifyContent: 'center' }}
           >
             <Text size={14} weight={500} color={theme.colors.brand} numberOfLines={1}>
@@ -122,9 +122,10 @@ function UploadRow({
   onRetry: () => void;
   onDismiss: () => void;
 }) {
-  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
+  const { rawLocale, tClient } = useI18n();
   const theme = useTheme();
-  const status = filesUploadStatusText(item);
+  const status = filesUploadStatusText(item, rawLocale);
   const failed = item.state === 'failed';
   const going = item.state === 'uploading' || item.state === 'saving';
   return (
@@ -177,7 +178,9 @@ function UploadRow({
           onPress={onDismiss}
           feedback="wash"
           ringRadius={22}
-          accessibilityLabel={going ? `Cancel ${item.name}` : `Dismiss ${item.name}`}
+          accessibilityLabel={tMobile(going ? 'screens2.attach.cancel' : 'screens2.files.dismiss', {
+            name: item.name,
+          })}
           style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}
         >
           <X size={18} color={theme.colors.ink2} strokeWidth={2} />
@@ -206,6 +209,7 @@ function FileRow({
   onOpen: () => void;
   onMore: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const ctx = useViewContext();
@@ -234,7 +238,7 @@ function FileRow({
           accessibilityLabel={view.accessibilityLabel}
           accessibilityHint={
             isPageSet(entry.attachment)
-              ? PAGES_COPY.openHint
+              ? pagesCopy(rawLocale).openHint
               : opensInViewer(entry.attachment)
                 ? tMobile('screens.opens-the-picture')
                 : tMobile('screens.opens-the-share-sheet')
@@ -280,7 +284,7 @@ function FileRow({
           spec={menu}
           onPick={onPick}
           trigger="tap"
-          label={`Actions for ${view.name}`}
+          label={tMobile('screens2.files.actionsFor', { name: view.name })}
           style={MORE_BUTTON}
         >
           <View style={MORE_FACE}>{moreFace}</View>
@@ -290,7 +294,7 @@ function FileRow({
           onPress={onMore}
           feedback="wash"
           ringRadius={22}
-          accessibilityLabel={`Actions for ${view.name}`}
+          accessibilityLabel={tMobile('screens2.files.actionsFor', { name: view.name })}
           style={MORE_BUTTON}
         >
           {moreFace}
@@ -337,7 +341,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
   );
   const summary = listed ?? fetched.data?.summary ?? null;
   const row = useMemo(() => (summary ? filesRowFor(summary) : null), [summary]);
-  const where = filesWhere(row);
+  const where = filesWhere(row, rawLocale);
 
   const list = useFilesList(slug, on ? conversationId : null);
   const entries = useMemo(() => list.data?.files ?? [], [list.data]);
@@ -397,8 +401,13 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
   const share = (a: Attachment) => {
     if (!access || sharing) return;
     setSharing(a.id);
-    shareAttachment(a, access)
-      .catch(() => Alert.alert(tMobile('screens.couldnt-open-it'), `${a.name} didn’t download. Try again.`))
+    shareAttachment(a, access, rawLocale)
+      .catch(() =>
+        Alert.alert(
+          tMobile('screens.couldnt-open-it'),
+          tMobile('screens2.files.didntDownload', { name: a.name }),
+        ),
+      )
       .finally(() => setSharing(null));
   };
   // Pictures and page sets open in their viewer here too; everything else goes to the share sheet.
@@ -419,7 +428,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
           }
           done();
         },
-        onError: (error) => setSheetError(filesErrorText(error, WRITE_FAILED)),
+        onError: (error) => setSheetError(filesErrorText(error, tMobile('screens2.files.writeFailed'))),
       },
     );
   };
@@ -446,9 +455,9 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
         setMoving(entry);
         return;
       case 'remove': {
-        const confirm = removeConfirm(entry, where);
+        const confirm = removeConfirm(entry, where, rawLocale);
         Alert.alert(confirm.title, confirm.body, [
-          { text: 'Cancel', style: 'cancel' },
+          { text: tMobile('screens2.common.cancel'), style: 'cancel' },
           {
             text: confirm.cta,
             style: 'destructive',
@@ -457,7 +466,8 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
                 { params: { burrow: slug, attachmentId: entry.attachment.id } },
                 {
                   onSuccess: feedback.onResult,
-                  onError: (error) => feedback.onText(filesErrorText(error, WRITE_FAILED)),
+                  onError: (error) =>
+                    feedback.onText(filesErrorText(error, tMobile('screens2.files.writeFailed'))),
                 },
               ),
           },
@@ -474,7 +484,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
   return (
     <Screen>
       <BackBar
-        label={up ? folderName(parentFolder(folder)) : tMobile('managed.back')}
+        label={up ? folderName(parentFolder(folder), rawLocale) : tMobile('managed.back')}
         onPress={up ?? goBack}
       />
       <ScrollView
@@ -494,7 +504,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
         <FilesTitle
           kicker={kicker}
           mark={row ? <FilesConversationMark row={row} size={18} /> : null}
-          title={folder ? folderName(folder) : filesCopyHere.title}
+          title={folder ? folderName(folder, rawLocale) : filesCopyHere.title}
         >
           {folder ? <Breadcrumbs folder={folder} onOpen={setFolder} /> : null}
           {conversationId && list.data ? (
@@ -503,7 +513,9 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
                 label={filesCopyHere.upload}
                 onPress={() => void pickFiles().catch((error: unknown) => feedback.onError(error))}
                 style={{ flex: 1 }}
-                accessibilityHint={`Uploads files to ${folder ? folderName(folder) : filesCopyHere.title}`}
+                accessibilityHint={tMobile('screens2.files.uploadsTo', {
+                  place: folder ? folderName(folder, rawLocale) : filesCopyHere.title,
+                })}
               />
               <Button
                 label={filesCopyHere.newFolder}
@@ -544,9 +556,9 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
                 key={f.path}
                 leading={<FolderTile />}
                 title={f.name}
-                meta={folderRowMeta(f)}
+                meta={folderRowMeta(f, rawLocale)}
                 trailing="›"
-                accessibilityLabel={`${f.name}, folder, ${folderRowMeta(f)}`}
+                accessibilityLabel={`${f.name}, folder, ${folderRowMeta(f, rawLocale)}`}
                 onPress={() => setFolder(f.path)}
               />
             ))}
@@ -586,22 +598,22 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
       />
       <MoveFileSheet
         entry={moving}
-        choices={moving ? moveChoices(entries, places, moving.folder) : []}
+        choices={moving ? moveChoices(entries, places, moving.folder, rawLocale) : []}
         busy={update.isPending}
         error={sheetError}
-        check={(raw) => typedFolder(raw, entries, places)}
+        check={(raw) => typedFolder(raw, entries, places, rawLocale)}
         onClose={() => setMoving(null)}
         onMove={(target) =>
           moving &&
           write(moving, { folder: target }, () => {
             setMoving(null);
-            showNotice(movedText(target));
+            showNotice(movedText(target, rawLocale));
           })
         }
       />
       <NewFolderSheet
         visible={naming}
-        check={(raw) => newFolder(raw, folder, entries, places)}
+        check={(raw) => newFolder(raw, folder, entries, places, rawLocale)}
         onClose={() => setNaming(false)}
         onCreate={(path) => {
           setNaming(false);
@@ -614,7 +626,7 @@ export function ConversationFilesScreen({ route, navigation }: Props) {
           attachment={viewing}
           access={access}
           onClose={() => setViewing(null)}
-          onDownload={() => shareAttachment(viewing, access)}
+          onDownload={() => shareAttachment(viewing, access, rawLocale)}
         />
       ) : access && viewing ? (
         <ImageViewer attachment={viewing} access={access} onClose={() => setViewing(null)} />

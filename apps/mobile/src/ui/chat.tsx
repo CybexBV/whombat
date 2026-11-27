@@ -7,28 +7,29 @@
 
 import { LIVE_BUST_MIN_SIZE } from '@whombat/avatars/motion';
 import {
-  ANSWERING_T3_CODE,
   agentFaceOf,
   agentNowFor,
   autocorrectComposerMention,
-  CARD_FRAME_WORDS,
+  cardFrameWords,
+  clientTranslator,
+  handoffWords,
   isAutomationPrincipal,
-  MOVED_CARD_WORDS,
+  movedCardWords,
   type ReportLine,
   type RunChips,
   type SettledLine,
-  THREAD_NEW_LABEL,
-  THREAD_STAGE_WORDS,
   type ThreadStage,
+  threadNewLabel,
   threadRowLabel,
   threadStageWord,
+  threadStageWords,
   type UploadItem,
   type WorkLine,
   workingFaceState,
 } from '@whombat/client';
 import type { AgentNowEntry } from '@whombat/client/query';
 import type { DigestCard, DigestItem, MentionTarget, Principal, Receipt } from '@whombat/core';
-import { formatDigestLabel, formatDuration, TURN_STOP_LABEL, typingLabel } from '@whombat/core';
+import { formatDigestLabel, formatDuration, turnStopLabel, typingLabel } from '@whombat/core';
 import { type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
@@ -56,7 +57,7 @@ import {
   type RunSettledModel,
 } from '../data/messages';
 import { type ThreadWorkView, thinkingLabels } from '../data/working';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { nextElapsedTick, RUN_SECONDS_BELOW_MS } from '../lib/elapsed';
 import { pulseRange } from '../lib/pulse';
 import { useOpenUrl } from '../navigation/hooks';
@@ -150,7 +151,11 @@ export function ReceiptsCard({
           disabled={!onOpen || !r.link}
           feedback="fade"
           accessibilityRole="link"
-          accessibilityLabel={`Receipt ${r.n}: ${r.source}, ${r.detail}`}
+          accessibilityLabel={tMobile('screens2.chat.receipt', {
+            n: r.n,
+            source: r.source,
+            detail: r.detail,
+          })}
           hitSlop={hitSlopFor(40)}
           style={{
             flexDirection: 'row',
@@ -195,7 +200,7 @@ export function QuickReplies({
   suggestions,
   onPick,
   disabled,
-  label = 'Quick replies',
+  label: givenLabel,
 }: {
   suggestions: readonly string[];
   onPick: (text: string) => void;
@@ -203,7 +208,9 @@ export function QuickReplies({
   /** The group's name for TalkBack. */
   label?: string;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
+  const label = givenLabel ?? tMobile('screens2.chat.quickReplies');
   return (
     <View accessibilityLabel={label} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
       {suggestions.map((text) => (
@@ -283,6 +290,7 @@ function DigestRow({ item }: { item: DigestItem }) {
 
 /** A digest card (RM-08), whole: `INBOX · 7 UNREAD`, sections of items; collapsed ones fold to a line. */
 export function DigestCardView({ card }: { card: DigestCard }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
 
   const theme = useTheme();
@@ -330,7 +338,10 @@ export function DigestCardView({ card }: { card: DigestCard }) {
               <Touchable
                 onPress={() => setOpened((s) => new Set(s).add(i))}
                 feedback="wash"
-                accessibilityLabel={`Show ${section.items.length}: ${section.items.map((it) => it.title).join(', ')}`}
+                accessibilityLabel={tMobile('screens2.chat.showItems', {
+                  count: section.items.length,
+                  items: section.items.map((it) => it.title).join(', '),
+                })}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -344,7 +355,7 @@ export function DigestCardView({ card }: { card: DigestCard }) {
                   {section.items.map((it) => it.title).join(' · ')}
                 </Text>
                 <Text size={11} weight={500} mono color={theme.colors.brand}>
-                  {`Show ${section.items.length}`}
+                  {tMobile('screens2.chat.show', { count: section.items.length })}
                 </Text>
               </Touchable>
             )}
@@ -377,6 +388,7 @@ export function ThinkingBubble({
   /** The stop is on its way: the button waits. */
   stopping?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
 
   const theme = useTheme();
@@ -414,8 +426,8 @@ export function ThinkingBubble({
       <Touchable
         onPress={onStop}
         disabled={stopping}
-        accessibilityLabel={`${TURN_STOP_LABEL} ${name}`}
-        accessibilityHint={`${name} stops working on this`}
+        accessibilityLabel={`${turnStopLabel(rawLocale)} ${name}`}
+        accessibilityHint={tMobile('screens2.chat.stopsWorking', { name })}
         feedback="wash"
         ringRadius={10}
         style={{
@@ -431,7 +443,7 @@ export function ThinkingBubble({
         }}
       >
         <Text size={13.5} weight={600} color={theme.colors.ink}>
-          {TURN_STOP_LABEL}
+          {turnStopLabel(rawLocale)}
         </Text>
       </Touchable>
     </View>
@@ -1115,7 +1127,7 @@ export function RunLineView({
           feedback="wash"
           accessibilityRole="button"
           accessibilityLabel={tClient('settings.retry')}
-          accessibilityHint={`Asks ${line.agentName} to try this run again`}
+          accessibilityHint={tMobile('screens2.chat.retryRunHint', { name: line.agentName })}
           accessibilityState={{ disabled: retrying, busy: retrying }}
           ringRadius={10}
           style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8, marginRight: -8 }}
@@ -1171,14 +1183,15 @@ export function RunChipsView({ chips }: { chips: RunChips }) {
 }
 
 /** What TalkBack reads for the chips: “PR #3, 12 added, 8 removed”. */
-function chipsLabel(chips: RunChips | null | undefined): string | null {
+function chipsLabel(chips: RunChips | null | undefined, locale?: string | null): string | null {
+  const tr = mobileTranslator(locale);
   if (!chips) return null;
   const [add, del] = chips.diff?.split(' ') ?? [];
   return (
     [
       chips.prNumber ? `PR #${chips.prNumber}` : null,
-      add ? `${add.slice(1)} added` : null,
-      del ? `${del.slice(1)} removed` : null,
+      add ? tr.t('screens2.chat.added', { count: add.slice(1) }) : null,
+      del ? tr.t('screens2.chat.removed', { count: del.slice(1) }) : null,
     ]
       .filter(Boolean)
       .join(', ') || null
@@ -1210,9 +1223,11 @@ export function SettledLineView({
   /** How many lines its words may take: a server task's outcome takes two on the phone (AP-4305). */
   lines?: number;
 }) {
+  const { rawLocale } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const words = [line.lead, line.detail].filter(Boolean).join(', ');
-  const chipWords = chipsLabel(chips);
+  const chipWords = chipsLabel(chips, rawLocale);
   const hasChips = !!chips && (!!chips.prNumber || !!chips.diff);
   const dotAndWords = (
     <>
@@ -1257,7 +1272,9 @@ export function SettledLineView({
       onPress={onOpen}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityLabel={`Show card: ${[words, chipWords].filter(Boolean).join(', ')}`}
+      accessibilityLabel={tMobile('screens2.chat.showCard', {
+        what: [words, chipWords].filter(Boolean).join(', '),
+      })}
       accessibilityState={{ expanded: false }}
       ringRadius={10}
       style={{ minHeight: 44, justifyContent: 'center', paddingVertical: 6 }}
@@ -1294,7 +1311,7 @@ export function SettledLineView({
             onPress={link.onPress}
             feedback="wash"
             accessibilityRole="link"
-            accessibilityLabel={`Open the run: ${line.lead}`}
+            accessibilityLabel={tMobile('screens2.chat.openRun', { lead: line.lead })}
             ringRadius={10}
             style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8, marginRight: -8 }}
           >
@@ -1372,7 +1389,9 @@ export function ReportLineView({
           onPress={onToggle}
           feedback="fade"
           accessibilityRole="button"
-          accessibilityLabel={`${expanded ? 'Hide details' : 'Details'}: ${line.reference}`}
+          accessibilityLabel={tMobile(expanded ? 'screens2.chat.hideDetailsOf' : 'screens2.chat.detailsOf', {
+            what: line.reference,
+          })}
           accessibilityState={{ expanded }}
           ringRadius={10}
           style={{ minHeight: 44, minWidth: 44, justifyContent: 'center' }}
@@ -1442,6 +1461,7 @@ export function LiveRunCardView({
   onOpen: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const cardFrameWordsHere = cardFrameWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -1463,7 +1483,12 @@ export function LiveRunCardView({
     >
       <View
         accessible
-        accessibilityLabel={[run.title, run.now, `${elapsed} so far`, chipsLabel(run.chips)]
+        accessibilityLabel={[
+          run.title,
+          run.now,
+          tMobile('screens2.chat.soFar', { elapsed }),
+          chipsLabel(run.chips, rawLocale),
+        ]
           .filter(Boolean)
           .join(', ')}
         style={{ gap: 6 }}
@@ -1472,8 +1497,8 @@ export function LiveRunCardView({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <CardMarkGlyph mark="working" />
           <Text size={12.5} weight={500} color={theme.colors.ink2} style={{ flex: 1 }}>
-            {CARD_FRAME_WORDS.marks.working}
-            <Text size={12.5} color={theme.colors.mut}>{` · ${CARD_FRAME_WORDS.kinds.run}`}</Text>
+            {cardFrameWordsHere.marks.working}
+            <Text size={12.5} color={theme.colors.mut}>{` · ${cardFrameWordsHere.kinds.run}`}</Text>
           </Text>
           <Text size={12} weight={500} mono color={theme.colors.mut}>
             {elapsed}
@@ -1497,7 +1522,7 @@ export function LiveRunCardView({
           onPress={onWatch}
           feedback="wash"
           accessibilityRole="link"
-          accessibilityLabel={`Watch run: ${run.title}`}
+          accessibilityLabel={tMobile('screens2.chat.watchRun', { title: run.title })}
           ringRadius={10}
           style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}
         >
@@ -1607,6 +1632,7 @@ export function ThreadRepliesRow({
   jobLine?: WorkLine | null;
 }) {
   const { rawLocale } = useI18n();
+  const threadStageWordsHere = threadStageWords(rawLocale);
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   // The job's line says what “Handed over” said, and what waits for the person when that is its work.
@@ -1624,13 +1650,14 @@ export function ThreadRepliesRow({
   const lastText = workLine || stage ? null : last;
   // The unread dot never shows on a settled thread (TU-05).
   const fresh = isNew && !!replies && stage !== 'settled';
-  const count = replies ?? (room ? THREAD_STAGE_WORDS.noReplies : null);
+  const count = replies ?? (room ? threadStageWordsHere.noReplies : null);
   const label = [
     threadRowLabel({
       replies: [count, lastText, workLine ? (workLine.spoken ?? workText) : null].filter(Boolean).join(', '),
       stage: shownStage,
       assistant,
-      unread: fresh ? THREAD_NEW_LABEL : null,
+      unread: fresh ? threadNewLabel(rawLocale) : null,
+      locale: rawLocale,
     }),
     jobSpoken,
   ]
@@ -1683,7 +1710,7 @@ export function ThreadRepliesRow({
             numberOfLines={1}
             style={{ flexShrink: 1 }}
           >
-            {threadStageWord(shownStage, assistant)}
+            {threadStageWord(shownStage, assistant, rawLocale)}
           </Text>
           {/* How far a run in it is, and how long T3 Code has had it: the work's own facts after the stage. */}
           {shownStage === 'working' && work && work.progress !== null ? (
@@ -1717,7 +1744,8 @@ export function ThreadRepliesRow({
           {workLine.progress !== null ? (
             <RunProgressBar progress={workLine.progress} style={{ width: 40 }} />
           ) : workLine.tone === 'live' &&
-            (workLine.text === THINKING_TEXT || workLine.text === ANSWERING_T3_CODE) ? (
+            (workLine.text === clientTranslator(rawLocale).t('working.isThinking') ||
+              workLine.text === handoffWords(rawLocale).answering) ? (
             <PulseDots size={4} gap={3} />
           ) : workLine.by && workLine.since != null ? (
             <HandoffMinutesText since={workLine.since} />
@@ -1811,12 +1839,13 @@ export function LoadEarlierRow({
   onPress: () => void;
   pageSize: number;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
       onPress={onPress}
       disabled={busy}
-      accessibilityHint={`Shows up to ${pageSize} replies before these`}
+      accessibilityHint={tMobile('screens2.chat.earlierHint', { count: pageSize })}
       accessibilityState={{ busy }}
       feedback="wash"
       ringRadius={10}
@@ -1890,6 +1919,8 @@ export function EarlierCardView({
   newest: { label: string; onPress: () => void } | null;
   children: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const movedCardWordsHere = movedCardWords(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (
@@ -1900,7 +1931,7 @@ export function EarlierCardView({
           feedback="wash"
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
-          accessibilityLabel={`${line}. ${open ? MOVED_CARD_WORDS.hide : MOVED_CARD_WORDS.show}`}
+          accessibilityLabel={`${line}. ${open ? movedCardWordsHere.hide : movedCardWordsHere.show}`}
           ringRadius={8}
           style={{
             minHeight: 44,
@@ -1926,7 +1957,7 @@ export function EarlierCardView({
             onPress={newest.onPress}
             feedback="wash"
             accessibilityRole="link"
-            accessibilityLabel={`${MOVED_CARD_WORDS.newest}: ${newest.label}`}
+            accessibilityLabel={`${movedCardWordsHere.newest}: ${newest.label}`}
             ringRadius={8}
             testID="moved-card-link"
             style={{
@@ -1940,7 +1971,7 @@ export function EarlierCardView({
             }}
           >
             <Text size={13} color={theme.colors.mut}>
-              {MOVED_CARD_WORDS.newest}
+              {movedCardWordsHere.newest}
             </Text>
             <ArrowDown size={14} color={theme.colors.mut} strokeWidth={1.8} />
           </Touchable>
@@ -1967,9 +1998,6 @@ export function EarlierCardView({
   );
 }
 
-/** `threadWork`'s text while the agent thinks in the thread. */
-const THINKING_TEXT = 'is thinking';
-
 const NO_TARGETS: readonly MentionTarget[] = [];
 const NO_ADDS: readonly AddChoice[] = [];
 
@@ -1986,10 +2014,14 @@ function PlusButton({
   onPick: ((id: string) => void) | undefined;
   disabled: boolean | undefined;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const after = useAfterSheet();
-  const label = plusLabel(choices.map((c) => c.id));
+  const label = plusLabel(
+    choices.map((c) => c.id),
+    rawLocale,
+  );
   const face = <Plus size={20} color={theme.colors.ink2} strokeWidth={1.75} />;
   const round = {
     width: 32,

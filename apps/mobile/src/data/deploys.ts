@@ -5,32 +5,40 @@
  * `DEPLOYMENT_STATUS_PILLS`, `DEPLOYMENT_HOW_LABELS`, `shortSha`); the rest is ours (not in the mocks). Pure.
  */
 import {
-  DEPLOYMENT_HOW_LABELS,
-  DEPLOYMENT_STATUS_PILLS,
   type DeployEnvironment,
   type Deployment,
   type DeployServiceState,
   deployLine,
+  deploymentHowLabels,
+  deploymentStatusPills,
   formatAgo,
   shortSha,
   type Tone,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ViewContext } from './people';
 
-export const DEPLOYS_TEXT = {
-  environments: 'ENVIRONMENTS',
-  history: 'HISTORY',
-  empty: 'No deploys recorded yet. Agents record every deploy they do here, and post it where they work.',
-  loadFailed: 'Deploys didn’t load.',
-  loadMore: 'Load more',
-  now: 'Live now',
-  failedAttempt: 'Last attempt failed',
-  before: 'Before',
-  nothingLive: 'Nothing live yet',
-  openSite: 'Open the deployed site',
-  openConversation: 'Open where it was posted',
-  summary: 'SUMMARY',
-} as const;
+type DeployContext = Pick<ViewContext, 'people' | 'now' | 'timeZone' | 'locale'>;
+
+export function deploysText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    environments: t('data.deploys.environments'),
+    history: t('data.deploys.history'),
+    empty: t('data.deploys.empty'),
+    loadFailed: t('data.deploys.loadFailed'),
+    loadMore: t('data.deploys.loadMore'),
+    now: t('data.deploys.now'),
+    failedAttempt: t('data.deploys.failedAttempt'),
+    before: t('data.deploys.before'),
+    nothingLive: t('data.deploys.nothingLive'),
+    openSite: t('data.deploys.openSite'),
+    openConversation: t('data.deploys.openConversation'),
+    summary: t('data.deploys.summary'),
+  };
+}
+
+export const DEPLOYS_TEXT = deploysText();
 
 /** The pill's tone: deployed ok, failed bad. */
 export function deployTone(status: Deployment['status']): Tone {
@@ -38,11 +46,11 @@ export function deployTone(status: Deployment['status']): Tone {
 }
 
 /** “Banjo · 2 h ago · GitHub Actions · 9b1e4c”: who, when, how and the commit. */
-export function deployMeta(d: Deployment, ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>): string {
+export function deployMeta(d: Deployment, ctx: DeployContext): string {
   return [
-    ctx.people.name(d.byId) ?? 'Someone',
-    formatAgo(d.createdAt, ctx.now, ctx.timeZone),
-    DEPLOYMENT_HOW_LABELS[d.how],
+    ctx.people.name(d.byId) ?? mobileTranslator(ctx.locale).t('data.approval.someone'),
+    formatAgo(d.createdAt, ctx.now, ctx.timeZone, ctx.locale),
+    deploymentHowLabels(ctx.locale)[d.how],
     d.sha ? shortSha(d.sha) : null,
   ]
     .filter(Boolean)
@@ -58,10 +66,10 @@ export interface DeployLineModel {
   deployment: Deployment;
 }
 
-function lineOf(d: Deployment, ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>): DeployLineModel {
+function lineOf(d: Deployment, ctx: DeployContext): DeployLineModel {
   return {
     id: d.id,
-    pill: DEPLOYMENT_STATUS_PILLS[d.status],
+    pill: deploymentStatusPills(ctx.locale)[d.status],
     tone: deployTone(d.status),
     meta: deployMeta(d, ctx),
     deployment: d,
@@ -90,11 +98,13 @@ export interface DeployEnvironmentModel {
 /** The environments board, in the server's order (newest deployed first, services by name). */
 export function deployBoard(
   environments: readonly DeployEnvironment[],
-  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>,
+  ctx: DeployContext,
 ): DeployEnvironmentModel[] {
+  const { t } = mobileTranslator(ctx.locale);
+  const text = deploysText(ctx.locale);
   return environments.map((env) => ({
     environment: env.environment,
-    label: `${env.environment.toUpperCase()} · ${formatAgo(env.lastAt, ctx.now, ctx.timeZone)}`,
+    label: `${env.environment.toUpperCase()} · ${formatAgo(env.lastAt, ctx.now, ctx.timeZone, ctx.locale)}`,
     services: env.services.map((s: DeployServiceState) => {
       const current = s.current ? lineOf(s.current, ctx) : null;
       const failed = s.failed ? lineOf(s.failed, ctx) : null;
@@ -106,10 +116,10 @@ export function deployBoard(
         failed,
         previous,
         accessibilityLabel: [
-          `${s.service} in ${env.environment}`,
-          current ? `${DEPLOYS_TEXT.now}: ${current.meta}` : DEPLOYS_TEXT.nothingLive,
-          failed ? `${DEPLOYS_TEXT.failedAttempt}: ${failed.meta}` : null,
-          previous ? `${DEPLOYS_TEXT.before}: ${previous.meta}` : null,
+          t('data.deploys.serviceIn', { service: s.service, environment: env.environment }),
+          current ? `${text.now}: ${current.meta}` : text.nothingLive,
+          failed ? `${text.failedAttempt}: ${failed.meta}` : null,
+          previous ? `${text.before}: ${previous.meta}` : null,
         ]
           .filter(Boolean)
           .join('. '),
@@ -125,13 +135,10 @@ export interface DeployHistoryRow extends DeployLineModel {
 }
 
 /** The history, newest first: each deploy's line, its pill and who, when, how. */
-export function deployHistory(
-  deployments: readonly Deployment[],
-  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>,
-): DeployHistoryRow[] {
+export function deployHistory(deployments: readonly Deployment[], ctx: DeployContext): DeployHistoryRow[] {
   return deployments.map((d) => {
     const line = lineOf(d, ctx);
-    const title = deployLine(d);
+    const title = deployLine(d, ctx.locale);
     return { ...line, title, accessibilityLabel: `${title}. ${line.meta}` };
   });
 }
@@ -139,7 +146,7 @@ export function deployHistory(
 /** A deploy opened: its facts, its summary (burrow-visible), and where it leads. */
 export function deployDetail(
   d: Deployment,
-  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>,
+  ctx: DeployContext,
 ): {
   title: string;
   pill: string;
@@ -149,19 +156,23 @@ export function deployDetail(
   url: string | null;
   conversationId: string | null;
 } {
+  const { t } = mobileTranslator(ctx.locale);
   return {
-    title: deployLine(d),
-    pill: DEPLOYMENT_STATUS_PILLS[d.status],
+    title: deployLine(d, ctx.locale),
+    pill: deploymentStatusPills(ctx.locale)[d.status],
     tone: deployTone(d.status),
     facts: [
-      { label: 'ENVIRONMENT', value: d.environment },
-      { label: 'SERVICE', value: d.service },
-      { label: 'HOW', value: DEPLOYMENT_HOW_LABELS[d.how] },
-      ...(d.repo ? [{ label: 'REPO', value: d.repo }] : []),
-      ...(d.ref ? [{ label: 'REF', value: d.ref }] : []),
-      ...(d.sha ? [{ label: 'COMMIT', value: shortSha(d.sha) }] : []),
-      { label: 'BY', value: ctx.people.name(d.byId) ?? 'Someone' },
-      { label: 'WHEN', value: formatAgo(d.createdAt, ctx.now, ctx.timeZone) },
+      { label: t('data.deploys.fact.environment'), value: d.environment },
+      { label: t('data.deploys.fact.service'), value: d.service },
+      { label: t('data.deploys.fact.how'), value: deploymentHowLabels(ctx.locale)[d.how] },
+      ...(d.repo ? [{ label: t('data.deploys.fact.repo'), value: d.repo }] : []),
+      ...(d.ref ? [{ label: t('data.deploys.fact.ref'), value: d.ref }] : []),
+      ...(d.sha ? [{ label: t('data.deploys.fact.commit'), value: shortSha(d.sha) }] : []),
+      { label: t('data.deploys.fact.by'), value: ctx.people.name(d.byId) ?? t('data.approval.someone') },
+      {
+        label: t('data.deploys.fact.when'),
+        value: formatAgo(d.createdAt, ctx.now, ctx.timeZone, ctx.locale),
+      },
     ],
     summary: d.summary,
     url: d.url,

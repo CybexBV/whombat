@@ -11,8 +11,8 @@ import {
   looksAheadCalendarMeta,
   looksAheadCheckMeta,
   looksAheadSavedText,
+  looksAheadText,
   matterLine,
-  LOOKS_AHEAD_TEXT as T,
 } from '@whombat/client';
 import { commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import {
@@ -40,6 +40,7 @@ import { Note, type PartProps, PartScroll } from './parts';
 export function LooksAheadPart({ profile }: PartProps) {
   const { rawLocale } = useI18n();
   const aheadKindWordsHere = aheadKindWords(rawLocale);
+  const T = looksAheadText(rawLocale);
 
   const theme = useTheme();
   const navigation = useAppNavigation();
@@ -66,7 +67,7 @@ export function LooksAheadPart({ profile }: PartProps) {
   const busy = update.isPending;
   const failed = (text: string) => Alert.alert(T.notSaved, text);
   const save = (change: LooksAheadUpdate, onDone?: () => void) => {
-    const said = looksAheadSavedText(view, change);
+    const said = looksAheadSavedText(view, change, rawLocale);
     update.mutate(change, {
       onSuccess: (r) => {
         if (r.status === 'ok') {
@@ -142,7 +143,7 @@ export function LooksAheadPart({ profile }: PartProps) {
               key={c.key}
               first={i === 0}
               title={c.name}
-              line={looksAheadCalendarMeta(c)}
+              line={looksAheadCalendarMeta(c, rawLocale)}
               on={c.on}
               resting={!view.on}
               disabled={busy || !view.on}
@@ -192,7 +193,7 @@ export function LooksAheadPart({ profile }: PartProps) {
                     {matter.title}
                   </Text>
                   <Text size={13} lh={1.4} color={theme.colors.mut}>
-                    {matterLine(matter, timeZone)}
+                    {matterLine(matter, timeZone, undefined, rawLocale)}
                   </Text>
                 </View>
                 <Button
@@ -348,7 +349,7 @@ export function LooksAheadPart({ profile }: PartProps) {
                     {item.title}
                   </Text>
                   <Text size={13} lh={1.4} color={theme.colors.mut}>
-                    {looksAheadCheckMeta(item)}
+                    {looksAheadCheckMeta(item, rawLocale)}
                   </Text>
                 </View>
                 {openRecent ? <ChevronRight size={16} color={theme.colors.mut} strokeWidth={1.7} /> : null}

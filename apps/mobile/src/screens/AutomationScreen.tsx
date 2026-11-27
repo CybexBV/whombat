@@ -133,8 +133,9 @@ export function AutomationScreen({ navigation, route }: Props) {
     names,
     viewer,
     deletes: true,
+    locale: rawLocale,
   });
-  const runRows = automationRunRows(runs.data?.runs ?? [], view.now, view.timeZone);
+  const runRows = automationRunRows(runs.data?.runs ?? [], view.now, view.timeZone, rawLocale);
 
   const toggle = (enabled: boolean) => {
     setSwitching(true);
@@ -142,11 +143,11 @@ export function AutomationScreen({ navigation, route }: Props) {
       { params: { burrow: slug, id }, body: { enabled } },
       {
         onSuccess: (res) => {
-          const text = outcomeText(res);
+          const text = outcomeText(res, rawLocale);
           if (text) Alert.alert(text.title, text.body);
           refresh();
         },
-        onError: (err) => Alert.alert(tMobile('screens.didnt-switch'), errorText(err)),
+        onError: (err) => Alert.alert(tMobile('screens.didnt-switch'), errorText(err, rawLocale)),
         onSettled: () => setSwitching(false),
       },
     );
@@ -175,7 +176,7 @@ export function AutomationScreen({ navigation, route }: Props) {
       { params: { burrow: slug, id } },
       {
         onSuccess: (res) => {
-          const text = outcomeText(res);
+          const text = outcomeText(res, rawLocale);
           if (text) return Alert.alert(text.title, text.body);
           void list.refetch();
           goBack();
@@ -186,7 +187,7 @@ export function AutomationScreen({ navigation, route }: Props) {
             void list.refetch();
             return goBack();
           }
-          Alert.alert(automationDeleteTextHere.failed, errorText(err));
+          Alert.alert(automationDeleteTextHere.failed, errorText(err, rawLocale));
         },
       },
     );
@@ -204,7 +205,7 @@ export function AutomationScreen({ navigation, route }: Props) {
         visible={telling}
         onClose={() => setTellingFor(null)}
         back={page.name}
-        initialText={talkAboutText(page.name)}
+        initialText={talkAboutText(page.name, rawLocale)}
         words={{
           title: automationListTextHere.tellTitle(agent.Name),
           label: automationListTextHere.tellTitle(agent.Name),
@@ -356,7 +357,7 @@ export function AutomationScreen({ navigation, route }: Props) {
                 importantForAccessibility="no-hide-descendants"
                 style={{ marginBottom: 8 }}
               >
-                <RunBars bars={runBars(runs.data?.runs ?? []).bars} />
+                <RunBars bars={runBars(runs.data?.runs ?? [], rawLocale).bars} />
               </View>
             </View>
             <Card>

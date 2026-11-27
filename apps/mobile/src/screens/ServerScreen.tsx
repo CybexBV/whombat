@@ -25,7 +25,6 @@ import {
   holdView,
   type LimitView,
   lineLimit,
-  OVERVIEW_WORDS,
   overviewWords,
   readingsMoment,
   readingTime,
@@ -36,7 +35,7 @@ import {
 } from '@whombat/client';
 import {
   detailGuests,
-  FIND_MY_WORDS,
+  findMyWords,
   guestsWord,
   isIncusServer,
   isMacServer,
@@ -46,6 +45,7 @@ import {
   SERVER_DASHBOARD_DEFAULT_RANGE,
   SERVER_DASHBOARD_PHONE_RANGES,
   type ServerDashboardHead,
+  selfGuestChip,
   serverDashboardKind,
   serverMark,
   serverReportAt,
@@ -53,7 +53,7 @@ import {
   statusText,
   type Verdict,
 } from '@whombat/client/hosts';
-import { isLibvirtServer, THIS_WHOMBAT, thisWhombatFact } from '@whombat/client/hosts/mobile';
+import { isLibvirtServer, thisWhombatFact } from '@whombat/client/hosts/mobile';
 import {
   useFindMyConnectionOf,
   useFindMyOnMac,
@@ -79,8 +79,8 @@ import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow, useNowLabel } from '../data/BurrowProvider';
 import { rangeOptions } from '../data/dashboard';
 import { parseMonitoringPick, serverMoreMenu } from '../data/monitoring';
-import { QUIET_COPY, quietNote, WATCH_FIRST } from '../data/quiet';
-import { isOwnId, parseThingRowPick, RENAME_COPY } from '../data/rename';
+import { quietCopy, quietNote, WATCH_FIRST } from '../data/quiet';
+import { isOwnId, parseThingRowPick, renameCopy } from '../data/rename';
 import { serverAsksRow } from '../data/serverAsks';
 import { type ServerTab, serverLinkTarget, serverPhoneTabs, serverTabFor } from '../data/serverSummary';
 import { serverCopy, serverGuestList, type serverThingStatus, verdictDot } from '../data/servers';
@@ -139,10 +139,13 @@ export function ServerScreen({
   onBack: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
   const serverCopyHere = serverCopy(rawLocale);
   const thingPageCopyHere = thingPageCopy(rawLocale);
 
   const overviewWordsHere = overviewWords(rawLocale);
+  const RENAME_COPY = renameCopy(rawLocale);
+  const QUIET_COPY = quietCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
@@ -223,13 +226,13 @@ export function ServerScreen({
   const target = thingRenameTarget({ id: thing, name: shown });
   const known: HostGuest[] = guests.data?.guests ?? (d ? detailGuests(d) : []);
   const list = useMemo(
-    () => serverGuestList(guests.data?.guests ?? [], showTemporary),
-    [guests.data, showTemporary],
+    () => serverGuestList(guests.data?.guests ?? [], showTemporary, rawLocale),
+    [guests.data, showTemporary, rawLocale],
   );
   const rows = list.rows;
   const unraidOp = useUnraidOp(serverId, shown);
   const keep = useKeepQuiet(slug, thing, { name: shown, timeZone, note: quietNote(showToast) });
-  const hold = keepsQuiet && d ? holdView(d) : null;
+  const hold = keepsQuiet && d ? holdView(d, rawLocale) : null;
   const canKeepQuiet = keepsQuiet && (!!watch.data?.mayChange || !!d?.keptQuiet?.canEnd);
   const subject: ChatSubject = { kind: 'server', id: serverId, name: shown };
   const askAbout = useAskAbout(subject, shown, () => setAsking({ text: null }));
@@ -243,7 +246,7 @@ export function ServerScreen({
       : proxmox || incus || libvirt
         ? ['summary', 'guests', 'backups']
         : ['summary', 'guests'];
-  const phoneTabs = serverPhoneTabs(tabs);
+  const phoneTabs = serverPhoneTabs(tabs, rawLocale);
   const shownTab: ServerTab = tabs.includes(tab) ? tab : 'summary';
   const canChange = true;
   const rc = d?.server.remoteControl;
@@ -253,12 +256,18 @@ export function ServerScreen({
   const incusChange = manageOn;
   const libvirtChange = manageOn;
   const manageOff = !manageOn
-    ? rc?.manageReason?.trim() || `Changing ${shown} is switched off for Whombat.`
+    ? rc?.manageReason?.trim() || tMobile('screens2.server.manageOff', { name: shown })
     : null;
   // “Asks you first” (SA-05, SA-08): on a Whombat that keeps it.
   const asksFirst = d?.server.asksFirst ?? row?.asksFirst;
   const hostsThisWhombat = d?.server.hostsThisWhombat ?? row?.hostsThisWhombat;
-  const asks = serverAsksRow({ server: shown, asksFirst, hostsThisWhombat, available: true });
+  const asks = serverAsksRow({
+    server: shown,
+    asksFirst,
+    hostsThisWhombat,
+    available: true,
+    locale: rawLocale,
+  });
   const absent = status.data && !status.data.present;
   const failed = !d && !row && (!!dash.error || fleet.isError);
   const openGuest = (g: Pick<HostGuest, 'id' | 'name'>, guestTab?: string) =>
@@ -314,11 +323,11 @@ export function ServerScreen({
     endQuiet: d?.keptQuiet?.canEnd ? { run: () => void keep.end(), busy: keep.busy } : null,
     limits:
       keepsQuiet && watch.data?.mayChange
-        ? { of: (line) => lineLimit(line, watch.data?.checks), open: setLimitFor }
+        ? { of: (line) => lineLimit(line, watch.data?.checks, rawLocale), open: setLimitFor }
         : null,
   };
   const panels = useMemo(() => shownPanels(dash.panels ?? []), [dash.panels]);
-  const ranges = useMemo(() => rangeOptions(SERVER_DASHBOARD_PHONE_RANGES), []);
+  const ranges = useMemo(() => rangeOptions(SERVER_DASHBOARD_PHONE_RANGES, rawLocale), [rawLocale]);
   const refresh = () => {
     setPulling(true);
     dash.refetch();
@@ -388,13 +397,13 @@ export function ServerScreen({
           mark={d ? serverMark(d.server) : row ? serverMark(row) : null}
           // When its readings were taken: the page's own report, else the fleet's for it (the same server's report).
           readAt={d ? serverReportAt(d) : (row?.lastSeen ?? null)}
-          here={thisWhombatFact(hostsThisWhombat, known)?.value ?? null}
+          here={thisWhombatFact(hostsThisWhombat, known, rawLocale)?.value ?? null}
           week={d?.uptime?.text ?? null}
           fallback={
             row
               ? {
                   status: row.status,
-                  words: [statusText(row.status, row.statusNote), shortOs(row.os)]
+                  words: [statusText(row.status, row.statusNote, rawLocale), shortOs(row.os)]
                     .filter(Boolean)
                     .join(' · '),
                 }
@@ -427,7 +436,7 @@ export function ServerScreen({
             {d && dash.error ? (
               // A failed refresh keeps the saved readings, with the time they were taken.
               <ReadNote
-                title={savedTitle(serverReportAt(d), timeZone)}
+                title={savedTitle(serverReportAt(d), timeZone, rawLocale)}
                 body={overviewWordsHere.keepLast}
                 onRetry={dash.refetch}
                 error={dash.error}
@@ -439,13 +448,14 @@ export function ServerScreen({
               }}
             >
               <UnderlineTabs<ServerTab>
-                label={`${shown}: what to show`}
+                label={tMobile('screens2.common.whatToShow', { name: shown })}
                 value={shownTab}
                 onChange={setTab}
                 tabs={tabs.map((t) => ({
                   key: t,
                   // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
-                  label: t === 'guests' && d ? guestsWord(serverDashboardKind(d)) : serverCopyHere[t],
+                  label:
+                    t === 'guests' && d ? guestsWord(serverDashboardKind(d), rawLocale) : serverCopyHere[t],
                 }))}
                 bleed={INSET}
               />
@@ -584,11 +594,11 @@ export function ServerScreen({
                     <OneRow
                       first
                       leading={<ThingIcon glyph="plug" mark="findmy" />}
-                      title={FIND_MY_WORDS.linkTitle}
+                      title={findMyWordsHere.linkTitle}
                       line={findMyLine}
                       chevron
-                      label={[FIND_MY_WORDS.linkTitle, findMyLine].filter(Boolean).join(', ')}
-                      hint={FIND_MY_WORDS.linkHint}
+                      label={[findMyWordsHere.linkTitle, findMyLine].filter(Boolean).join(', ')}
+                      hint={findMyWordsHere.linkHint}
                       onPress={() =>
                         navigation.navigate('Thing', {
                           thingId: thingId('connection', findMy.connectionId),
@@ -647,7 +657,7 @@ export function ServerScreen({
                       titleLines={2}
                       titleAfter={g.kind.id}
                       line={g.meta || null}
-                      badge={g.self ? <ToneBadge text={THIS_WHOMBAT} tone="brand" /> : undefined}
+                      badge={g.self ? <ToneBadge text={selfGuestChip(rawLocale)} tone="brand" /> : undefined}
                       trailing={
                         // Running is the dot alone; any other state says its word too (AP-1753, AP-1810).
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -707,9 +717,11 @@ function ServerMenu({
   onRename: () => void;
   onKeepQuiet: (() => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const RENAME_COPY = renameCopy(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const spec = serverMoreMenu(!!onKeepQuiet);
+  const spec = serverMoreMenu(!!onKeepQuiet, rawLocale);
   const onPick = (id: string) => {
     if (parseThingRowPick(id) === 'rename') onRename();
     if (parseMonitoringPick(id) === 'keep_quiet') onKeepQuiet?.();
@@ -862,7 +874,7 @@ function ServerHead({
       ) : null}
       {here ? (
         <Text size={13.5} lh={1.45} color={theme.colors.brand}>
-          {`${THIS_WHOMBAT}: ${here}`}
+          {`${selfGuestChip(rawLocale)}: ${here}`}
         </Text>
       ) : null}
     </View>
@@ -870,6 +882,7 @@ function ServerHead({
 }
 
 /** A failed refresh's heading: “Couldn’t refresh; showing readings from 14:03 on 23 Sept.”, or that their time is unknown. */
-function savedTitle(at: string | null, timeZone: string): string {
-  return at ? OVERVIEW_WORDS.savedFrom(readingsMoment(at, timeZone)) : OVERVIEW_WORDS.savedUnknown;
+function savedTitle(at: string | null, timeZone: string, locale?: string | null): string {
+  const words = overviewWords(locale);
+  return at ? words.savedFrom(readingsMoment(at, timeZone, locale)) : words.savedUnknown;
 }

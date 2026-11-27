@@ -1,4 +1,4 @@
-import { fillVoiceWords, VOICE_TEXT, type VoiceSectionView, voiceSectionView } from '@whombat/client/voice';
+import { fillVoiceWords, type VoiceSectionView, voiceSectionView, voiceText } from '@whombat/client/voice';
 import { type VoiceTyping, voiceWords } from '@whombat/core/domain';
 import { mobileTranslator } from '../i18n/translate';
 
@@ -14,16 +14,19 @@ const extraErrors = [
 
 export function localizedVoiceError(message: string, locale: string): string {
   const words = voiceWords(locale);
+  // The message may come in English or already in the person's language; both name the same failure.
+  const english = voiceText();
+  const here = voiceText(locale);
   const key = (Object.keys(words.errors) as Array<keyof typeof words.errors>).find(
-    (name) => VOICE_TEXT.errors[name] === message,
+    (name) => english.errors[name] === message || here.errors[name] === message,
   );
   if (key) return words.errors[key];
-  const extra = extraErrors.find((name) => VOICE_TEXT.errors[name] === message);
+  const extra = extraErrors.find((name) => english.errors[name] === message || here.errors[name] === message);
   return extra ? mobileTranslator(locale).t(`voice.error.${extra}`) : message;
 }
 
 export function localizedVoiceView(voice: VoiceTyping, locale: string): VoiceSectionView {
-  const view = voiceSectionView(voice);
+  const view = voiceSectionView(voice, locale);
   const words = voiceWords(locale);
   const status = (state: keyof typeof words.states, progress: number | null) =>
     fillVoiceWords(words.states[state], { percent: Math.floor((progress ?? 0) * 100) });

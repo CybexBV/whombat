@@ -6,10 +6,11 @@
  * on.”), each a 52dp row. A press closes the sheet at once; the line greys or goes on the page and
  * the toast says so with Undo (`useQuietActions`). The sheet is the shared `quietMenu`.
  */
-import { LIMIT_WORDS, type LimitView, limitNow, type QuietMenuView } from '@whombat/client';
+import { type LimitView, limitNow, limitWords, type QuietMenuView } from '@whombat/client';
 import type { QuietActions, QuietTarget } from '@whombat/client/react';
 import type { ComponentType } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { AlarmClock, BellOff, EyeOff, SlidersHorizontal } from '../../ui/icons';
@@ -38,6 +39,8 @@ export function QuietMenuSheet({
   onLimit?: ((view: LimitView) => void) | null;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const limitWordsHere = limitWords(rawLocale);
   const theme = useTheme();
   const menu = target?.menu ?? null;
   const pick = (run: (line: QuietTarget) => void) => {
@@ -68,8 +71,8 @@ export function QuietMenuSheet({
           {target.limit && onLimit ? (
             <MenuRow
               icon={SlidersHorizontal}
-              label={LIMIT_WORDS.menu}
-              words={limitNow(target.limit)}
+              label={limitWordsHere.menu}
+              words={limitNow(target.limit, rawLocale)}
               onPress={() => {
                 const view = target.limit;
                 onClose();

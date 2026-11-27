@@ -32,11 +32,11 @@ import {
   type NearbyClaimStep,
   nearbyClaimStep,
   openDecision,
-  PASSKEY_COPY,
   PasskeyError,
   type PasskeySignInOutcome,
   type PhoneSignInLink,
   pairingFingerprint,
+  passkeyCopy,
   passkeyErrorOf,
   passkeySignIn,
   pinnedRecord,
@@ -94,7 +94,7 @@ import { COMMUNITY_REGISTRY, phoneCommunityText } from './community';
 import { APP_BUILD, CONTROL_URL, UI_ORIGINS } from './config';
 import { asStarted, finishingDevice, pushConnectReturn, takeHeldConnect } from './connectReturn';
 import { createLinkBus, createPushTaps, sendLink } from './context';
-import { COPY, managedCopy } from './copy';
+import { managedCopy } from './copy';
 import {
   createMobileEnvironment,
   type EndpointKey,
@@ -204,45 +204,49 @@ function storage() {
 }
 
 /** The recovery kit's text through the share sheet (Files, a drive, print); the temporary copy goes afterwards. */
-const shareSheetSaver: KitSaver = {
-  async save(fileName, text) {
-    const file = new File(Paths.cache, fileName);
-    if (file.exists) file.delete();
-    file.create();
-    file.write(text);
-    await Sharing.shareAsync(file.uri, {
-      mimeType: 'text/plain',
-      dialogTitle: COPY.kit.title,
-      UTI: 'public.plain-text',
-    });
-  },
-  discard() {
-    try {
-      for (const entry of Paths.cache.list())
-        if (entry instanceof File && entry.name.startsWith('whombat-recovery-kit-')) entry.delete();
-    } catch {
-      // already gone
-    }
-  },
-};
+function shareSheetSaver(dialogTitle: string): KitSaver {
+  return {
+    async save(fileName, text) {
+      const file = new File(Paths.cache, fileName);
+      if (file.exists) file.delete();
+      file.create();
+      file.write(text);
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/plain',
+        dialogTitle,
+        UTI: 'public.plain-text',
+      });
+    },
+    discard() {
+      try {
+        for (const entry of Paths.cache.list())
+          if (entry instanceof File && entry.name.startsWith('whombat-recovery-kit-')) entry.delete();
+      } catch {
+        // already gone
+      }
+    },
+  };
+}
 
 /**
  * The kit's print page through the share sheet (backup-options-android.md AP-6857): a browser or a printer app opens the
  * HTML and prints it; the temporary copy goes with the kit's other files (`shareSheetSaver.discard`).
  */
-const shareSheetPrinter: KitPrinter = {
-  async print(fileName, html) {
-    const file = new File(Paths.cache, fileName);
-    if (file.exists) file.delete();
-    file.create();
-    file.write(html);
-    await Sharing.shareAsync(file.uri, {
-      mimeType: 'text/html',
-      dialogTitle: COPY.kit.title,
-      UTI: 'public.html',
-    });
-  },
-};
+function shareSheetPrinter(dialogTitle: string): KitPrinter {
+  return {
+    async print(fileName, html) {
+      const file = new File(Paths.cache, fileName);
+      if (file.exists) file.delete();
+      file.create();
+      file.write(html);
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/html',
+        dialogTitle,
+        UTI: 'public.html',
+      });
+    },
+  };
+}
 
 /** What the app starts loading before its first screen (`startManagedApp`). */
 interface ManagedStart {
@@ -317,6 +321,7 @@ export function ManagedUpdatePrompt() {
 
 export function ManagedApp() {
   const { rawLocale, tClient } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const phoneCommunityTextHere = phoneCommunityText(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
@@ -542,7 +547,7 @@ export function ManagedApp() {
     if (!key || key === 'error') return;
     let outcome: PasskeySignInOutcome;
     try {
-      outcome = await phonePasskeySignIn(env, key, (name) => setPasskeyOpening({ name }));
+      outcome = await phonePasskeySignIn(env, key, (name) => setPasskeyOpening({ name }), rawLocale);
     } catch (error) {
       // Its Whombat is gone: the next Whombat this phone opens offers a new passkey. One kept for that Whombat's
       // recovery kit (`kept`) says so and stays on the phone: only `gone` tells the platform to forget a passkey.
@@ -568,12 +573,12 @@ export function ManagedApp() {
         pendingRoute.set({ name: 'appliances' });
         break;
       case 'not_in_org':
-        setPasskeyNote(PASSKEY_COPY.notInOrg);
+        setPasskeyNote(passkeyCopy(rawLocale).notInOrg);
         pendingRoute.set({ name: 'appliances' });
         break;
       case 'retired':
         PASSKEY_NUDGE.owe();
-        setPasskeyNote(PASSKEY_COPY.retired(outcome.name));
+        setPasskeyNote(passkeyCopy(rawLocale).retired(outcome.name));
         pendingRoute.set({ name: 'appliances' });
         break;
       default:
@@ -582,7 +587,7 @@ export function ManagedApp() {
     if (outcome.kind !== 'open') void clearCloudStatusWidget(WhombatLive);
     setCloud(outcome.session);
     setPasskeyEpoch((n) => n + 1);
-  }, [env, key]);
+  }, [env, key, rawLocale]);
   const restartSignedIn = (route: Route) => {
     pendingRoute.set(route);
     setPasskeyStop(null);
@@ -631,7 +636,7 @@ export function ManagedApp() {
     const stop = passkeyStop;
     return (
       <PasskeyStopScreen
-        text={PASSKEY_COPY.errors[stop.reason]}
+        text={passkeyCopyHere.errors[stop.reason]}
         onOtherWay={() => restartSignedIn({ name: 'pair', device: stop.known.device })}
         onBack={() => restartSignedIn({ name: 'appliances' })}
       />
@@ -764,12 +769,13 @@ function phonePasskeySignIn(
   env: ManagedEnvironment,
   keyPair: EndpointKey,
   onOpening: (name: string | null) => void,
+  locale?: string | null,
 ): Promise<PasskeySignInOutcome> {
   if (!PASSKEYS) return Promise.reject(new PasskeyError('unsupported'));
   return passkeySignIn({
     control: env.control,
     platform: PASSKEYS,
-    endpoint: { peerId: keyPair.peerId, label: phoneLabel(), platform: PHONE_PLATFORM },
+    endpoint: { peerId: keyPair.peerId, label: phoneLabel(locale), platform: PHONE_PLATFORM },
     registryFor: (accountId) => {
       const reg = createRegistry(accountId, storage());
       return {
@@ -1470,6 +1476,7 @@ function ClaimFlow({
   onBack: () => void;
   onClaimed: (device: string, peerId: string, accountId: string) => void;
 }) {
+  const { rawLocale } = useI18n();
   const locale = useClaimLocale();
   const [step, setStep] = useState<ClaimStep>(card ? { kind: 'card' } : (found ?? { kind: 'looking' }));
   /** Where “Claim with the code on its screen instead” goes back to. */
@@ -1519,7 +1526,7 @@ function ClaimFlow({
         terms: { version: APPLIANCE_TERMS_VERSION },
         clientPeerId: keyPair.peerId,
         account: { name: cloud.account.name ?? typedName, email: cloud.account.email },
-        endpoint: { label: phoneLabel(), platform: PHONE_PLATFORM },
+        endpoint: { label: phoneLabel(rawLocale), platform: PHONE_PLATFORM },
       });
       // Only now, with the appliance's confirmation checked, is its PeerId pinned (CC-07).
       onClaimed(r.device, r.peerId, r.accountId);
@@ -1529,7 +1536,7 @@ function ClaimFlow({
         setStep({ kind: 'none' });
         return;
       }
-      setError(claimErrorText(e, request.method));
+      setError(claimErrorText(e, request.method, Date.now(), rawLocale));
     } finally {
       setBusy(false);
     }
@@ -1652,6 +1659,10 @@ function KitFlow({
   onBack?: () => void;
 }) {
   const session = useFlowSession(env, keyPair, known, 'app');
+  const { rawLocale } = useI18n();
+  const kitTitle = managedCopy(rawLocale).kit.title;
+  const saver = useMemo(() => shareSheetSaver(kitTitle), [kitTitle]);
+  const printer = useMemo(() => shareSheetPrinter(kitTitle), [kitTitle]);
   if (!session)
     return (
       <Screen>
@@ -1664,8 +1675,8 @@ function KitFlow({
       applianceName={known.name ?? known.device}
       device={known.device}
       appliancePeerId={known.peerId}
-      saver={shareSheetSaver}
-      printer={shareSheetPrinter}
+      saver={saver}
+      printer={printer}
       control={env.control}
       platform={PASSKEYS}
       onDone={onDone}
@@ -1696,6 +1707,7 @@ function PairFlow({
   /** The Whombat was retired, or isn't this organization's any more: nothing to ask (AP-696). */
   onGone: (reason: GoneReason) => void;
 }) {
+  const { rawLocale } = useI18n();
   const session = useFlowSession(env, keyPair, known, 'enroll');
   useLeaveWhenGone(session, onGone);
   useOpenWhenLetIn(session, onApproved);
@@ -1708,7 +1720,7 @@ function PairFlow({
   return (
     <PairScreen
       session={session}
-      label={phoneLabel()}
+      label={phoneLabel(rawLocale)}
       platform={PHONE_PLATFORM}
       fingerprint={pairingFingerprint(keyPair.peerId)}
       onBack={onBack}
@@ -1831,6 +1843,7 @@ function ScreenSignInSession({
   onIn: (accountId: string) => void;
   onAlready: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const session = useFlowSession(env, keyPair, target, 'enroll');
   useLeaveWhenGone(session, onGone);
   if (!session)
@@ -1846,7 +1859,7 @@ function ScreenSignInSession({
       device={target.device}
       appliancePeerId={target.peerId}
       clientPeerId={keyPair.peerId}
-      endpoint={{ label: phoneLabel(), platform: PHONE_PLATFORM }}
+      endpoint={{ label: phoneLabel(rawLocale), platform: PHONE_PLATFORM }}
       onBack={onBack}
       onIn={onIn}
       onAlready={onAlready}
@@ -1879,6 +1892,7 @@ function PhoneHandoffFlow({
   onForget: (device: string) => void;
   onOpen: (known: KnownAppliance) => void;
 }) {
+  const { rawLocale } = useI18n();
   const [view, setView] = useState<PhoneSignInView>({ kind: 'working', stage: 'asking' });
   const [stop, setStop] = useState<{ stop: 'changed' | 'link'; device: string; pinned: boolean } | null>(
     null,
@@ -1886,6 +1900,9 @@ function PhoneHandoffFlow({
   const [attempt, setAttempt] = useState(0);
   const done = useRef({ onBack, onOpen });
   done.current = { onBack, onOpen };
+  // Read when the handoff starts; a language change doesn't restart one under way.
+  const label = useRef(phoneLabel(rawLocale));
+  label.current = phoneLabel(rawLocale);
   useEffect(() => {
     void attempt;
     const abort = new AbortController();
@@ -1903,7 +1920,7 @@ function PhoneHandoffFlow({
     const input = {
       handoff,
       orgId,
-      label: phoneLabel(),
+      label: label.current,
       platform: PHONE_PLATFORM,
       fingerprint: pairingFingerprint(keyPair.peerId),
     };
@@ -2126,7 +2143,7 @@ function RecoverFlow({
       secretKeyHex: input.secretKeyHex,
       accountId: input.accountId,
       endpointPeerId: keyPair.peerId,
-      endpoint: { label: phoneLabel(), platform: PHONE_PLATFORM },
+      endpoint: { label: phoneLabel(rawLocale), platform: PHONE_PLATFORM },
       openSession: (peerId) => openEnrollSession(env, keyPair, { orgId, device, peerId }),
     });
     if (result.kind === 'changed' || result.kind === 'mismatch') {

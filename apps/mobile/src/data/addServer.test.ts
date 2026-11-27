@@ -45,7 +45,7 @@ describe('Add a server on the phone', () => {
         serverName: 'pve-03',
       }),
     );
-    expect(steps.map(stepSpoken)).toEqual([
+    expect(steps.map((s) => stepSpoken(s))).toEqual([
       'Done: Signed in to 10.100.0.14',
       'Done: Installed Whombat’s helper. Proxmox VE 9.0 · Debian 13 · amd64',
       'Under way: Waiting for its first report',

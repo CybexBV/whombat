@@ -11,6 +11,7 @@ import {
   type HostInfo,
   type Tone,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * Whether Settings → Agent has a Running part: whenever the host answered, as on the web; a Whombat without a container
@@ -21,32 +22,37 @@ export function showsServices(host: Pick<HostInfo, 'services'> | undefined): boo
 }
 
 /** The part's words, the web's (`features/agent/settings/services.ts`); the agent by its name. */
-export const SERVICES_TEXT = {
-  /** The part's tab. */
-  tab: 'Running',
-  title: 'RUNNING ON YOUR WHOMBAT',
-  intro: (agent: string) =>
-    `Websites, dev servers and dashboards ${agent} keeps running for you. You open them from your home network or Tailscale, never from the internet.`,
-  empty: (agent: string) =>
-    `Nothing is running. When ${agent} starts a website or a dashboard for you, it shows here.`,
-  open: 'Open',
-  stop: 'Stop',
-  stopLabel: (name: string) => `Stop ${name}`,
-  stopTitle: (name: string) => `Stop ${name}?`,
-  stopBody: (agent: string) =>
-    `It stays stopped, also after your Whombat restarts. Anyone using it loses it. ${agent} can start it again when you ask.`,
-  cancel: 'Cancel',
-  stopped: (name: string) => `Stopped ${name}.`,
-  failed: 'That didn’t work. Try again in a moment.',
-  loadFailed: 'Couldn’t load what’s running. Try again in a moment.',
-} as const;
+export function servicesText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The part's tab. */
+    tab: t('data.activity.running'),
+    title: t('data.services.title'),
+    intro: (agent: string) => t('data.services.intro', { agent }),
+    empty: (agent: string) => t('data.services.empty', { agent }),
+    open: t('data.services.open'),
+    stop: t('data.services.stop'),
+    stopLabel: (name: string) => t('data.services.stopLabel', { name }),
+    stopTitle: (name: string) => t('data.services.stopTitle', { name }),
+    stopBody: (agent: string) => t('data.services.stopBody', { agent }),
+    cancel: t('data.common.cancel'),
+    stopped: (name: string) => t('data.services.stopped', { name }),
+    failed: t('data.services.failed'),
+    loadFailed: t('data.services.loadFailed'),
+  } as const;
+}
+export const SERVICES_TEXT = servicesText();
 
-export const SERVICE_STATE_LABELS: Readonly<Record<AgentServiceState, string>> = {
-  starting: 'Starting',
-  running: 'Running',
-  stopped: 'Stopped',
-  failed: 'Stopped working',
-};
+export function serviceStateLabels(locale?: string): Readonly<Record<AgentServiceState, string>> {
+  const { t } = mobileTranslator(locale);
+  return {
+    starting: t('data.services.state.starting'),
+    running: t('data.activity.running'),
+    stopped: t('data.run.step.stopped'),
+    failed: t('data.services.state.failed'),
+  };
+}
+export const SERVICE_STATE_LABELS = serviceStateLabels();
 
 /** The state's dot: running ok, starting warn, failed bad, stopped quiet. */
 export const SERVICE_STATE_TONES: Readonly<Record<AgentServiceState, Tone | null>> = {
@@ -74,14 +80,20 @@ export interface ServiceRow {
 
 export function serviceRows(
   services: readonly AgentService[],
-  ctx: { now: Date; timeZone: string },
+  ctx: { now: Date; timeZone: string; locale?: string | undefined },
 ): ServiceRow[] {
+  const labels = serviceStateLabels(ctx.locale);
+  const text = servicesText(ctx.locale);
+  const { t } = mobileTranslator(ctx.locale);
   return services.map((s) => {
-    const stateLabel = SERVICE_STATE_LABELS[s.state];
+    const stateLabel = labels[s.state];
     const line =
       !s.startedAt || s.state === 'starting'
         ? stateLabel
-        : `${stateLabel} · started ${formatAgo(s.startedAt, ctx.now, ctx.timeZone)}`;
+        : t('data.services.startedAgo', {
+            state: stateLabel,
+            ago: formatAgo(s.startedAt, ctx.now, ctx.timeZone, ctx.locale),
+          });
     const url = s.state === 'running' || s.state === 'starting' ? s.url : null;
     return {
       id: s.id,
@@ -91,7 +103,7 @@ export function serviceRows(
       line,
       url,
       canStop: s.state !== 'stopped',
-      stopLabel: SERVICES_TEXT.stopLabel(s.name),
+      stopLabel: text.stopLabel(s.name),
       accessibilityLabel: [s.name, line, url].filter(Boolean).join(', '),
     };
   });

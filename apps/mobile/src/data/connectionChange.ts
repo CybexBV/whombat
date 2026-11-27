@@ -5,12 +5,12 @@
  * Remove, in the web's words, and signing a connection made with a code in again with a new one (T3 Code's pairing code).
  * Who it's for is shown, not changed (the Whombat has no way to change it; the web doesn't either). Pure.
  */
-import { ONEPASSWORD_APP_TEXT } from '@whombat/client';
+import { onePasswordAppText } from '@whombat/client';
 import {
   codeSignInAgain,
   raiseNote,
-  SIGN_IN_AGAIN_TEXT,
   sessionSecret,
+  signInAgainText,
   usedByAutomations,
   usedByGateway,
   usedByVaultSync,
@@ -18,40 +18,46 @@ import {
 import {
   type CatalogEntry,
   type CatalogStep,
-  CONNECTION_ACCESS_LABELS,
   type ConnectionAccessLevel,
   type ConnectionView,
   catalogSignIn,
+  connectionAccessLabels,
   scopeListWords,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
-export const CONNECTION_CHANGE_TEXT = {
-  name: 'NAME',
-  rename: 'Rename',
-  giveName: 'Give it a name.',
-  renamed: (label: string) => `Renamed to ${label}.`,
-  change: 'Change',
-  save: 'Save',
-  cancel: 'Cancel',
-  levelSaved: (label: string, level: ConnectionAccessLevel) =>
-    `${label} set to ${CONNECTION_ACCESS_LABELS[level]}.`,
-  signInAgain: 'Sign in again',
-  signIn: 'SIGN-IN',
-  reconnect: 'Reconnect',
-  /** A call needed more than the service allowed (step-up): “Allow on Cloudflare…”. */
-  allowMore: (name: string) => `Allow on ${name}…`,
-  allowMoreLine: (agent: string, words: string) =>
-    `${agent} needs your OK to ${words}. What you allowed before stays.`,
-  remove: 'Remove',
-  removeNamed: (label: string) => `Remove ${label}`,
-  removed: (label: string) => `${label} removed.`,
-  tokenReplaced: 'Token replaced.',
-  /** “Client secret replaced.” */
-  replaced: (secretLabel: string) => `${secretLabel} replaced.`,
-  checking: (name: string) => `Checking with ${name}…`,
-  checkAgain: 'Check again',
-  documentation: (name: string) => `${name} documentation`,
-} as const;
+export function connectionChangeText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    name: t('data.connectionChange.name'),
+    rename: t('data.connectionChange.rename'),
+    giveName: t('data.connectionChange.giveName'),
+    renamed: (label: string) => t('data.connectionChange.renamed', { label }),
+    change: t('data.connectionChange.change'),
+    save: t('data.connectionChange.save'),
+    cancel: t('data.common.cancel'),
+    levelSaved: (label: string, level: ConnectionAccessLevel) =>
+      t('data.connectionChange.levelSaved', { label, level: connectionAccessLabels(locale)[level] }),
+    signInAgain: t('data.connectionChange.signInAgain'),
+    signIn: t('data.connectionChange.signIn'),
+    reconnect: t('data.connectionChange.reconnect'),
+    /** A call needed more than the service allowed (step-up): “Allow on Cloudflare…”. */
+    allowMore: (name: string) => t('data.connectionChange.allowMore', { name }),
+    allowMoreLine: (agent: string, words: string) =>
+      t('data.connectionChange.allowMoreLine', { agent, words }),
+    remove: t('data.connectionChange.remove'),
+    removeNamed: (label: string) => t('data.connectionChange.removeNamed', { label }),
+    removed: (label: string) => t('data.connectionChange.removed', { label }),
+    tokenReplaced: t('data.connectionChange.tokenReplaced'),
+    /** “Client secret replaced.” */
+    replaced: (secretLabel: string) => t('data.connectionChange.replaced', { secret: secretLabel }),
+    checking: (name: string) => t('data.connectionChange.checking', { name }),
+    checkAgain: t('data.connectionChange.checkAgain'),
+    documentation: (name: string) => t('data.connectionChange.documentation', { name }),
+  };
+}
+
+export const CONNECTION_CHANGE_TEXT = connectionChangeText();
 
 /** What the sign-in section says and offers (the web's SIGN-IN): the sign-in's name, its line, its buttons. */
 export interface SignInView {
@@ -93,15 +99,18 @@ export function signInView(
   serviceLogin = false,
   /** The agent's name, for what it asked the service for (step-up). */
   agent = 'Whombat',
+  locale?: string,
 ): SignInView {
-  const code = codeSignInAgain(entry, { signIn: conn.signIn, status: conn.status ?? 'active' });
+  const { t } = mobileTranslator(locale);
+  const text = connectionChangeText(locale);
+  const code = codeSignInAgain(entry, { signIn: conn.signIn, status: conn.status ?? 'active' }, locale);
   if (code)
     return {
       title: code.title,
       line: code.line,
       action: {
         kind: 'code',
-        label: SIGN_IN_AGAIN_TEXT.button,
+        label: signInAgainText(locale).button,
         secretLabel: code.words.label,
         placeholder: code.words.placeholder,
         help: code.words.help,
@@ -112,35 +121,35 @@ export function signInView(
     };
   const method = catalogSignIn(entry, conn.signIn);
   const secretWord = sessionSecret(entry) ?? 'token';
-  const title = method?.label ?? 'Sign-in';
+  const title = method?.label ?? t('data.connectionChange.signInTitle');
   if (conn.signIn === 'token' && method?.kind === 'token')
     return {
       title,
-      line: `The ${secretWord} is kept sealed on this Whombat and never shown again.`,
+      line: t('data.connectionChange.sealed', { word: secretWord }),
       action: {
         kind: 'replace',
-        label: `Replace ${secretWord}`,
+        label: t('data.connectionChange.replace', { word: secretWord }),
         secretLabel: method.secretLabel,
-        help: `${method.secretHelp} Whombat checks it before it replaces the old one.`,
+        help: t('data.connectionChange.replaceHelp', { help: method.secretHelp }),
       },
       again:
         serviceLogin && entry.signIn.some((m) => m.kind === 'service_login')
-          ? { label: CONNECTION_CHANGE_TEXT.signInAgain }
+          ? { label: text.signInAgain }
           : null,
     };
   if (conn.signIn === 'none')
-    return { title, line: 'This server needs no sign-in.', action: null, again: null };
+    return { title, line: t('data.connectionChange.noSignIn'), action: null, again: null };
   // An OAuth client (CS-12): its new secret replaces the old one on this connection, checked first, as a token's does.
   if (conn.signIn === 'client_credentials' && method?.kind === 'client_credentials') {
     const word = lowerFirst(method.secretLabel);
     return {
       title,
-      line: `The ${word} is kept sealed on this Whombat and never shown again.`,
+      line: t('data.connectionChange.sealed', { word }),
       action: {
         kind: 'replace',
-        label: `Replace ${word}`,
+        label: t('data.connectionChange.replace', { word }),
         secretLabel: method.secretLabel,
-        help: `${method.secretHelp} Whombat checks it before it replaces the old one.`,
+        help: t('data.connectionChange.replaceHelp', { help: method.secretHelp }),
       },
       again: null,
     };
@@ -154,14 +163,14 @@ export function signInView(
   if (asked.length)
     return {
       title,
-      line: CONNECTION_CHANGE_TEXT.allowMoreLine(agent, scopeListWords(asked)),
-      action: { kind: 'reconnect', label: CONNECTION_CHANGE_TEXT.allowMore(entry.name), primary: true },
+      line: text.allowMoreLine(agent, scopeListWords(asked)),
+      action: { kind: 'reconnect', label: text.allowMore(entry.name), primary: true },
       again: null,
     };
   return {
     title,
-    line: `Signed in with ${entry.name}. Reconnect to sign in again.`,
-    action: { kind: 'reconnect', label: CONNECTION_CHANGE_TEXT.reconnect, primary: false },
+    line: t('data.connectionChange.signedInWith', { name: entry.name }),
+    action: { kind: 'reconnect', label: text.reconnect, primary: false },
     again: null,
   };
 }
@@ -170,9 +179,10 @@ export function signInView(
  * Whether SIGN-IN's buttons stack full width instead of sitting side by side with Remove (AP-3964): when Replace's words
  * are longer than “Replace token”, they don't fit half a 368dp card (“Replace password”, “Replace app password”).
  */
-export function stacksActions(view: Pick<SignInView, 'action'>): boolean {
+export function stacksActions(view: Pick<SignInView, 'action'>, locale?: string): boolean {
   const a = view.action;
-  return (a?.kind === 'replace' || a?.kind === 'reconnect') && a.label.length > 'Replace token'.length;
+  const fits = mobileTranslator(locale).t('data.connectionChange.replace', { word: 'token' }).length;
+  return (a?.kind === 'replace' || a?.kind === 'reconnect') && a.label.length > fits;
 }
 
 /** “Client secret” → “client secret”; an initialism stays (“API key”). */
@@ -184,20 +194,29 @@ function lowerFirst(label: string): string {
  * What Remove asks first (the web's words, by what stops; the agent by its name). The Vault's sync
  * (1Password) asks it above its two choices for the entries it kept in step.
  */
-export function removeAsk(entry: CatalogEntry, conn: Pick<ConnectionView, 'label'>, agent: string): string {
-  if (usedByVaultSync(entry)) return ONEPASSWORD_APP_TEXT.removeAsk(conn.label);
-  if (usedByGateway(entry))
-    return `Remove ${conn.label}? Claude Code and ChatGPT run on your own sign-in again.`;
-  if (usedByAutomations(entry))
-    return `Remove ${conn.label}? Automations that read it get no new reports until you connect it again.`;
-  return `Remove ${conn.label}? ${agent} can’t use it until you connect it again.`;
+export function removeAsk(
+  entry: CatalogEntry,
+  conn: Pick<ConnectionView, 'label'>,
+  agent: string,
+  locale?: string,
+): string {
+  const { t } = mobileTranslator(locale);
+  const label = conn.label;
+  if (usedByVaultSync(entry)) return onePasswordAppText(locale).removeAsk(label);
+  if (usedByGateway(entry)) return t('data.connectionChange.removeGateway', { label });
+  if (usedByAutomations(entry)) return t('data.connectionChange.removeAutomations', { label });
+  return t('data.connectionChange.removeAgent', { label, agent });
 }
 
 /** The secret's own problem before it is sent (a code with spaces only is none). */
-export function replaceProblem(view: SignInView, secret: string): string | null {
-  if (view.action?.kind === 'code') return secret.trim() ? null : `${view.action.secretLabel} is needed.`;
+export function replaceProblem(view: SignInView, secret: string, locale?: string): string | null {
+  const { t } = mobileTranslator(locale);
+  if (view.action?.kind === 'code')
+    return secret.trim() ? null : t('data.connectionChange.needed', { label: view.action.secretLabel });
   if (secret) return null;
-  return `${view.action?.kind === 'replace' ? view.action.secretLabel : 'The token'} is needed.`;
+  return t('data.connectionChange.needed', {
+    label: view.action?.kind === 'replace' ? view.action.secretLabel : t('data.connectionChange.theToken'),
+  });
 }
 
 /**
@@ -209,11 +228,13 @@ export function replacedText(
   entry: CatalogEntry,
   conn: Pick<ConnectionView, 'signIn'>,
   view: Pick<SignInView, 'action'>,
+  locale?: string,
 ): string {
-  if (view.action?.kind === 'code') return SIGN_IN_AGAIN_TEXT.done(entry.name);
-  if (view.action?.kind !== 'replace') return CONNECTION_CHANGE_TEXT.tokenReplaced;
-  if (conn.signIn === 'token' && !sessionSecret(entry)) return CONNECTION_CHANGE_TEXT.tokenReplaced;
-  return CONNECTION_CHANGE_TEXT.replaced(view.action.secretLabel);
+  const text = connectionChangeText(locale);
+  if (view.action?.kind === 'code') return signInAgainText(locale).done(entry.name);
+  if (view.action?.kind !== 'replace') return text.tokenReplaced;
+  if (conn.signIn === 'token' && !sessionSecret(entry)) return text.tokenReplaced;
+  return text.replaced(view.action.secretLabel);
 }
 
 /** Raising it to Manage where sign in once asked the service for a key at the level (CS-11): the note, else null. */
@@ -221,8 +242,9 @@ export function raisedNote(
   entry: CatalogEntry,
   raised: boolean,
   access: ConnectionAccessLevel,
+  locale?: string,
 ): string | null {
-  return raised && access === 'manage' ? raiseNote(entry) : null;
+  return raised && access === 'manage' ? raiseNote(entry, locale) : null;
 }
 
 /**

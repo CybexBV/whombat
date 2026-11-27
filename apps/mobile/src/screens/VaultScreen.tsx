@@ -58,7 +58,7 @@ export function VaultScreen({ navigation, route }: Props) {
           ? phoneVaultRowLine(entry, { now, timeZone, agent: words.name, locale: rawLocale })
           : { text: row.meta, failing: false };
         // Kept in step with 1Password: its tag after the name, read with it.
-        const tag = entry ? vaultEntryTag(entry) : null;
+        const tag = entry ? vaultEntryTag(entry, rawLocale) : null;
         return {
           ...row,
           line,
@@ -68,7 +68,10 @@ export function VaultScreen({ navigation, route }: Props) {
       }),
     [query.data, now, timeZone, agent, words.name, rawLocale],
   );
-  const networkRows = useMemo(() => vaultNetworkRows(networks.data?.networks ?? []), [networks.data]);
+  const networkRows = useMemo(
+    () => vaultNetworkRows(networks.data?.networks ?? [], rawLocale),
+    [networks.data, rawLocale],
+  );
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const [adding, setAdding] = useState(false);
 

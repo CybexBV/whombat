@@ -21,6 +21,8 @@ import {
   WEATHER_NEWS_MINOR,
 } from '@whombat/protocol/session';
 import type { CommitResult } from '../http/types';
+import { clientTree } from '../i18n/catalog';
+import { HOME_AREA_WORDS } from '../i18n/messages/chatWork/home';
 import { patchEndpoint } from '../query/cache';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from './context';
@@ -49,16 +51,19 @@ function newsChanged(qc: QueryClient, burrow: string, view: NewsSourcesView): vo
 }
 
 /** What a write's answer carries, or the refusal as an error (a read's answer is always `ok`). */
-function dataOf<T>(result: CommitResult<T>): T {
+function dataOf<T>(result: CommitResult<T>, locale?: string | null): T {
   if (result.status === 'ok') return result.data;
-  throw new Error(result.status === 'blocked' ? result.message : 'That didn’t go through.');
+  throw new Error(
+    result.status === 'blocked' ? result.message : clientTree(locale, HOME_AREA_WORDS).notThrough,
+  );
 }
 
 /** Look up a place by its name (`query`) or the device's own latitude and longitude. */
-export function useFindPlace(burrow: string) {
+export function useFindPlace(burrow: string, locale?: string | null) {
   const { client } = useWhombat();
   return useMutation<PlaceFindResult, Error, { query: string } | { lat: number; lon: number }>({
-    mutationFn: async (query) => dataOf(await client.request(api.place.find, { params: { burrow }, query })),
+    mutationFn: async (query) =>
+      dataOf(await client.request(api.place.find, { params: { burrow }, query }), locale),
   });
 }
 
@@ -70,12 +75,12 @@ function setBurrow(qc: QueryClient, slug: string, next: Burrow): void {
 }
 
 /** Keep a place, or go back to the time zone's guess (null); the suggested news follows it. */
-export function useSetPlace(burrow: string) {
+export function useSetPlace(burrow: string, locale?: string | null) {
   const { client } = useWhombat();
   const qc = useQueryClient();
   return useMutation<Burrow, Error, PlaceInput | null>({
     mutationFn: async (place) =>
-      dataOf(await client.request(api.place.set, { params: { burrow }, body: { place } })).burrow,
+      dataOf(await client.request(api.place.set, { params: { burrow }, body: { place } }), locale).burrow,
     onSuccess: (next) => {
       setBurrow(qc, burrow, next);
       void qc.invalidateQueries({ queryKey: queryKeys.endpoint(api.news.sources, { params: { burrow } }) });
@@ -85,34 +90,34 @@ export function useSetPlace(burrow: string) {
 }
 
 /** Which news sites are on, in order (`news.setSources`); the answer is the part's new view. */
-export function useSetNewsSources(burrow: string) {
+export function useSetNewsSources(burrow: string, locale?: string | null) {
   const { client } = useWhombat();
   const qc = useQueryClient();
   return useMutation<NewsSourcesView, Error, string[]>({
     mutationFn: async (ids) =>
-      dataOf(await client.request(api.news.setSources, { params: { burrow }, body: { ids } })),
+      dataOf(await client.request(api.news.setSources, { params: { burrow }, body: { ids } }), locale),
     onSuccess: (view) => newsChanged(qc, burrow, view),
   });
 }
 
 /** Add a news site of the person's own by its address; a refusal names the `url` field. */
-export function useAddNewsSite(burrow: string) {
+export function useAddNewsSite(burrow: string, locale?: string | null) {
   const { client } = useWhombat();
   const qc = useQueryClient();
   return useMutation<NewsAddSiteResult, Error, string>({
     mutationFn: async (url) =>
-      dataOf(await client.request(api.news.addSite, { params: { burrow }, body: { url } })),
+      dataOf(await client.request(api.news.addSite, { params: { burrow }, body: { url } }), locale),
     onSuccess: (result) => newsChanged(qc, burrow, result.news),
   });
 }
 
 /** Add the feeds of another reader's list (`newsOpmlUrls` of its OPML file); the answer says what was skipped. */
-export function useImportNewsSites(burrow: string) {
+export function useImportNewsSites(burrow: string, locale?: string | null) {
   const { client } = useWhombat();
   const qc = useQueryClient();
   return useMutation<NewsImportResult, Error, string[]>({
     mutationFn: async (urls) =>
-      dataOf(await client.request(api.news.importSites, { params: { burrow }, body: { urls } })),
+      dataOf(await client.request(api.news.importSites, { params: { burrow }, body: { urls } }), locale),
     onSuccess: (result) => newsChanged(qc, burrow, result.news),
   });
 }

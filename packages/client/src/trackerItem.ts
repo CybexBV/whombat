@@ -13,6 +13,11 @@ import {
   trackerWriteLine,
   UNKNOWN_TRACKER_WORDS,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from './i18n/catalog';
+import { AUTOMATIONS_AREA_WORDS } from './i18n/messages/chatWork/automations';
+
+const own = (locale?: string | null) => clientTree(locale, AUTOMATIONS_AREA_WORDS).tracker;
 
 /* The tracker's words --------------------------------------------------------------------------------------------- */
 
@@ -42,22 +47,23 @@ const capitalised = (text: string): string => `${text.charAt(0).toUpperCase()}${
  * team's messages as “Acme team”, “Acme Desk emails the reporter what you send.” A tracker whose driver isn't known
  * reads “the tracker” and “the team”, never “the the”.
  */
-export function trackerItemText(words: TrackerWords = UNKNOWN_TRACKER_WORDS) {
+export function trackerItemText(words: TrackerWords = UNKNOWN_TRACKER_WORDS, locale?: string | null) {
+  const w = own(locale);
   const product = words.product.trim() || UNKNOWN_TRACKER_WORDS.product;
   const known = !unknownTracker({ product });
   const team = words.team.trim() || UNKNOWN_TRACKER_WORDS.team;
   const Product = capitalised(product);
   return {
-    loading: `Reading the report from ${product}…`,
+    loading: interpolate(w.loading, { product }),
     /** The server's words, ending in one full stop. */
     failedWith: (message: string) =>
-      `Couldn’t read the report from ${product}: ${message.replace(/\.$/, '')}.`,
-    failed: `Couldn’t read the report from ${product}. Try again in a moment.`,
+      interpolate(w.failedWith, { product, message: message.replace(/\.$/, '') }),
+    failed: interpolate(w.failed, { product }),
     /** Who wrote a message the team sent (a person's reply, or Whombat's): “Acme team”. */
     teamAuthor: capitalised(team),
-    emails: `${Product} emails the reporter what you send.`,
-    replyNote: `${Product} emails your reply to the reporter and shows it as from ${known ? `“${team}”` : team}. It’s also posted in the run’s thread.`,
-    statusNote: `${Product} emails the reporter about the change.`,
+    emails: interpolate(w.emails, { product: Product }),
+    replyNote: interpolate(w.replyNote, { product: Product, team: known ? `“${team}”` : team }),
+    statusNote: interpolate(w.statusNote, { product: Product }),
   };
 }
 
@@ -84,7 +90,9 @@ const connectionOf = (output: Record<string, unknown>, product: string): string 
 export function trackerWriteOutcome(
   output: Record<string, unknown>,
   words: Pick<TrackerWords, 'product'> = UNKNOWN_TRACKER_WORDS,
+  locale?: string | null,
 ): string | null {
+  const w = own(locale);
   if (output.wrote === false || (output.wrote === undefined && typeof output.reason === 'string'))
     return reasonOf(output);
   if (output.wrote !== true) return null;
@@ -93,10 +101,11 @@ export function trackerWriteOutcome(
     assessment: oneOf(ASSESSMENTS, output.assessment),
     priority: oneOf(PRIORITIES, output.priority),
   };
-  if (typeof output.number !== 'number') return `Wrote to ${connection}.`;
+  if (typeof output.number !== 'number') return interpolate(w.wrote, { connection });
   // Neither written: the report alone, not a line ending in a colon.
-  if (!write.assessment && !write.priority) return `Wrote to ${connection} #${output.number}.`;
-  return `Wrote to ${trackerWriteLine(connection, output.number, write)}.`;
+  if (!write.assessment && !write.priority)
+    return interpolate(w.wroteNumber, { connection, number: output.number });
+  return interpolate(w.wroteLine, { line: trackerWriteLine(connection, output.number, write) });
 }
 
 /**
@@ -108,7 +117,9 @@ export function trackerWriteOutcome(
 export function trackerReplyOutcome(
   output: Record<string, unknown>,
   words: Pick<TrackerWords, 'product'> = UNKNOWN_TRACKER_WORDS,
+  locale?: string | null,
 ): string | null {
+  const w = own(locale);
   if (output.sent === false || (output.sent === undefined && typeof output.reason === 'string'))
     return reasonOf(output);
   if (output.sent !== true) return null;
@@ -116,21 +127,31 @@ export function trackerReplyOutcome(
   const report = typeof output.number === 'number' ? `${connection} #${output.number}` : connection;
   const status = typeof output.status === 'string' && output.status.trim() ? output.status.trim() : null;
   return status
-    ? `Replied to the customer and set ${report} to “${trackerStatusLabel(status)}”.`
-    : `Replied to the customer on ${report}.`;
+    ? interpolate(w.repliedSet, { report, status: trackerStatusLabel(status) })
+    : interpolate(w.replied, { report });
 }
 
 /** What a `tracker_decision` step adds while it waits: where the person answers. */
-export const DECISION_WAITING = 'Waiting for your answer on its card in the thread.';
+export function decisionWaiting(locale?: string | null): string {
+  return own(locale).decisionWaiting;
+}
+
+/** What a `tracker_decision` step adds while it waits: where the person answers. */
+export const DECISION_WAITING = decisionWaiting();
 
 /** “PR #52”: how the fix line starts, and what links to the pull request. */
 export const fixPullRequest = (fix: Pick<TrackerFixView, 'prNumber'>): string => `PR #${fix.prNumber}`;
 
 /** “live on dev.desk.acme.example (Acme Desk 0.1.176)”; “(version 0.1.176)” for a tracker whose name isn't known. */
-function liveAt(live: NonNullable<TrackerFixView['development']>, product: string): string {
+function liveAt(
+  live: NonNullable<TrackerFixView['development']>,
+  product: string,
+  locale?: string | null,
+): string {
+  const w = own(locale);
   const version = live.version.trim();
-  const name = !product || unknownTracker({ product }) ? 'version' : product;
-  return `live on ${live.host}${version ? ` (${name} ${version})` : ''}`;
+  const name = !product || unknownTracker({ product }) ? w.version : product;
+  return `${interpolate(w.liveOn, { host: live.host })}${version ? ` (${name} ${version})` : ''}`;
 }
 
 /**
@@ -142,35 +163,36 @@ function liveAt(live: NonNullable<TrackerFixView['development']>, product: strin
 export function fixLine(
   fix: TrackerFixView,
   words: Pick<TrackerWords, 'product'> = UNKNOWN_TRACKER_WORDS,
+  locale?: string | null,
 ): string {
+  const w = own(locale);
   const pr = fixPullRequest(fix);
+  const merged = interpolate(w.merged, { pr });
   const live = fix.production ?? fix.development;
-  const liveOn = (at: NonNullable<TrackerFixView['development']>) => liveAt(at, words.product.trim());
+  const liveOn = (at: NonNullable<TrackerFixView['development']>) => liveAt(at, words.product.trim(), locale);
   switch (fix.state) {
     case 'open':
-      return `${pr} open`;
+      return interpolate(w.open, { pr });
     case 'closed':
-      return `${pr} closed without merging`;
+      return interpolate(w.closed, { pr });
     case 'merged':
-      return `${pr} merged · not live yet`;
+      return interpolate(w.mergedNotLive, { pr });
     case 'development':
       return fix.development
-        ? `${pr} merged · ${liveOn(fix.development)} · waiting for production`
-        : `${pr} merged · waiting for production`;
+        ? `${merged} · ${liveOn(fix.development)} · ${w.waitingProduction}`
+        : `${merged} · ${w.waitingProduction}`;
     case 'live':
     case 'confirmed':
     case 'reopened':
-      return live ? `${pr} merged · ${liveOn(live)}` : `${pr} merged · live`;
+      return live ? `${merged} · ${liveOn(live)}` : `${merged} · ${w.live}`;
     case 'stopped':
-      return [fix.mergedAt ? `${pr} merged` : pr, ...(live ? [liveOn(live)] : []), 'no longer followed'].join(
-        ' · ',
-      );
+      return [fix.mergedAt ? merged : pr, ...(live ? [liveOn(live)] : []), w.noLongerFollowed].join(' · ');
   }
 }
 
 /** What the customer said about the fix, when they did: it works, or it still happens. */
-export function fixFollowUp(fix: Pick<TrackerFixView, 'state'>): string | null {
-  if (fix.state === 'confirmed') return 'The customer says it works.';
-  if (fix.state === 'reopened') return 'The customer says it still happens.';
+export function fixFollowUp(fix: Pick<TrackerFixView, 'state'>, locale?: string | null): string | null {
+  if (fix.state === 'confirmed') return own(locale).works;
+  if (fix.state === 'reopened') return own(locale).stillHappens;
   return null;
 }

@@ -9,10 +9,10 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  TEAM_REPORT_WORDS,
   type TeamReportEntry,
   teamReportMessageWhen,
   teamReportTimeline,
+  teamReportWords,
 } from '@whombat/client';
 import {
   teamReportErrorText,
@@ -53,6 +53,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'TeamReport'>;
 
 export function TeamReportScreen({ navigation, route }: Props) {
   const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const teamReportStatusWordsHere = teamReportStatusWords(rawLocale);
 
   const theme = useTheme();
@@ -83,24 +84,24 @@ export function TeamReportScreen({ navigation, route }: Props) {
     else navigation.replace('TeamReports', undefined);
   };
   const withdraw = () =>
-    Alert.alert(TEAM_REPORT_WORDS.withdrawConfirm, undefined, [
-      { text: TEAM_REPORT_WORDS.cancel, style: 'cancel' },
+    Alert.alert(teamReportWordsHere.withdrawConfirm, undefined, [
+      { text: teamReportWordsHere.cancel, style: 'cancel' },
       {
-        text: TEAM_REPORT_WORDS.withdraw,
+        text: teamReportWordsHere.withdraw,
         style: 'destructive',
         onPress: () =>
           act.mutate('withdraw', {
             onSuccess: () => {
-              showNotice(TEAM_REPORT_WORDS.withdrawn);
+              showNotice(teamReportWordsHere.withdrawn);
               toList();
             },
-            onError: (e) => Alert.alert(teamReportErrorText(e)),
+            onError: (e) => Alert.alert(teamReportErrorText(e, rawLocale)),
           }),
       },
     ]);
   const back = (
     <BackBar
-      label={route.params.back ?? TEAM_REPORT_WORDS.back}
+      label={route.params.back ?? teamReportWordsHere.back}
       onPress={goBack}
       right={report ? <ReportMore title={report.title} onWithdraw={withdraw} /> : undefined}
     />
@@ -109,14 +110,14 @@ export function TeamReportScreen({ navigation, route }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={TEAM_REPORT_WORDS.updateFirst} />
+        <ErrorState text={teamReportWordsHere.updateFirst} />
       </Screen>
     );
   if (!valid)
     return (
       <Screen>
         {back}
-        <ErrorState text={TEAM_REPORT_WORDS.notFound} />
+        <ErrorState text={teamReportWordsHere.notFound} />
       </Screen>
     );
   if (!report && isError)
@@ -124,9 +125,9 @@ export function TeamReportScreen({ navigation, route }: Props) {
       <Screen>
         {back}
         {teamReportMissing(error) ? (
-          <ErrorState text={TEAM_REPORT_WORDS.notFound} />
+          <ErrorState text={teamReportWordsHere.notFound} />
         ) : (
-          <ErrorState text={TEAM_REPORT_WORDS.reportFailed} onRetry={() => void refetch()} />
+          <ErrorState text={teamReportWordsHere.reportFailed} onRetry={() => void refetch()} />
         )}
       </Screen>
     );
@@ -158,13 +159,13 @@ export function TeamReportScreen({ navigation, route }: Props) {
               style={{ padding: 14, borderRadius: 14, backgroundColor: theme.colors.sf2 }}
             >
               <Text size={14} lh={1.45} color={theme.colors.ink2}>
-                {TEAM_REPORT_WORDS.sent}
+                {teamReportWordsHere.sent}
               </Text>
             </View>
           ) : null}
           <View style={{ gap: 6, paddingHorizontal: 6 }}>
             <Text size={11.5} mono color={theme.colors.mut}>
-              {reportKicker(report)}
+              {reportKicker(report, rawLocale)}
             </Text>
             <Text size={25} weight={700} lh={1.2} tracking={-0.02} accessibilityRole="header">
               {report.title}
@@ -189,18 +190,18 @@ export function TeamReportScreen({ navigation, route }: Props) {
               }}
             >
               <Text size={15} weight={600}>
-                {TEAM_REPORT_WORDS.confirmQuestion}
+                {teamReportWordsHere.confirmQuestion}
               </Text>
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <Button
-                  label={TEAM_REPORT_WORDS.works}
+                  label={teamReportWordsHere.works}
                   style={{ flex: 1 }}
                   busy={act.isPending && act.variables === 'works'}
                   disabled={act.isPending}
                   onPress={() => pick('works')}
                 />
                 <Button
-                  label={TEAM_REPORT_WORDS.stillHappening}
+                  label={teamReportWordsHere.stillHappening}
                   variant="secondary"
                   style={{ flex: 1 }}
                   busy={act.isPending && act.variables === 'still_happening'}
@@ -211,11 +212,13 @@ export function TeamReportScreen({ navigation, route }: Props) {
             </View>
           ) : null}
           <ErrorLine
-            text={act.isError && act.variables !== 'withdraw' ? teamReportErrorText(act.error) : null}
+            text={
+              act.isError && act.variables !== 'withdraw' ? teamReportErrorText(act.error, rawLocale) : null
+            }
           />
           {earlier > 0 ? (
             <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-              {TEAM_REPORT_WORDS.earlier}
+              {teamReportWordsHere.earlier}
             </Text>
           ) : null}
           <Conversation report={report} earlier={earlier} />
@@ -235,7 +238,8 @@ export function TeamReportScreen({ navigation, route }: Props) {
 
 /** The conversation, oldest first: the person's words in their bubble, the team's on the page, status lines quiet. */
 function Conversation({ report, earlier }: { report: TeamReport; earlier: number }) {
-  const entries = teamReportTimeline(report, earlier);
+  const { rawLocale } = useI18n();
+  const entries = teamReportTimeline(report, earlier, rawLocale);
   return (
     <View style={{ gap: 14 }}>
       {entries.map((entry) => (
@@ -246,10 +250,12 @@ function Conversation({ report, earlier }: { report: TeamReport; earlier: number
 }
 
 function Entry({ entry }: { entry: TeamReportEntry }) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
-  const when = teamReportMessageWhen(entry.at, now.getTime(), timeZone);
+  const when = teamReportMessageWhen(entry.at, now.getTime(), timeZone, rawLocale);
   if (entry.kind === 'status')
     return (
       <View
@@ -265,7 +271,7 @@ function Entry({ entry }: { entry: TeamReportEntry }) {
       </View>
     );
   const mine = entry.kind === 'sent' || entry.author === 'reporter';
-  const who = entry.kind === 'sent' ? TEAM_REPORT_WORDS.you : entry.who;
+  const who = entry.kind === 'sent' ? teamReportWordsHere.you : entry.who;
   return (
     <View style={{ gap: 4, alignItems: mine ? 'flex-end' : 'flex-start' }}>
       <Text size={12} color={theme.colors.mut} style={{ paddingHorizontal: 4 }}>
@@ -293,7 +299,7 @@ function Entry({ entry }: { entry: TeamReportEntry }) {
         {entry.kind === 'sent' && entry.expected ? (
           <View style={{ gap: 2 }}>
             <Text size={12} weight={600} color={theme.colors.ink2}>
-              {TEAM_REPORT_WORDS.expected}
+              {teamReportWordsHere.expected}
             </Text>
             <Text size={14} lh={1.45} color={theme.colors.ink2} selectable>
               {entry.expected}
@@ -307,6 +313,8 @@ function Entry({ entry }: { entry: TeamReportEntry }) {
 
 /** “Write to the Whombat Team” and Send; a report that can't take more replies says so instead. */
 function ReplyBox({ report, earlier, onSent }: { report: TeamReport; earlier: number; onSent: () => void }) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const reply = useReplyTeamReport(slug, report.id);
@@ -314,7 +322,7 @@ function ReplyBox({ report, earlier, onSent }: { report: TeamReport; earlier: nu
   if (report.messages.length + earlier >= TEAM_REPORT_MESSAGES_MAX)
     return (
       <Text size={13.5} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-        {TEAM_REPORT_WORDS.full}
+        {teamReportWordsHere.full}
       </Text>
     );
   const ready = text.trim().length > 0 && !reply.isPending;
@@ -326,8 +334,8 @@ function ReplyBox({ report, earlier, onSent }: { report: TeamReport; earlier: nu
         onChangeText={setText}
         multiline
         maxLength={TEAM_REPORT_REPLY_MAX}
-        placeholder={TEAM_REPORT_WORDS.reply}
-        accessibilityLabel={TEAM_REPORT_WORDS.reply}
+        placeholder={teamReportWordsHere.reply}
+        accessibilityLabel={teamReportWordsHere.reply}
         placeholderTextColor={theme.colors.placeholder}
         selectionColor={theme.colors.brand}
         cursorColor={theme.colors.ink}
@@ -344,10 +352,10 @@ function ReplyBox({ report, earlier, onSent }: { report: TeamReport; earlier: nu
           ...metrics,
         }}
       />
-      <ErrorLine text={reply.isError ? teamReportErrorText(reply.error) : null} />
+      <ErrorLine text={reply.isError ? teamReportErrorText(reply.error, rawLocale) : null} />
       <Button
-        label={TEAM_REPORT_WORDS.replySend}
-        accessibilityLabel={`${TEAM_REPORT_WORDS.replySend}: ${TEAM_REPORT_WORDS.reply}`}
+        label={teamReportWordsHere.replySend}
+        accessibilityLabel={`${teamReportWordsHere.replySend}: ${teamReportWordsHere.reply}`}
         disabled={!ready}
         busy={reply.isPending}
         style={{ alignSelf: 'flex-end', minWidth: 120 }}

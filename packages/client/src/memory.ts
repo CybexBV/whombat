@@ -13,24 +13,30 @@ import {
   memoryFileText,
   memoryUsageText,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { ApiError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** The screens' own words around the contracts' (`MEMORY_COPY`). */
-export const MEMORY_TEXT = {
-  add: 'Add',
-  remove: 'Remove',
-  /** The add field's placeholder of each file. */
-  placeholder: (file: MemoryFile, agent: string) =>
-    file === 'memory'
-      ? `Something ${agent} should remember about working with you`
-      : `Something ${agent} should know about you`,
-  saved: 'Saved.',
-  removed: 'Removed.',
-  failed: 'That didn’t work. Try again in a moment.',
-  loadFailed: 'Couldn’t load this. Try again in a moment.',
-  /** The agent's notes saved. */
-  notesSaved: 'Saved. Every chat reads them from now on.',
-} as const;
+/** The screens' own words around the contracts' (`MEMORY_COPY`), in a locale (English when none). */
+export function memoryText(locale?: string | null) {
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).memory;
+  return {
+    add: w.add,
+    remove: w.remove,
+    /** The add field's placeholder of each file. */
+    placeholder: (file: MemoryFile, agent: string) =>
+      interpolate(file === 'memory' ? w.placeholderMemory : w.placeholderUser, { agent }),
+    saved: w.saved,
+    removed: w.removed,
+    failed: w.failed,
+    loadFailed: w.loadFailed,
+    /** The agent's notes saved. */
+    notesSaved: w.notesSaved,
+  };
+}
+
+export const MEMORY_TEXT = memoryText();
 
 /** A file's entries (Hermes's own split). */
 export function memoryFileEntries(view: Pick<MemoryFileView, 'text'>): string[] {
@@ -59,14 +65,17 @@ export function memoryWithout(view: Pick<MemoryFileView, 'text'>, index: number)
 export type MemoryUsageTone = 'ok' | 'warn' | 'bad';
 
 /** “1,240 of 2,200 characters”, how full the bar is (0…1) and its tone: amber from 90 %, red over the limit. */
-export function memoryUsage(view: Pick<MemoryFileView, 'used' | 'limit'>): {
+export function memoryUsage(
+  view: Pick<MemoryFileView, 'used' | 'limit'>,
+  locale?: string | null,
+): {
   text: string;
   fraction: number;
   tone: MemoryUsageTone;
 } {
   const fraction = view.limit > 0 ? view.used / view.limit : 0;
   return {
-    text: memoryUsageText(view.used, view.limit),
+    text: memoryUsageText(view.used, view.limit, locale),
     fraction: Math.min(1, fraction),
     tone: fraction > 1 ? 'bad' : fraction >= 0.9 ? 'warn' : 'ok',
   };
@@ -81,9 +90,10 @@ export function memoryEntryFits(view: Pick<MemoryFileView, 'text' | 'limit'>, en
  * What a refused write says (CT-1201): the agent changed the file meanwhile (`conflict` without a reason) is the
  * contracts' `changed` sentence; busy (a turn holds it), too long and the rest are the server's own words.
  */
-export function memoryWriteProblem(error: unknown, changed: string): string {
-  if (!(error instanceof ApiError)) return MEMORY_TEXT.failed;
+export function memoryWriteProblem(error: unknown, changed: string, locale?: string | null): string {
+  const failed = memoryText(locale).failed;
+  if (!(error instanceof ApiError)) return failed;
   const reason = (error.details as { reason?: unknown } | undefined)?.reason;
   if (error.code === 'conflict' && reason !== 'busy') return changed;
-  return error.message || MEMORY_TEXT.failed;
+  return error.message || failed;
 }

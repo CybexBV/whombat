@@ -4,6 +4,7 @@
  * one rule that turns the two versions into those lines (a line diff, Myers'), so the runtime and the fixtures agree.
  */
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { DiffLineKind } from './cards.js';
 import { Count } from './common.js';
 
@@ -47,11 +48,14 @@ export const PrFileView = z.object({
 });
 export type PrFileView = z.infer<typeof PrFileView>;
 
-/** What the file view says instead of lines. */
-export const PR_FILE_SHOWN_TEXT: Record<Exclude<PrFileShown, 'text'>, string> = {
-  binary: 'This is a binary file, so there are no lines to show.',
-  too_large: 'This file is too large to show here.',
-};
+/** What the file view says instead of lines, in a locale. */
+export function prFileShownText(
+  locale?: string | null,
+): Readonly<Record<Exclude<PrFileShown, 'text'>, string>> {
+  return coreWords(locale, 'prFile', ['binary', 'too_large'] as const);
+}
+
+export const PR_FILE_SHOWN_TEXT: Record<Exclude<PrFileShown, 'text'>, string> = prFileShownText('en');
 
 /** Whether bytes look binary: a NUL in the first 8 KiB (git's rule). */
 export function looksBinary(bytes: Uint8Array): boolean {

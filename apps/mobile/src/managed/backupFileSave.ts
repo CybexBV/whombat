@@ -59,9 +59,9 @@ export async function chooseBackupSink(name: string): Promise<BackupFileSink | n
  * Asks for the file to restore: its source (close it once the upload is over), why it can't be uploaded, or null when
  * the person backed out.
  */
-export async function pickBackupSource(): Promise<
-  { source: ChunkSource & { close(): void } } | { problem: string } | null
-> {
+export async function pickBackupSource(
+  locale?: string,
+): Promise<{ source: ChunkSource & { close(): void } } | { problem: string } | null> {
   const result = await DocumentPicker.getDocumentAsync({
     type: '*/*',
     copyToCacheDirectory: false,
@@ -69,8 +69,8 @@ export async function pickBackupSource(): Promise<
   });
   const asset = result.canceled ? null : result.assets[0];
   if (!asset) return null;
-  const picked = pickedBackupFile(asset);
-  return 'problem' in picked ? picked : { source: fileChunkSource(expoFileApi, picked.file) };
+  const picked = pickedBackupFile(asset, locale);
+  return 'problem' in picked ? picked : { source: fileChunkSource(expoFileApi, picked.file, locale) };
 }
 
 /** Keeps the screen on while a file moves (the phone sleeping would pause it). */

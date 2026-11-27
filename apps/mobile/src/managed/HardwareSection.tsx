@@ -13,7 +13,6 @@
  * hands it to the system's share sheet (the copy goes afterwards), as DIAGNOSTICS shares its files.
  */
 import {
-  HARDWARE_TEXT,
   type HardwareKind,
   type HardwareLoader,
   type HardwareProblemView,
@@ -24,6 +23,7 @@ import {
   hardwareReportText,
   hardwareSectionView,
   hardwareSpecs,
+  hardwareText,
 } from '@whombat/client';
 import Constants from 'expo-constants';
 import { File, Paths } from 'expo-file-system';
@@ -31,6 +31,7 @@ import * as Sharing from 'expo-sharing';
 import { type ReactNode, useCallback, useEffect, useState } from 'react';
 import { type LayoutChangeEvent, Platform, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { tint } from '../ui/glanceColors';
@@ -59,11 +60,9 @@ import {
   Wifi,
 } from '../ui/icons';
 import { Button, SkeletonRows } from '../ui/primitives';
-import { hardwareReportAbout, MACHINE_TEXT } from './machine';
+import { hardwareReportAbout, machineText } from './machine';
 import { Card, type Dot, dotColor, ErrorLine, IconTile, LinkRow, Row } from './ui';
 import type { MachineHere } from './useMachine';
-
-const T = HARDWARE_TEXT;
 
 type Read = { hardware: HostHardware } | { failed: true } | null;
 
@@ -133,6 +132,7 @@ export function HardwareSummary({
 
 /** The hardware read once as it shows, again on Try again and when the demo machine starts over; `gone`: no manager. */
 function useHardwareRead(load: HardwareLoader, onReset: MachineHere['onReset']) {
+  const { rawLocale } = useI18n();
   const [read, setRead] = useState<Read>(null);
   const [gone, setGone] = useState(false);
   const ask = useCallback(() => {
@@ -155,11 +155,13 @@ function useHardwareRead(load: HardwareLoader, onReset: MachineHere['onReset']) 
   // The demo machine starting over as another one.
   useEffect(() => onReset?.(() => void ask()), [onReset, ask]);
   const hardware = read && 'hardware' in read ? read.hardware : null;
-  return { read, gone, ask, hardware, view: hardware ? hardwareSectionView(hardware) : null };
+  return { read, gone, ask, hardware, view: hardware ? hardwareSectionView(hardware, rawLocale) : null };
 }
 
 /** “The hardware couldn’t be read right now.” with Try again. */
 function Unavailable({ onRetry }: { onRetry: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = hardwareText(rawLocale);
   return (
     <Row
       first
@@ -183,6 +185,8 @@ function Summary({
   onOpen: () => void;
   onLayout: ((e: LayoutChangeEvent) => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const T = hardwareText(rawLocale);
   const { read, gone, ask, hardware, view: v } = useHardwareRead(load, onReset);
   if (gone) return null;
   return (
@@ -222,6 +226,8 @@ function Hardware({
   runtime: string | null;
   onReset: MachineHere['onReset'];
 }) {
+  const { rawLocale } = useI18n();
+  const T = hardwareText(rawLocale);
   const { timeZone } = useBurrowBase();
   const { read, gone, ask, hardware, view: v } = useHardwareRead(load, onReset);
   const [sharing, setSharing] = useState(false);
@@ -251,7 +257,7 @@ function Hardware({
         dialogTitle: T.share,
       });
     } catch {
-      setNote(MACHINE_TEXT.shareFailed);
+      setNote(machineText(rawLocale).shareFailed);
     } finally {
       setSharing(false);
       try {
@@ -327,9 +333,11 @@ function MachineCard({
   worst: Dot;
   children: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
+  const T = hardwareText(rawLocale);
   const theme = useTheme();
   const Icon = machineIcon(hardware);
-  const specs = hardwareSpecs(hardware);
+  const specs = hardwareSpecs(hardware, rawLocale);
   // The processor's name is long, so it has the whole width; the others go two by two, and one left alone is wide too.
   const halves = specs.filter((sp) => sp.key !== 'cpu');
   const lone = halves.length % 2 === 1 ? halves[halves.length - 1]?.key : undefined;

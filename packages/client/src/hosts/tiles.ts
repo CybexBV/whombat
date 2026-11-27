@@ -6,8 +6,10 @@
  * and the phone; pure.
  */
 import type { HostCpu, HostServer } from '@whombat/core';
-import { clientTranslator } from '../i18n/catalog';
-import { DASH, formatNum, formatUptimeShort, plural } from './format';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTranslator, clientTree } from '../i18n/catalog';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
+import { DASH, formatNum, formatUptimeShort } from './format';
 import { serverHref, shortOs } from './model';
 import { diskUsedLevel, type HostTone, hostTone, sensorLevel } from './thresholds';
 
@@ -22,12 +24,16 @@ export function cpuName(model: string | null | undefined): string {
 }
 
 /** What's inside a server: its CPU in full and “16 cores · 32 threads”; null when the server didn't say. */
-export function cpuLine(cpu: HostCpu | null | undefined): { name: string; detail: string } | null {
+export function cpuLine(
+  cpu: HostCpu | null | undefined,
+  locale?: string | null,
+): { name: string; detail: string } | null {
   const name = cpuName(cpu?.model);
   if (!cpu || !name) return null;
+  const w = clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).head;
   const parts: string[] = [];
-  if (cpu.cores > 0) parts.push(plural(cpu.cores, 'core'));
-  if (cpu.threads > 0) parts.push(plural(cpu.threads, 'thread'));
+  if (cpu.cores > 0) parts.push(w.cores(cpu.cores));
+  if (cpu.threads > 0) parts.push(w.threads(cpu.threads));
   return { name, detail: parts.join(' · ') };
 }
 
@@ -229,8 +235,10 @@ export function serverFigures(s: HostServer, locale?: string | null): ServerFigu
 }
 
 /** The four tiles of a server's card, in order; offline (or not yet reporting) each says “—” with an unlit meter. */
-export function serverTiles(s: HostServer): ServerTile[] {
+export function serverTiles(s: HostServer, locale?: string | null): ServerTile[] {
   const offline = s.status === 'offline' || s.status === 'pending';
+  const w = clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).tiles;
+  const pct = (n: number) => `${Math.round(n)}${NBSP}%`;
   const tile = (
     key: ServerTileKey,
     label: string,
@@ -239,7 +247,8 @@ export function serverTiles(s: HostServer): ServerTile[] {
   ): ServerTile => {
     const value = t.value ?? DASH;
     const unit = value === DASH ? '' : (t.unit ?? '');
-    const said = value === DASH ? `${label} not known` : `${label} ${value}${unit ? ` ${unit}` : ''}`;
+    const said =
+      value === DASH ? interpolate(w.unknown, { name: label }) : `${label} ${value}${unit ? ` ${unit}` : ''}`;
     return {
       key,
       label,
@@ -260,63 +269,74 @@ export function serverTiles(s: HostServer): ServerTile[] {
   };
   if (offline) {
     return [
-      tile('cpu', 'Processor', hrefs.cpu, {}),
-      tile('memory', 'Memory', hrefs.memory, {}),
-      tile('storage', 'Storage', hrefs.storage, {}),
-      tile('temp', 'Temperature', hrefs.temp, {}),
+      tile('cpu', w.processor, hrefs.cpu, {}),
+      tile('memory', w.memory, hrefs.memory, {}),
+      tile('storage', w.storage, hrefs.storage, {}),
+      tile('temp', w.temperature, hrefs.temp, {}),
     ];
   }
   const words = tilesInWords(s);
-  const { cpu, avg, memTotal, memUsed, memPct, memAmount, diskPct, diskAmount, maxC, limit } =
-    serverFigures(s);
+  const { cpu, avg, memTotal, memUsed, memPct, memAmount, diskPct, diskAmount, maxC, limit } = serverFigures(
+    s,
+    locale,
+  );
 
-  const avgSub = avg == null ? '' : `24 h avg ${Math.round(avg)}${NBSP}%`;
-  const cpuSub =
-    words && cpu != null ? [`${Math.round(cpu)}${NBSP}% in use`, avgSub].filter(Boolean).join(' · ') : avgSub;
-  const cpuTile = tile('cpu', 'Processor', hrefs.cpu, {
-    value: cpu == null ? DASH : words ? processorWords(cpu) : String(Math.round(cpu)),
+  const spoken = (text: string) => text.replaceAll(NBSP, ' ');
+  const cpuInUse = words && cpu != null ? interpolate(w.inUse, { amount: pct(cpu) }) : null;
+  const avgSub = avg == null ? '' : interpolate(w.avg24h, { pct: pct(avg) });
+  const avgSaid = avg == null ? null : interpolate(w.avg24hSaid, { pct: pct(avg) });
+  const cpuSub = cpuInUse ? [cpuInUse, avgSub].filter(Boolean).join(' · ') : avgSub;
+  const cpuSaid = (cpuInUse ? [cpuInUse, avgSaid] : [avgSaid]).filter(Boolean).join(' · ');
+  const cpuTile = tile('cpu', w.processor, hrefs.cpu, {
+    value: cpu == null ? DASH : words ? processorWords(cpu, locale) : String(Math.round(cpu)),
     unit: words ? '' : '%',
     share: cpu == null ? null : clamp01(cpu / 100),
     sub: cpuSub,
-    said: cpuSub ? cpuSub.replaceAll(NBSP, ' ').replace('24 h avg', '24 hour average') : undefined,
+    said: cpuSaid ? spoken(cpuSaid) : undefined,
     tone: cpu == null ? 'ok' : fullTone(cpu),
   });
 
   const memFree =
-    memTotal && memUsed != null ? `${formatNum(Math.max(0, memTotal - memUsed))}${NBSP}GB free` : '';
+    memTotal && memUsed != null
+      ? interpolate(w.free, { amount: `${formatNum(Math.max(0, memTotal - memUsed), locale)}${NBSP}GB` })
+      : '';
   const memSub =
     words && memPct != null && memAmount
-      ? [memFree, `${memAmount} in use (${Math.round(memPct)}${NBSP}%)`].filter(Boolean).join(' · ')
+      ? [memFree, interpolate(w.inUseShare, { amount: memAmount, pct: pct(memPct) })]
+          .filter(Boolean)
+          .join(' · ')
       : memAmount;
-  const memTile = tile('memory', 'Memory', hrefs.memory, {
-    value: memPct == null ? DASH : words ? memoryFullWords(memPct) : String(Math.round(memPct)),
+  const memTile = tile('memory', w.memory, hrefs.memory, {
+    value: memPct == null ? DASH : words ? memoryFullWords(memPct, locale) : String(Math.round(memPct)),
     unit: words ? '' : '%',
     share: memPct == null ? null : clamp01(memPct / 100),
     sub: memSub,
-    said: memSub ? memSub.replaceAll(NBSP, ' ') : undefined,
+    said: memSub ? spoken(memSub) : undefined,
     tone: memPct == null ? 'ok' : fullTone(memPct),
   });
 
   const diskSub =
     words && diskPct != null
-      ? [diskAmount, `${Math.round(diskPct)}${NBSP}% in use`].filter(Boolean).join(' · ')
+      ? [diskAmount, interpolate(w.inUse, { amount: pct(diskPct) })].filter(Boolean).join(' · ')
       : diskAmount;
-  const diskTile = tile('storage', 'Storage', hrefs.storage, {
-    value: diskPct == null ? DASH : words ? spaceWords(diskPct) : String(Math.round(diskPct)),
+  const diskTile = tile('storage', w.storage, hrefs.storage, {
+    value: diskPct == null ? DASH : words ? spaceWords(diskPct, locale) : String(Math.round(diskPct)),
     unit: words ? '' : '%',
     share: diskPct == null ? null : clamp01(diskPct / 100),
     sub: diskSub,
-    said: diskSub ? diskSub.replaceAll(NBSP, ' ') : undefined,
+    said: diskSub ? spoken(diskSub) : undefined,
     tone: tileTone(levelTone(hostTone(diskUsedLevel(diskPct)))),
   });
 
   // Temperature is always its figure: a word here (“Normal”) could contradict the pill (“Running warm”).
-  const tempTile = tile('temp', 'Temperature', hrefs.temp, {
+  const limitWords = (sep: string) =>
+    limit ? interpolate(w.limit, { temp: `${Math.round(limit)}${sep}°C` }) : '';
+  const tempTile = tile('temp', w.temperature, hrefs.temp, {
     value: maxC == null ? DASH : String(Math.round(maxC)),
     unit: '°C',
     share: maxC == null ? null : clamp01(maxC / (limit ?? 100)),
-    sub: maxC != null && limit ? `limit ${Math.round(limit)}${NBSP}°C` : '',
-    said: maxC == null ? undefined : `the hottest sensor${limit ? `, limit ${Math.round(limit)} °C` : ''}`,
+    sub: maxC != null && limit ? limitWords(NBSP) : '',
+    said: maxC == null ? undefined : [w.hottest, limitWords(' ')].filter(Boolean).join(', '),
     tone: maxC == null ? 'ok' : tileTone(levelTone(hostTone(sensorLevel(maxC, limit)))),
   });
 

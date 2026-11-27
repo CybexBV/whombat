@@ -785,23 +785,31 @@ export function handleFor(catalogId: string, taken: Iterable<string>, label?: st
   }
 }
 
-/** Why a field's value isn't acceptable, or null (CX-01). A field the service fills is never needed from the person. */
-export function fieldProblem(field: CatalogField, value: string | undefined): string | null {
+/**
+ * Why a field's value isn't acceptable, or null (CX-01). A field the service fills is never needed from the person. The
+ * field's own label and pattern message come from the catalog as written.
+ */
+export function fieldProblem(
+  field: CatalogField,
+  value: string | undefined,
+  locale?: string | null,
+): string | null {
+  const tr = coreTranslator(locale);
   const v = value?.trim() ?? '';
   if (v === '')
     return field.required && !field.fromService && field.fromCheck === undefined
-      ? `${field.label} is needed.`
+      ? tr.t('catalogField.needed', { label: field.label })
       : null;
-  if (v.length > CONNECTION_FIELD_VALUE_MAX) return `${field.label} is too long.`;
+  if (v.length > CONNECTION_FIELD_VALUE_MAX) return tr.t('catalogField.tooLong', { label: field.label });
   if (field.kind === 'url') {
-    const parsed = parseVaultUrl(v);
+    const parsed = parseVaultUrl(v, locale);
     if (!parsed.ok) return parsed.message;
   }
-  if (field.guide && v.length > CONNECTION_GUIDE_MAX) return 'Keep it under 1 500 characters.';
+  if (field.guide && v.length > CONNECTION_GUIDE_MAX) return tr.t('catalogField.guideTooLong');
   if (field.validation && !new RegExp(`^(?:${field.validation.pattern})$`).test(v))
     return field.validation.message;
   if (field.options && !field.options.some((o) => o.value === v))
-    return `Pick one of the choices for ${field.label}.`;
+    return tr.t('catalogField.pick', { label: field.label });
   return null;
 }
 
@@ -810,10 +818,12 @@ export function fieldsProblems(
   entry: CatalogEntry,
   kind: SignInKind,
   fields: Readonly<Record<string, string>>,
+  locale?: string | null,
 ): Record<string, string> {
+  const tr = coreTranslator(locale);
   const out: Record<string, string> = {};
   for (const f of fieldsFor(entry, kind)) {
-    const problem = fieldProblem(f, fields[f.id]);
+    const problem = fieldProblem(f, fields[f.id], locale);
     if (problem) out[f.id] = problem;
   }
   if (entry.id === UPTIME_ID) {
@@ -824,11 +834,13 @@ export function fieldsProblems(
         out[id] ??=
           issue.code === 'custom'
             ? issue.message
-            : `Check the value for ${entry.fields.find((f) => f.id === id)?.label.toLowerCase() ?? id}.`;
+            : tr.t('catalogField.check', {
+                label: entry.fields.find((f) => f.id === id)?.label.toLowerCase() ?? id,
+              });
       }
   }
   for (const id of Object.keys(fields))
-    if (!entry.fields.some((f) => f.id === id)) out[id] = 'This connection has no such field.';
+    if (!entry.fields.some((f) => f.id === id)) out[id] = tr.t('catalogField.unknown');
   return out;
 }
 

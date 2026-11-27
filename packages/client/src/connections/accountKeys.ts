@@ -4,10 +4,13 @@
  * three, Asks · Off where it always asks (sending, invites, sharing: what reaches other people). A change is saved at once through `agent.setKeys` with every
  * other grant as it is (`withAccountTier`). Pure, shared by the web and the phone.
  */
-import { CONNECTION_TOOL_TIER_LABELS, type ConnectorService } from '@whombat/core';
+import { type ConnectorService, connectionToolTierLabels } from '@whombat/core';
 import type { Grant, GrantInput } from '@whombat/core/domain';
-import { agentMaxTier, KEY_CATALOG, type KeyId, type Tier } from '@whombat/core/keys';
+import { interpolate } from '@whombat/core/i18n';
+import { agentMaxTier, type KeyId, keyLabel, type Tier } from '@whombat/core/keys';
 import { agentWords } from '../agentName';
+import { clientTree } from '../i18n/catalog';
+import { CONN_ACCOUNT_KEYS_WORDS } from '../i18n/messages/connectionsHosts/connections';
 
 export interface AccountKeyRow {
   keyId: KeyId;
@@ -27,42 +30,48 @@ export interface AccountKeyGroup {
   rows: AccountKeyRow[];
 }
 
-const GROUPS: readonly { title: string; services: readonly ConnectorService[]; keys: readonly KeyId[] }[] = [
+const GROUPS: readonly {
+  title: 'mail' | 'calendar' | 'files' | 'contacts';
+  services: readonly ConnectorService[];
+  keys: readonly KeyId[];
+}[] = [
   {
-    title: 'Mail',
+    title: 'mail',
     services: ['mail'],
     keys: ['mail.read', 'mail.organize', 'mail.draft', 'mail.delete', 'mail.send'],
   },
-  { title: 'Calendar', services: ['calendar'], keys: ['calendar.read', 'calendar.write', 'calendar.invite'] },
+  { title: 'calendar', services: ['calendar'], keys: ['calendar.read', 'calendar.write', 'calendar.invite'] },
   {
-    title: 'Files',
+    title: 'files',
     services: ['files', 'docs', 'sheets'],
     keys: ['files.read', 'files.write', 'files.delete', 'files.share'],
   },
-  { title: 'Contacts', services: ['contacts'], keys: ['contacts.read'] },
+  { title: 'contacts', services: ['contacts'], keys: ['contacts.read'] },
 ];
 
 const ALL: readonly Tier[] = ['can', 'ask', 'cannot'];
 const ASKS: readonly Tier[] = ['ask', 'cannot'];
 
 /** A tier in a connection's words: Allowed, Asks, Off. */
-export const ACCOUNT_TIER_LABELS: Readonly<Record<Tier, string>> = {
-  can: CONNECTION_TOOL_TIER_LABELS.can,
-  ask: CONNECTION_TOOL_TIER_LABELS.ask,
-  cannot: CONNECTION_TOOL_TIER_LABELS.off,
-};
+export function accountTierLabels(locale?: string | null): Readonly<Record<Tier, string>> {
+  const labels = connectionToolTierLabels(locale);
+  return { can: labels.can, ask: labels.ask, cannot: labels.off };
+}
+
+export const ACCOUNT_TIER_LABELS: Readonly<Record<Tier, string>> = accountTierLabels('en');
 
 /** The section's words, the assistant by its name. */
-export function accountKeysText(agent: string) {
-  const { Name: N } = agentWords(agent);
+export function accountKeysText(agent: string, locale?: string | null) {
+  const { Name: N } = agentWords(agent, locale);
+  const w = clientTree(locale, CONN_ACCOUNT_KEYS_WORDS);
   return {
-    title: `WHAT ${N.toUpperCase()} MAY DO`,
-    line: (account: string) =>
-      `What ${N} may do with your ${account} account: Allowed runs at once, Asks waits for you, Off never runs.`,
-    tiersLabel: (key: string) => `${key}: what ${N} may do`,
-    alwaysAsks: 'Always asks you first.',
-    saved: 'Saved.',
-    failed: 'That didn’t save. Try again in a moment.',
+    title: interpolate(w.title, { NAME: N.toUpperCase() }),
+    line: (account: string) => interpolate(w.line, { Name: N, account }),
+    tiersLabel: (key: string) => interpolate(w.tiersLabel, { key, Name: N }),
+    alwaysAsks: w.alwaysAsks,
+    saved: w.saved,
+    failed: w.failed,
+    groups: w.groups,
   };
 }
 
@@ -71,16 +80,17 @@ export function accountKeyGroups(
   grants: readonly Pick<Grant, 'keyId' | 'tier'>[],
   services: readonly ConnectorService[],
   agent: string,
+  locale?: string | null,
 ): AccountKeyGroup[] {
-  const t = accountKeysText(agent);
+  const t = accountKeysText(agent, locale);
   return GROUPS.filter((g) => g.services.some((s) => services.includes(s))).map((g) => ({
-    title: g.title,
+    title: t.groups[g.title],
     rows: g.keys.map((keyId) => {
       const capped = agentMaxTier(keyId) === 'ask';
       const held = grants.find((x) => x.keyId === keyId)?.tier ?? 'cannot';
       return {
         keyId,
-        label: KEY_CATALOG[keyId].label,
+        label: keyLabel(keyId, locale),
         // A key held above its cap reads at the cap, as the engine decides it.
         tier: capped && held === 'can' ? 'ask' : held,
         choices: capped ? ASKS : ALL,

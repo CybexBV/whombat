@@ -58,10 +58,10 @@ import {
 import { SvgXml } from 'react-native-svg';
 import { attachmentMeta, fileTile, imageBox, localFileName, tilePicture } from '../data/attachments';
 import type { FileAccess } from '../data/fileAccess';
-import { PAGES_COPY, pageSetMeta } from '../data/pageSets';
+import { pageSetMeta, pagesCopy } from '../data/pageSets';
 import { supportsAvif } from '../data/richPreview';
 import type { MessageFileActions } from '../data/useFiles';
-import { useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { resourceToCacheFile } from '../managed/files';
 import { Text } from '../theme/Text';
@@ -100,6 +100,7 @@ async function sessionFile(
   access: Extract<FileAccess, { kind: 'session' }>,
   preview = false,
   name = localFileName(a),
+  locale?: string | null,
 ): Promise<string> {
   const ref = resourceFromUrl(a.url);
   if (!ref) throw new Error('not an attachment');
@@ -107,7 +108,7 @@ async function sessionFile(
     expoFileApi,
     access.session,
     preview && ref.kind === 'attachment' ? { ...ref, variant: 'preview' } : ref,
-    { scope: access.scope, name },
+    { scope: access.scope, name, locale },
   );
 }
 
@@ -131,6 +132,7 @@ export function AttachmentImage({
   thumbnail?: boolean;
 }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [uri, setUri] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -141,7 +143,7 @@ export function AttachmentImage({
     let live = true;
     setUri(null);
     setFailed(false);
-    sessionFile(attachment, access, picture.preview).then(
+    sessionFile(attachment, access, picture.preview, undefined, rawLocale).then(
       (u) => live && setUri(u),
       () => {
         if (!live) return;
@@ -152,7 +154,7 @@ export function AttachmentImage({
     return () => {
       live = false;
     };
-  }, [attachment, access, picture.preview]);
+  }, [attachment, access, picture.preview, rawLocale]);
   if (!uri)
     return (
       <View
@@ -160,7 +162,9 @@ export function AttachmentImage({
           style as object,
           { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.sf2 },
         ]}
-        accessibilityLabel={failed ? `Couldn’t load ${attachment.name}` : `Loading ${attachment.name}`}
+        accessibilityLabel={tMobile(failed ? 'screens2.attach.couldntLoad' : 'screens2.attach.loading', {
+          name: attachment.name,
+        })}
       >
         {failed ? (
           <Text size={11} mono color={theme.colors.mut}>
@@ -182,9 +186,9 @@ export function AttachmentImage({
 }
 
 /** An SVG attachment's text, for `SvgXml` (null while loading; an error when it can't be shown). */
-async function readSvgText(a: Attachment, access: FileAccess): Promise<string> {
+async function readSvgText(a: Attachment, access: FileAccess, locale?: string | null): Promise<string> {
   if (a.size > SVG_PREVIEW_MAX_BYTES) throw new Error('too large');
-  const text = await new File(await sessionFile(a, access)).text();
+  const text = await new File(await sessionFile(a, access, false, undefined, locale)).text();
   if (text.length > SVG_PREVIEW_MAX_BYTES) throw new Error('too large');
   return svgForNative(text);
 }
@@ -195,9 +199,14 @@ const HTML_ATTACHMENT_MAX_BYTES = 2 * 1024 * 1024;
 const IMAGE_MAX_HEIGHT = 360;
 
 /** A text attachment's whole text, up to `maxBytes` (larger: an error; it stays a row). */
-async function readText(a: Attachment, access: FileAccess, maxBytes: number): Promise<string> {
+async function readText(
+  a: Attachment,
+  access: FileAccess,
+  maxBytes: number,
+  locale?: string | null,
+): Promise<string> {
   if (a.size > maxBytes) throw new Error('too large');
-  return new File(await sessionFile(a, access)).text();
+  return new File(await sessionFile(a, access, false, undefined, locale)).text();
 }
 
 /** An image this device draws: raster (AVIF where the platform supports it, AP-328). */
@@ -226,20 +235,27 @@ function TextPreviewAttachment({
   kind: 'html' | 'mermaid';
   files: MessageFileActions | null;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const [text, setText] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
     setText(null);
     setFailed(false);
-    readText(attachment, access, kind === 'html' ? HTML_ATTACHMENT_MAX_BYTES : MERMAID_PREVIEW_MAX * 4).then(
+    readText(
+      attachment,
+      access,
+      kind === 'html' ? HTML_ATTACHMENT_MAX_BYTES : MERMAID_PREVIEW_MAX * 4,
+      rawLocale,
+    ).then(
       (t) => live && setText(t),
       () => live && setFailed(true),
     );
     return () => {
       live = false;
     };
-  }, [attachment, access, kind]);
+  }, [attachment, access, kind, rawLocale]);
   const showable =
     text !== null &&
     (kind === 'html'
@@ -251,7 +267,7 @@ function TextPreviewAttachment({
       {kind === 'html' ? (
         <HtmlPreviewCard html={text} fallbackTitle={attachment.name} meta={attachment.name} />
       ) : (
-        <DiagramPreview source={text} title={attachment.name} meta="Diagram" />
+        <DiagramPreview source={text} title={attachment.name} meta={tMobile('screens2.attach.diagram')} />
       )}
       <FileRow attachment={attachment} access={access} files={files} />
     </View>
@@ -260,7 +276,7 @@ function TextPreviewAttachment({
 
 const svgTexts = new Map<string, Promise<string>>();
 
-function useSvgText(attachment: Attachment | null, access: FileAccess) {
+function useSvgText(attachment: Attachment | null, access: FileAccess, locale: string) {
   const [state, setState] = useState<{ xml: string | null; failed: boolean }>({ xml: null, failed: false });
   useEffect(() => {
     if (!attachment) return;
@@ -268,7 +284,7 @@ function useSvgText(attachment: Attachment | null, access: FileAccess) {
     const key = `${access.scope}|${attachment.url}`;
     let pending = svgTexts.get(key);
     if (!pending) {
-      pending = readSvgText(attachment, access);
+      pending = readSvgText(attachment, access, locale);
       svgTexts.set(key, pending);
       pending.catch(() => svgTexts.delete(key));
       for (const old of svgTexts.keys()) {
@@ -284,7 +300,7 @@ function useSvgText(attachment: Attachment | null, access: FileAccess) {
     return () => {
       live = false;
     };
-  }, [attachment, access]);
+  }, [attachment, access, locale]);
   return state;
 }
 
@@ -307,8 +323,10 @@ function SvgPicture({
   maxHeight?: number;
   onFail?: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const { xml, failed } = useSvgText(attachment, access);
+  const { xml, failed } = useSvgText(attachment, access, rawLocale);
   useEffect(() => {
     if (failed) onFail?.();
   }, [failed, onFail]);
@@ -317,7 +335,9 @@ function SvgPicture({
     return (
       <View
         style={[box, { alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.sf2 }]}
-        accessibilityLabel={failed ? `Couldn’t load ${attachment.name}` : `Loading ${attachment.name}`}
+        accessibilityLabel={tMobile(failed ? 'screens2.attach.couldntLoad' : 'screens2.attach.loading', {
+          name: attachment.name,
+        })}
       >
         {failed ? null : <ActivityIndicator color={theme.colors.mut} />}
       </View>
@@ -343,6 +363,7 @@ export function UploadChips({
   /** Whether a failed chip offers Retry (not for a file that can never go up as it is). */
   canRetry: (localId: string) => boolean;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const window = useWindowDimensions();
@@ -383,13 +404,13 @@ export function UploadChips({
                 color={failed ? theme.colors.bad : theme.colors.mut}
                 accessibilityLiveRegion={failed ? 'assertive' : 'none'}
               >
-                {uploadStatusText(item)}
+                {uploadStatusText(item, rawLocale)}
               </Text>
             </View>
             {failed && canRetry(item.localId) ? (
               <Touchable
                 onPress={() => onRetry(item.localId)}
-                accessibilityLabel={`Retry ${item.name}`}
+                accessibilityLabel={tMobile('screens2.attach.retry', { name: item.name })}
                 feedback="wash"
                 ringRadius={22}
                 style={{
@@ -408,7 +429,10 @@ export function UploadChips({
             ) : null}
             <Touchable
               onPress={() => onRemove(item.localId)}
-              accessibilityLabel={`${item.state === 'uploading' ? 'Cancel' : 'Remove'} ${item.name}`}
+              accessibilityLabel={tMobile(
+                item.state === 'uploading' ? 'screens2.attach.cancel' : 'screens2.attach.remove',
+                { name: item.name },
+              )}
               feedback="wash"
               ringRadius={22}
               style={{
@@ -424,7 +448,7 @@ export function UploadChips({
             {item.state === 'uploading' ? (
               <View
                 accessibilityRole="progressbar"
-                accessibilityLabel={`Uploading ${item.name}`}
+                accessibilityLabel={tMobile('screens2.attach.uploading', { name: item.name })}
                 accessibilityValue={{ min: 0, max: 100, now: Math.round(item.progress * 100) }}
                 style={{
                   position: 'absolute',
@@ -454,13 +478,17 @@ export function UploadChips({
 /* A message's files -------------------------------------------------------------------------------- */
 
 /** Streams a file through the session into its scoped cache file and opens the share sheet on it. */
-export async function shareAttachment(a: Attachment, access: FileAccess): Promise<void> {
-  const uri = await sessionFile(a, access);
+export async function shareAttachment(
+  a: Attachment,
+  access: FileAccess,
+  locale?: string | null,
+): Promise<void> {
+  const uri = await sessionFile(a, access, false, undefined, locale);
   await Sharing.shareAsync(uri, { mimeType: a.contentType, dialogTitle: a.name });
 }
 
 /** “Save to Files” / “In Files” for a file (AP-840): what to do on a tap, the button's name, its icon. */
-function saveControl(attachment: Attachment, files: MessageFileActions | null) {
+function saveControl(attachment: Attachment, files: MessageFileActions | null, locale?: string | null) {
   const action = files?.actionOf(attachment) ?? null;
   if (!files || !action) return null;
   const busy = files.busy.has(attachment.id);
@@ -468,7 +496,7 @@ function saveControl(attachment: Attachment, files: MessageFileActions | null) {
   return {
     saved,
     busy,
-    label: saved ? inFilesLabel(attachment.name) : saveToFilesLabel(attachment.name),
+    label: saved ? inFilesLabel(attachment.name, locale) : saveToFilesLabel(attachment.name, locale),
     onPress: () => {
       if (busy) return;
       if (saved) files.open();
@@ -490,9 +518,11 @@ function PictureActions({
   access: FileAccess;
   files: MessageFileActions | null;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [sharing, setSharing] = useState(false);
-  const control = saveControl(attachment, files);
+  const control = saveControl(attachment, files, rawLocale);
   return (
     <View style={{ position: 'absolute', top: 8, right: 8, flexDirection: 'row', gap: 12 }}>
       {control ? (
@@ -526,11 +556,11 @@ function PictureActions({
         onPress={() => {
           if (sharing) return;
           setSharing(true);
-          shareAttachment(attachment, access)
+          shareAttachment(attachment, access, rawLocale)
             .catch(() => {})
             .finally(() => setSharing(false));
         }}
-        accessibilityLabel={`Download ${attachment.name}`}
+        accessibilityLabel={tMobile('screens2.attach.download', { name: attachment.name })}
         accessibilityState={{ busy: sharing }}
         hitSlop={hitSlopFor(32)}
         feedback="fade"
@@ -570,15 +600,16 @@ function FileRow({
   access: FileAccess;
   files: MessageFileActions | null;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   const Icon = attachment.kind === 'file' ? FileIcon : FileText;
-  const control = saveControl(attachment, files);
+  const control = saveControl(attachment, files, rawLocale);
   const open = () => {
     if (state === 'busy') return;
     setState('busy');
-    shareAttachment(attachment, access).then(
+    shareAttachment(attachment, access, rawLocale).then(
       () => setState('idle'),
       () => setState('failed'),
     );
@@ -601,7 +632,7 @@ function FileRow({
         onPress={open}
         feedback="wash"
         ringRadius={14}
-        accessibilityLabel={`${attachment.name}, ${attachmentMeta(attachment)}`}
+        accessibilityLabel={`${attachment.name}, ${attachmentMeta(attachment, rawLocale)}`}
         accessibilityHint={tMobile('ui.downloads-the-file-and-opens-the-share-sheet')}
         style={{
           flex: 1,
@@ -620,7 +651,9 @@ function FileRow({
             {attachment.name}
           </Text>
           <Text size={11} mono color={state === 'failed' ? theme.colors.bad : theme.colors.mut}>
-            {state === 'failed' ? tMobile('ui.couldnt-open-it-tap-to-try-again') : attachmentMeta(attachment)}
+            {state === 'failed'
+              ? tMobile('ui.couldnt-open-it-tap-to-try-again')
+              : attachmentMeta(attachment, rawLocale)}
           </Text>
         </View>
       </Touchable>
@@ -642,7 +675,7 @@ function FileRow({
       ) : null}
       <Touchable
         onPress={open}
-        accessibilityLabel={`Download ${attachment.name}`}
+        accessibilityLabel={tMobile('screens2.attach.download', { name: attachment.name })}
         accessibilityState={{ busy: state === 'busy' }}
         feedback="wash"
         ringRadius={22}
@@ -673,6 +706,7 @@ const PAGES_FOOT_HEIGHT = 61;
  */
 function PageSetCover({ attachment, access }: { attachment: Attachment; access: FileAccess }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
   const [uri, setUri] = useState<string | null>(null);
   const [none, setNone] = useState(!attachment.thumbnailUrl);
   useEffect(() => {
@@ -680,14 +714,14 @@ function PageSetCover({ attachment, access }: { attachment: Attachment; access: 
     setNone(!attachment.thumbnailUrl);
     if (!attachment.thumbnailUrl) return;
     let live = true;
-    sessionFile(attachment, access, true, 'cover.png').then(
+    sessionFile(attachment, access, true, 'cover.png', rawLocale).then(
       (u) => live && setUri(u),
       () => live && setNone(true),
     );
     return () => {
       live = false;
     };
-  }, [attachment, access]);
+  }, [attachment, access, rawLocale]);
   if (uri)
     return (
       <Image
@@ -728,9 +762,11 @@ function PageSetTile({
   maxWidth: number;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = pagesCopy(rawLocale);
   const [open, setOpen] = useState(false);
   const title = pageSetTitle(attachment.name);
-  const meta = pageSetMeta(attachment);
+  const meta = pageSetMeta(attachment, rawLocale);
   const width = Math.min(maxWidth, PAGES_TILE_MAX_WIDTH);
   return (
     <View
@@ -747,7 +783,7 @@ function PageSetTile({
         <Touchable
           onPress={() => setOpen(true)}
           accessibilityLabel={`${title}, ${meta}`}
-          accessibilityHint={PAGES_COPY.openHint}
+          accessibilityHint={copy.openHint}
           feedback="fade"
           ringRadius={16}
           style={{ width: '100%', height: pagesCoverHeight(width - 2) }}
@@ -777,10 +813,10 @@ function PageSetTile({
           </Text>
         </View>
         <Button
-          label={PAGES_COPY.open}
+          label={copy.open}
           variant="secondary"
           onPress={() => setOpen(true)}
-          accessibilityLabel={`${PAGES_COPY.open} ${title}`}
+          accessibilityLabel={`${copy.open} ${title}`}
           style={{ paddingHorizontal: 18 }}
         />
       </View>
@@ -789,7 +825,7 @@ function PageSetTile({
           attachment={attachment}
           access={access}
           onClose={() => setOpen(false)}
-          onDownload={() => shareAttachment(attachment, access)}
+          onDownload={() => shareAttachment(attachment, access, rawLocale)}
         />
       ) : null}
     </View>
@@ -811,12 +847,13 @@ export function ImageViewer({
   onClose: () => void;
   files?: MessageFileActions | null;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const window = useWindowDimensions();
   const [sharing, setSharing] = useState(false);
   if (!attachment) return null;
-  const control = saveControl(attachment, files);
+  const control = saveControl(attachment, files, rawLocale);
   return (
     <FullScreenModal onClose={onClose}>
       {(insets) => {
@@ -879,11 +916,11 @@ export function ImageViewer({
               <Touchable
                 onPress={() => {
                   setSharing(true);
-                  shareAttachment(attachment, access)
+                  shareAttachment(attachment, access, rawLocale)
                     .catch(() => {})
                     .finally(() => setSharing(false));
                 }}
-                accessibilityLabel={`Share ${attachment.name}`}
+                accessibilityLabel={tMobile('screens2.attach.share', { name: attachment.name })}
                 feedback="wash"
                 ringRadius={22}
                 style={{
@@ -920,7 +957,7 @@ export function ImageViewer({
               )}
             </View>
             <Text size={11} mono color={theme.colors.mut} style={{ textAlign: 'center', paddingBottom: 12 }}>
-              {attachmentMeta(attachment)}
+              {attachmentMeta(attachment, rawLocale)}
             </Text>
           </>
         );
@@ -967,7 +1004,7 @@ export function MessageAttachmentsView({
         {attachments.map((a) => (
           <View
             key={a.id}
-            accessibilityLabel={`Loading ${a.name}`}
+            accessibilityLabel={tMobile('screens2.attach.loading', { name: a.name })}
             style={[placeholder(a), { backgroundColor: theme.colors.sf2 }]}
           />
         ))}
@@ -985,7 +1022,7 @@ export function MessageAttachmentsView({
           <View key={a.id}>
             <Touchable
               onPress={() => setOpen(a)}
-              accessibilityLabel={`Image ${a.name}`}
+              accessibilityLabel={tMobile('screens2.attach.image', { name: a.name })}
               accessibilityHint={tMobile('ui.opens-the-image')}
               feedback="fade"
               ringRadius={16}
@@ -1005,7 +1042,7 @@ export function MessageAttachmentsView({
           <View key={a.id}>
             <Touchable
               onPress={() => setOpen(a)}
-              accessibilityLabel={`Image ${a.name}`}
+              accessibilityLabel={tMobile('screens2.attach.image', { name: a.name })}
               accessibilityHint={tMobile('ui.opens-the-image')}
               feedback="fade"
               ringRadius={16}
@@ -1041,23 +1078,38 @@ export function MessageAttachmentsView({
 export type AttachChoice = 'camera' | 'photos' | 'files';
 
 /** What the paperclip offered (AP-714), now the first lines of the message box's “+”: their words, hints and icons. */
-export const ATTACH_CHOICES: readonly {
+export function attachChoices(locale?: string | null): readonly {
   kind: AttachChoice;
   label: string;
   hint: string;
   Icon: LucideIcon;
   symbol: string;
-}[] = [
-  { kind: 'camera', label: 'Take photo', hint: 'Opens the camera', Icon: Camera, symbol: 'camera' },
-  {
-    kind: 'photos',
-    label: 'Photo from gallery',
-    hint: 'Opens your photos',
-    Icon: ImageIcon,
-    symbol: 'photo.on.rectangle',
-  },
-  { kind: 'files', label: 'File', hint: 'Opens your files', Icon: FileIcon, symbol: 'doc' },
-];
+}[] {
+  const tr = mobileTranslator(locale);
+  return [
+    {
+      kind: 'camera',
+      label: tr.t('screens2.attach.takePhoto'),
+      hint: tr.t('screens2.attach.takePhotoHint'),
+      Icon: Camera,
+      symbol: 'camera',
+    },
+    {
+      kind: 'photos',
+      label: tr.t('screens2.attach.gallery'),
+      hint: tr.t('screens2.attach.galleryHint'),
+      Icon: ImageIcon,
+      symbol: 'photo.on.rectangle',
+    },
+    {
+      kind: 'files',
+      label: tr.t('screens2.attach.file'),
+      hint: tr.t('screens2.attach.fileHint'),
+      Icon: FileIcon,
+      symbol: 'doc',
+    },
+  ];
+}
 
 /** A line of the message box's “+”: a way to add a file, or the saved prompts. */
 export interface AddChoice {

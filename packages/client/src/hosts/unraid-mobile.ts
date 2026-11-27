@@ -7,7 +7,10 @@
  * Sizes are decimal (“16 TB”), as Unraid writes them. Pure: times and the time zone come in as arguments.
  */
 import type { HostGuest, HostUnraidDetail, HostUnraidDisk, HostUnraidParityRun } from '@whombat/core/domain';
-import { DASH, formatDuration, formatPct, formatRelativeDay, formatTemp, plural } from './format';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_UNRAID_WORDS } from '../i18n/messages/connectionsHosts/unraid';
+import { DASH, formatDuration, formatPct, formatRelativeDay, formatTemp } from './format';
 import type { HostTone } from './thresholds';
 import {
   arrayGroups,
@@ -15,9 +18,9 @@ import {
   fsWords,
   guestWebUi,
   hasAutostart,
-  NOTIFICATION_WORDS,
   notificationTitle,
   notificationTone,
+  notificationWords,
   parityRunWhen,
   parityRunWords,
   pluginRows,
@@ -25,11 +28,13 @@ import {
   poolWords,
   spinningDisks,
   UNRAID_POOL_FULL_PCT,
-  unraidDiskRow,
+  unraidDiskRowFor,
   unraidDiskStatus,
   unraidSize,
   unraidVersionView,
 } from './unraid';
+
+const phone = (locale?: string | null) => clientTree(locale, HOSTS_UNRAID_WORDS).phone;
 
 /* Disks ------------------------------------------------------------------------------------------------------------ */
 
@@ -53,16 +58,22 @@ export interface DiskRowView {
 
 /** A disk as one phone row (the web's Array table row, `unraidDiskRow`, folded into two lines). */
 export function diskRow(d: HostUnraidDisk): DiskRowView {
-  const r = unraidDiskRow(d);
+  return diskRowFor(d);
+}
+
+/** {@link diskRow} in a locale (English when none is given); `diskRow` stays one-argument for `map`. */
+export function diskRowFor(d: HostUnraidDisk, locale?: string | null): DiskRowView {
+  const w = phone(locale);
+  const r = unraidDiskRowFor(d, locale);
   const present = !!d.device && d.status !== 'empty';
-  const tempText = !present ? DASH : d.spunDown && d.rotational !== false ? 'Spun down' : r.tempText;
+  const tempText = !present ? DASH : d.spunDown && d.rotational !== false ? w.spunDown : r.tempText;
   const line = [r.model, r.device].filter(Boolean).join(' · ') || r.status.text;
   const meta = present
     ? [
         r.sizeText,
-        d.usedBytes != null && d.slot !== 'parity' ? `${r.usedText} used` : null,
+        d.usedBytes != null && d.slot !== 'parity' ? interpolate(w.used, { used: r.usedText }) : null,
         r.fsText !== DASH ? r.fsText : null,
-        d.errors ? plural(d.errors, 'error') : null,
+        d.errors ? w.errors(d.errors) : null,
       ]
         .filter(Boolean)
         .join(' · ')
@@ -93,40 +104,44 @@ export interface DiskSection {
 }
 
 /** The disks as Unraid's Main page groups them: Parity, Data, each pool, Flash (empty groups left out). */
-export function diskSections(u: HostUnraidDetail): DiskSection[] {
+export function diskSections(u: HostUnraidDetail, locale?: string | null): DiskSection[] {
+  const w = phone(locale);
+  const row = (d: HostUnraidDisk) => diskRowFor(d, locale);
   const { parity, data } = arrayGroups(u.array);
   const out: DiskSection[] = [];
-  if (parity.length) out.push({ id: 'parity', title: 'Parity', sub: null, rows: parity.map(diskRow) });
-  if (data.length) out.push({ id: 'data', title: 'Data', sub: null, rows: data.map(diskRow) });
+  if (parity.length) out.push({ id: 'parity', title: w.parity, sub: null, rows: parity.map(row) });
+  if (data.length) out.push({ id: 'data', title: w.data, sub: null, rows: data.map(row) });
   for (const p of u.pools)
     out.push({
       id: `pool:${p.name}`,
-      title: `Pool ${p.name}`,
-      sub: poolWords(p),
-      rows: p.disks.map(diskRow),
+      title: interpolate(w.pool, { name: p.name }),
+      sub: poolWords(p, locale),
+      rows: p.disks.map(row),
     });
-  if (u.flash) out.push({ id: 'flash', title: 'Flash', sub: null, rows: [diskRow(u.flash)] });
+  if (u.flash) out.push({ id: 'flash', title: w.flash, sub: null, rows: [row(u.flash)] });
   return out;
 }
 
 /** A disk's sheet: everything Unraid's Main row shows, in words. */
-export function diskFacts(d: HostUnraidDisk): { label: string; value: string }[] {
+export function diskFacts(d: HostUnraidDisk, locale?: string | null): { label: string; value: string }[] {
+  const w = phone(locale);
   const present = !!d.device && d.status !== 'empty';
-  const out: { label: string; value: string }[] = [{ label: 'State', value: unraidDiskStatus(d).text }];
-  if (d.device) out.push({ label: 'Device', value: d.device });
-  if (d.model) out.push({ label: 'Model', value: d.model });
-  if (d.serial) out.push({ label: 'Serial', value: d.serial });
-  if (present) out.push({ label: 'Size', value: unraidSize(d.sizeBytes) });
-  if (d.usedBytes != null) out.push({ label: 'Used', value: unraidSize(d.usedBytes) });
-  if (d.freeBytes != null) out.push({ label: 'Free', value: unraidSize(d.freeBytes) });
-  if (d.fsType) out.push({ label: 'File system', value: fsWords(d.fsType) });
+  const out: { label: string; value: string }[] = [
+    { label: w.state, value: unraidDiskStatus(d, locale).text },
+  ];
+  if (d.device) out.push({ label: w.device, value: d.device });
+  if (d.model) out.push({ label: w.model, value: d.model });
+  if (d.serial) out.push({ label: w.serial, value: d.serial });
+  if (present) out.push({ label: w.size, value: unraidSize(d.sizeBytes) });
+  if (d.usedBytes != null) out.push({ label: w.usedLabel, value: unraidSize(d.usedBytes) });
+  if (d.freeBytes != null) out.push({ label: w.free, value: unraidSize(d.freeBytes) });
+  if (d.fsType) out.push({ label: w.fileSystem, value: fsWords(d.fsType, locale) });
   if (present)
     out.push({
-      label: 'Temperature',
-      value:
-        d.spunDown && d.rotational !== false ? 'Spun down' : d.tempC != null ? formatTemp(d.tempC) : DASH,
+      label: w.temperature,
+      value: d.spunDown && d.rotational !== false ? w.spunDown : d.tempC != null ? formatTemp(d.tempC) : DASH,
     });
-  out.push({ label: 'Errors', value: d.errors ? String(d.errors) : 'None' });
+  out.push({ label: w.errorsLabel, value: d.errors ? String(d.errors) : w.none });
   return out;
 }
 
@@ -150,13 +165,18 @@ export interface UnraidPoolRow {
 }
 
 /** The pools with their use: warn from 90 % (IU-08), a problem from 97 %. */
-export function unraidPoolRows(u: Pick<HostUnraidDetail, 'pools'>): UnraidPoolRow[] {
+export function unraidPoolRows(u: Pick<HostUnraidDetail, 'pools'>, locale?: string | null): UnraidPoolRow[] {
+  const w = phone(locale);
   return u.pools.map((p) => {
     const pct = p.sizeBytes > 0 ? (p.usedBytes / p.sizeBytes) * 100 : null;
-    const line = poolWords(p);
-    const usedText = `${unraidSize(p.usedBytes)} of ${unraidSize(p.sizeBytes)} used`;
+    const line = poolWords(p, locale);
+    const usedText = interpolate(w.poolUsed, {
+      used: unraidSize(p.usedBytes),
+      size: unraidSize(p.sizeBytes),
+    });
     const tone = pct == null ? null : pct >= 97 ? 'bad' : pct >= UNRAID_POOL_FULL_PCT ? 'warn' : null;
-    return { name: p.name, line, usedText, pct, tone, label: `Pool ${p.name}, ${line}, ${usedText}` };
+    const title = interpolate(w.pool, { name: p.name });
+    return { name: p.name, line, usedText, pct, tone, label: `${title}, ${line}, ${usedText}` };
   });
 }
 
@@ -175,15 +195,17 @@ export function parityHistoryRows(
   runs: readonly HostUnraidParityRun[],
   now: number,
   timeZone?: string,
+  locale?: string | null,
 ): ParityRunRow[] {
+  const took = phone(locale).took;
   return [...runs]
     .sort((a, b) => b.at.localeCompare(a.at))
     .map((r) => {
-      const w = parityRunWords(r);
-      const title = parityRunWhen(r.at, now, timeZone);
+      const w = parityRunWords(r, locale);
+      const title = parityRunWhen(r.at, now, timeZone, locale);
       const line = [
         w.action,
-        r.durationS != null ? `took ${formatDuration(r.durationS)}` : null,
+        r.durationS != null ? interpolate(took, { duration: formatDuration(r.durationS, locale) }) : null,
         r.speedMbs != null ? `${Math.round(r.speedMbs)} MB/s` : null,
         w.result,
       ]
@@ -206,16 +228,19 @@ export interface PluginRow {
 }
 
 /** The installed plugins as phone rows (the web's order: with an update first; never Unraid's own). */
-export function pluginPhoneRows(u: Pick<HostUnraidDetail, 'plugins'>): PluginRow[] {
+export function pluginPhoneRows(u: Pick<HostUnraidDetail, 'plugins'>, locale?: string | null): PluginRow[] {
+  const w = phone(locale);
   return pluginRows(u).map((p) => {
-    const line = p.update ? `Version ${p.version} → ${p.update}` : `Version ${p.version}`;
+    const line = p.update
+      ? interpolate(w.versionUpdate, { version: p.version, update: p.update })
+      : interpolate(w.version, { version: p.version });
     return {
       file: p.file,
       name: p.name,
       line,
       author: p.author,
       update: p.update,
-      label: [p.name, line, p.update ? 'update ready' : null].filter(Boolean).join(', '),
+      label: [p.name, line, p.update ? w.updateReady : null].filter(Boolean).join(', '),
     };
   });
 }
@@ -231,27 +256,32 @@ export interface UpdateLine {
 export function unraidUpdates(
   u: Pick<HostUnraidDetail, 'version' | 'license' | 'osUpdate' | 'plugins'>,
   guests: readonly Pick<HostGuest, 'platform' | 'updateAvailable'>[],
+  locale?: string | null,
 ): UpdateLine[] {
+  const w = phone(locale);
   const plugins = pluginUpdates(u).length;
   const containers = guests.filter((g) => g.platform === 'docker' && g.updateAvailable).length;
-  const os = unraidVersionView(u);
+  const os = unraidVersionView(u, locale);
   return [
     {
       id: 'os',
       title: 'Unraid',
-      value: os.update && u.osUpdate ? `${u.version} → ${u.osUpdate.version}` : `${u.version}, up to date`,
+      value:
+        os.update && u.osUpdate
+          ? `${u.version} → ${u.osUpdate.version}`
+          : interpolate(w.upToDate, { version: u.version }),
       tone: os.update ? 'warn' : 'ok',
     },
     {
       id: 'plugins',
-      title: 'Plugins',
-      value: plugins ? `${plural(plugins, 'update')} ready` : 'All up to date',
+      title: w.plugins,
+      value: plugins ? w.updatesReady(plugins) : w.allUpToDate,
       tone: plugins ? 'warn' : 'ok',
     },
     {
       id: 'containers',
-      title: 'Containers',
-      value: containers ? `${plural(containers, 'update')} ready` : 'All up to date',
+      title: w.containers,
+      value: containers ? w.updatesReady(containers) : w.allUpToDate,
       tone: containers ? 'warn' : 'ok',
     },
   ];
@@ -274,39 +304,44 @@ export function notificationRows(
   u: Pick<HostUnraidDetail, 'notifications'>,
   now: number,
   timeZone?: string,
+  locale?: string | null,
 ): NotificationRow[] {
+  const importance = notificationWords(locale);
   return [...u.notifications]
     .sort((a, b) => b.at.localeCompare(a.at))
     .map((n) => {
       const t = notificationTone(n);
       const title = notificationTitle(n);
-      const meta = [formatRelativeDay(Date.parse(n.at), now, timeZone), n.event].filter(Boolean).join(' · ');
+      const meta = [formatRelativeDay(Date.parse(n.at), now, timeZone, locale), n.event]
+        .filter(Boolean)
+        .join(' · ');
       return {
         id: n.id,
         tone: t === 'bad' || t === 'warn' ? t : null,
         title,
         line: n.description,
         meta,
-        label: `${NOTIFICATION_WORDS[n.importance]}: ${title}. ${n.description} ${meta}`,
+        label: `${importance[n.importance]}: ${title}. ${n.description} ${meta}`,
       };
     });
 }
 
 /* The server's facts ----------------------------------------------------------------------------------------------- */
 
-export function unraidFacts(u: HostUnraidDetail): { label: string; value: string }[] {
+export function unraidFacts(u: HostUnraidDetail, locale?: string | null): { label: string; value: string }[] {
+  const w = phone(locale);
   const out: { label: string; value: string }[] = [{ label: 'Unraid', value: u.version }];
-  if (u.license) out.push({ label: 'Licence', value: u.license });
-  out.push({ label: 'Array', value: u.array.startOnBoot ? 'Starts with the server' : 'Started by hand' });
+  if (u.license) out.push({ label: w.licence, value: u.license });
+  out.push({ label: w.array, value: u.array.startOnBoot ? w.startsWithServer : w.byHand });
   out.push({
     label: 'Docker',
     value: !u.docker.enabled
-      ? 'Off'
+      ? w.off
       : u.docker.imageUsedPct != null
-        ? `On · image ${formatPct(u.docker.imageUsedPct)} full`
-        : 'On',
+        ? interpolate(w.dockerImage, { pct: formatPct(u.docker.imageUsedPct) })
+        : w.on,
   });
-  out.push({ label: 'VMs', value: u.vms.enabled ? 'On' : 'Off' });
+  out.push({ label: w.vms, value: u.vms.enabled ? w.on : w.off });
   return out;
 }
 
@@ -328,14 +363,15 @@ export interface ContainerView {
  * What a Docker guest of an Unraid server and a libvirt guest anywhere get on their screen (the web's rules:
  * `canUpdateContainer`, `hasAutostart`, `guestWebUi`): Update, the autostart switch, the web page link.
  */
-export function containerView(g: HostGuest, onUnraid: boolean): ContainerView | null {
+export function containerView(g: HostGuest, onUnraid: boolean, locale?: string | null): ContainerView | null {
+  const w = phone(locale);
   const docker = g.platform === 'docker';
   if (!(docker && onUnraid) && g.platform !== 'libvirt') return null;
   const update = docker
     ? g.updateAvailable
-      ? { text: 'An update is ready', tone: 'warn' as const }
+      ? { text: w.updateIsReady, tone: 'warn' as const }
       : g.updateAvailable === false
-        ? { text: 'Up to date', tone: 'ok' as const }
+        ? { text: w.upToDateShort, tone: 'ok' as const }
         : null
     : null;
   return {
@@ -343,7 +379,7 @@ export function containerView(g: HostGuest, onUnraid: boolean): ContainerView | 
     updateText: update?.text ?? null,
     updateTone: update?.tone ?? 'mut',
     autostart: hasAutostart(g, onUnraid) ? !!g.autostart : null,
-    autostartLabel: onUnraid ? 'Start it when the array starts' : 'Start it when the server starts',
+    autostartLabel: onUnraid ? w.withArray : w.withServer,
     webUi: docker ? guestWebUi(g) : null,
   };
 }

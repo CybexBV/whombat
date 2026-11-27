@@ -3,8 +3,9 @@
  * known.
  */
 
+import { useI18n } from '../i18n';
 import type { AgentPrincipal } from './people';
-import { SKILLS_PHONE_TEXT } from './skillLibrary';
+import { skillsPhoneText } from './skillLibrary';
 import { useTheAgentHere } from './useAgent';
 
 /** The agent whose library the phone shows, or null where it shows none. */
@@ -14,5 +15,6 @@ export function useSkillLibraryAgent(): AgentPrincipal | null {
 
 /** What the Skills screen says where it shows no library (AP-4150). */
 export function useSkillsAbsentText(): string {
-  return SKILLS_PHONE_TEXT.onWeb;
+  const { rawLocale } = useI18n();
+  return skillsPhoneText(rawLocale).onWeb;
 }

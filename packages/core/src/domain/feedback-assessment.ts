@@ -4,14 +4,15 @@
  * that shows them. Kept apart from `feedback.ts` so `cards.ts` can include the card without importing messages.
  */
 import { z } from 'zod';
+import { coreTranslator, coreWords } from '../i18n/catalog.js';
 import { FeedbackReportId, PrincipalId } from '../ids.js';
 import { Timestamp } from './common.js';
 import {
-  FEEDBACK_OUTCOME_LABELS,
   FeedbackOutcome,
   FeedbackReference,
   FeedbackReportStatus,
   FeedbackReportType,
+  feedbackOutcomeLabels,
 } from './feedback-card.js';
 
 // ---------------------------------------------------------------------------------------------------------
@@ -148,11 +149,14 @@ export const FEEDBACK_REPLY_MAX = 700;
 export const FeedbackBugVerdict = z.enum(['bug', 'not_a_bug', 'unsure']);
 export type FeedbackBugVerdict = z.infer<typeof FeedbackBugVerdict>;
 
-export const FEEDBACK_BUG_VERDICT_LABELS: Record<FeedbackBugVerdict, string> = {
-  bug: 'Bug',
-  not_a_bug: 'Not a bug',
-  unsure: 'Unsure',
-};
+/** The bug verdict, in a locale. */
+export function feedbackBugVerdictLabels(
+  locale?: string | null,
+): Readonly<Record<FeedbackBugVerdict, string>> {
+  return coreWords(locale, 'assessment.verdict', FeedbackBugVerdict.options);
+}
+
+export const FEEDBACK_BUG_VERDICT_LABELS: Record<FeedbackBugVerdict, string> = feedbackBugVerdictLabels('en');
 
 /**
  * What an option of the decision does when a person picks it. The assessor writes the words; the action is always one
@@ -164,12 +168,15 @@ export const FeedbackDecisionAction = z.enum(['hand_off', 'resolve', 'close', 'k
 export type FeedbackDecisionAction = z.infer<typeof FeedbackDecisionAction>;
 
 /** What each action does, in Whombat's words (under the chosen option; the labels of a redacted decision). */
-export const FEEDBACK_DECISION_ACTION_LABELS: Record<FeedbackDecisionAction, string> = {
-  hand_off: 'Build the fix',
-  resolve: 'Mark resolved',
-  close: 'Close',
-  keep_open: 'Keep open',
-};
+/** What each action does, in a locale. The English stands in a stored conclusion once its words are removed. */
+export function feedbackDecisionActionLabels(
+  locale?: string | null,
+): Readonly<Record<FeedbackDecisionAction, string>> {
+  return coreWords(locale, 'assessment.decision', FeedbackDecisionAction.options);
+}
+
+export const FEEDBACK_DECISION_ACTION_LABELS: Record<FeedbackDecisionAction, string> =
+  feedbackDecisionActionLabels('en');
 
 /** The report status each action but `hand_off` sets (a handoff leaves the status to the approval). */
 export const FEEDBACK_DECISION_STATUS: Record<
@@ -333,25 +340,39 @@ export type AssessmentCard = z.infer<typeof AssessmentCard>;
 /** Storage form: by reference, resolved on read. */
 export const StoredAssessmentCard = z.object({ kind: z.literal('assessment'), reportId: FeedbackReportId });
 
-export const FEEDBACK_REPRODUCTION_LABELS: Record<FeedbackReproduction, string> = {
-  not_attempted: 'Not attempted',
-  attempted_not_reproduced: 'Tried, not reproduced',
-  reproduced: 'Reproduced',
-  unknown: 'Unknown',
-};
+/** How far the assessor got reproducing it, in a locale. */
+export function feedbackReproductionLabels(
+  locale?: string | null,
+): Readonly<Record<FeedbackReproduction, string>> {
+  return coreWords(locale, 'assessment.reproduction', FeedbackReproduction.options);
+}
+
+export const FEEDBACK_REPRODUCTION_LABELS: Record<FeedbackReproduction, string> =
+  feedbackReproductionLabels('en');
+
+/** A formatter passed straight to `Array.map` receives an index as its locale; anything but a tag means English. */
+const tagOf = (locale: unknown): string | null => (typeof locale === 'string' ? locale : null);
 
 /** Card header: `ASSESSMENT · FB-7K3Q-9M2X`. */
-export function assessmentCardLabel(card: Pick<AssessmentCard, 'reference'>): string {
-  return `ASSESSMENT · ${card.reference}`;
+export function assessmentCardLabel(card: Pick<AssessmentCard, 'reference'>, locale?: string | null): string {
+  return coreTranslator(tagOf(locale)).t('assessment.cardLabel', { reference: card.reference });
 }
 
 /** The folded line: `Duplicate of FB-2P7K-8T73 · high confidence · severity none`. */
 export function assessmentHeadline(
   a: Pick<FeedbackAssessment, 'outcome' | 'duplicateOf' | 'confidence' | 'severity'>,
+  locale?: string | null,
 ): string {
-  const outcome = `${FEEDBACK_OUTCOME_LABELS[a.outcome]}${a.duplicateOf ? ` of ${a.duplicateOf}` : ''}`;
-  const severity = a.severity.level === 'unknown' ? '' : ` · severity ${a.severity.level}`;
-  return `${outcome} · ${a.confidence} confidence${severity}`;
+  const tr = coreTranslator(tagOf(locale));
+  const label = feedbackOutcomeLabels(tagOf(locale))[a.outcome];
+  const outcome = a.duplicateOf
+    ? tr.t('assessment.duplicateOf', { outcome: label, reference: a.duplicateOf })
+    : label;
+  const severity =
+    a.severity.level === 'unknown'
+      ? ''
+      : ` · ${tr.t('assessment.severityLine', { level: tr.t(`assessment.severity.${a.severity.level}`) })}`;
+  return `${outcome} · ${tr.t(`assessment.confidence.${a.confidence}`)}${severity}`;
 }
 
 /** Agent text without a lead-in that repeats the label it goes under (“Uncertain: Unverified: …”). */
@@ -370,42 +391,49 @@ export interface AssessmentDetailRow {
  * shared by web and mobile): the summary, a feature request's goal, today, workarounds, scope and trade-offs, the next
  * step, reproduction, severity, what is uncertain or missing, and the code read. The evidence is its own list.
  */
-export function assessmentDetailRows(a: FeedbackAssessment): AssessmentDetailRow[] {
-  const rows: AssessmentDetailRow[] = [{ label: 'Summary', text: a.summary }];
+export function assessmentDetailRows(a: FeedbackAssessment, locale?: string | null): AssessmentDetailRow[] {
+  const tr = coreTranslator(tagOf(locale));
+  const rows: AssessmentDetailRow[] = [{ label: tr.t('assessment.row.summary'), text: a.summary }];
   if (a.feature) {
     const f = a.feature;
-    for (const [label, text] of [
-      ['Goal', f.goal],
-      ['Today', f.existingBehavior],
-      ['Workarounds', f.workarounds],
-      ['Scope', f.scope],
-      ['Trade-offs', f.tradeoffs],
+    for (const [key, text] of [
+      ['goal', f.goal],
+      ['today', f.existingBehavior],
+      ['workarounds', f.workarounds],
+      ['scope', f.scope],
+      ['tradeoffs', f.tradeoffs],
     ] as const)
-      if (text) rows.push({ label, text });
+      if (text) rows.push({ label: tr.t(`assessment.row.${key}`), text });
   }
-  if (a.nextAction) rows.push({ label: 'Next', text: withoutLead(a.nextAction, ['next', 'next step']) });
+  // The leads matched below are the assessor's own words, which stay as it wrote them.
+  if (a.nextAction)
+    rows.push({ label: tr.t('assessment.row.next'), text: withoutLead(a.nextAction, ['next', 'next step']) });
   const notes = a.reproduction.notes ? ` · ${a.reproduction.notes}` : '';
   rows.push({
-    label: 'Reproduction',
-    text: `${FEEDBACK_REPRODUCTION_LABELS[a.reproduction.status]}${notes}`,
+    label: tr.t('assessment.row.reproduction'),
+    text: `${tr.t(`assessment.reproduction.${a.reproduction.status}`)}${notes}`,
   });
   if (a.severity.level !== 'unknown' || a.severity.rationale) {
     const why = a.severity.rationale ? ` · ${withoutLead(a.severity.rationale, ['severity'])}` : '';
-    rows.push({ label: 'Severity', text: `${a.severity.level}${why}` });
+    rows.push({
+      label: tr.t('assessment.row.severity'),
+      text: `${tr.t(`assessment.severity.${a.severity.level}`)}${why}`,
+    });
   }
   if (a.uncertainty)
     rows.push({
-      label: 'Uncertain',
+      label: tr.t('assessment.row.uncertain'),
       text: withoutLead(a.uncertainty, ['uncertain', 'uncertainty', 'unverified']),
     });
-  if (a.missingInformation.length) rows.push({ label: 'Missing', text: a.missingInformation.join('; ') });
+  if (a.missingInformation.length)
+    rows.push({ label: tr.t('assessment.row.missing'), text: a.missingInformation.join('; ') });
   const { inspected, reported, mismatch } = a.revision;
   if (inspected || reported || mismatch)
     rows.push({
-      label: 'Code',
+      label: tr.t('assessment.row.code'),
       text: [
-        inspected ? `read ${inspected}` : 'not read',
-        reported ? `reported version ${reported}` : null,
+        inspected ? tr.t('assessment.code.read', { revision: inspected }) : tr.t('assessment.code.notRead'),
+        reported ? tr.t('assessment.code.reported', { version: reported }) : null,
         mismatch,
       ]
         .filter(Boolean)
@@ -415,6 +443,9 @@ export function assessmentDetailRows(a: FeedbackAssessment): AssessmentDetailRow
 }
 
 /** One evidence line: `Observed · src/app.ts:12: note` / `Hypothesis · …`. */
-export function evidenceLine(e: FeedbackEvidence): string {
-  return `${e.hypothesis ? 'Hypothesis' : 'Observed'} · ${e.ref}${e.note ? `: ${e.note}` : ''}`;
+export function evidenceLine(e: FeedbackEvidence, locale?: string | null): string {
+  const kind = coreTranslator(tagOf(locale)).t(
+    e.hypothesis ? 'assessment.evidence.hypothesis' : 'assessment.evidence.observed',
+  );
+  return `${kind} · ${e.ref}${e.note ? `: ${e.note}` : ''}`;
 }

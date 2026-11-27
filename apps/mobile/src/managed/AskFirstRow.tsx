@@ -4,11 +4,11 @@
  * box's next status agrees.
  */
 
-import { askFirstView, UPDATE_TEXT } from '@whombat/client/managed';
+import { askFirstView, updateText } from '@whombat/client/managed';
 import { type ApplianceStatus, OperationError, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { Alert, Switch, View } from 'react-native';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -16,10 +16,12 @@ import { switchColors } from '../ui/switchColors';
 import { useManagedOrThrow } from './context';
 
 export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; onChanged: () => void }) {
+  const { rawLocale } = useI18n();
+  const updateTextHere = updateText(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { session } = useManagedOrThrow();
-  const view = askFirstView(status);
+  const view = askFirstView(status, rawLocale);
   const [wanted, setWanted] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const shown = view?.on;
@@ -28,7 +30,7 @@ export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; on
   }, [shown, wanted]);
   if (!view) return null;
   const on = wanted ?? view.on;
-  const meta = on ? UPDATE_TEXT.askOn : UPDATE_TEXT.askOff;
+  const meta = on ? updateTextHere.askOn : updateTextHere.askOff;
   const save = (next: boolean) => {
     setBusy(true);
     setWanted(next);
@@ -37,15 +39,15 @@ export function AskFirstRow({ status, onChanged }: { status: ApplianceStatus; on
       .then(
         (r) => {
           setWanted(r.askFirst);
-          if (r.askFirst === next) showNotice(UPDATE_TEXT.askSwitched(r.askFirst));
-          else Alert.alert(tMobile('managed.that-didnt-go-through'), UPDATE_TEXT.failed);
+          if (r.askFirst === next) showNotice(updateTextHere.askSwitched(r.askFirst));
+          else Alert.alert(tMobile('managed.that-didnt-go-through'), updateTextHere.failed);
           onChanged();
         },
         (e) => {
           setWanted(null);
           Alert.alert(
             tMobile('managed.that-didnt-go-through'),
-            e instanceof OperationError ? e.message : UPDATE_TEXT.failed,
+            e instanceof OperationError ? e.message : updateTextHere.failed,
           );
         },
       )

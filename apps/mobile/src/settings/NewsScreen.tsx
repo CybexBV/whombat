@@ -36,13 +36,13 @@ import {
 } from '@whombat/client/react';
 import {
   NEWS_SOURCES_MAX,
-  NEWS_WORDS,
   type NewsBrowseSite,
   type NewsSourcesView,
   newsOpmlUrls,
-  PLACE_SETTING_WORDS,
+  newsWords,
   type Place,
   placeLabel,
+  placeSettingWords,
 } from '@whombat/core';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -50,6 +50,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { useI18n } from '../i18n';
+import { mobileTranslator } from '../i18n/translate';
 import { Card, Row } from '../managed/ui';
 import { errorText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -76,9 +77,6 @@ import {
 } from './news';
 import { SettingsPage } from './SettingsPages';
 
-const P = PLACE_SETTING_WORDS;
-const N = NEWS_WORDS;
-const CANCEL = 'Cancel';
 /** The biggest list file read: an OPML of a few hundred feeds is far smaller. */
 const IMPORT_MAX_BYTES = 1_000_000;
 
@@ -86,6 +84,8 @@ const fill = (text: string, values: Record<string, string>) =>
   text.replace(/\{(\w+)\}/g, (all, key: string) => values[key] ?? all);
 
 export function SettingsNewsScreen() {
+  const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
   const theme = useTheme();
   const protocol = useSessionProtocol();
   const { slug, bootstrap } = useBurrow();
@@ -109,6 +109,7 @@ export function SettingsNewsScreen() {
 
 function PlaceCard({ slug, place }: { slug: string; place: Place | null }) {
   const { rawLocale } = useI18n();
+  const P = placeSettingWords(rawLocale);
 
   const [open, setOpen] = useState(false);
   return (
@@ -119,9 +120,13 @@ function PlaceCard({ slug, place }: { slug: string; place: Place | null }) {
         body={P.about}
         action={
           <Button
-            label={open ? CANCEL : P.change}
+            label={open ? mobileTranslator(rawLocale).t('settings2.cancel') : P.change}
             variant="secondary"
-            accessibilityLabel={open ? CANCEL : `${P.change} ${P.title.toLowerCase()}`}
+            accessibilityLabel={
+              open
+                ? mobileTranslator(rawLocale).t('settings2.cancel')
+                : `${P.change} ${P.title.toLowerCase()}`
+            }
             onPress={() => setOpen((was) => !was)}
           />
         }
@@ -133,10 +138,11 @@ function PlaceCard({ slug, place }: { slug: string; place: Place | null }) {
 
 function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | null; onDone: () => void }) {
   const { rawLocale } = useI18n();
+  const P = placeSettingWords(rawLocale);
 
   const theme = useTheme();
-  const find = useFindPlace(slug);
-  const set = useSetPlace(slug);
+  const find = useFindPlace(slug, rawLocale);
+  const set = useSetPlace(slug, rawLocale);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<Place[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -165,7 +171,7 @@ function PlaceChange({ slug, place, onDone }: { slug: string; place: Place | nul
         showNotice(placeSavedText(burrow.place, rawLocale));
         onDone();
       },
-      onError: (e) => setProblem(errorText(e)),
+      onError: (e) => setProblem(errorText(e, rawLocale)),
     });
   };
   const busy = find.isPending || set.isPending;
@@ -241,8 +247,9 @@ type FindPart = 'suggested' | 'own' | 'import';
 
 function NewsParts({ slug, view, more }: { slug: string; view: NewsSourcesView; more: boolean }) {
   const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
 
-  const set = useSetNewsSources(slug);
+  const set = useSetNewsSources(slug, rawLocale);
   const [problem, setProblem] = useState<string | null>(null);
   const max = newsMax(more);
   const room = view.chosen.length < max;
@@ -252,7 +259,7 @@ function NewsParts({ slug, view, more }: { slug: string; view: NewsSourcesView; 
       onSuccess: () => {
         if (done) showNotice(done);
       },
-      onError: (e) => setProblem(fieldProblem(e, 'ids') ?? errorText(e)),
+      onError: (e) => setProblem(fieldProblem(e, 'ids') ?? errorText(e, rawLocale)),
     });
   };
   const turnOn = (site: { id: string; name: string }) =>
@@ -269,7 +276,7 @@ function NewsParts({ slug, view, more }: { slug: string; view: NewsSourcesView; 
         view={view}
         max={max}
         busy={set.isPending}
-        problem={problem ?? (room ? null : newsFullTextFor(max))}
+        problem={problem ?? (room ? null : newsFullTextFor(max, rawLocale))}
         onOff={(id) => change(newsIdsWithout(view, id))}
         onMove={(id, by) => change(newsIdsMoved(view.chosen, id, by))}
       />
@@ -340,10 +347,12 @@ function YourSources({
   onOff: (id: string) => void;
   onMove: (id: string, by: number) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
   const theme = useTheme();
   const [ordering, setOrdering] = useState(false);
   const chosen = view.chosen;
-  const count = newsCountText(chosen.length, max);
+  const count = newsCountText(chosen.length, max, rawLocale);
   return (
     <View>
       <LabelRow label={N.chosen.toUpperCase()} end={count} />
@@ -361,7 +370,7 @@ function YourSources({
               key={s.id}
               mark={s}
               name={s.name}
-              line={chosenSourceLine(s, view.place)}
+              line={chosenSourceLine(s, view.place, rawLocale)}
               problem={s.problem ?? null}
               end={
                 ordering ? (
@@ -531,6 +540,8 @@ function AddOrOn({
   disabled: boolean;
   onAdd: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
   const theme = useTheme();
   if (on)
     return (
@@ -571,6 +582,7 @@ function BrowseCard({
   onAdd: (site: NewsBrowseSite) => void;
 }) {
   const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
 
   const theme = useTheme();
   const [country, setCountry] = useState<string | null>(null);
@@ -591,7 +603,7 @@ function BrowseCard({
         .sort((a, b) => a.name.localeCompare(b.name)),
     [data, rawLocale],
   );
-  if (!data) return browse.error ? <FormMessage text={errorText(browse.error)} /> : null;
+  if (!data) return browse.error ? <FormMessage text={errorText(browse.error, rawLocale)} /> : null;
   const shownName = data.country ? countryName(data.country, undefined, rawLocale) : '';
   return (
     <Card>
@@ -639,7 +651,12 @@ function BrowseCard({
           }}
         >
           {chips.map((c) => (
-            <Chip key={c} label={newsChipLabel(c)} active={c === shownChip} onPress={() => setChip(c)} />
+            <Chip
+              key={c}
+              label={newsChipLabel(c, rawLocale)}
+              active={c === shownChip}
+              onPress={() => setChip(c)}
+            />
           ))}
         </View>
       ) : null}
@@ -649,7 +666,7 @@ function BrowseCard({
           first={i === 0 && countries.length === 0 && chips.length <= 1}
           mark={s}
           name={s.name}
-          line={browseSiteLine(s)}
+          line={browseSiteLine(s, rawLocale)}
           end={<AddOrOn name={s.name} on={s.on} disabled={busy || !room} onAdd={() => onAdd(s)} />}
         />
       ))}
@@ -682,6 +699,8 @@ function CountrySheet({
   onClose: () => void;
   onPick: (code: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
   const theme = useTheme();
   return (
     <Sheet visible={visible} onClose={onClose} label={N.country} title={N.country.toUpperCase()}>
@@ -757,8 +776,9 @@ function SuggestedCard({
 
 function AddOwnCard({ slug, full, max }: { slug: string; full: boolean; max: number }) {
   const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
 
-  const add = useAddNewsSite(slug);
+  const add = useAddNewsSite(slug, rawLocale);
   const [url, setUrl] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
   const submit = () => {
@@ -782,7 +802,7 @@ function AddOwnCard({ slug, full, max }: { slug: string; full: boolean; max: num
             setUrl(v);
             setFieldError(null);
           }}
-          error={fieldError ?? (full ? newsFullTextFor(max) : null)}
+          error={fieldError ?? (full ? newsFullTextFor(max, rawLocale) : null)}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
@@ -804,8 +824,10 @@ function AddOwnCard({ slug, full, max }: { slug: string; full: boolean; max: num
 
 /** Another reader's list: an OPML file picked on the phone, its feeds sent to the Whombat to check and add. */
 function ImportCard({ slug, full, max }: { slug: string; full: boolean; max: number }) {
+  const { rawLocale } = useI18n();
+  const N = newsWords(rawLocale);
   const theme = useTheme();
-  const importSites = useImportNewsSites(slug);
+  const importSites = useImportNewsSites(slug, rawLocale);
   const [problem, setProblem] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
   const choose = async () => {
@@ -835,8 +857,8 @@ function ImportCard({ slug, full, max }: { slug: string; full: boolean; max: num
     }
     if (urls.length === 0) return setProblem(N.importNone);
     importSites.mutate(urls.slice(0, NEWS_SOURCES_MAX), {
-      onSuccess: (result) => showNotice(newsImportText(result)),
-      onError: (e) => setProblem(fieldProblem(e, 'urls') ?? errorText(e)),
+      onSuccess: (result) => showNotice(newsImportText(result, rawLocale)),
+      onError: (e) => setProblem(fieldProblem(e, 'urls') ?? errorText(e, rawLocale)),
     });
   };
   return (
@@ -845,7 +867,7 @@ function ImportCard({ slug, full, max }: { slug: string; full: boolean; max: num
         <Text size={14} lh={1.45} color={theme.colors.ink2}>
           {N.importLine}
         </Text>
-        <FormMessage text={problem ?? (full ? newsFullTextFor(max) : null)} />
+        <FormMessage text={problem ?? (full ? newsFullTextFor(max, rawLocale) : null)} />
         <Button
           label={N.importButton}
           variant="secondary"

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { tCore } from '../i18n/catalog.js';
 import { AttachmentId, ConversationId, MessageId, PrincipalId, VaultEntryId } from '../ids.js';
 import { VAULT_SSH_SERVER_NAME_MAX, VaultEntryKind, VaultEntryName } from '../vault/schemas.js';
 import { MessageCard } from './cards.js';
@@ -49,8 +50,12 @@ export function messageTextFits(text: string): boolean {
   return text.length <= MESSAGE_MAX_LENGTH && messageTextJsonBytes(text) <= MESSAGE_MAX_JSON_BYTES;
 }
 
-/** The message people see when their text doesn't fit ({@link messageTextFits}). */
-export const MESSAGE_TOO_LONG = 'That message is too long.';
+/** The message people see when their text doesn't fit ({@link messageTextFits}), in a locale. */
+export function messageTooLong(locale?: string | null): string {
+  return tCore(locale, 'message.tooLong');
+}
+
+export const MESSAGE_TOO_LONG = messageTooLong('en');
 
 /**
  * A message's text as a command takes it (trimmed; may be empty where attachments stand in for it): within both
@@ -330,11 +335,19 @@ export const Message = z.object({
 });
 export type Message = z.infer<typeof Message>;
 
-/** What a deleted thread root shows instead of its text (CT-173). */
-export const MESSAGE_DELETED_TEXT = 'This message was deleted.';
+/** What a deleted thread root shows instead of its text, in a locale. */
+export function messageDeletedText(locale?: string | null): string {
+  return tCore(locale, 'message.deleted');
+}
 
-/** Beside the time of an edited message. */
-export const MESSAGE_EDITED_LABEL = '(edited)';
+export const MESSAGE_DELETED_TEXT = messageDeletedText('en');
+
+/** Beside the time of an edited message, in a locale. */
+export function messageEditedLabel(locale?: string | null): string {
+  return tCore(locale, 'message.edited');
+}
+
+export const MESSAGE_EDITED_LABEL = messageEditedLabel('en');
 
 /** Most pinned messages `conversations.pins` lists per conversation, newest pin first (CT-174). */
 export const PINS_MAX = 50;

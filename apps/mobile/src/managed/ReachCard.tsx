@@ -9,12 +9,12 @@
 
 import {
   addressRowView,
-  CHANNEL_TEXT,
   channelErrorText,
+  channelText,
   channelView,
   linkRowView,
-  REACH_CHOICE_TEXT,
-  REACH_TEXT,
+  reachChoiceText,
+  reachText,
   readUpdatesChannel,
   tailscaleRowView,
   type UpdatesChannelOutput,
@@ -32,9 +32,6 @@ import { Segmented } from '../ui/Segmented';
 import { Touchable } from '../ui/Touchable';
 import { Card, Note, Row } from './ui';
 import { OFFER_LINK, type PhoneReach, useTailscaleTurnOn } from './useReach';
-
-const T = REACH_TEXT;
-const C = REACH_CHOICE_TEXT;
 
 /** “What you get” or “What to know” under a way to reach the Whombat: its points, folded. */
 function ReachMore({ label, points }: { label: string; points: readonly string[] }) {
@@ -85,6 +82,9 @@ export function ReachCard({
   /** Lets About scroll to REACH (a connection that needs a secure address opens it there). */
   onLayout?: (e: LayoutChangeEvent) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = reachText(rawLocale);
+  const C = reachChoiceText(rawLocale);
   const { tClient } = useI18n();
   const theme = useTheme();
   const tailscaleOn = useTailscaleTurnOn(session);
@@ -105,9 +105,9 @@ export function ReachCard({
         <Card label={T.section}>{own}</Card>
       </View>
     ) : null;
-  const link = r.link ? linkRowView(r.link, { offerLink: OFFER_LINK, now }) : null;
-  const address = r.ownAddress ? null : addressRowView(r, { offerLink: OFFER_LINK });
-  const tailscale = tailscaleRowView(tailscaleOn.state ?? r.tailscale);
+  const link = r.link ? linkRowView(r.link, { offerLink: OFFER_LINK, now, locale: rawLocale }) : null;
+  const address = r.ownAddress ? null : addressRowView(r, { offerLink: OFFER_LINK, locale: rawLocale });
+  const tailscale = tailscaleRowView(tailscaleOn.state ?? r.tailscale, rawLocale);
   const confirmOff = () =>
     Alert.alert(T.link.offConfirm, T.link.offConfirmMeta, [
       { text: T.link.cancel, style: 'cancel' },
@@ -203,6 +203,8 @@ export function ReachCard({
 
 /** “Updates from”: Production or Beta, with what Beta means; nothing where the box can't choose. */
 export function ChannelRow({ session }: { session: ApplianceSession }) {
+  const { rawLocale } = useI18n();
+  const channelTextHere = channelText(rawLocale);
   const [channel, setChannel] = useState<UpdatesChannelOutput | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -216,7 +218,7 @@ export function ChannelRow({ session }: { session: ApplianceSession }) {
     };
   }, [session]);
   if (!channel) return null;
-  const v = channelView(channel);
+  const v = channelView(channel, rawLocale);
   const save = (next: 'production' | 'development') => {
     if (next === v.channel) return;
     setBusy(true);
@@ -225,24 +227,24 @@ export function ChannelRow({ session }: { session: ApplianceSession }) {
       .then(
         (c) => {
           setChannel(c);
-          showNotice(CHANNEL_TEXT.switched(c.channel));
+          showNotice(channelTextHere.switched(c.channel));
         },
-        (e) => Alert.alert(CHANNEL_TEXT.title, channelErrorText(e)),
+        (e) => Alert.alert(channelTextHere.title, channelErrorText(e, rawLocale)),
       )
       .finally(() => setBusy(false));
   };
   return (
     <>
-      <Row title={CHANNEL_TEXT.title} meta={v.meta} />
+      <Row title={channelTextHere.title} meta={v.meta} />
       <View style={{ paddingHorizontal: 16, paddingBottom: 14 }}>
         <Segmented
-          label={CHANNEL_TEXT.label}
+          label={channelTextHere.label}
           disabled={busy}
           value={v.channel}
           onChange={save}
           options={[
-            { value: 'production', label: CHANNEL_TEXT.production },
-            { value: 'development', label: CHANNEL_TEXT.development },
+            { value: 'production', label: channelTextHere.production },
+            { value: 'development', label: channelTextHere.development },
           ]}
         />
       </View>

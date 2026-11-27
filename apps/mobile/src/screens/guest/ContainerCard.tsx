@@ -33,10 +33,10 @@ export function ContainerCard({
   /** The Manage switch on and this Whombat's runtime can (`hosts.unraid` / `hosts.libvirt`). */
   canChange: boolean;
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
-  const v = containerView(g, onUnraid);
+  const v = containerView(g, onUnraid, rawLocale);
   const { send, busy } = useManageChange(serverId);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,7 @@ export function ContainerCard({
       guestId: g.id,
       params: { on },
       name: g.name,
-      done: unraidChangeWords('guest.autostart', serverName, { target: g.name, on }).finished,
+      done: unraidChangeWords('guest.autostart', serverName, { target: g.name, on }, rawLocale).finished,
     }).then((o) => setError(o.ok || o.waiting ? null : o.message));
   return (
     <OneCard
@@ -59,16 +59,12 @@ export function ContainerCard({
           first
           label={tClient('hosts.agentUpdates.title')}
           value={v.updateText}
-          sub={
-            g.updateAvailable && !v.canUpdate
-              ? 'Update it in Unraid: it has no template Whombat can use.'
-              : null
-          }
+          sub={g.updateAvailable && !v.canUpdate ? tMobile('screens2.container.noTemplate') : null}
           action={
             canChange && v.canUpdate ? (
               <RowAction
                 label={tMobile('screens.update')}
-                spoken={`Update ${g.name}`}
+                spoken={tMobile('screens2.container.updateName', { name: g.name })}
                 onPress={() => setAsking(true)}
               />
             ) : null
@@ -87,7 +83,11 @@ export function ContainerCard({
             <SwitchLine label={v.autostartLabel} value={v.autostart} onChange={toggle} disabled={busy} />
           </View>
         ) : (
-          <SettingLine first={!v.updateText} label={v.autostartLabel} value={v.autostart ? 'Yes' : 'No'} />
+          <SettingLine
+            first={!v.updateText}
+            label={v.autostartLabel}
+            value={tMobile(v.autostart ? 'screens2.common.yes' : 'screens2.common.no')}
+          />
         )
       ) : null}
       {v.webUi ? (
@@ -95,7 +95,7 @@ export function ContainerCard({
           onPress={() => void Linking.openURL(v.webUi ?? '')}
           feedback="wash"
           accessibilityRole="link"
-          accessibilityLabel={`Open ${g.name}’s web page`}
+          accessibilityLabel={tMobile('screens2.container.openWeb', { name: g.name })}
           accessibilityHint={v.webUi}
           style={{
             minHeight: 52,
@@ -146,13 +146,13 @@ function UpdateSheet({
       onClose={() => !busy && onClose()}
       badge={guest.name}
       tone="warn"
-      title={`Update ${guest.name}?`}
+      title={tMobile('screens2.container.updateAsk', { name: guest.name })}
       body={tMobile('screens.it-stops-gets-the-new-version-and-starts')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Update',
+          label: tMobile('screens.update'),
           variant: 'primary',
           onPress: () =>
             void send({
@@ -166,7 +166,7 @@ function UpdateSheet({
               else setError(o.message);
             }),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />

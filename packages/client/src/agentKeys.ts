@@ -14,17 +14,17 @@
 
 import {
   ALL_KEY_OPTIONS,
-  DEPLOY_NO_WORKFLOW_HINT,
+  deployNoWorkflowHint,
   impliedBy,
   includedNote,
   isKeyTierRow,
   isThreeStateOption,
   KEY_TIER_CHOICES,
-  KEY_TIER_LABELS,
   type KeyId,
   type KeyOption,
   type KeyTierRow,
-  keyRiskRow,
+  keyRiskRowIn,
+  keyTierLabels,
   keyTierRowLabel,
   keyTierRowOf,
   type Tier,
@@ -41,11 +41,13 @@ export function keyRowOptions(options: readonly KeyOption[]): KeyOption[] {
   return options.filter(isTierOption);
 }
 
-/** Off · Ask · On, in order, for the segmented control. */
-export const TIER_SEGMENTS: readonly { value: Tier; label: string }[] = KEY_TIER_CHOICES.map((value) => ({
-  value,
-  label: KEY_TIER_LABELS[value],
-}));
+/** Off · Ask · On, in order, for the segmented control, in a locale (English when none). */
+export function tierSegments(locale?: string | null): readonly { value: Tier; label: string }[] {
+  const labels = keyTierLabels(locale);
+  return KEY_TIER_CHOICES.map((value) => ({ value, label: labels[value] }));
+}
+
+export const TIER_SEGMENTS = tierSegments();
 
 export interface TierKeyRow {
   option: KeyOption & { keyId: KeyTierRow };
@@ -68,14 +70,15 @@ export function tierKeyRows(
   options: readonly KeyOption[],
   tierOf: (row: KeyTierRow, option: KeyOption) => Tier,
   deployWorkflow?: boolean,
+  locale?: string | null,
 ): TierKeyRow[] {
   return options.filter(isTierOption).map((option) => ({
     option,
     row: option.keyId,
     tier: tierOf(option.keyId, option),
-    label: keyTierRowLabel(option.keyId),
-    description: keyRiskRow(option.keyId).description,
-    hint: option.keyId === 'deploy' && deployWorkflow === false ? DEPLOY_NO_WORKFLOW_HINT : null,
+    label: keyTierRowLabel(option.keyId, locale),
+    description: keyRiskRowIn(option.keyId, locale).description,
+    hint: option.keyId === 'deploy' && deployWorkflow === false ? deployNoWorkflowHint(locale) : null,
   }));
 }
 
@@ -125,7 +128,11 @@ export interface LiveKeyRow {
  * brings in on and locked with “included with …”; any other row as `isOn` says. Three-state options (the rows, the
  * three-state keys under All keys) aren't switches and are left out.
  */
-export function liveKeyRows(options: readonly KeyOption[], isOn: (keyId: KeyId) => boolean): LiveKeyRow[] {
+export function liveKeyRows(
+  options: readonly KeyOption[],
+  isOn: (keyId: KeyId) => boolean,
+  locale?: string | null,
+): LiveKeyRow[] {
   const switches = options.filter((o) => !isThreeStateOption(o));
   const onKeys = switches.filter((o) => !o.locked && isOn(o.keyId)).map((o) => o.keyId);
   return switches.map((option) => {
@@ -134,7 +141,7 @@ export function liveKeyRows(options: readonly KeyOption[], isOn: (keyId: KeyId) 
       option.keyId,
       onKeys.filter((k) => k !== option.keyId),
     );
-    if (via) return { option, checked: true, includedWith: via, note: includedNote(via) };
+    if (via) return { option, checked: true, includedWith: via, note: includedNote(via, locale) };
     return { option, checked: isOn(option.keyId), includedWith: null, note: null };
   });
 }

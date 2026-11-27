@@ -39,9 +39,9 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { HOME_SERVERS_COPY, serverGroups } from '../../data/homeServers';
-import { isOwnId, parseThingRowPick, RENAME_COPY, thingRowMenu } from '../../data/rename';
-import { OVERVIEW_TITLE } from '../../data/shell';
+import { homeServersCopy, serverGroups } from '../../data/homeServers';
+import { isOwnId, parseThingRowPick, renameCopy, thingRowMenu } from '../../data/rename';
+import { overviewTitle } from '../../data/shell';
 import { useStatusOrder } from '../../data/useStatusOrder';
 import { type ThingRenaming, useThingRename } from '../../data/useThingRename';
 import { useI18n } from '../../i18n';
@@ -80,6 +80,8 @@ export function ServersCard({
 }) {
   const { rawLocale } = useI18n();
   const overviewWordsHere = overviewWords(rawLocale);
+  const HOME_SERVERS_COPY = homeServersCopy(rawLocale);
+  const RENAME_COPY = renameCopy(rawLocale);
 
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
@@ -91,8 +93,8 @@ export function ServersCard({
   // The same read as a server's page (ServerScreen), so opening one reads nothing again.
   const fleet = useHostsFleet(present ? { params: { burrow: slug } } : null, { retry: false });
   const rows = useMemo(
-    () => overviewServerRows(fleet.data?.servers ?? [], now.getTime(), timeZone),
-    [fleet.data?.servers, now, timeZone],
+    () => overviewServerRows(fleet.data?.servers ?? [], now.getTime(), timeZone, rawLocale),
+    [fleet.data?.servers, now, timeZone, rawLocale],
   );
   // Worst first when the list loads or is pulled to refresh; a live change doesn't move a card under the finger.
   const groups = useStatusOrder(
@@ -105,8 +107,8 @@ export function ServersCard({
   // A server kept quiet says so on its card: Home's thing has until when.
   const home = useHomeOverview({ params: { burrow: slug } });
   const quietWords = useMemo(
-    () => serverQuietWords(home.data?.things, now, timeZone),
-    [home.data?.things, now, timeZone],
+    () => serverQuietWords(home.data?.things, now, timeZone, rawLocale),
+    [home.data?.things, now, timeZone, rawLocale],
   );
   // Elsewhere than iPhone a held card's menu is a sheet, for the card it was held on.
   const [menuFor, setMenuFor] = useState<OverviewServerRow | null>(null);
@@ -115,13 +117,13 @@ export function ServersCard({
     isHostsUnavailable(status.error) || isHostsUnavailable(fleet.error) || status.data?.healthy === false;
   // A failed refresh keeps the cards, each with its own reading time.
   const fleetState = readState({ hasData: !!fleet.data, error: fleet.error });
-  const add = () => navigation.navigate('AddServer', { back: OVERVIEW_TITLE });
+  const add = () => navigation.navigate('AddServer', { back: overviewTitle(rawLocale) });
   const thing = (row: OverviewServerRow) => thingId('server', row.id);
   const open = (row: OverviewServerRow) =>
     navigation.navigate('Thing', {
       thingId: thing(row),
       title: rename.shown(thing(row), row.name),
-      back: OVERVIEW_TITLE,
+      back: overviewTitle(rawLocale),
     });
   const pick = (row: OverviewServerRow, id: string) => {
     const picked = parseThingRowPick(id);
@@ -158,7 +160,7 @@ export function ServersCard({
                 onPress={() => open(row)}
                 onPick={(id) => pick(row, id)}
                 onMenu={() => setMenuFor(row)}
-                renaming={renameBox(row, name, rename)}
+                renaming={renameBox(row, name, rename, rawLocale)}
                 quiet={quietWords.get(thing(row)) || null}
               />
             );
@@ -187,7 +189,7 @@ export function ServersCard({
       )}
       {hasNativeMenu ? null : (
         <MenuSheet
-          spec={menuFor ? thingRowMenu(rename.shown(thing(menuFor), menuFor.name)) : null}
+          spec={menuFor ? thingRowMenu(rename.shown(thing(menuFor), menuFor.name), rawLocale) : null}
           visible={menuFor !== null}
           label={RENAME_COPY.rowMenu(menuFor ? rename.shown(thing(menuFor), menuFor.name) : '')}
           onClose={() => setMenuFor(null)}
@@ -199,7 +201,8 @@ export function ServersCard({
 }
 
 /** The box a card's name turns into while it is renamed, else null. */
-function renameBox(row: OverviewServerRow, name: string, rename: ThingRenaming): ReactNode {
+function renameBox(row: OverviewServerRow, name: string, rename: ThingRenaming, locale?: string): ReactNode {
+  const RENAME_COPY = renameCopy(locale);
   const id = thingId('server', row.id);
   if (rename.editing !== id) return null;
   const target = thingRenameTarget({ id, name });
@@ -252,6 +255,8 @@ function ServerCard({
 }) {
   const { rawLocale } = useI18n();
   const overviewWordsHere = overviewWords(rawLocale);
+  const HOME_SERVERS_COPY = homeServersCopy(rawLocale);
+  const RENAME_COPY = renameCopy(rawLocale);
 
   const theme = useTheme();
   // Where the elbow ends: the middle of the name block, measured, as the mock's `bottom: 50%`.
@@ -328,7 +333,7 @@ function ServerCard({
     </View>
   ) : (
     // The menu takes the card's own press (so a hold doesn't open the server too): the Touchable is its only child.
-    <NativeMenu spec={thingRowMenu(name)} onPick={onPick}>
+    <NativeMenu spec={thingRowMenu(name, rawLocale)} onPick={onPick}>
       <Touchable
         onPress={onPress}
         {...(hasNativeMenu ? null : { onLongPress: onMenu })}
@@ -377,6 +382,8 @@ function ServerCard({
  * with its waiting list.
  */
 function WaitingCard({ pending, onReview }: { pending: number; onReview: () => void }) {
+  const { rawLocale } = useI18n();
+  const HOME_SERVERS_COPY = homeServersCopy(rawLocale);
   const theme = useTheme();
   return (
     <View

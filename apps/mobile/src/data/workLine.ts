@@ -3,7 +3,7 @@
  * at work) and a live council's or checklist's ⋯, which stops it quietly. The words are the shared `@whombat/client`
  * `workLine.ts` and its council words. Pure.
  */
-import { COUNCIL_WORDS, type WorkProgress } from '@whombat/client';
+import { councilWords, type WorkProgress } from '@whombat/client';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
 
 /* The work line's bar ----------------------------------------------------------------------------------------------- */
@@ -31,10 +31,19 @@ export function workSegments(progress: WorkProgress): WorkSegment[] {
 /* A live card's menu ------------------------------------------------------------------------------------------------ */
 
 /** A live card's ⋯ (a council's, a checklist's): Council settings where it has one, then Stop… (it asks first). */
-export function liveCardMenu({ change, stop }: { change: boolean; stop: boolean }): NativeMenuSpec {
+export function liveCardMenu({
+  change,
+  stop,
+  locale,
+}: {
+  change: boolean;
+  stop: boolean;
+  locale?: string;
+}): NativeMenuSpec {
+  const w = councilWords(locale);
   return plainMenu([
-    change ? [{ id: 'change', title: COUNCIL_WORDS.changeCouncil, icon: 'person.2' }] : [],
-    stop ? [{ id: 'stop', title: `${COUNCIL_WORDS.stop}…`, icon: 'stop', destructive: true }] : [],
+    change ? [{ id: 'change', title: w.changeCouncil, icon: 'person.2' }] : [],
+    stop ? [{ id: 'stop', title: `${w.stop}…`, icon: 'stop', destructive: true }] : [],
   ]);
 }
 

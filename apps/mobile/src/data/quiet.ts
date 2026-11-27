@@ -7,23 +7,30 @@
  */
 import type { ThingWatchView, WatchCheckView } from '@whombat/client';
 import type { QuietNote } from '@whombat/client/react';
-import { QUIET_WORDS } from '@whombat/core';
+import { quietWords } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
-export const QUIET_COPY = {
-  watchTitle: QUIET_WORDS.watchTitle,
-  watchNot: QUIET_WORDS.watchNot,
-  undo: QUIET_WORDS.undo,
-  loading: 'Loading what Whombat watches',
-  failed: 'What Whombat watches didn’t load.',
-  /** Look only and guests (QN-15): the rows without switches, each saying whether it is on. */
-  on: 'On',
-  off: 'Off',
-  readOnly: 'Only those who manage it change what Whombat watches.',
-  showMore: (n: number) => `Show ${n} more`,
-  showFewer: 'Show fewer',
-  /** A check's limit's button. */
-  change: 'Change',
-} as const;
+export function quietCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const w = quietWords(locale);
+  return {
+    watchTitle: w.watchTitle,
+    watchNot: w.watchNot,
+    undo: w.undo,
+    loading: t('data.quiet.loading'),
+    failed: t('data.quiet.failed'),
+    /** Look only and guests: the rows without switches, each saying whether it is on. */
+    on: t('data.quiet.on'),
+    off: t('data.quiet.off'),
+    readOnly: t('data.quiet.readOnly'),
+    showMore: (n: number) => t('data.quiet.showMore', { n }),
+    showFewer: t('data.quiet.showFewer'),
+    /** A check's limit's button. */
+    change: t('data.quiet.change'),
+  };
+}
+
+export const QUIET_COPY = quietCopy();
 
 /** How many checks a server's Summary shows before “Show N more” (its card sits under everything else). */
 export const WATCH_FIRST = 6;
@@ -47,8 +54,9 @@ export function foldWatchRows(
 }
 
 /** A check's switch as TalkBack reads it (the switch's own label is the shared `switchLabel`), with its exceptions. */
-export function watchRowSpoken(row: WatchCheckView, mayChange: boolean): string {
-  const state = mayChange ? null : row.on ? QUIET_COPY.on : QUIET_COPY.off;
+export function watchRowSpoken(row: WatchCheckView, mayChange: boolean, locale?: string): string {
+  const copy = quietCopy(locale);
+  const state = mayChange ? null : row.on ? copy.on : copy.off;
   return [row.name, state, row.offLine].filter(Boolean).join('. ');
 }
 

@@ -23,7 +23,7 @@ import type { AppMode } from '../data/config';
 import { mobileTranslator } from '../i18n/translate';
 
 /** What the Spend page is called now: Usage (docs/decisions/phone-shell-final.md). */
-export const USAGE_TITLE = 'Usage';
+export const USAGE_TITLE = mobileTranslator().t('settings2.groups.usage');
 
 /** What the phone shows depends on whether it is on a Whombat or in the demo world. */
 export interface SettingsHere {
@@ -126,15 +126,21 @@ export interface AdvancedRowView extends AdvancedRow {
 export function advancedRowsOnPhone(
   agent: string,
   here: SettingsHere & { services?: boolean; spend?: boolean },
+  locale?: string | null,
 ): AdvancedRowView[] {
-  return advancedRowsHere(agent, {
-    managed: here.mode === 'managed',
-    ...(here.services === undefined ? {} : { services: here.services }),
-    ...(here.spend === undefined ? {} : { spend: here.spend }),
-  }).flatMap((row) => {
+  const usage = mobileTranslator(locale).t('settings2.groups.usage');
+  return advancedRowsHere(
+    agent,
+    {
+      managed: here.mode === 'managed',
+      ...(here.services === undefined ? {} : { services: here.services }),
+      ...(here.spend === undefined ? {} : { spend: here.spend }),
+    },
+    locale,
+  ).flatMap((row) => {
     const route = advancedRoute(row.key, here);
     // Spend is shown as Usage, the one name of that page on the phone (Places, Search, its title).
-    const named = row.key === 'spend' ? { ...row, title: USAGE_TITLE } : row;
+    const named = row.key === 'spend' ? { ...row, title: usage } : row;
     return route ? [{ ...named, route, label: `${named.title}. ${named.line}` }] : [];
   });
 }

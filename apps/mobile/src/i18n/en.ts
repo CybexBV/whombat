@@ -1,4 +1,11 @@
+import { DATA_EN } from './messages/data';
+import { SCREENS_EN } from './messages/screens';
+import { SETTINGS_EN } from './messages/settings';
+
 export const EN = {
+  ...DATA_EN,
+  ...SCREENS_EN,
+  ...SETTINGS_EN,
   'language.saveFailed': 'The language didn’t save. Try again.',
   'language.needsUpdate':
     'Your Whombat needs an update before you can choose a language here. Whombats update themselves.',
@@ -985,4 +992,5 @@ export const EN = {
   'localClaim.account.badEmail': 'Enter an email address, like you@example.com.',
   'chat.lastReply': 'Last reply {when}',
   'chat.lastReplyOn': 'Last reply on {date}',
+  'demo.leave': 'Leave',
 } as const;

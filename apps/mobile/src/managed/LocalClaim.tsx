@@ -8,7 +8,7 @@
  */
 
 import {
-  COMMUNITY_TEXT,
+  communityText,
   type KnownAppliance,
   localClaimLettersReady,
   localClaimNext,
@@ -54,8 +54,9 @@ export function LocalClaim({
   onReread: (text: string) => void;
 }) {
   const { rawLocale, tClient } = useI18n();
+  const communityTextHere = communityText(rawLocale);
   const { t: tMobile } = useMobileT();
-  const { claim: claimText } = COMMUNITY_TEXT;
+  const { claim: claimText } = communityTextHere;
   const phoneCommunityTextHere = phoneCommunityText(rawLocale);
 
   const locale = useClaimLocale();
@@ -123,11 +124,11 @@ export function LocalClaim({
         appliancePeerId: record.peerId,
         clientPeerId: keyPair.peerId,
         account: { name: name.trim(), email: email.trim() },
-        endpoint: { label: phoneLabel(), platform: PHONE_PLATFORM },
+        endpoint: { label: phoneLabel(rawLocale), platform: PHONE_PLATFORM },
       });
       onClaimed(out.accountId);
     } catch (error) {
-      const next = localClaimNext(error);
+      const next = localClaimNext(error, Date.now(), rawLocale);
       // Another phone won: this one reads the box again and joins it as a second device would.
       if (next.to === 'taken') onTaken();
       // The connection or the proof was lost on the way: the box says what it is now before anything is asked again.

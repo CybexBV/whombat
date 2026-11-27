@@ -4,7 +4,7 @@
  * the person's zone; *Always* takes the times away) and *Ask {assistant}* beside *+ Page*. The rules and the words are
  * `@whombat/client/desk`'s, the web's too.
  */
-import { toggleDay, WEEKDAY_LABELS } from '@whombat/client';
+import { toggleDay, weekdayLabels } from '@whombat/client';
 import {
   type DeskPage,
   type DeskPageShow,
@@ -193,7 +193,7 @@ export function PageTimesSheet({
                 ringRadius={999}
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: on }}
-                accessibilityLabel={WEEKDAY_LABELS[day].long}
+                accessibilityLabel={weekdayLabels(rawLocale)[day].long}
                 hitSlop={hitSlopFor(36)}
                 style={{
                   flex: 1,
@@ -207,7 +207,7 @@ export function PageTimesSheet({
                 }}
               >
                 <Text size={12} weight={500} mono color={on ? theme.colors.btnfg : theme.colors.ink}>
-                  {WEEKDAY_LABELS[day].short}
+                  {weekdayLabels(rawLocale)[day].short}
                 </Text>
               </Touchable>
             );

@@ -5,13 +5,14 @@
  */
 import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ChevronDown, ChevronUp } from './icons';
 import { Touchable } from './Touchable';
 
 export function MoreFold({
-  label = 'More',
+  label: givenLabel,
   open: startOpen = false,
   children,
   inset = 0,
@@ -26,7 +27,9 @@ export function MoreFold({
   /** The folded part is rows with their own padding and hairlines (a card's keys): no padding, no gaps. */
   flush?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
+  const label = givenLabel ?? tMobile('screens2.ui.more');
   const [open, setOpen] = useState(startOpen);
   const Chevron = open ? ChevronUp : ChevronDown;
   return (

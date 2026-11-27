@@ -5,16 +5,17 @@
  * checks, and the line under a thing kept an eye on. Pure.
  */
 import {
-  AHEAD_KIND_WORDS,
   AHEAD_KINDS,
   AHEAD_RULES_MAX,
   type AheadKind,
-  LOOKS_AHEAD_WORDS,
+  aheadKindWords,
+  aheadWords,
   type LooksAheadCheckItem,
   type LooksAheadMatter,
   type LooksAheadUpdate,
   type LooksAheadView,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { type DateInput, formatDate } from '@whombat/core/text';
 import {
   LOOKS_AHEAD_INBOX_MINOR,
@@ -24,37 +25,47 @@ import {
   type ProtocolVersion,
   protocolAtLeast,
 } from '@whombat/protocol/session';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** The part's words: the shared ones, and the few only the apps say. */
-export const LOOKS_AHEAD_TEXT = {
-  ...LOOKS_AHEAD_WORDS,
-  /** Read before a part loaded. */
-  loading: 'Loading Looks ahead…',
-  failed: 'Couldn’t load Looks ahead. Try again in a moment.',
-  retry: 'Try again',
-  /** A change that didn't go through. */
-  notSaved: 'That didn’t go through. Try again.',
-  /** A calendar the account names as its own, after its address. */
-  primary: 'Main calendar',
-  /** A stopped kind's button, for screen readers. */
-  turnBackOnLabel: (kind: AheadKind) => `${LOOKS_AHEAD_WORDS.turnBackOn}: ${AHEAD_KIND_WORDS[kind]}`,
-  /** A standing rule's remove button, for screen readers. */
-  removeRuleLabel: (rule: string) => `${LOOKS_AHEAD_WORDS.removeRule}: ${rule}`,
-  /** Link to open a flagged finding's thread in Chat. */
-  openThread: 'Open thread',
-  /** A look through new mail that is going on now. */
-  triageChecking: 'Looking through new mail',
-  /** A thing kept an eye on's remove button, for screen readers. */
-  removeMatterLabel: (title: string) => `${LOOKS_AHEAD_WORDS.removeMatter}: ${title}`,
-  /** A recent check's feedback: the person stopped a kind of check, or (under a follow-up) the thing kept an eye on. */
-  stoppedKind: 'Stopped this kind',
-  stoppedMatter: 'Stopped keeping an eye on it',
-  notUseful: 'Marked not useful',
-} as const;
+/** The part's words: the shared ones, and the few only the apps say, in a locale (English when none). */
+export function looksAheadText(locale?: string | null) {
+  const shared = aheadWords(locale);
+  const kinds = aheadKindWords(locale);
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).ahead;
+  const labelled = (label: string, what: string) => interpolate(w.labelled, { label, what });
+  return {
+    ...shared,
+    /** Read before a part loaded. */
+    loading: w.loading,
+    failed: w.failed,
+    retry: w.retry,
+    /** A change that didn't go through. */
+    notSaved: w.notSaved,
+    /** A calendar the account names as its own, after its address. */
+    primary: w.primary,
+    /** A stopped kind's button, for screen readers. */
+    turnBackOnLabel: (kind: AheadKind) => labelled(shared.turnBackOn, kinds[kind]),
+    /** A standing rule's remove button, for screen readers. */
+    removeRuleLabel: (rule: string) => labelled(shared.removeRule, rule),
+    /** Link to open a flagged finding's thread in Chat. */
+    openThread: w.openThread,
+    /** A look through new mail that is going on now. */
+    triageChecking: w.triageChecking,
+    /** A thing kept an eye on's remove button, for screen readers. */
+    removeMatterLabel: (title: string) => labelled(shared.removeMatter, title),
+    /** A recent check's feedback: the person stopped a kind of check, or (under a follow-up) the thing kept an eye on. */
+    stoppedKind: w.stoppedKind,
+    stoppedMatter: w.stoppedMatter,
+    notUseful: w.notUseful,
+  };
+}
+
+export const LOOKS_AHEAD_TEXT = looksAheadText();
 
 /** A thing kept an eye on's remove button, for screen readers: “Remove: Answer from the notary”. */
-export function removeMatterLabel(title: string): string {
-  return LOOKS_AHEAD_TEXT.removeMatterLabel(title);
+export function removeMatterLabel(title: string, locale?: string | null): string {
+  return looksAheadText(locale).removeMatterLabel(title);
 }
 
 /** Whether this Whombat has Looks ahead's setting (an older one doesn't answer `looksAhead.*`). */
@@ -107,30 +118,32 @@ export function withLooksAheadChange(view: LooksAheadView, update: LooksAheadUpd
 }
 
 /** What the note says once a change saved. */
-export function looksAheadSavedText(view: LooksAheadView, update: LooksAheadUpdate): string {
+export function looksAheadSavedText(
+  view: LooksAheadView,
+  update: LooksAheadUpdate,
+  locale?: string | null,
+): string {
+  const shared = aheadWords(locale);
   if ('calendar' in update) {
-    const name = view.calendars.find((c) => c.key === update.calendar)?.name || LOOKS_AHEAD_WORDS.calendars;
-    return LOOKS_AHEAD_WORDS.calendarSwitched(name, update.on);
+    const name = view.calendars.find((c) => c.key === update.calendar)?.name || shared.calendars;
+    return shared.calendarSwitched(name, update.on);
   }
-  if ('kind' in update) return LOOKS_AHEAD_WORDS.kindSwitched(update.kind, update.on);
-  if ('mailOn' in update) return LOOKS_AHEAD_WORDS.mailSwitched(update.mailOn);
-  if ('addRule' in update) return LOOKS_AHEAD_WORDS.ruleAdded;
-  if ('removeRule' in update) return LOOKS_AHEAD_WORDS.ruleRemoved;
-  if ('removeMatter' in update) return LOOKS_AHEAD_WORDS.matterRemoved;
-  return LOOKS_AHEAD_WORDS.switched(update.on);
+  if ('kind' in update) return shared.kindSwitched(update.kind, update.on);
+  if ('mailOn' in update) return shared.mailSwitched(update.mailOn);
+  if ('addRule' in update) return shared.ruleAdded;
+  if ('removeRule' in update) return shared.ruleRemoved;
+  if ('removeMatter' in update) return shared.matterRemoved;
+  return shared.switched(update.on);
 }
 
 /** A calendar's line under its name: its account, and whether it is the account's main one. */
-export function looksAheadCalendarMeta(calendar: { account: string; primary: boolean }): string {
-  return [calendar.account, calendar.primary ? LOOKS_AHEAD_TEXT.primary : ''].filter(Boolean).join(' · ');
+export function looksAheadCalendarMeta(
+  calendar: { account: string; primary: boolean },
+  locale?: string | null,
+): string {
+  const primary = clientTree(locale, SETTINGS_AREA_WORDS).ahead.primary;
+  return [calendar.account, calendar.primary ? primary : ''].filter(Boolean).join(' · ');
 }
-
-const STAGE_LABEL: Readonly<Record<LooksAheadCheckItem['stage'], string>> = {
-  early: 'Early check',
-  eve: 'Day-before check',
-  morning: 'Morning-of check',
-  mail: 'Incoming mail',
-};
 
 /**
  * The line under a thing kept an eye on: who, whom it waits on, and its date (“The notary · Waiting for an answer · by
@@ -141,29 +154,32 @@ export function matterLine(
   matter: Pick<LooksAheadMatter, 'who' | 'waitingOn' | 'due'>,
   timeZone?: string,
   now?: DateInput,
+  locale?: string | null,
 ): string {
-  const due = matter.due ? matterDueDate(matter.due, timeZone, now) : '';
-  return [
-    matter.who?.trim() ?? '',
-    LOOKS_AHEAD_WORDS.matterWaiting[matter.waitingOn],
-    due ? LOOKS_AHEAD_WORDS.matterDue(due) : '',
-  ]
+  const shared = aheadWords(locale);
+  const due = matter.due ? matterDueDate(matter.due, timeZone, now, locale) : '';
+  return [matter.who?.trim() ?? '', shared.matterWaiting[matter.waitingOn], due ? shared.matterDue(due) : '']
     .filter(Boolean)
     .join(' · ');
 }
 
 /** `20 Dec`, or '' for a date that can't be read. */
-function matterDueDate(due: string, timeZone: string | undefined, now: DateInput | undefined): string {
+function matterDueDate(
+  due: string,
+  timeZone: string | undefined,
+  now: DateInput | undefined,
+  locale?: string | null,
+): string {
   const year = now === undefined ? ('never' as const) : ('auto' as const);
   const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(due);
   // A bare day, or no zone to read a moment in: the calendar day as written, read at noon UTC so no zone moves it.
   if (day && (!timeZone || due.length === 10)) {
     const at = new Date(Date.UTC(Number(day[1]), Number(day[2]) - 1, Number(day[3]), 12));
-    return formatDate(at, 'UTC', { year, now });
+    return formatDate(at, 'UTC', { year, now }, locale);
   }
   const at = new Date(due);
   if (Number.isNaN(at.getTime())) return '';
-  return formatDate(at, timeZone ?? 'UTC', { year, now });
+  return formatDate(at, timeZone ?? 'UTC', { year, now }, locale);
 }
 
 /**
@@ -172,9 +188,11 @@ function matterDueDate(due: string, timeZone: string | undefined, now: DateInput
  */
 export function looksAheadRecentLabel(
   item: Pick<LooksAheadCheckItem, 'of' | 'count' | 'picked'>,
+  locale?: string | null,
 ): string | null {
-  if (item.of === 'triage') return LOOKS_AHEAD_WORDS.recentTriage(item.count ?? 0, item.picked ?? 0);
-  if (item.of === 'matter') return LOOKS_AHEAD_WORDS.recentMatter;
+  const shared = aheadWords(locale);
+  if (item.of === 'triage') return shared.recentTriage(item.count ?? 0, item.picked ?? 0);
+  if (item.of === 'matter') return shared.recentMatter;
   return null;
 }
 
@@ -184,29 +202,31 @@ export function looksAheadRecentLabel(
  */
 export function looksAheadCheckMeta(
   item: Pick<LooksAheadCheckItem, 'stage' | 'state' | 'kind' | 'feedback' | 'of' | 'count' | 'picked'>,
+  locale?: string | null,
 ): string {
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).ahead;
   if (item.of === 'triage') {
     // A look's own words say what came of it once it ended.
-    if (item.state === 'checking') return LOOKS_AHEAD_TEXT.triageChecking;
-    if (item.state === 'failed') return `${LOOKS_AHEAD_TEXT.triageChecking} · Couldn’t finish`;
-    return LOOKS_AHEAD_WORDS.recentTriage(item.count ?? 0, item.picked ?? 0);
+    if (item.state === 'checking') return w.triageChecking;
+    if (item.state === 'failed') return `${w.triageChecking} · ${w.couldntFinish}`;
+    return aheadWords(locale).recentTriage(item.count ?? 0, item.picked ?? 0);
   }
-  const origin = looksAheadRecentLabel(item) ?? STAGE_LABEL[item.stage];
+  const origin = looksAheadRecentLabel(item, locale) ?? w.stage[item.stage];
   let outcome: string;
-  if (item.state === 'checking') outcome = 'Checking now';
-  else if (item.state === 'failed') outcome = 'Couldn’t finish';
+  if (item.state === 'checking') outcome = w.checkingNow;
+  else if (item.state === 'failed') outcome = w.couldntFinish;
   else if (item.state === 'told')
-    outcome = item.kind ? `Flagged · ${AHEAD_KIND_WORDS[item.kind]}` : 'Flagged';
-  else outcome = 'Checked · nothing to flag';
+    outcome = item.kind ? `${w.flagged} · ${aheadKindWords(locale)[item.kind]}` : w.flagged;
+  else outcome = w.checked;
   // Under a follow-up, “Stop checking for this” stopped keeping an eye on that one thing, not a kind. A mail check's
   // row doesn't say whether its finding was about a matter, so it keeps the kind's words.
   const fb =
     item.feedback === 'not_useful'
-      ? LOOKS_AHEAD_TEXT.notUseful
+      ? w.notUseful
       : item.feedback === 'stop_kind'
         ? item.of === 'matter'
-          ? LOOKS_AHEAD_TEXT.stoppedMatter
-          : LOOKS_AHEAD_TEXT.stoppedKind
+          ? w.stoppedMatter
+          : w.stoppedKind
         : '';
   return [origin, outcome, fb].filter(Boolean).join(' · ');
 }

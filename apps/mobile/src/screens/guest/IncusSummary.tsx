@@ -65,13 +65,21 @@ export function IncusSummary({
   );
   const wayOutOf = (kind: string) =>
     platform === 'libvirt'
-      ? libvirtHintWayOut(kind) && { label: 'Back up now', to: 'back_up' as const }
-      : incusHintWayOut(kind) && { label: 'Set a schedule', to: 'schedule' as const };
+      ? libvirtHintWayOut(kind, rawLocale) && {
+          label: tMobile('screens2.common.backUpNow'),
+          to: 'back_up' as const,
+        }
+      : incusHintWayOut(kind, rawLocale) && {
+          label: tMobile('screens2.guest.setSchedule'),
+          to: 'schedule' as const,
+        };
   const mine = hints.filter((h) => h.serverId === serverId && hintGuest(h, [g]) && wayOutOf(h.kind));
-  const schedule = incusScheduleLine(config);
+  const schedule = incusScheduleLine(config, rawLocale);
   const items = list.data?.op === 'backup.list' ? list.data.items : [];
   const last = (
-    platform === 'libvirt' ? libvirtBackupRows(items, now, timeZone) : incusBackupRows(items, now, timeZone)
+    platform === 'libvirt'
+      ? libvirtBackupRows(items, now, timeZone, undefined, rawLocale)
+      : incusBackupRows(items, now, timeZone, undefined, rawLocale)
   )[0];
   return (
     <>
@@ -127,7 +135,7 @@ export function IncusSummary({
               canChange ? (
                 <RowAction
                   label={tMobile('screens.change')}
-                  spoken="Change the snapshot schedule"
+                  spoken={tMobile('screens2.guest.changeSchedule')}
                   onPress={() => onWayOut('schedule')}
                 />
               ) : null
@@ -147,7 +155,7 @@ export function IncusSummary({
                   ? '…'
                   : g.lastBackup
                     ? formatRelativeDay(Date.parse(g.lastBackup.at), now, timeZone, rawLocale)
-                    : 'None yet'
+                    : tMobile('screens2.guest.noneYet')
             }
             sub={last?.line ?? null}
           />

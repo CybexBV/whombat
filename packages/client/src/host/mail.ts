@@ -7,6 +7,7 @@
  * `mailApi(session)` is the four ops; `mailView` turns `host.mail`'s answer into the section's row; `mailDraft` checks a
  * form before it is sent; `mailTestText` and `mailErrorText` are the words.
  */
+import { interpolate } from '@whombat/core/i18n';
 import {
   type HostMailOutput,
   type HostMailTestOutput,
@@ -16,8 +17,11 @@ import {
   type MailSettings,
   MailSettingsInput,
   type MailTest,
+  type MailTestState,
   mailSettingsProblem,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { MAIL_WORDS } from '../i18n/messages/hostManaged/mail';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 
@@ -41,60 +45,29 @@ export function mailApi(session: ApplianceSession): MailApi {
   };
 }
 
-/** Every word of EMAIL. */
-export const MAIL_TEXT = {
-  section: 'EMAIL',
-  offTitle: 'Off',
-  offMeta: 'This Whombat sends no email. Set up your own mail server to get notifications by email.',
-  setUp: 'Set up',
-  change: 'Change',
-  test: 'Send a test',
-  testing: 'Sending…',
-  remove: 'Remove',
-  fromConfig: 'Set in this Whombat’s configuration.',
-  security: { tls: 'TLS', starttls: 'STARTTLS', none: 'No encryption' } satisfies Record<
-    MailSecurity,
-    string
-  >,
-  lastTest: (text: string) => `Last test: ${text}`,
-  untested: 'Not tested yet.',
-  formTitle: 'Your mail server',
-  formLead: 'Whombat sends email through it. Your mail provider’s help pages list these settings.',
-  host: 'Server',
-  hostPlaceholder: 'smtp.example.com',
-  port: 'Port',
-  securityLabel: 'Security',
-  username: 'User name',
-  usernameHint: 'Often your email address. Leave it empty if the server needs no login.',
-  password: 'Password',
-  passwordKept: 'Saved. Leave it empty to keep it.',
-  passwordHint: 'It’s never shown again.',
-  from: 'From address',
-  fromName: 'From name',
-  fromNamePlaceholder: 'Whombat',
-  save: 'Save',
-  saving: 'Saving…',
-  cancel: 'Cancel',
-  removeTitle: 'Remove the mail server?',
-  removeLead: 'This Whombat stops sending email.',
-  saved: 'Saved.',
-  removed: 'Removed. This Whombat sends no email now.',
-  wentTo: (to: string) => `It went to ${to}.`,
-  problems: {
-    host: 'Enter the mail server’s name.',
-    port: 'Enter a port between 1 and 65535.',
-    from: 'Enter the address mail comes from.',
-    fromName: 'Leave out angle brackets and quotes.',
-    login_without_tls: 'A login needs TLS or STARTTLS.',
-    password: 'Enter the password for that user name.',
-  },
-  errors: {
-    'mail.in_config': 'This Whombat’s configuration sets the mail server, so it can’t be changed here.',
-    'mail.not_set': 'Set up a mail server first.',
-    'mail.busy': 'A test is still running. Try again in a moment.',
-    failed: 'That didn’t work. Try again.',
-  },
-} as const;
+/** Every word of EMAIL, in a locale (English when none is given). */
+export function mailText(locale?: string | null) {
+  const w = clientTree(locale, MAIL_WORDS);
+  return {
+    ...w,
+    security: w.security satisfies Record<MailSecurity, string>,
+    lastTest: (text: string) => interpolate(w.lastTest, { text }),
+    wentTo: (to: string) => interpolate(w.wentTo, { to }),
+    errors: {
+      'mail.in_config': w.errors.inConfig,
+      'mail.not_set': w.errors.notSet,
+      'mail.busy': w.errors.busy,
+      failed: w.errors.failed,
+    },
+    /** One line per test result (the contracts' `MAIL_TEST_TEXT`, in this language). */
+    tests: w.tests satisfies Record<MailTestState, string>,
+  } as const;
+}
+
+export type MailText = ReturnType<typeof mailText>;
+
+/** EMAIL's words in English. */
+export const MAIL_TEXT: MailText = mailText('en');
 
 export type MailAction = 'set_up' | 'test' | 'change' | 'remove';
 
@@ -109,8 +82,8 @@ export interface MailView {
 }
 
 /** The row for `host.mail`'s answer (null: not asked yet). */
-export function mailView(answer: HostMailOutput | null): MailView | null {
-  const T = MAIL_TEXT;
+export function mailView(answer: HostMailOutput | null, locale?: string | null): MailView | null {
+  const T = mailText(locale);
   if (!answer) return null;
   const m = answer.mail;
   if (!m)
@@ -123,7 +96,7 @@ export function mailView(answer: HostMailOutput | null): MailView | null {
     };
   const where = [m.from, `${m.host}:${m.port}`, T.security[m.security]].join(' · ');
   const config = m.source === 'config';
-  const test = m.lastTest ? T.lastTest(mailTestText(m.lastTest)) : config ? null : T.untested;
+  const test = m.lastTest ? T.lastTest(mailTestText(m.lastTest, locale)) : config ? null : T.untested;
   const dot = !m.lastTest ? 'mut' : m.lastTest.state === 'sent' ? 'ok' : 'warn';
   return {
     dot,
@@ -138,18 +111,21 @@ export function mailView(answer: HostMailOutput | null): MailView | null {
  * One line for a test's result: the contracts' words (`failed` with the box's detail), and where a sent one went (the
  * person's own email).
  */
-export function mailTestText(test: Pick<MailTest, 'state' | 'detail'> & { to?: string }): string {
-  const text = MAIL_TEST_TEXT[test.state];
-  if (test.state === 'sent' && test.to) return `${text} ${MAIL_TEXT.wentTo(test.to)}`;
+export function mailTestText(
+  test: Pick<MailTest, 'state' | 'detail'> & { to?: string },
+  locale?: string | null,
+): string {
+  const T = mailText(locale);
+  const text = T.tests[test.state] ?? MAIL_TEST_TEXT[test.state];
+  if (test.state === 'sent' && test.to) return `${text} ${T.wentTo(test.to)}`;
   return test.state === 'failed' && test.detail ? `${text} ${test.detail}` : text;
 }
 
 /** What a failed mail change says (`mail.*` by name). */
-export function mailErrorText(error: unknown): string {
+export function mailErrorText(error: unknown, locale?: string | null): string {
+  const T = mailText(locale);
   const code = error instanceof OperationError ? error.code : null;
-  return code && code in MAIL_TEXT.errors
-    ? MAIL_TEXT.errors[code as keyof typeof MAIL_TEXT.errors]
-    : MAIL_TEXT.errors.failed;
+  return code && code in T.errors ? T.errors[code as keyof typeof T.errors] : T.errors.failed;
 }
 
 /** The form as people fill it in (strings; the password empty to keep the stored one). */

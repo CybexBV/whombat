@@ -15,6 +15,7 @@ export function isUsableTimeZone(zone: string): boolean {
   if (cached !== undefined) return cached;
   let ok = false;
   try {
+    // Only a probe that the zone can be read; nothing is shown, so the language doesn't matter.
     const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: zone,
       hourCycle: 'h23',

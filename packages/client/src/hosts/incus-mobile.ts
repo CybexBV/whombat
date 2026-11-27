@@ -15,20 +15,25 @@ import type {
   HostHint,
   HostIncusDetail,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_INCUS_WORDS } from '../i18n/messages/connectionsHosts/incus';
 import { type ConfigDraft, currentValue, incusDraft, parseSize, reviewRows, trimDraft } from './config';
-import { DASH, formatBytesBinary, formatRelativeDay, plural } from './format';
+import { DASH, formatBytesBinary, formatRelativeDay } from './format';
 import {
   backupExpiresAt,
   cpuWords,
   expiryText,
-  INCUS_LOCK_WORDS,
   expiryWords as incusExpiryWords,
+  incusLockWords,
   incusNameError,
   isSelfGuest,
   memoryWords,
   SELF_GUEST_CHIP,
   SELF_GUEST_LINE,
   scheduleWords,
+  selfGuestChip,
+  selfGuestLine,
 } from './incus';
 import { type UnraidOp, unraidChangeWords } from './unraid';
 
@@ -54,6 +59,12 @@ const UNRAID_TASK_OPS: readonly UnraidOp[] = [
 /** The chip on its row and its screen, and the line where its changing actions would be (the web's, `incus.ts`). */
 export const THIS_WHOMBAT = SELF_GUEST_CHIP;
 export const SELF_LINE = SELF_GUEST_LINE;
+/** `THIS_WHOMBAT` and `SELF_LINE` in a locale (English when none is given). */
+export const thisWhombatLabel = selfGuestChip;
+export const selfLine = selfGuestLine;
+
+const words = (locale?: string | null) => clientTree(locale, HOSTS_INCUS_WORDS);
+
 /** The self guest's rules are the web's (`HOST_SELF_GUEST_ALLOWED`). */
 export { isSelfGuest, selfAllowsAction, selfAllowsOp } from './incus';
 
@@ -66,10 +77,15 @@ export function selfGuestOf<G extends Pick<HostGuest, 'self'>>(guests: readonly 
 export function thisWhombatFact(
   hosts: boolean | undefined,
   guests: readonly Pick<HostGuest, 'self' | 'name'>[],
+  locale?: string | null,
 ): { label: string; value: string } | null {
   const self = selfGuestOf(guests);
   if (!hosts && !self) return null;
-  return { label: THIS_WHOMBAT, value: self ? `Runs here, in ${self.name}` : 'Runs here' };
+  const w = words(locale);
+  return {
+    label: selfGuestChip(locale),
+    value: self ? interpolate(w.runsHereIn, { guest: self.name }) : w.runsHere,
+  };
 }
 
 /* Tasks: which platform reads them ------------------------------------------------------------------------------- */
@@ -94,8 +110,14 @@ export function phoneIncusTabs(g: Pick<HostGuestDetail, 'manageable'>): IncusPho
 }
 
 /** “thetitan”, “thetitan · project ci-platform”: the kind is the mark before the name (less-is-more.md AP-1810). */
-export function incusHeadLine(g: Pick<HostGuest, 'node' | 'serverId' | 'project'>): string {
-  return [g.node ?? g.serverId, g.project && g.project !== 'default' ? `project ${g.project}` : null]
+export function incusHeadLine(
+  g: Pick<HostGuest, 'node' | 'serverId' | 'project'>,
+  locale?: string | null,
+): string {
+  return [
+    g.node ?? g.serverId,
+    g.project && g.project !== 'default' ? interpolate(words(locale).project, { project: g.project }) : null,
+  ]
     .filter(Boolean)
     .join(' · ');
 }
@@ -112,29 +134,39 @@ const isFalse = (v: string | undefined) => /^(false|0|no|off)$/i.test(v?.trim() 
 const _NBSP = ' ';
 
 /** `boot.autostart`: unset means “as it was when the server stopped”. */
-export function autostartWords(v: string | undefined): string {
-  if (isTrue(v)) return 'Yes';
-  if (isFalse(v)) return 'No';
-  return 'If it was running';
+export function autostartWords(v: string | undefined, locale?: string | null): string {
+  const w = words(locale).autostart;
+  if (isTrue(v)) return w.yes;
+  if (isFalse(v)) return w.no;
+  return w.ifRunning;
 }
 
 /** `snapshots.schedule` in the web's words (`scheduleWords`); unset “None”. */
-export function scheduleWordsIncus(v: string | undefined): string {
-  return scheduleWords(v) || 'None';
+export function scheduleWordsIncus(v: string | undefined, locale?: string | null): string {
+  return scheduleWords(v, locale) || words(locale).none;
 }
 
 /** `snapshots.expiry` in the web's words with “kept” (“kept 2 weeks”); unset “kept until removed”. */
-export function expiryWords(v: string | undefined): string {
-  const w = incusExpiryWords(v);
-  return w ? `kept ${w}` : 'kept until removed';
+export function expiryWords(v: string | undefined, locale?: string | null): string {
+  const w = words(locale);
+  const expiry = incusExpiryWords(v, locale);
+  return expiry ? interpolate(w.kept, { expiry }) : w.keptUntilRemoved;
+}
+
+/** How long snapshots are kept without the “kept” around it (“2 weeks”, “until removed”). */
+function keptFor(v: string | undefined, locale?: string | null): string {
+  return incusExpiryWords(v, locale) || words(locale).values.untilRemoved;
 }
 
 /** The snapshot schedule as one line: “Every day at 03:00 · kept 1 week”, or “No schedule”. */
-export function incusScheduleLine(cfg: HostGuestConfig | undefined): { text: string; set: boolean } {
+export function incusScheduleLine(
+  cfg: HostGuestConfig | undefined,
+  locale?: string | null,
+): { text: string; set: boolean } {
   const schedule = currentValue(cfg, 'snapshots.schedule')?.trim();
-  if (!schedule) return { text: 'No schedule', set: false };
+  if (!schedule) return { text: words(locale).noSchedule, set: false };
   return {
-    text: `${scheduleWordsIncus(schedule)} · ${expiryWords(currentValue(cfg, 'snapshots.expiry'))}`,
+    text: `${scheduleWordsIncus(schedule, locale)} · ${expiryWords(currentValue(cfg, 'snapshots.expiry'), locale)}`,
     set: true,
   };
 }
@@ -162,67 +194,56 @@ export interface IncusSettingGroup {
 }
 
 /** Under a locked key, on the phone and the web. */
-export const INCUS_LOCKED = INCUS_LOCK_WORDS;
+export const INCUS_LOCKED = incusLockWords('en');
 /** Under a key set in a profile rather than on the instance. */
-export const FROM_PROFILE = 'From a profile';
+export const FROM_PROFILE = words('en').fromProfile;
+/** The line and link at the bottom of an Incus instance's Settings, in a locale (English when none is given). */
+export function incusWebOnly(locale?: string | null): string {
+  return words(locale).webOnly;
+}
 /** The line and link at the bottom of an Incus instance's Settings (IU-09). */
-export const INCUS_WEB_ONLY =
-  'Devices, profiles, images, volumes, networks and moving: on whombat on the web.';
-
-const KEY_LABELS: Record<string, string> = {
-  'limits.memory': 'Memory',
-  'limits.cpu': 'Processors',
-  'limits.memory.swap': 'Swap',
-  'limits.processes': 'Processes',
-  'boot.autostart': 'Start with the server',
-  'boot.autostart.priority': 'Start order',
-  'boot.autostart.delay': 'Wait after starting',
-  'security.protection.delete': 'Protection',
-  'security.nesting': 'Containers inside',
-  'security.privileged': 'Privileged',
-  'snapshots.schedule': 'Snapshot schedule',
-  'snapshots.expiry': 'Keep snapshots',
-  'snapshots.pattern': 'Snapshot names',
-  description: 'Notes',
-};
+export const INCUS_WEB_ONLY = incusWebOnly('en');
 
 /** An Incus key in words (“Memory”, “Snapshot schedule”); unknown keys as they are. */
-export function incusKeyLabel(key: string): string {
-  return KEY_LABELS[key] ?? key;
+export function incusKeyLabel(key: string, locale?: string | null): string {
+  const keys = words(locale).keys;
+  return Object.hasOwn(keys, key) ? keys[key as keyof typeof keys] : key;
 }
 
 /** An Incus value as the phone shows it. */
-export function incusValueWords(key: string, v: string | undefined): string {
+export function incusValueWords(key: string, v: string | undefined, locale?: string | null): string {
+  const w = words(locale);
   switch (key) {
     case 'limits.memory':
-      return memoryWords(v) || 'No limit';
+      return memoryWords(v, locale) || w.values.noLimit;
     case 'limits.cpu':
-      return cpuWords(v) || 'No limit';
+      return cpuWords(v, locale) || w.values.noLimit;
     case 'boot.autostart':
-      return autostartWords(v);
+      return autostartWords(v, locale);
     case 'security.protection.delete':
-      return isTrue(v) ? 'Can’t be deleted' : 'Off';
+      return isTrue(v) ? w.values.protected : w.values.off;
     case 'security.nesting':
     case 'security.privileged':
-      return isTrue(v) ? 'On' : 'Off';
+      return isTrue(v) ? w.values.on : w.values.off;
     case 'snapshots.schedule':
-      return scheduleWordsIncus(v);
+      return scheduleWordsIncus(v, locale);
     case 'snapshots.expiry':
-      return v?.trim() ? expiryWords(v).replace(/^kept /, '') : 'Until removed';
+      return v?.trim() ? keptFor(v, locale) : w.values.untilRemoved;
     case 'description':
-      return v?.trim() || 'None';
+      return v?.trim() || w.none;
     default:
-      return v?.trim() ? v : '(none)';
+      return v?.trim() ? v : w.values.empty;
   }
 }
 
-function rootDisk(cfg: HostGuestConfig): string | null {
+function rootDisk(cfg: HostGuestConfig, locale?: string | null): string | null {
+  const w = words(locale).settings;
   const disk = cfg.disks?.find((d) => d.key === 'root' || d.path === '/');
   const raw = cfg.values['device.root'];
   const pool = disk?.storage ?? /(?:^|,)pool=([^,]+)/.exec(raw ?? '')?.[1];
   const size = disk?.sizeBytes ?? parseSize(/(?:^|,)size=([^,]+)/.exec(raw ?? '')?.[1]);
   if (!pool && size == null) return null;
-  return [size != null ? formatBytesBinary(size) : 'Pool’s size', pool ? `on ${pool}` : null]
+  return [size != null ? formatBytesBinary(size) : w.poolSize, pool ? interpolate(w.onPool, { pool }) : null]
     .filter(Boolean)
     .join(' ');
 }
@@ -232,7 +253,10 @@ function rootDisk(cfg: HostGuestConfig): string | null {
  * Profiles — the everyday keys marked for their edit, keys only the `incus` command changes locked, keys from a
  * profile said so. Devices, `user.*` keys and the rest stay on the web.
  */
-export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
+export function incusSettingGroups(cfg: HostGuestConfig, locale?: string | null): IncusSettingGroup[] {
+  const all = words(locale);
+  const w = all.settings;
+  const fromProfile = all.fromProfile;
   const v = (k: string) => currentValue(cfg, k);
   const restricted = new Set(cfg.restricted ?? []);
   const inherited = new Set(cfg.inherited ?? []);
@@ -240,16 +264,16 @@ export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
     const locked = restricted.has(key);
     const out: IncusSettingRow = {
       id,
-      label: incusKeyLabel(key),
-      value: incusValueWords(key, v(key)),
+      label: incusKeyLabel(key, locale),
+      value: incusValueWords(key, v(key), locale),
       ...extra,
     };
     if (locked) {
       out.locked = true;
-      out.sub = INCUS_LOCKED;
+      out.sub = incusLockWords(locale);
     } else {
       if (edit) out.edit = edit;
-      if (inherited.has(key) && !out.sub) out.sub = FROM_PROFILE;
+      if (inherited.has(key) && !out.sub) out.sub = fromProfile;
     }
     return out;
   };
@@ -260,8 +284,8 @@ export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
   ];
   if (v('limits.memory.swap') !== undefined) resources.push(row('swap', 'limits.memory.swap'));
   if (v('limits.processes') !== undefined) resources.push(row('processes', 'limits.processes'));
-  const root = rootDisk(cfg);
-  if (root) resources.push({ id: 'root', label: 'Root disk', value: root });
+  const root = rootDisk(cfg, locale);
+  if (root) resources.push({ id: 'root', label: w.rootDisk, value: root });
 
   const boot: IncusSettingRow[] = [row('autostart', 'boot.autostart', 'autostart')];
   const priority = v('boot.autostart.priority');
@@ -269,8 +293,11 @@ export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
   if (priority || delay)
     boot.push({
       id: 'order',
-      label: 'Start order',
-      value: [priority ? `In turn ${priority}` : null, delay ? `waits ${delay} s` : null]
+      label: w.startOrder,
+      value: [
+        priority ? interpolate(w.inTurn, { order: priority }) : null,
+        delay ? interpolate(w.waits, { delay }) : null,
+      ]
         .filter(Boolean)
         .join(' · '),
     });
@@ -281,13 +308,11 @@ export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
 
   const schedule = row('schedule', 'snapshots.schedule', 'schedule');
   if (v('snapshots.schedule')?.trim() && !schedule.locked)
-    schedule.sub = [
-      expiryWords(v('snapshots.expiry')),
-      inherited.has('snapshots.schedule') ? FROM_PROFILE : null,
-    ]
-      .filter(Boolean)
-      .join(' · ')
-      .replace(/^k/, 'K');
+    schedule.sub = upperFirst(
+      [expiryWords(v('snapshots.expiry'), locale), inherited.has('snapshots.schedule') ? fromProfile : null]
+        .filter(Boolean)
+        .join(' · '),
+    );
   const snapshots: IncusSettingRow[] = [schedule];
   if (v('snapshots.pattern')) snapshots.push(row('pattern', 'snapshots.pattern', undefined, { mono: true }));
 
@@ -295,19 +320,19 @@ export function incusSettingGroups(cfg: HostGuestConfig): IncusSettingGroup[] {
   const profiles: IncusSettingRow[] = [
     {
       id: 'profiles',
-      label: 'Profiles',
-      value: cfg.profiles?.length ? cfg.profiles.join(', ') : 'None',
+      label: w.profiles,
+      value: cfg.profiles?.length ? cfg.profiles.join(', ') : all.none,
       mono: true,
     },
   ];
 
   return [
-    { id: 'resources', title: 'Resources', rows: resources },
-    { id: 'boot', title: 'Boot', rows: boot },
-    { id: 'security', title: 'Security', rows: security },
-    { id: 'snapshots', title: 'Snapshots', rows: snapshots },
-    { id: 'notes', title: 'Notes', rows: notes },
-    { id: 'profiles', title: 'Profiles', rows: profiles },
+    { id: 'resources', title: w.resources, rows: resources },
+    { id: 'boot', title: w.boot, rows: boot },
+    { id: 'security', title: w.security, rows: security },
+    { id: 'snapshots', title: w.snapshots, rows: snapshots },
+    { id: 'notes', title: w.notes, rows: notes },
+    { id: 'profiles', title: w.profiles, rows: profiles },
   ];
 }
 
@@ -329,69 +354,81 @@ export interface IncusEditSpec {
   hint?: string;
 }
 
-export function incusEditSpec(kind: IncusEditKind, name: string): IncusEditSpec {
+export function incusEditSpec(kind: IncusEditKind, name: string, locale?: string | null): IncusEditSpec {
+  const w = words(locale).edit;
+  const title = (t: string) => interpolate(t, { name });
   switch (kind) {
     case 'memory':
-      return {
-        title: `Memory of ${name}`,
-        field: 'Memory (MiB)',
-        kind: 'number',
-        hint: '1024 MiB is 1 GiB. Empty: no limit.',
-      };
+      return { title: title(w.memoryTitle), field: w.memoryField, kind: 'number', hint: w.memoryHint };
     case 'cpu':
-      return { title: `Processors of ${name}`, field: 'Cores', kind: 'number', hint: 'Empty: no limit.' };
+      return { title: title(w.cpuTitle), field: w.cpuField, kind: 'number', hint: w.noLimitHint };
     case 'autostart':
-      return {
-        title: `Start ${name} with the server`,
-        field: 'Always start it when the server starts',
-        kind: 'switch',
-      };
+      return { title: title(w.autostartTitle), field: w.autostartField, kind: 'switch' };
     case 'protection':
-      return { title: `Protect ${name}?`, field: 'Protect it from being deleted', kind: 'switch' };
+      return { title: title(w.protectionTitle), field: w.protectionField, kind: 'switch' };
     case 'description':
-      return { title: `Notes of ${name}`, field: 'Notes', kind: 'multiline' };
+      return { title: title(w.notesTitle), field: w.notesField, kind: 'multiline' };
     case 'schedule':
-      return { title: `Snapshots of ${name}`, field: 'Take a snapshot', kind: 'schedule' };
+      return { title: title(w.scheduleTitle), field: w.scheduleField, kind: 'schedule' };
   }
 }
 
+/** The schedules the phone offers (Incus cron or its `@` words), in a locale (English when none is given). */
+export function incusSchedules(locale?: string | null): readonly { value: string; label: string }[] {
+  const w = words(locale).choices;
+  return [
+    { value: '', label: w.none },
+    { value: '@hourly', label: w.hourly },
+    { value: '0 */6 * * *', label: w.sixHours },
+    { value: '0 3 * * *', label: w.daily },
+    { value: '0 3 * * 0', label: w.sundays },
+  ];
+}
+
 /** The schedules the phone offers (Incus cron or its `@` words). */
-export const INCUS_SCHEDULES: readonly { value: string; label: string }[] = [
-  { value: '', label: 'None' },
-  { value: '@hourly', label: 'Every hour' },
-  { value: '0 */6 * * *', label: 'Every 6 hours' },
-  { value: '0 3 * * *', label: 'Every day at 03:00' },
-  { value: '0 3 * * 0', label: 'Sundays at 03:00' },
-];
+export const INCUS_SCHEDULES: readonly { value: string; label: string }[] = incusSchedules('en');
+
+/** How long scheduled snapshots are kept, in a locale (English when none is given). */
+export function incusExpiries(locale?: string | null): readonly { value: string; label: string }[] {
+  const w = words(locale).choices;
+  return [
+    { value: '1d', label: w.day },
+    { value: '1w', label: w.week },
+    { value: '2w', label: w.twoWeeks },
+    { value: '1m', label: w.month },
+    { value: '', label: w.untilRemoved },
+  ];
+}
 
 /** How long scheduled snapshots are kept. */
-export const INCUS_EXPIRIES: readonly { value: string; label: string }[] = [
-  { value: '1d', label: '1 day' },
-  { value: '1w', label: '1 week' },
-  { value: '2w', label: '2 weeks' },
-  { value: '1m', label: '1 month' },
-  { value: '', label: 'Until I remove them' },
-];
+export const INCUS_EXPIRIES: readonly { value: string; label: string }[] = incusExpiries('en');
 
 /**
  * The schedule choices for this instance: the phone's, its own schedule first when it is another one (so it can be
  * kept), and no “None” when the schedule comes from a profile (an empty value on the instance brings the profile's
  * back).
  */
-export function scheduleChoices(cfg: HostGuestConfig): { value: string; label: string }[] {
+export function scheduleChoices(
+  cfg: HostGuestConfig,
+  locale?: string | null,
+): { value: string; label: string }[] {
   const now = currentValue(cfg, 'snapshots.schedule')?.trim() ?? '';
   const fromProfile = !!cfg.inherited?.includes('snapshots.schedule');
-  const list = INCUS_SCHEDULES.filter((c) => !(fromProfile && c.value === ''));
+  const list = incusSchedules(locale).filter((c) => !(fromProfile && c.value === ''));
   return now && !list.some((c) => c.value === now)
-    ? [{ value: now, label: scheduleWordsIncus(now) }, ...list]
+    ? [{ value: now, label: scheduleWordsIncus(now, locale) }, ...list]
     : list;
 }
 
-export function expiryChoices(cfg: HostGuestConfig): { value: string; label: string }[] {
+export function expiryChoices(
+  cfg: HostGuestConfig,
+  locale?: string | null,
+): { value: string; label: string }[] {
   const now = currentValue(cfg, 'snapshots.expiry')?.trim() ?? '';
-  return now && !INCUS_EXPIRIES.some((c) => c.value === now)
-    ? [{ value: now, label: expiryWords(now).replace(/^kept /, '') }, ...INCUS_EXPIRIES]
-    : [...INCUS_EXPIRIES];
+  const list = incusExpiries(locale);
+  return now && !list.some((c) => c.value === now)
+    ? [{ value: now, label: keptFor(now, locale) }, ...list]
+    : [...list];
 }
 
 const MIB = 1024 ** 2;
@@ -436,25 +473,27 @@ export function incusEditDraft(
   cfg: HostGuestConfig,
   kind: IncusEditKind,
   input: IncusEditInput,
+  locale?: string | null,
 ): { draft: ConfigDraft | null; error: string | null } {
+  const w = words(locale).edit;
   const done = (d: ConfigDraft) => ({ draft: incusDraft(trimDraft(cfg, d)), error: null });
   const text = input.text.trim();
   switch (kind) {
     case 'memory': {
       if (!text) return done({ delete: ['limits.memory'] });
-      if (!/^\d+$/.test(text)) return { draft: null, error: 'Use a whole number.' };
+      if (!/^\d+$/.test(text)) return { draft: null, error: w.wholeNumber };
       const n = Number(text);
-      if (n < 64) return { draft: null, error: 'At least 64.' };
+      if (n < 64) return { draft: null, error: interpolate(w.atLeast, { n: 64 }) };
       const now = parseSize(currentValue(cfg, 'limits.memory'));
       if (now != null && now === n * MIB) return { draft: {}, error: null };
       return done({ set: { 'limits.memory': memoryValue(n) } });
     }
     case 'cpu': {
       if (!text) return done({ delete: ['limits.cpu'] });
-      if (!/^\d+$/.test(text)) return { draft: null, error: 'Use a whole number.' };
+      if (!/^\d+$/.test(text)) return { draft: null, error: w.wholeNumber };
       const n = Number(text);
-      if (n < 1) return { draft: null, error: 'At least 1.' };
-      if (n > 512) return { draft: null, error: 'At most 512.' };
+      if (n < 1) return { draft: null, error: interpolate(w.atLeast, { n: 1 }) };
+      if (n > 512) return { draft: null, error: interpolate(w.atMost, { n: 512 }) };
       return done({ set: { 'limits.cpu': String(n) } });
     }
     case 'autostart': {
@@ -489,21 +528,27 @@ export interface IncusReviewLine {
 }
 
 /** The review's lines in Incus words (“Memory  4 GiB → 8 GiB”); a key set to “” reads as its empty words. */
-export function incusReviewLines(cfg: HostGuestConfig, draft: ConfigDraft): IncusReviewLine[] {
+export function incusReviewLines(
+  cfg: HostGuestConfig,
+  draft: ConfigDraft,
+  locale?: string | null,
+): IncusReviewLine[] {
   return reviewRows(cfg, draft).map((r) => ({
     key: r.key,
-    label: incusKeyLabel(r.key),
-    old: incusValueWords(r.key, r.old),
-    new: incusValueWords(r.key, r.op === 'delete' ? undefined : r.new),
+    label: incusKeyLabel(r.key, locale),
+    old: incusValueWords(r.key, r.old, locale),
+    new: incusValueWords(r.key, r.op === 'delete' ? undefined : r.new, locale),
   }));
 }
 
 /** A running VM takes some changes at its next restart: the review says so. */
-export function incusReviewNote(cfg: HostGuestConfig, draft: ConfigDraft): string | null {
+export function incusReviewNote(
+  cfg: HostGuestConfig,
+  draft: ConfigDraft,
+  locale?: string | null,
+): string | null {
   const touches = Object.keys(draft.set ?? {}).some((k) => k === 'limits.memory' || k === 'limits.cpu');
-  return cfg.running && cfg.kind === 'vm' && touches
-    ? 'It’s running: Incus applies what it can now, the rest at its next restart.'
-    : null;
+  return cfg.running && cfg.kind === 'vm' && touches ? words(locale).edit.reviewNote : null;
 }
 
 /* Names ------------------------------------------------------------------------------------------------------------ */
@@ -513,23 +558,26 @@ export function incusNewNameError(
   name: string,
   taken: readonly string[] = [],
   current?: string,
+  locale?: string | null,
 ): string | null {
+  const w = words(locale).names;
   const v = name.trim();
-  const bad = incusNameError(v);
+  const bad = incusNameError(v, locale);
   if (bad) return bad;
-  if (current && v === current) return 'That’s its name now.';
-  if (taken.includes(v)) return `There’s already a guest called ${v}.`;
+  if (current && v === current) return w.same;
+  if (taken.includes(v)) return interpolate(w.taken, { name: v });
   return null;
 }
 
 /** Whether a change that needs the instance stopped may go, and the sentence when it may not. */
-export function stoppedCheck(g: Pick<HostGuest, 'name' | 'state'>): string | null {
-  return g.state === 'stopped' ? null : `Shut ${g.name} down first.`;
+export function stoppedCheck(g: Pick<HostGuest, 'name' | 'state'>, locale?: string | null): string | null {
+  return g.state === 'stopped' ? null : interpolate(words(locale).names.shutDownFirst, { name: g.name });
 }
 
 /* Backups ---------------------------------------------------------------------------------------------------------- */
 
 const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
+const upperFirst = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 export interface IncusBackupRow {
   volume: string;
@@ -549,17 +597,18 @@ export function incusBackupRows(
   now: number,
   timeZone?: string,
   nameOf?: (b: HostBackupVolume) => string | null,
+  locale?: string | null,
 ): IncusBackupRow[] {
   return [...items]
     .sort((a, b) => (b.created ?? '').localeCompare(a.created ?? ''))
     .map((b) => {
-      const when = b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone) : DASH;
+      const when = b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone, locale) : DASH;
       const who = nameOf?.(b) ?? null;
       const title = who ? `${who} · ${when}` : when;
       const expires = backupExpiresAt(b);
       const line = [
         b.sizeBytes != null ? formatBytesBinary(b.sizeBytes) : null,
-        lower(expiryText(expires, now)),
+        lower(expiryText(expires, now, locale)),
       ]
         .filter(Boolean)
         .join(' · ');
@@ -593,64 +642,69 @@ export function restoredName(name: string): string {
 
 /* Tasks ------------------------------------------------------------------------------------------------------------ */
 
+type TaskKey = keyof ReturnType<typeof words>['tasks'];
+
 /** The new ops as task words (Incus and unRAID tasks the hub names by their op). */
-const OP_TASK_WORDS: Record<string, string> = {
-  'backup.create': 'Backup',
-  'backup.restore': 'Restore',
-  'backup.delete': 'Remove a backup',
-  'guest.create': 'Create',
-  'guest.clone': 'Copy',
-  'guest.delete': 'Delete',
-  'guest.rename': 'Rename',
-  'guest.move': 'Move',
-  'guest.publish': 'Make an image',
-  'config.set': 'Settings',
-  'image.download': 'Download an image',
-  'image.refresh': 'Refresh an image',
-  'image.delete': 'Delete an image',
-  'array.start': 'Start the array',
-  'array.stop': 'Stop the array',
-  'parity.start': 'Parity check',
-  'parity.pause': 'Pause the parity check',
-  'parity.resume': 'Resume the parity check',
-  'parity.cancel': 'Cancel the parity check',
-  'disk.spin_up': 'Spin up',
-  'disk.spin_down': 'Spin down',
-  'mover.start': 'Mover',
-  'plugin.check': 'Check plugins',
-  'plugin.update': 'Plugin update',
-  'container.update': 'Container update',
-  'containers.check': 'Check containers',
+const OP_TASK_WORDS: Record<string, TaskKey> = {
+  'backup.create': 'backup',
+  'backup.restore': 'restore',
+  'backup.delete': 'removeBackup',
+  'guest.create': 'create',
+  'guest.clone': 'copy',
+  'guest.delete': 'delete',
+  'guest.rename': 'rename',
+  'guest.move': 'move',
+  'guest.publish': 'publish',
+  'config.set': 'settings',
+  'image.download': 'downloadImage',
+  'image.refresh': 'refreshImage',
+  'image.delete': 'deleteImage',
+  'array.start': 'arrayStart',
+  'array.stop': 'arrayStop',
+  'parity.start': 'parityCheck',
+  'parity.pause': 'parityPause',
+  'parity.resume': 'parityResume',
+  'parity.cancel': 'parityCancel',
+  'disk.spin_up': 'spinUp',
+  'disk.spin_down': 'spinDown',
+  'mover.start': 'mover',
+  'plugin.check': 'pluginCheck',
+  'plugin.update': 'pluginUpdate',
+  'container.update': 'containerUpdate',
+  'containers.check': 'containersCheck',
 };
+
+/** An Incus operation's description read as a task word (the hub names them “Backing up instance” and the like). */
+function describedTask(t: string): TaskKey | null {
+  if (!/instance|snapshot|backup|image|container|volume|profile|operation/.test(t)) return null;
+  if (/restor\w*\s+(a\s+|the\s+)?backup/.test(t)) return 'restore';
+  if (/delet\w*\s+(a\s+|the\s+)?backup/.test(t)) return 'removeBackup';
+  if (/backing up|backup/.test(t)) return 'backup';
+  if (/restor\w*\s+(a\s+|the\s+)?snapshot/.test(t)) return 'backToSnapshot';
+  if (/delet\w*\s+(a\s+|the\s+)?snapshot/.test(t)) return 'removeSnapshot';
+  if (/snapshot/.test(t)) return 'snapshot';
+  if (/renam/.test(t)) return 'rename';
+  if (/migrat|moving/.test(t)) return 'move';
+  if (/publish|creating image/.test(t)) return 'publish';
+  if (/download\w*\s+image/.test(t)) return 'downloadImage';
+  if (/cop(y|ying)/.test(t)) return 'copy';
+  if (/restart/.test(t)) return 'restart';
+  if (/start/.test(t)) return 'start';
+  if (/stop/.test(t)) return 'stop';
+  if (/freez/.test(t)) return 'pause';
+  if (/creat/.test(t)) return 'create';
+  if (/delet/.test(t)) return 'delete';
+  if (/updat/.test(t)) return 'settings';
+  return null;
+}
 
 /**
  * An Incus operation or a new op in words, or null when it isn't one: the hub names Incus operations by their
  * description (“Backing up instance”, “Restoring snapshot”) or by the op that started them.
  */
-export function iuTaskWord(type: string): string | null {
-  const op = OP_TASK_WORDS[type];
-  if (op) return op;
-  const t = type.toLowerCase();
-  if (!/instance|snapshot|backup|image|container|volume|profile|operation/.test(t)) return null;
-  if (/restor\w*\s+(a\s+|the\s+)?backup/.test(t)) return 'Restore';
-  if (/delet\w*\s+(a\s+|the\s+)?backup/.test(t)) return 'Remove a backup';
-  if (/backing up|backup/.test(t)) return 'Backup';
-  if (/restor\w*\s+(a\s+|the\s+)?snapshot/.test(t)) return 'Back to a snapshot';
-  if (/delet\w*\s+(a\s+|the\s+)?snapshot/.test(t)) return 'Remove a snapshot';
-  if (/snapshot/.test(t)) return 'Snapshot';
-  if (/renam/.test(t)) return 'Rename';
-  if (/migrat|moving/.test(t)) return 'Move';
-  if (/publish|creating image/.test(t)) return 'Make an image';
-  if (/download\w*\s+image/.test(t)) return 'Download an image';
-  if (/cop(y|ying)/.test(t)) return 'Copy';
-  if (/restart/.test(t)) return 'Restart';
-  if (/start/.test(t)) return 'Start';
-  if (/stop/.test(t)) return 'Stop';
-  if (/freez/.test(t)) return 'Pause';
-  if (/creat/.test(t)) return 'Create';
-  if (/delet/.test(t)) return 'Delete';
-  if (/updat/.test(t)) return 'Settings';
-  return null;
+export function iuTaskWord(type: string, locale?: string | null): string | null {
+  const key = Object.hasOwn(OP_TASK_WORDS, type) ? OP_TASK_WORDS[type] : describedTask(type.toLowerCase());
+  return key ? words(locale).tasks[key] : null;
 }
 
 /* Started and finished (IU-07) ------------------------------------------------------------------------------------ */
@@ -661,52 +715,51 @@ export interface IuFollowWords {
   failed: string;
 }
 
-const w = (started: string, done: string, failed: string): IuFollowWords => ({ started, done, failed });
-
 /**
  * What a change of the Incus and unRAID build says when it starts and when it ends (null for the rest): `name` is
  * the guest, plugin or server it is about, `extra` the new name or the disk.
  */
-export function iuFollowWords(kind: string, name: string, extra = ''): IuFollowWords | null {
+export function iuFollowWords(
+  kind: string,
+  name: string,
+  extra = '',
+  locale?: string | null,
+): IuFollowWords | null {
+  const w = words(locale).follow;
   // An Unraid command: the web's words (`unraidChangeWords`), `name` the server, `extra` the disk, plugin or guest.
   if ((UNRAID_TASK_OPS as readonly string[]).includes(kind)) {
-    const u = unraidChangeWords(kind as UnraidOp, name, extra ? { target: extra } : {});
-    return { started: u.started, done: u.finished, failed: `${u.what} didn’t work.` };
+    const u = unraidChangeWords(kind as UnraidOp, name, extra ? { target: extra } : {}, locale);
+    return { started: u.started, done: u.finished, failed: interpolate(w.failed, { what: u.what }) };
   }
-  switch (kind) {
-    case 'guest.rename':
-      return w(
-        `Renaming ${name} started.`,
-        `${name} is called ${extra} now.`,
-        `Renaming ${name} didn’t work.`,
-      );
-    case 'guest.copy':
-      return w(
-        `The copy of ${name} started.`,
-        `The copy of ${name} is ready.`,
-        `The copy of ${name} didn’t work.`,
-      );
-    case 'backup.restore_new':
-      return w(
-        `Restoring ${name} as ${extra} started.`,
-        `${extra} is ready.`,
-        `Restoring ${name} didn’t work.`,
-      );
-    default:
-      return null;
-  }
+  const said =
+    kind === 'guest.rename'
+      ? w.rename
+      : kind === 'guest.copy'
+        ? w.copy
+        : kind === 'backup.restore_new'
+          ? w.restoreNew
+          : null;
+  if (!said) return null;
+  const vars = { name, extra };
+  return {
+    started: interpolate(said.started, vars),
+    done: interpolate(said.done, vars),
+    failed: interpolate(said.failed, vars),
+  };
 }
 
 /* An Incus server -------------------------------------------------------------------------------------------------- */
 
 /** An Incus server's facts on its Summary: the version, projects, images, profiles and networks. */
-export function incusFacts(d: HostIncusDetail): { label: string; value: string }[] {
+export function incusFacts(d: HostIncusDetail, locale?: string | null): { label: string; value: string }[] {
+  const all = words(locale);
+  const w = all.facts;
   const out: { label: string; value: string }[] = [{ label: 'Incus', value: d.version }];
-  if (d.projects.length) out.push({ label: 'Projects', value: d.projects.map((p) => p.name).join(', ') });
-  out.push({ label: 'Images', value: d.images.length ? plural(d.images.length, 'image') : 'None' });
-  if (d.profiles.length) out.push({ label: 'Profiles', value: d.profiles.map((p) => p.name).join(', ') });
+  if (d.projects.length) out.push({ label: w.projects, value: d.projects.map((p) => p.name).join(', ') });
+  out.push({ label: w.images, value: d.images.length ? w.imageCount(d.images.length) : all.none });
+  if (d.profiles.length) out.push({ label: w.profiles, value: d.profiles.map((p) => p.name).join(', ') });
   const managed = d.networks.filter((n) => n.managed);
-  if (managed.length) out.push({ label: 'Networks', value: managed.map((n) => n.name).join(', ') });
+  if (managed.length) out.push({ label: w.networks, value: managed.map((n) => n.name).join(', ') });
   return out;
 }
 
@@ -727,14 +780,18 @@ export function poolTone(pct: number | null, warn = 85): 'warn' | 'bad' | null {
   return pct >= 95 ? 'bad' : pct >= warn ? 'warn' : null;
 }
 
-export function incusPoolRows(d: HostIncusDetail): PoolRowView[] {
+export function incusPoolRows(d: HostIncusDetail, locale?: string | null): PoolRowView[] {
+  const w = words(locale).pools;
   return d.pools.map((p) => {
     const pct = p.usedBytes != null && p.totalBytes ? (p.usedBytes / p.totalBytes) * 100 : null;
     const usedText =
       p.usedBytes != null && p.totalBytes != null
-        ? `${formatBytesBinary(p.usedBytes)} of ${formatBytesBinary(p.totalBytes)} used`
-        : 'Use not known';
-    const line = [p.driver, plural(p.volumes, 'volume')].join(' · ');
+        ? interpolate(w.used, {
+            used: formatBytesBinary(p.usedBytes),
+            total: formatBytesBinary(p.totalBytes),
+          })
+        : w.unknown;
+    const line = [p.driver, w.volumes(p.volumes)].join(' · ');
     return {
       name: p.name,
       line,
@@ -747,8 +804,11 @@ export function incusPoolRows(d: HostIncusDetail): PoolRowView[] {
 }
 
 /** Where an Incus hint is fixed on the phone (IU-08): no schedule → the guest's Snapshots. */
-export function incusHintWayOut(kind: string): { label: string; to: 'snapshots' } | null {
-  return kind === 'incus.no_snapshots' ? { label: 'Set a schedule', to: 'snapshots' } : null;
+export function incusHintWayOut(
+  kind: string,
+  locale?: string | null,
+): { label: string; to: 'snapshots' } | null {
+  return kind === 'incus.no_snapshots' ? { label: words(locale).setSchedule, to: 'snapshots' } : null;
 }
 
 /** The guest a hint is about (its entity is the guest id or the instance name). */

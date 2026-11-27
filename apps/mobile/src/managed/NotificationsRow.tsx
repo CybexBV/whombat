@@ -37,7 +37,9 @@ export function NotificationsRow({
     push.state.status === 'unavailable' &&
     (push.state.reason === 'link_off' || push.state.reason === 'community');
   const delivery = useDeliveryStatus();
-  const v = noPush ? communityNotificationsView() : notificationsView(push, Date.now(), delivery.status);
+  const v = noPush
+    ? communityNotificationsView(rawLocale)
+    : notificationsView(push, Date.now(), delivery.status, rawLocale);
   const page = 'page' in v ? v.page : undefined;
   return (
     <Card label={label ?? managedCopyHere.notifications.label}>

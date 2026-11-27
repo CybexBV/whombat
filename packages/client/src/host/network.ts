@@ -9,8 +9,11 @@
  * `networkApi`'s session.
  */
 
-import { HOST_REPOINT_WORDS } from '@whombat/core/domain';
+import { hostRepointWords } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import type { z } from 'zod';
+import { clientTree } from '../i18n/catalog';
+import { NETWORK_WORDS } from '../i18n/messages/hostManaged/network';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import {
@@ -71,174 +74,129 @@ export function networkApi(session: ApplianceSession): NetworkApi {
 
 /* Words ----------------------------------------------------------------------------------------------------------- */
 
-const q = (ssid: string) => `“${ssid}”`;
-const servers = (n: number) => (n === 1 ? 'server' : 'servers');
-
-/** Every word of NETWORK and its dialogs (HD-11's where it has them). `name` is the Whombat's (the burrow's) name. */
-export const NETWORK_TEXT = {
-  section: 'NETWORK',
-  cable: 'Cable',
-  wifi: 'Wi-Fi',
-  connected: 'Connected',
-  notConnected: 'Not connected',
-  connecting: (ssid: string | undefined) => (ssid ? `Connecting to ${ssid}…` : 'Connecting…'),
-  /** With a cable plugged in, the Wi-Fi waits (HD-05: a cable wins). */
-  cableWins: 'Used when the cable is unplugged',
-  unavailable: 'The network couldn’t be read right now.',
-  tryAgain: 'Try again',
-  offline: 'Can’t reach Whombat right now',
-  offlineMeta: 'It keeps trying. A cable or another Wi-Fi network may help.',
-  missing: {
-    no_adapter: { title: 'No Wi-Fi card', meta: 'This machine connects by cable.' },
-    no_driver: { title: 'Wi-Fi isn’t working', meta: 'This Wi-Fi card has no driver yet.' },
-    disabled: { title: 'Wi-Fi is switched off', meta: 'Turn it on with the machine’s Wi-Fi key or switch.' },
-  },
-  /** The Wi-Fi card is in the hardware report (About → HARDWARE). */
-  seeHardware: 'See hardware',
-  saved: 'Saved',
-  inUse: 'In use now',
-  secured: 'Secured',
-  open: 'Open',
-  forget: 'Forget',
-  join: 'Join a Wi-Fi network',
-  forgetDialog: {
-    title: (ssid: string) => `Forget ${q(ssid)}?`,
-    lead: (name: string, secured: boolean) =>
-      secured
-        ? `${name} won’t join it again until someone types its password.`
-        : `${name} won’t join it again by itself.`,
-    submit: 'Forget',
-    busy: 'Forgetting…',
-  },
-  dialog: {
-    title: 'Join a Wi-Fi network',
-    lead: (name: string) => `Choose the network ${name} should use.`,
-    nearby: 'Wi-Fi networks nearby',
-    looking: 'Looking for networks…',
-    none: 'No Wi-Fi networks nearby.',
-    again: 'Look again',
-    couldNotLook: 'Couldn’t look for networks. Try again.',
-    other: 'Other network…',
-    otherTitle: 'Other network',
-    otherLead: 'A network that doesn’t show its name. Type it exactly.',
-    name: 'Network name',
-    security: 'Security',
-    securities: { psk: 'Password', open: 'None' } as Record<'psk' | 'open', string>,
-    password: 'Password',
-    show: 'Show',
-    hide: 'Hide',
-    guard: (name: string) =>
-      `If ${name} can’t reach the internet on the new network, it goes back to the one it uses now.`,
-    savedNote: 'Saved on this Whombat: it joins without the password.',
-    join: 'Join',
-    joining: 'Joining…',
-    back: 'Back',
-    cancel: 'Cancel',
-    close: 'Close',
-    done: 'Done',
-  },
-  rowReason: {
-    enterprise: 'Company networks can’t be joined yet.',
-    other: 'This kind of network can’t be joined.',
-  } as Record<'enterprise' | 'other', string>,
-  signal: (signal: WifiSignal) =>
-    signal >= 4 ? 'Strong signal' : signal >= 2 ? 'Good signal' : 'Weak signal',
-  problems: {
-    name: 'Type the network’s name.',
-    nameLong: 'That name is too long for a Wi-Fi network.',
-    password: 'A Wi-Fi password is 8 to 63 characters.',
-  },
-  failures: {
-    wrong_password: () => 'That password didn’t work.',
-    not_found: (ssid: string) => `Couldn’t find ${ssid} nearby.`,
-    no_address: (ssid: string, name: string) => `${ssid} didn’t give ${name} an address.`,
-    no_internet: (_ssid: string, name: string) => `${name} couldn’t reach the internet there.`,
-    failed: () => 'Something went wrong. Try again.',
-  } as Record<NetworkChangeFailure, (ssid: string, name: string) => string>,
-  errors: {
-    no_wifi: (name: string) => `${name} has no Wi-Fi.`,
-    busy: () => 'Another network change is still running. Try again in a moment.',
-    in_use: (name: string) =>
-      `${name} reaches the internet through this network. Plug in a cable or join another network first.`,
-    not_saved: () => 'That network isn’t saved any more.',
-    invalid_passphrase: () => 'A Wi-Fi password is 8 to 63 characters.',
-    not_connected: (name: string) => `${name}’s Wi-Fi isn’t on a network. Join one first.`,
-    no_cable: (name: string) => `No cable is plugged into ${name}.`,
-    unchanged: (name: string) => `${name} already works that way.`,
-    forbidden: () => 'The network can’t be changed from here.',
-  } as Record<NetworkErrorCode, (name: string) => string>,
-  failed: 'That didn’t work. Try again.',
-  /* Wi-Fi only and the cable again (Whombat network-move.md). */
-  useWifiOnly: 'Use Wi-Fi only',
-  useCableAgain: 'Use the cable again',
-  switchedOff: 'Switched off',
-  /** A switched-off cable's row: unplugging it is safe now (once Wi-Fi only is kept). */
-  wifiOnlyMeta: (name: string, plugged: boolean) =>
-    plugged ? `${name} uses Wi-Fi only. You can unplug the cable.` : `${name} uses Wi-Fi only.`,
-  wifiOnlyDialog: {
-    title: 'Use Wi-Fi only?',
-    lead: (name: string, ssid: string) =>
-      `${name} stops using the cable and stays on ${q(ssid)}. Your servers move with it.`,
-    guard: (name: string) =>
-      `If ${name} can’t reach the internet on Wi-Fi, it goes back to the cable after 2 minutes.`,
-    /** The Wi-Fi's subnet isn't the cable's: agents search only their own network. */
-    otherNetwork: (name: string) =>
-      `This Wi-Fi is another network than the cable. Your servers can’t follow ${name} there by themselves, so ${name} will ask you to point them here.`,
-    submit: 'Use Wi-Fi only',
-    busy: 'Switching…',
-  },
-  cableDialog: {
-    title: 'Use the cable again?',
-    lead: (name: string) => `${name} goes back to the cable. Your servers move with it.`,
-    submit: 'Use the cable',
-    busy: 'Switching…',
-  },
-  /** A cable change's line, by what it makes the box use and its phase. */
-  cableChange: {
-    wifi: {
-      applying: () => 'Moving to Wi-Fi…',
-      confirming: (name: string) => `Checking that ${name} reaches the internet on Wi-Fi…`,
-      committed: (name: string) => `${name} uses Wi-Fi only now.`,
-      reverting: (name: string) => `${name} couldn’t reach the internet on Wi-Fi. Going back to the cable…`,
-      reverted: (name: string) => `${name} couldn’t reach the internet on Wi-Fi, so it uses the cable again.`,
-      failed: (name: string) => `${name} couldn’t switch to Wi-Fi. Nothing changed.`,
+/** Every word of NETWORK and its dialogs, in a locale (English when none is given). `name` is the Whombat's name. */
+export function networkText(locale?: string | null) {
+  const w = clientTree(locale, NETWORK_WORDS);
+  const named = (template: string) => (name: string) => interpolate(template, { name });
+  const phases = (words: Record<NetworkChangePhase, string>) =>
+    Object.fromEntries(Object.entries(words).map(([phase, t]) => [phase, named(t)])) as Record<
+      NetworkChangePhase,
+      (name: string) => string
+    >;
+  return {
+    section: w.section,
+    cable: w.cable,
+    wifi: w.wifi,
+    connected: w.connected,
+    notConnected: w.notConnected,
+    connecting: (ssid: string | undefined) => (ssid ? interpolate(w.connectingTo, { ssid }) : w.connecting),
+    /** With a cable plugged in, the Wi-Fi waits (a cable wins). */
+    cableWins: w.cableWins,
+    unavailable: w.unavailable,
+    tryAgain: w.tryAgain,
+    offline: w.offline,
+    offlineMeta: w.offlineMeta,
+    missing: w.missing,
+    /** The Wi-Fi card is in the hardware report (About → HARDWARE). */
+    seeHardware: w.seeHardware,
+    saved: w.saved,
+    inUse: w.inUse,
+    secured: w.secured,
+    open: w.open,
+    forget: w.forget,
+    join: w.join,
+    forgetDialog: {
+      title: (ssid: string) => interpolate(w.forgetDialog.title, { ssid }),
+      lead: (name: string, secured: boolean) =>
+        interpolate(secured ? w.forgetDialog.leadSecured : w.forgetDialog.leadOpen, { name }),
+      submit: w.forgetDialog.submit,
+      busy: w.forgetDialog.busy,
     },
-    cable: {
-      applying: () => 'Moving to the cable…',
-      confirming: (name: string) => `Checking that ${name} reaches the internet on the cable…`,
-      committed: (name: string) => `${name} uses the cable again.`,
-      reverting: (name: string) => `${name} couldn’t reach the internet on the cable. Going back to Wi-Fi…`,
-      reverted: (name: string) => `${name} couldn’t reach the internet on the cable, so it stays on Wi-Fi.`,
-      failed: (name: string) => `${name} couldn’t switch to the cable. Nothing changed.`,
+    dialog: {
+      ...w.dialog,
+      lead: named(w.dialog.lead),
+      securities: w.dialog.securities as Record<'psk' | 'open', string>,
+      guard: named(w.dialog.guard),
     },
-  } satisfies Record<CableUse, Record<NetworkChangePhase, (name: string) => string>>,
-  /** The box turned its cable back on by itself. */
-  cableBackup: (name: string) => `Wi-Fi stopped reaching Whombat, so ${name} uses its cable again.`,
-  /** The servers following the box's new address. */
-  move: {
-    progress: (found: number, total: number, name: string) =>
-      `${found} of ${total} ${servers(total)} found ${name}’s new address.`,
-    done: (total: number, name: string) =>
-      total === 1
-        ? `Your server found ${name}’s new address.`
-        : `All your servers found ${name}’s new address.`,
-    unplug: 'You can unplug the cable now.',
-    missing: (n: number, name: string) =>
-      n === 1 ? `1 server hasn’t found ${name} yet.` : `${n} servers haven’t found ${name} yet.`,
-    pointHere: HOST_REPOINT_WORDS.pointThemHere,
-  },
-  /** How to keep the old address: the router's fixed address for the card the box uses now. */
-  addressTip: (name: string, from: string, to: string, card: 'wifi' | 'cable', mac: string | null) =>
-    `${name}’s address changed from ${from} to ${to}. To keep ${from}, have your router give it to ${
-      card === 'wifi' ? 'the Wi-Fi card' : 'the cable'
-    }${mac ? ` (${mac.toUpperCase()})` : ''}, then restart ${name}.`,
-} as const;
+    rowReason: w.rowReason as Record<'enterprise' | 'other', string>,
+    signal: (signal: WifiSignal) =>
+      signal >= 4 ? w.signal.strong : signal >= 2 ? w.signal.good : w.signal.weak,
+    problems: w.problems,
+    failures: {
+      wrong_password: () => w.failures.wrong_password,
+      not_found: (ssid: string) => interpolate(w.failures.not_found, { ssid }),
+      no_address: (ssid: string, name: string) => interpolate(w.failures.no_address, { ssid, name }),
+      no_internet: (_ssid: string, name: string) => interpolate(w.failures.no_internet, { name }),
+      failed: () => w.failures.failed,
+    } as Record<NetworkChangeFailure, (ssid: string, name: string) => string>,
+    errors: {
+      no_wifi: named(w.errors.no_wifi),
+      busy: () => w.errors.busy,
+      in_use: named(w.errors.in_use),
+      not_saved: () => w.errors.not_saved,
+      invalid_passphrase: () => w.errors.invalid_passphrase,
+      not_connected: named(w.errors.not_connected),
+      no_cable: named(w.errors.no_cable),
+      unchanged: named(w.errors.unchanged),
+      forbidden: () => w.errors.forbidden,
+    } as Record<NetworkErrorCode, (name: string) => string>,
+    failed: w.failed,
+    /* Wi-Fi only and the cable again (Whombat network-move.md). */
+    useWifiOnly: w.useWifiOnly,
+    useCableAgain: w.useCableAgain,
+    switchedOff: w.switchedOff,
+    /** A switched-off cable's row: unplugging it is safe now (once Wi-Fi only is kept). */
+    wifiOnlyMeta: (name: string, plugged: boolean) =>
+      interpolate(plugged ? w.wifiOnlyMeta.plugged : w.wifiOnlyMeta.unplugged, { name }),
+    wifiOnlyDialog: {
+      title: w.wifiOnlyDialog.title,
+      lead: (name: string, ssid: string) => interpolate(w.wifiOnlyDialog.lead, { name, ssid }),
+      guard: named(w.wifiOnlyDialog.guard),
+      /** The Wi-Fi's subnet isn't the cable's: agents search only their own network. */
+      otherNetwork: named(w.wifiOnlyDialog.otherNetwork),
+      submit: w.wifiOnlyDialog.submit,
+      busy: w.wifiOnlyDialog.busy,
+    },
+    cableDialog: { ...w.cableDialog, lead: named(w.cableDialog.lead) },
+    /** A cable change's line, by what it makes the box use and its phase. */
+    cableChange: {
+      wifi: phases(w.cableChange.wifi),
+      cable: phases(w.cableChange.cable),
+    } satisfies Record<CableUse, Record<NetworkChangePhase, (name: string) => string>>,
+    /** The box turned its cable back on by itself. */
+    cableBackup: named(w.cableBackup),
+    /** The servers following the box's new address. */
+    move: {
+      progress: (found: number, total: number, name: string) =>
+        w.move.progress(total, { found, total, name }),
+      done: (total: number, name: string) => w.move.done(total, { name }),
+      unplug: w.move.unplug,
+      missing: (n: number, name: string) => w.move.missing(n, { name }),
+      pointHere: hostRepointWords(locale).pointThemHere,
+    },
+    /** How to keep the old address: the router's fixed address for the card the box uses now. */
+    addressTip: (name: string, from: string, to: string, card: 'wifi' | 'cable', mac: string | null) =>
+      interpolate(w.addressTip.line, {
+        name,
+        from,
+        to,
+        card: card === 'wifi' ? w.addressTip.wifiCard : w.addressTip.cable,
+        mac: mac ? interpolate(w.addressTip.mac, { mac: mac.toUpperCase() }) : '',
+      }),
+    /** A Wi-Fi join's and forget's lines, by phase (`networkChangeView`). */
+    joinChange: w.joinChange,
+    forgetChange: w.forgetChange,
+  } as const;
+}
 
-const T = NETWORK_TEXT;
+export type NetworkText = ReturnType<typeof networkText>;
+
+/** NETWORK's words in English. */
+export const NETWORK_TEXT: NetworkText = networkText('en');
 
 /** “Strong signal”, “Good signal”, “Weak signal” (4 bars; 3–2; 1–0). */
-export function wifiSignalText(signal: WifiSignal): string {
-  return T.signal(signal);
+export function wifiSignalText(signal: WifiSignal, locale?: string | null): string {
+  return networkText(locale).signal(signal);
 }
 
 /* The section ----------------------------------------------------------------------------------------------------- */
@@ -345,7 +303,12 @@ export function cableChangeShown(
 }
 
 /** A cable change in words: what runs, or how it ended. */
-export function cableChangeView(change: CableChange, name: string): NetworkChangeView {
+export function cableChangeView(
+  change: CableChange,
+  name: string,
+  locale?: string | null,
+): NetworkChangeView {
+  const T = networkText(locale);
   const running = networkChangeRunning(change);
   const backup = change.by === 'backup' && change.phase === 'committed';
   const dot: Dot = backup
@@ -379,8 +342,9 @@ export const SERVER_MOVE_LATE_MS = 5 * 60_000;
  */
 export function serverMoveView(
   move: ServerMove | null | undefined,
-  { name, unplug, now }: { name: string; unplug: boolean; now: number },
+  { name, unplug, now, locale }: { name: string; unplug: boolean; now: number; locale?: string | null },
 ): ServerMoveView | null {
+  const T = networkText(locale);
   if (!move || move.total === 0) return null;
   const since = Date.parse(move.since);
   if (move.found >= move.total) {
@@ -411,6 +375,7 @@ export function addressTip(
   network: HostNetwork,
   move: ServerMove | null | undefined,
   name: string,
+  locale?: string | null,
 ): string | null {
   if (!move?.from || move.from === move.to) return null;
   const wifi = network.wifi;
@@ -422,7 +387,7 @@ export function addressTip(
         ? false
         : !!network.wifiOnly;
   const mac = (onWifi ? wifi?.mac : cable?.mac) ?? null;
-  return T.addressTip(name, move.from, move.to, onWifi ? 'wifi' : 'cable', mac);
+  return networkText(locale).addressTip(name, move.from, move.to, onWifi ? 'wifi' : 'cable', mac);
 }
 
 /** The Use Wi-Fi only dialog's words: the network it stays on, the guard, and the other-network note when it applies. */
@@ -434,7 +399,12 @@ export interface WifiOnlyDialogView {
   otherNetwork: string | null;
 }
 
-export function wifiOnlyDialogView(network: HostNetwork, name: string): WifiOnlyDialogView {
+export function wifiOnlyDialogView(
+  network: HostNetwork,
+  name: string,
+  locale?: string | null,
+): WifiOnlyDialogView {
+  const T = networkText(locale);
   const D = T.wifiOnlyDialog;
   const wifi = network.wifi;
   const cable = network.wired.find((w) => w.connected) ?? null;
@@ -448,10 +418,16 @@ export function wifiOnlyDialogView(network: HostNetwork, name: string): WifiOnly
 }
 
 /** A change in words (HD-11): what runs, or how it ended and why. */
-export function networkChangeView(change: NetworkChange, name: string): NetworkChangeView {
+export function networkChangeView(
+  change: NetworkChange,
+  name: string,
+  locale?: string | null,
+): NetworkChangeView {
+  const T = networkText(locale);
   const { ssid } = change;
   const previous = change.previous ?? null;
   const why = change.failure ? T.failures[change.failure](ssid, name) : null;
+  const say = (template: string) => interpolate(template, { ssid, name, previous: previous ?? '' });
   const line = (title: string, meta: string | null, dot: Dot) => ({
     id: change.id,
     title,
@@ -459,50 +435,43 @@ export function networkChangeView(change: NetworkChange, name: string): NetworkC
     dot,
     running: networkChangeRunning(change),
   });
-  if (change.kind === 'join')
+  if (change.kind === 'join') {
+    const J = T.joinChange;
     switch (change.phase) {
       case 'applying':
-        return line(`Joining ${ssid}…`, previous ? T.dialog.guard(name) : null, 'mut');
+        return line(say(J.applying), previous ? T.dialog.guard(name) : null, 'mut');
       case 'confirming':
-        return line(`Joined ${ssid}`, `Checking that ${name} reaches the internet there…`, 'mut');
+        return line(say(J.joined), say(J.checking), 'mut');
       case 'committed':
-        return line(`Joined ${ssid}`, null, 'ok');
+        return line(say(J.joined), null, 'ok');
       case 'reverting':
-        return line(
-          previous ? `Going back to ${previous}…` : `Leaving ${ssid}…`,
-          why ?? `${name} couldn’t reach the internet there.`,
-          'warn',
-        );
+        return line(previous ? say(J.goingBack) : say(J.leaving), why ?? say(J.noInternet), 'warn');
       case 'reverted':
         return line(
-          `Couldn’t switch to ${ssid}`,
+          say(J.reverted),
           change.failure === 'no_address'
-            ? `${ssid} didn’t give ${name} an address, so it ${previous ? `went back to ${previous}` : 'left it again'}.`
-            : `Joined ${ssid}, but ${name} couldn’t reach the internet there, so it ${
-                previous ? `went back to ${previous}` : 'left it again'
-              }.`,
+            ? say(previous ? J.noAddressBack : J.noAddressLeft)
+            : say(previous ? J.noInternetBack : J.noInternetLeft),
           'warn',
         );
       default:
-        return line(`Couldn’t join ${ssid}`, why ?? T.failures.failed(ssid, name), 'bad');
+        return line(say(J.failed), why ?? T.failures.failed(ssid, name), 'bad');
     }
+  }
+  const F = T.forgetChange;
   switch (change.phase) {
     case 'applying':
-      return line(`Forgetting ${ssid}…`, null, 'mut');
+      return line(say(F.applying), null, 'mut');
     case 'confirming':
-      return line(`Forgot ${ssid}`, `Checking that ${name} still reaches the internet…`, 'mut');
+      return line(say(F.forgot), say(F.checking), 'mut');
     case 'committed':
-      return line(`Forgot ${ssid}`, null, 'ok');
+      return line(say(F.forgot), null, 'ok');
     case 'reverting':
-      return line(`Joining ${ssid} again…`, `${name} couldn’t reach the internet without it.`, 'warn');
+      return line(say(F.joiningAgain), say(F.noInternet), 'warn');
     case 'reverted':
-      return line(
-        `Kept ${ssid}`,
-        `${name} couldn’t reach the internet without ${ssid}, so it joined it again.`,
-        'warn',
-      );
+      return line(say(F.kept), say(F.keptMeta), 'warn');
     default:
-      return line(`Couldn’t forget ${ssid}`, why ?? T.failures.failed(ssid, name), 'bad');
+      return line(say(F.failed), why ?? T.failures.failed(ssid, name), 'bad');
   }
 }
 
@@ -520,6 +489,7 @@ export function networkSectionView(
     cableSeenRunning = false,
     move = null,
     now = Date.now(),
+    locale,
   }: {
     name: string;
     seenRunning?: boolean;
@@ -527,8 +497,11 @@ export function networkSectionView(
     /** `host.network`'s `move` (the poller keeps it). */
     move?: ServerMove | null;
     now?: number;
+    /** The language of the words (English when none is given). */
+    locale?: string | null;
   },
 ): NetworkSectionView {
+  const T = networkText(locale);
   const rows: NetworkRowView[] = [];
   const base = { signal: null, hardware: false, action: null } as const;
   const busy = networkChangeRunning(network.change) || networkChangeRunning(network.cableChange);
@@ -590,7 +563,7 @@ export function networkSectionView(
         ...base,
         key: 'wifi',
         kind: 'wifi',
-        title: [T.wifi, ssid, wifi.signal === undefined ? null : wifiSignalText(wifi.signal as WifiSignal)]
+        title: [T.wifi, ssid, wifi.signal === undefined ? null : T.signal(wifi.signal as WifiSignal)]
           .filter(Boolean)
           .join(' · '),
         meta: join([wifi.address ?? null, cable ? T.cableWins : null]),
@@ -643,19 +616,19 @@ export function networkSectionView(
     .sort((a, b) => Number(b.connected) - Number(a.connected));
   const change =
     network.change && networkChangeShown(network.change, { seenRunning, now })
-      ? networkChangeView(network.change, name)
+      ? networkChangeView(network.change, name, locale)
       : null;
   const cableChange =
     network.cableChange && cableChangeShown(network.cableChange, { seenRunning: cableSeenRunning, now })
-      ? cableChangeView(network.cableChange, name)
+      ? cableChangeView(network.cableChange, name, locale)
       : null;
   return {
     rows,
     saved,
     change,
     cableChange,
-    move: serverMoveView(move, { name, unplug, now }),
-    tip: addressTip(network, move, name),
+    move: serverMoveView(move, { name, unplug, now, locale }),
+    tip: addressTip(network, move, name, locale),
     canJoin: wifi !== null && !busy,
     busy,
   };
@@ -686,7 +659,8 @@ export interface WifiRowView {
 }
 
 /** The dialog's list: the network in use first, then as the scan has them (strongest first). */
-export function wifiRows(scan: Pick<WifiScan, 'networks'>): WifiRowView[] {
+export function wifiRows(scan: Pick<WifiScan, 'networks'>, locale?: string | null): WifiRowView[] {
+  const T = networkText(locale);
   return [...scan.networks]
     .sort((a, b) => Number(b.connected) - Number(a.connected))
     .map((n) => {
@@ -705,7 +679,7 @@ export function wifiRows(scan: Pick<WifiScan, 'networks'>): WifiRowView[] {
         label: [
           n.ssid,
           n.security === 'open' ? T.open.toLowerCase() : T.secured.toLowerCase(),
-          wifiSignalText(n.signal as WifiSignal).toLowerCase(),
+          T.signal(n.signal as WifiSignal).toLowerCase(),
           state?.toLowerCase() ?? null,
           reason,
         ]
@@ -721,12 +695,15 @@ export function wifiNeedsPassword(network: Pick<WifiNetwork, 'security' | 'saved
 }
 
 /** The password's problem in words, or null (8–63 characters, or 64 hex digits). */
-export function wifiPasswordProblem(password: string): string | null {
-  return /^(?:[\x20-\x7e]{8,63}|[0-9A-Fa-f]{64})$/.test(password) ? null : T.problems.password;
+export function wifiPasswordProblem(password: string, locale?: string | null): string | null {
+  return /^(?:[\x20-\x7e]{8,63}|[0-9A-Fa-f]{64})$/.test(password)
+    ? null
+    : networkText(locale).problems.password;
 }
 
 /** A typed network name's problem in words, or null (1–32 bytes, printable). */
-export function wifiNameProblem(name: string): string | null {
+export function wifiNameProblem(name: string, locale?: string | null): string | null {
+  const T = networkText(locale);
   if (name.trim() === '') return T.problems.name;
   if (!ssidValid(name)) return T.problems.nameLong;
   return null;
@@ -750,12 +727,13 @@ export function wifiJoinInput(form: {
 export function networkErrorCode(error: unknown): NetworkErrorCode | null {
   if (!(error instanceof OperationError)) return null;
   const detail = (error.details as { code?: unknown } | undefined)?.code;
-  const known = (c: unknown): c is NetworkErrorCode => typeof c === 'string' && c in T.errors;
+  const known = (c: unknown): c is NetworkErrorCode => typeof c === 'string' && c in NETWORK_TEXT.errors;
   return known(detail) ? detail : known(error.code) ? error.code : null;
 }
 
 /** A `host.wifi.*` refusal in words (never the password). */
-export function networkErrorText(error: unknown, name: string): string {
+export function networkErrorText(error: unknown, name: string, locale?: string | null): string {
+  const T = networkText(locale);
   const code = networkErrorCode(error);
   return code ? T.errors[code](name) : T.failed;
 }

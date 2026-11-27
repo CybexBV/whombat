@@ -37,7 +37,7 @@ import {
 import { Linking, Platform, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { isShareUrl } from '../data/shareInbox';
-import { HOME_TAB, INBOX_TAB, OVERVIEW_TITLE, TABS, type Tab as TabName } from '../data/shell';
+import { HOME_TAB, INBOX_TAB, overviewTitle, TABS, type Tab as TabName } from '../data/shell';
 import { ChatSettledBridge } from '../data/useThreadSettle';
 import { noteRoute } from '../errors/nativeErrorNotes';
 import { useI18n } from '../i18n';
@@ -300,15 +300,20 @@ function usePushTaps(navRef: typeof navigationRef) {
         navRef.navigate('Tabs', { screen: INBOX_TAB });
         return;
       }
-      const route = routeForLink(target.item.link as LinkRef, currentBootstrap().sidebar, OVERVIEW_TITLE, {
-        deployments: true,
-      });
+      const route = routeForLink(
+        target.item.link as LinkRef,
+        currentBootstrap().sidebar,
+        overviewTitle(rawLocale),
+        {
+          deployments: true,
+        },
+      );
       if (route) (navRef.navigate as (name: string, params?: object) => void)(route.name, route.params);
       void client.notifications
         .markRead({ params: { burrow: slug }, body: { ids: [target.item.id] } })
         .catch(() => {});
     },
-    [client, slug, currentBootstrap, navRef],
+    [client, slug, currentBootstrap, navRef, rawLocale],
   );
   const session = managed?.session;
   const showNote = managed?.showNote;
@@ -331,7 +336,9 @@ function usePushTaps(navRef: typeof navigationRef) {
       // This app shows one burrow; a link of another opens the inbox (Connections).
       const route =
         open.to === 'link' && open.burrow === slug
-          ? routeForLink(open.link, currentBootstrap().sidebar, OVERVIEW_TITLE, { deployments: true })
+          ? routeForLink(open.link, currentBootstrap().sidebar, overviewTitle(rawLocale), {
+              deployments: true,
+            })
           : null;
       if (route) {
         (navRef.navigate as (name: string, params?: object) => void)(route.name, route.params);
@@ -353,7 +360,7 @@ function usePushTaps(navRef: typeof navigationRef) {
       navRef.navigate('Tabs', { screen: INBOX_TAB });
       if (open.to === 'inbox' && open.missing) showNote?.(managedCopyHere.push.notFound);
     },
-    [session, showNote, byKind, slug, currentBootstrap, navRef, managedCopyHere.push.notFound],
+    [session, showNote, byKind, slug, currentBootstrap, navRef, managedCopyHere.push.notFound, rawLocale],
   );
   // Taps from the managed root: one that opened the app (before this appliance's session was up), then each new one.
   const taps = managed?.taps;

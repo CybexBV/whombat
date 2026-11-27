@@ -13,32 +13,42 @@ import {
   type Message,
   parseChatHref,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
 
 /**
- * What every screen calls the places (CHT-01, CHT-03, CHT-11; AP-2401). The `dashboard` place is called Overview
- * (sidebar-tabs.md): it holds the servers and the connections, so “Connections” keeps meaning only what is connected.
+ * What every screen calls the places (CHT-01, CHT-03, CHT-11; AP-2401), in a locale (English when none). The
+ * `dashboard` place is called Overview (sidebar-tabs.md): it holds the servers and the connections, so “Connections”
+ * keeps meaning only what is connected.
  */
-export const CHAT_WORDS = {
-  chat: 'Chat',
-  feedback: 'Feedback',
-  /** Chat's head's way to Feedback, with its unread count, for a screen reader. */
-  feedbackUnread: (n: number) => `Feedback, ${n} unread`,
-  dashboard: 'Overview',
-  newThread: 'New thread',
-  /** Chat's button and page for a new question where two pages show (app iphone-duo.md AP-6300). */
-  newChat: 'New chat',
-  /** A thread's reply box (the mock's “Reply…”). */
-  reply: 'Reply…',
-  /** A Chat thread's reply box on the web, where the composer names who answers. */
-  replyTo: (name: string) => `Reply to ${name}…`,
-  /** Chat's head while there is a file to see (files-space.md FS-07). */
-  files: 'Files',
-  /** Under a message whose question still waits for the person, and the button that goes to it. */
-  waiting: 'Waiting for you',
-  answer: 'Answer',
-  /** The Feedback room before its first report. */
-  feedbackEmpty: 'Reports from your websites come here, each one in its own thread.',
-} as const;
+export function chatWords(locale?: string | null) {
+  const w = clientTree(locale, CHAT_AREA_WORDS).rooms;
+  return {
+    chat: w.chat,
+    feedback: w.feedback,
+    /** Chat's head's way to Feedback, with its unread count, for a screen reader. */
+    feedbackUnread: (n: number) => interpolate(w.feedbackUnread, { n }),
+    dashboard: w.dashboard,
+    newThread: w.newThread,
+    /** Chat's button and page for a new question where two pages show (app iphone-duo.md AP-6300). */
+    newChat: w.newChat,
+    /** A thread's reply box (the mock's “Reply…”). */
+    reply: w.reply,
+    /** A Chat thread's reply box on the web, where the composer names who answers. */
+    replyTo: (name: string) => interpolate(w.replyTo, { name }),
+    /** Chat's head while there is a file to see (files-space.md FS-07). */
+    files: w.files,
+    /** Under a message whose question still waits for the person, and the button that goes to it. */
+    waiting: w.waiting,
+    answer: w.answer,
+    /** The Feedback room before its first report. */
+    feedbackEmpty: w.feedbackEmpty,
+  };
+}
+
+/** What every screen calls the places, in English. */
+export const CHAT_WORDS = chatWords();
 
 /** One of the rooms as the shell reads it from `chats.list`: its conversation, its unread count. */
 export interface ChatRoomRef {
@@ -61,10 +71,11 @@ export interface ChatRooms {
  * The Chat and the Feedback room among the chats list's rows (`ChatSummary.room`, CT-441; `chatSummaryRoom` reads an
  * older server's default chat as the Chat). Archived rows are left out; task chats are not rooms.
  */
-export function chatRoomsOf(chats: readonly ChatSummary[] | undefined): ChatRooms {
+export function chatRoomsOf(chats: readonly ChatSummary[] | undefined, locale?: string | null): ChatRooms {
+  const words = locale ? chatWords(locale) : CHAT_WORDS;
   const find = (room: ChatRoom): ChatRoomRef | null => {
     const s = chats?.find((c) => !c.archivedAt && chatSummaryRoom(c) === room);
-    return s ? { room, id: s.id, title: CHAT_WORDS[room], unread: s.unread, lastAt: s.lastAt ?? null } : null;
+    return s ? { room, id: s.id, title: words[room], unread: s.unread, lastAt: s.lastAt ?? null } : null;
   };
   return { chat: find('chat'), feedback: find('feedback') };
 }

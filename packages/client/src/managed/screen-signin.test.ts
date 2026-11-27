@@ -6,7 +6,7 @@ import { screenSignInPakeResponder } from '@whombat/protocol/claim';
 import { describe, expect, it } from 'vitest';
 import { OperationError } from '../session/managed-ops';
 import type { ApplianceSession, OperationResponse } from '../session/types';
-import { COPY } from './copy';
+import { COPY, managedCopyText } from './copy';
 import type { KnownAppliance } from './registry';
 import {
   formatScreenLettersInput,
@@ -298,6 +298,23 @@ describe('the screen sign-in’s steps', () => {
       kind: 'stopped',
       error: E.old,
     });
+  });
+
+  it('a refusal speaks the reader’s language when the deps name one, English without', async () => {
+    const NL = managedCopyText('nl-NL').screen.errors;
+    expect(NL.screen_code_invalid).not.toBe(E.screen_code_invalid);
+    const box = newBox();
+    const d = { ...deps(fakeSession(box)), locale: 'nl-NL' };
+    const at = await lettersStep(d);
+    expect(await screenSignInSubmit(d, at, 'KX')).toEqual({ ...at, error: NL.letters });
+    expect(await screenSignInSubmit(d, at, 'PRTVWY')).toMatchObject({ error: NL.screen_code_invalid });
+    const now = Date.parse('2026-10-20T12:00:00Z');
+    const backoff = new OperationError('enroll.screen', 400, 'screen_backoff', 'screen_backoff', {
+      code: 'screen_backoff',
+      retryAt: '2026-10-20T12:03:30Z',
+    });
+    expect(screenSignInFailed(at, backoff, now, 'nl-NL')).toEqual({ ...at, error: NL.screen_backoff(4) });
+    expect(screenSignInFailed(at, backoff, now)).toEqual({ ...at, error: E.screen_backoff(4) });
   });
 });
 

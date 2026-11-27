@@ -10,7 +10,7 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useConversation, usePullRequest } from '@whombat/client/react';
-import { type ConversationDetail, composerPlaceholder, PR_STATUS_LABELS, prStatus } from '@whombat/core';
+import { type ConversationDetail, composerPlaceholder, prStatus, prStatusLabels } from '@whombat/core';
 import { useEffect } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
@@ -69,6 +69,8 @@ function useTarget(params: Props['route']['params']) {
 }
 
 export function ConversationScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const prStatusLabelsHere = prStatusLabels(rawLocale);
   const { t: tMobile } = useMobileT();
   const { slug } = useBurrow();
   const theme = useTheme();
@@ -88,10 +90,14 @@ export function ConversationScreen({ route, navigation }: Props) {
     const repos = new Set(target.choices.map((r) => r.repo).filter((r): r is string => !!r));
     return (
       <Screen>
-        <ChatHeader onBack={goBack} backLabel="Back" title={`PR #${target.byPr.prNumber}`} />
+        <ChatHeader
+          onBack={goBack}
+          backLabel={tMobile('screens2.common.back')}
+          title={`PR #${target.byPr.prNumber}`}
+        />
         <ScrollView contentContainerStyle={{ paddingTop: 12 }}>
           <QuietText style={{ paddingTop: 8, paddingBottom: 18 }}>
-            {`More than one repository has a PR #${target.byPr.prNumber}. Which one?`}
+            {tMobile('screens2.conversation.whichRepo', { number: target.byPr.prNumber })}
           </QuietText>
           <Section title={tMobile('screens.branch-rooms')}>
             {target.choices.map((r) => (
@@ -101,8 +107,10 @@ export function ConversationScreen({ route, navigation }: Props) {
                 title={r.branch}
                 titleMono
                 meta={r.repo ?? branchRoomMeta(r, repos)}
-                trailing={<StatusDot color={toneColor(theme, r.dot)} label={PR_STATUS_LABELS[r.prStatus]} />}
-                accessibilityLabel={`${r.branch}, ${r.repo ?? ''} PR ${r.prNumber}, ${PR_STATUS_LABELS[r.prStatus]}`}
+                trailing={
+                  <StatusDot color={toneColor(theme, r.dot)} label={prStatusLabelsHere[r.prStatus]} />
+                }
+                accessibilityLabel={`${r.branch}, ${r.repo ?? ''} PR ${r.prNumber}, ${prStatusLabelsHere[r.prStatus]}`}
                 onPress={() =>
                   navigation.replace('Conversation', {
                     conversationId: r.id,
@@ -119,11 +127,11 @@ export function ConversationScreen({ route, navigation }: Props) {
 
   if (!detail || own) {
     const error = query.error ?? target.prQuery?.error ?? null;
-    const failure = error ? conversationLoadError(error) : null;
+    const failure = error ? conversationLoadError(error, rawLocale) : null;
     const title = target.byPr ? `PR #${target.byPr.prNumber}` : '';
     return (
       <Screen>
-        <ChatHeader onBack={goBack} backLabel="Back" title={title} />
+        <ChatHeader onBack={goBack} backLabel={tMobile('screens2.common.back')} title={title} />
         {failure ? (
           <ErrorState
             text={failure.text}
@@ -165,28 +173,30 @@ function Conversation({
   /** The message a link opens it at (MX-03). */
   anchor: string | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
+  const prStatusLabelsHere = prStatusLabels(rawLocale);
 
   const c = detail.conversation;
   const title = c.title;
   const subtitle = detail.pr
-    ? `${detail.pr.repoFullName ? `${detail.pr.repoFullName} · ` : ''}PR #${detail.pr.number} · ${PR_STATUS_LABELS[prStatus(detail.pr)]}`
+    ? `${detail.pr.repoFullName ? `${detail.pr.repoFullName} · ` : ''}PR #${detail.pr.number} · ${prStatusLabelsHere[prStatus(detail.pr)]}`
     : c.topic || null;
   const placeholder = c.prNumber
     ? composerPlaceholder({ kind: 'branch', prNumber: c.prNumber }, rawLocale)
-    : 'Write a message…';
+    : tMobile('screens2.conversation.placeholder');
 
   return (
     <Screen>
       <ChatHeader
         onBack={goBack}
-        backLabel="Back"
+        backLabel={tMobile('screens2.common.back')}
         avatar={<ConversationMark kind="branch" />}
         title={title}
         {...(subtitle ? { subtitle } : {})}
         right={
           <ConversationMenu
-            label={`Options for ${title}`}
+            label={tMobile('screens2.conversation.optionsFor', { title })}
             conversation={{ id: c.id, kind: c.kind, notify: detail.notify ?? detail.summary.notify ?? null }}
             onPins={() => navigation.navigate('Pins', { conversationId: c.id, title })}
             onPlans={() => navigation.navigate('Plans', { conversationId: c.id, back: title })}
@@ -206,7 +216,7 @@ function Conversation({
         conversationId={c.id}
         authors
         placeholder={placeholder}
-        emptyText="No messages yet."
+        emptyText={tMobile('screens2.conversation.empty')}
         backLabel={title}
         anchor={anchor}
         onAnchorDone={() => navigation.setParams({ anchor: undefined })}

@@ -8,6 +8,7 @@
  * `ui/Toast.tsx`, which draws `get()` and calls `press`.
  */
 import { durations } from '@whombat/tokens';
+import { mobileTranslator } from '../i18n/translate';
 
 /** How long a toast with a button stays (the web's Undo after Settle). */
 export const ACTION_TOAST_MS = 8000;
@@ -113,18 +114,25 @@ export const toasts = createToastStore();
  * A toast that can carry Undo (QN-10): with `undo`, “Undo” after the words; without, the plain toast. Failures (a
  * refusal in the server's words) come here too, without a button.
  */
-export function showToast(text: string, options: { undo?: (() => void) | null; ms?: number } = {}): void {
+export function showToast(
+  text: string,
+  options: { undo?: (() => void) | null; ms?: number; locale?: string | undefined } = {},
+): void {
   if (!text.trim()) return;
   toasts.show(text, {
-    action: options.undo ? { label: TOAST_COPY.undo, onPress: options.undo } : null,
+    action: options.undo ? { label: toastCopy(options.locale).undo, onPress: options.undo } : null,
     ...(options.ms ? { ms: options.ms } : {}),
   });
 }
 
-export const TOAST_COPY = {
-  undo: 'Undo',
-  /** The toast's close button, while it stays until dismissed. */
-  dismiss: 'Dismiss',
-  /** The button's hint: what Undo takes back. */
-  undoHint: (text: string) => `Takes back: ${text}`,
-} as const;
+export function toastCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    undo: t('data.toast.undo'),
+    /** The toast's close button, while it stays until dismissed. */
+    dismiss: t('data.toast.dismiss'),
+    /** The button's hint: what Undo takes back. */
+    undoHint: (text: string) => t('data.toast.undoHint', { text }),
+  } as const;
+}
+export const TOAST_COPY = toastCopy();

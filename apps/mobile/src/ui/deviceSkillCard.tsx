@@ -13,10 +13,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import {
-  DEVICE_CARD_COPY,
   DEVICE_TIERS,
   type DeviceTier,
   decideBody,
+  deviceCardCopy,
   deviceSkillView,
   initialTiers,
   tierLabel,
@@ -36,6 +36,7 @@ import { hitSlopFor } from './touchTarget';
 export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
   const { rawLocale } = useI18n();
   const deviceSkillCopyHere = deviceSkillCopy(rawLocale);
+  const deviceCardCopyHere = deviceCardCopy(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -43,7 +44,7 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
   const decline = useDeclineDeviceSkill(slug);
   const feedback = useDecisionFeedback();
   const assistant = useAgentWords();
-  const view = useMemo(() => deviceSkillView(card), [card]);
+  const view = useMemo(() => deviceSkillView(card, rawLocale), [card, rawLocale]);
   const [tiers, setTiers] = useState(() => initialTiers(card));
   const [busy, setBusy] = useState<'on' | 'decline' | null>(null);
   // The server's answer (or another device's decision) is the truth once it comes.
@@ -156,7 +157,7 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
       {view.actions.length ? (
         <>
           <View style={{ paddingHorizontal: 14, paddingTop: 4, paddingBottom: 8 }}>
-            <MonoLabel>{DEVICE_CARD_COPY.mayChange}</MonoLabel>
+            <MonoLabel>{deviceCardCopyHere.mayChange}</MonoLabel>
           </View>
           {view.actions.map((a) => {
             const tier = tiers[a.key] ?? 'off';
@@ -168,7 +169,7 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
                 {/* The setting's name with what it is set to, so a screen reader hears both together. */}
                 <View
                   accessible
-                  accessibilityLabel={`${a.label}, ${tierLabel(tier)}. ${a.sub}`}
+                  accessibilityLabel={`${a.label}, ${tierLabel(tier, rawLocale)}. ${a.sub}`}
                   style={{ gap: 2 }}
                 >
                   <Text size={15} weight={500}>
@@ -181,14 +182,14 @@ export function DeviceSkillCardView({ card }: { card: DeviceSkillCard }) {
                 {view.open ? (
                   <Tiers
                     name={a.label}
-                    label={DEVICE_CARD_COPY.tiersLabel(a.label, assistant)}
+                    label={deviceCardCopyHere.tiersLabel(a.label, assistant)}
                     value={tier}
                     disabled={busy !== null}
                     onChange={(next) => setTiers((t) => ({ ...t, [a.key]: next }))}
                   />
                 ) : (
                   <Text size={13} weight={500} mono color={theme.colors.ink2}>
-                    {tierLabel(tier)}
+                    {tierLabel(tier, rawLocale)}
                   </Text>
                 )}
               </View>
@@ -244,10 +245,11 @@ function Tiers({
   disabled: boolean;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
   return (
     <View
       accessibilityRole="radiogroup"
-      accessibilityLabel={`${label}: ${tierLabel(value)}`}
+      accessibilityLabel={`${label}: ${tierLabel(value, rawLocale)}`}
       style={{
         flexDirection: 'row',
         gap: 2,
@@ -263,7 +265,7 @@ function Tiers({
             key={tier}
             accessibilityRole="radio"
             accessibilityState={{ selected, disabled }}
-            accessibilityLabel={`${name}: ${tierLabel(tier)}`}
+            accessibilityLabel={`${name}: ${tierLabel(tier, rawLocale)}`}
             disabled={disabled}
             onPress={() => onChange(tier)}
             feedback={selected ? 'none' : 'wash'}
@@ -283,7 +285,7 @@ function Tiers({
               weight={selected ? 600 : 500}
               color={selected ? (theme.dark ? theme.colors.btnfg : theme.colors.ink) : theme.colors.mut}
             >
-              {tierLabel(tier)}
+              {tierLabel(tier, rawLocale)}
             </Text>
           </Touchable>
         );

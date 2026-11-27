@@ -3,10 +3,11 @@
  * its line under it and Off · Ask · On (the settings sheet's segmented control, 44dp with its padding), a switch row
  * (a 44dp switch), and a locked row with its note. Used by Settings → Agent's keys.
  */
-import { TIER_SEGMENTS } from '@whombat/client';
+import { tierSegments } from '@whombat/client';
 import type { Tier } from '@whombat/core/keys';
 import type { ReactNode } from 'react';
 import { Switch, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Segmented } from './Segmented';
@@ -36,7 +37,7 @@ export function TierSegmentRow({
   hint,
   tier,
   onChange,
-  options = TIER_SEGMENTS,
+  options,
   disabled = false,
 }: {
   label: string;
@@ -49,6 +50,7 @@ export function TierSegmentRow({
   options?: readonly { value: Tier; label: string }[];
   disabled?: boolean;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   return (
     <RowFrame>
@@ -62,7 +64,13 @@ export function TierSegmentRow({
           </Text>
         ) : null}
       </View>
-      <Segmented options={options} value={tier} onChange={onChange} label={label} disabled={disabled} />
+      <Segmented
+        options={options ?? tierSegments(rawLocale)}
+        value={tier}
+        onChange={onChange}
+        label={label}
+        disabled={disabled}
+      />
     </RowFrame>
   );
 }

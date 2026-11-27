@@ -11,6 +11,7 @@ import {
   environment,
 } from '@expo/ui/swift-ui/modifiers';
 import { View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { clockDate, dateClock } from './clockDate';
@@ -18,7 +19,7 @@ import { useHeldPick } from './heldPick';
 
 export function ClockField({
   label,
-  spoken = `${label} time`,
+  spoken: givenSpoken,
   value,
   onChange,
   disabled = false,
@@ -30,6 +31,8 @@ export function ClockField({
   onChange: (clock: string) => void;
   disabled?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
+  const spoken = givenSpoken ?? tMobile('screens2.ui.clockSpoken', { label });
   const theme = useTheme();
   const { key, pick } = useHeldPick(value, onChange);
   return (

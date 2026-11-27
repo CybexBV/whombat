@@ -15,6 +15,7 @@ import type {
 import { hostScreenTimeoutMs } from '@whombat/core/domain';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CallInput, CommitResult, ResponseData } from '../http/types';
+import { useI18n } from '../i18n/react';
 import { useWhombat } from '../react/context';
 import { type Sealed, sealOnce, useApiMutation } from '../react/mutations';
 import { queryHook } from '../react/queries';
@@ -39,6 +40,15 @@ import type { Verdict } from './verdict';
 export * from './findmy-react';
 export * from './findmy-timeline-react';
 export { useHostsStatus } from './status';
+
+/**
+ * The reader's language for the servers' words: null in English, so English pages keep the words and dates they had
+ * before the pages spoke other languages (a locale also switches on the localized tab names and forecast words).
+ */
+function useHostsLocale(): string | null {
+  const { displayLanguage, rawLocale } = useI18n();
+  return displayLanguage === 'en' ? null : rawLocale;
+}
 
 /** Every server with its status and load, the totals, open alerts and hints. */
 export const useHostsFleet = queryHook(api.hosts.fleet);
@@ -108,6 +118,7 @@ export interface RepointServers {
  * the dialog's lead while the job runs (the servers it points leave the waiting list). Null `burrow` waits.
  */
 export function useRepointServers(burrow: string | null): RepointServers {
+  const locale = useHostsLocale();
   const change = useHostsAddressChange(burrow ? { params: { burrow } } : null, { retry: false });
   const start = useHostsChange(api.hosts.repoint);
   const [job, setJob] = useState<ResponseData<typeof api.hosts.repoint> | null>(null);
@@ -117,7 +128,7 @@ export function useRepointServers(burrow: string | null): RepointServers {
   const first = useRef<ResponseData<typeof api.hosts.addressChange> | undefined>(undefined);
   if (change.data && first.current === undefined) first.current = change.data;
   const current = followed.data ?? job;
-  const view = repointView(current ? (change.data ?? first.current ?? null) : change.data, current);
+  const view = repointView(current ? (change.data ?? first.current ?? null) : change.data, current, locale);
   // A finished job read again what it changed (a frame may not come: fixture mode, a dropped socket).
   const qc = useQueryClient();
   const finished = current?.state === 'done';
@@ -132,16 +143,17 @@ export function useRepointServers(burrow: string | null): RepointServers {
     try {
       const r = await start.mutateAsync({ params: { burrow }, body: { servers: view.servers } });
       if (r.status === 'ok') setJob(r.data);
-      else setRefusal(commitOutcomeText(r));
+      else setRefusal(commitOutcomeText(r, locale));
     } catch (err) {
-      setRefusal(hostErrorInfo(err).message);
+      setRefusal(hostErrorInfo(err, locale).message);
     } finally {
       setStarting(false);
     }
-  }, [burrow, start, view.servers]);
+  }, [burrow, start, view.servers, locale]);
 
-  const loadError = change.error && change.data === undefined ? hostErrorInfo(change.error).message : null;
-  const lost = followed.error && !followed.data && job ? hostErrorInfo(followed.error).message : null;
+  const loadError =
+    change.error && change.data === undefined ? hostErrorInfo(change.error, locale).message : null;
+  const lost = followed.error && !followed.data && job ? hostErrorInfo(followed.error, locale).message : null;
   return { view, start: run, starting, error: refusal ?? lost ?? loadError };
 }
 
@@ -281,6 +293,7 @@ export function useServerDashboard({
   assistant?: string;
 }): ServerDashboardState {
   const { queries } = useWhombat();
+  const locale = useHostsLocale();
   const detailQ = useHostServer(
     serverId ? { params: { burrow, serverId }, query: { range: SERVER_DASHBOARD_DETAIL_RANGE } } : null,
   );
@@ -339,11 +352,15 @@ export function useServerDashboard({
             quiet,
             ...(name ? { name } : {}),
             ...(assistant ? { assistant } : {}),
+            locale,
           })
         : null,
-    [detail, series, guests, volumes, shown, timeZone, updates, quiet, name, assistant],
+    [detail, series, guests, volumes, shown, timeZone, updates, quiet, name, assistant, locale],
   );
-  const head = useMemo(() => (detail ? serverDashboardHead(detail) : null), [detail]);
+  const head = useMemo(
+    () => (detail ? serverDashboardHead(detail, undefined, locale) : null),
+    [detail, locale],
+  );
   const refetch = useCallback(() => {
     void detailQ.refetch();
     void metricsQ.refetch();
@@ -412,6 +429,7 @@ export function useHostScreenMutation() {
  */
 export function useHostScreenStep(burrow: string, serverId: string, serverName: string) {
   const change = useHostScreenMutation();
+  const locale = useHostsLocale();
   const [busy, setBusy] = useState<HostScreenBody['op'] | null>(null);
   const mutate = useRef(change.mutateAsync);
   mutate.current = change.mutateAsync;
@@ -424,7 +442,7 @@ export function useHostScreenStep(burrow: string, serverId: string, serverName: 
           body,
           ...(account ? { account: sealOnce(account) } : {}),
         });
-        if (result.status !== 'ok') return { ok: false, text: commitOutcomeText(result) ?? '' };
+        if (result.status !== 'ok') return { ok: false, text: commitOutcomeText(result, locale) ?? '' };
         const words = macStepText(
           {
             op: body.op,
@@ -433,17 +451,18 @@ export function useHostScreenStep(burrow: string, serverId: string, serverName: 
           },
           result.data,
           serverName,
+          locale,
         );
         return words.ok
           ? { ok: true, text: words.text, result: result.data }
           : { ok: false, text: words.text, result: result.data };
       } catch (error) {
-        return { ok: false, text: hostErrorInfo(error).message, error };
+        return { ok: false, text: hostErrorInfo(error, locale).message, error };
       } finally {
         setBusy(null);
       }
     },
-    [burrow, serverId, serverName],
+    [burrow, serverId, serverName, locale],
   );
   return { step, busy };
 }

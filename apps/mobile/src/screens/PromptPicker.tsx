@@ -10,7 +10,7 @@
  * the Whombat keeps prompts.
  */
 
-import { PROMPT_WORDS, problemText } from '@whombat/client';
+import { problemText, promptWords } from '@whombat/client';
 import type { ChatRoom, Prompt, UsePromptResponse } from '@whombat/core';
 import { type ReactNode, useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, TextInput, View } from 'react-native';
@@ -56,6 +56,8 @@ export function usePromptsInChat({
   fill: (text: string) => void;
   onUsed: (used: UsePromptResponse) => void;
 }): PromptsInChat | null {
+  const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
   const here = usePrompts(room === 'chat');
   const prompts = here.prompts;
   const [listOpen, setListOpen] = useState(false);
@@ -90,13 +92,13 @@ export function usePromptsInChat({
           visible={listOpen}
           onClose={() => setListOpen(false)}
           onDismissed={after.onDismissed}
-          label={PROMPT_WORDS.title}
-          closeLabel={PROMPT_WORDS.cancel}
+          label={promptWordsHere.title}
+          closeLabel={promptWordsHere.cancel}
           surface="sf"
           maxHeight="80%"
         >
-          <SheetHead title={PROMPT_WORDS.title} subtitle={null} />
-          {prompts.length ? null : <QuietLine text={PROMPT_WORDS.empty} />}
+          <SheetHead title={promptWordsHere.title} subtitle={null} />
+          {prompts.length ? null : <QuietLine text={promptWordsHere.empty} />}
           <ScrollView keyboardShouldPersistTaps="handled">
             <PromptRows
               rows={prompts.map(promptRow)}
@@ -130,10 +132,12 @@ export function usePromptsInChat({
 
 /** Over the pill while the draft is a `/` word: the prompts that match, the first few in sight. */
 function SlashList({ rows, onPick }: { rows: PromptRow[]; onPick: (id: string) => void }) {
+  const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
   const theme = useTheme();
   return (
     <View
-      accessibilityLabel={PROMPT_WORDS.title}
+      accessibilityLabel={promptWordsHere.title}
       style={{
         maxHeight: 232,
         marginBottom: 8,
@@ -154,7 +158,7 @@ function SlashList({ rows, onPick }: { rows: PromptRow[]; onPick: (id: string) =
         accessibilityRole="header"
         style={{ paddingHorizontal: 14, paddingTop: 10, paddingBottom: 4 }}
       >
-        {PROMPT_WORDS.group}
+        {promptWordsHere.group}
       </Text>
       <ScrollView keyboardShouldPersistTaps="always">
         <PromptRows rows={rows} onPick={onPick} compact />
@@ -249,6 +253,7 @@ function RepositorySheet({
   onUsed: (used: UsePromptResponse) => void;
 }) {
   const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
 
   const theme = useTheme();
   const { slug, clock } = useBurrowBase();
@@ -262,7 +267,7 @@ function RepositorySheet({
     setShown(prompt);
     setSearch('');
   }
-  const view = promptPickerView(shown, projects.data, !!projects.error, search, clock());
+  const view = promptPickerView(shown, projects.data, !!projects.error, search, clock(), rawLocale);
   const field = textMetrics({ size: 15.5 });
   const pick = (project: { id: string; title: string }) => {
     if (!shown || use.isPending) return;
@@ -277,11 +282,11 @@ function RepositorySheet({
       },
       {
         onSuccess: (r) => {
-          if (r.status !== 'ok') return showFailure(PROMPT_WORDS.useFailed);
+          if (r.status !== 'ok') return showFailure(promptWordsHere.useFailed, rawLocale);
           haptic('send');
           onUsed(r.data);
         },
-        onError: (error) => showFailure(problemText(error, PROMPT_WORDS.useFailed, rawLocale)),
+        onError: (error) => showFailure(problemText(error, promptWordsHere.useFailed, rawLocale), rawLocale),
       },
     );
   };
@@ -289,19 +294,19 @@ function RepositorySheet({
     <Sheet
       visible={open}
       onClose={use.isPending ? () => {} : onClose}
-      label={PROMPT_WORDS.pickTitle}
-      closeLabel={PROMPT_WORDS.cancel}
+      label={promptWordsHere.pickTitle}
+      closeLabel={promptWordsHere.cancel}
       surface="sf"
       maxHeight="85%"
     >
-      <SheetHead title={PROMPT_WORDS.pickTitle} subtitle={shown?.title ?? null} />
+      <SheetHead title={promptWordsHere.pickTitle} subtitle={shown?.title ?? null} />
       {view.kind === 'rows' || (view.kind === 'empty' && search) ? (
         <View style={{ paddingHorizontal: 18, paddingBottom: 10 }}>
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder={PROMPT_WORDS.pickSearch}
-            accessibilityLabel={PROMPT_WORDS.pickSearch}
+            placeholder={promptWordsHere.pickSearch}
+            accessibilityLabel={promptWordsHere.pickSearch}
             placeholderTextColor={theme.colors.placeholder}
             selectionColor={theme.colors.brand}
             cursorColor={theme.colors.ink}
@@ -374,7 +379,11 @@ function RepositorySheet({
             </Text>
           </View>
           {view.kind === 't3' && shown ? (
-            <Button label={PROMPT_WORDS.pickInstead} variant="secondary" onPress={() => onInstead(shown)} />
+            <Button
+              label={promptWordsHere.pickInstead}
+              variant="secondary"
+              onPress={() => onInstead(shown)}
+            />
           ) : null}
         </View>
       )}

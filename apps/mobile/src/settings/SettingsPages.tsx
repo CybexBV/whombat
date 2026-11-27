@@ -12,9 +12,9 @@ import { type RouteProp, StackActions, useRoute } from '@react-navigation/native
 import {
   type HostMetricsLoader,
   type HostSpend,
-  PROMPT_WORDS,
+  promptWords,
   settingsGroupText,
-  TEAM_REPORT_WORDS,
+  teamReportWords,
 } from '@whombat/client';
 import { thisWhombatText } from '@whombat/client/managed';
 import { useTeamReportsEntry } from '@whombat/client/react';
@@ -123,10 +123,6 @@ export function SettingsPage({
   );
 }
 
-/** The way to Devices on You: this phone, your other devices and passkeys (a Whombat's, AP-1229). */
-const DEVICES_LINE = 'This phone, your other devices and passkeys';
-const LINKS_LINE = 'Links to copies of your threads, and stopping them';
-
 /**
  * You: who you are and your photo (PA-06), your notifications — Do not disturb and quiet hours where the Whombat keeps
  * them (AP-513), push on this phone — then CHAT: when threads settle by themselves (chat-settle.md AP-6156),
@@ -134,9 +130,14 @@ const LINKS_LINE = 'Links to copies of your threads, and stopping them';
  */
 export function SettingsProfileScreen() {
   const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   const settingsGroupTextHere = settingsGroupText(rawLocale);
+  const { t: tMobile } = useMobileT();
+  const DEVICES_LINE = tMobile('settings2.pages.devicesLine');
+  const LINKS_LINE = tMobile('settings2.pages.linksLine');
 
   const { bootstrap, mode, slug } = useBurrow();
   const managed = useManaged();
@@ -210,10 +211,10 @@ export function SettingsProfileScreen() {
         >
           <ListRow
             title={settingsGroupTextHere.you.prompts}
-            body={PROMPT_WORDS.intro}
+            body={promptWordsHere.intro}
             trailing="›"
             onPress={() => navigation.navigate('SettingsPrompts')}
-            accessibilityLabel={`${settingsGroupTextHere.you.prompts}. ${PROMPT_WORDS.intro}`}
+            accessibilityLabel={`${settingsGroupTextHere.you.prompts}. ${promptWordsHere.intro}`}
           />
         </View>
       ) : null}
@@ -228,11 +229,11 @@ export function SettingsProfileScreen() {
           }}
         >
           <ListRow
-            title={TEAM_REPORT_WORDS.entry}
-            body={TEAM_REPORT_WORDS.intro}
+            title={teamReportWordsHere.entry}
+            body={teamReportWordsHere.intro}
             trailing="›"
             onPress={() => navigation.navigate('TeamReports', { back: settingsGroupTextHere.groups('').you })}
-            accessibilityLabel={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
+            accessibilityLabel={`${teamReportWordsHere.entry}. ${teamReportWordsHere.intro}`}
           />
         </View>
       ) : null}
@@ -303,7 +304,7 @@ export function SettingsWhombatScreen() {
     <SettingsPage title={settingsTextHere.rows.appliance}>
       <DeskUnlockCard api={desk} />
       <View style={{ gap: 2 }}>
-        <SectionLabel>BURROW</SectionLabel>
+        <SectionLabel>{tMobile('settings2.pages.burrow')}</SectionLabel>
         <Text size={15} color={theme.colors.ink2} style={{ paddingHorizontal: 6 }}>
           {`${bootstrap.burrow.name} · ${bootstrap.burrow.slug}`}
         </Text>

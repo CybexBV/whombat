@@ -170,6 +170,7 @@ export function TurnFailedCardView({
   /** “Hide card” in the top right of a card opened from its line (docs/decisions/card-settle.md AP-730). */
   hide?: ReactNode;
 }) {
+  const { t: tMobile } = useMobileT();
   const { tClient } = useI18n();
   const theme = useTheme();
   return (
@@ -208,7 +209,7 @@ export function TurnFailedCardView({
           label={tClient('settings.retry')}
           busy={busy}
           onPress={onRetry}
-          accessibilityHint={`Asks ${view.agentName} to try this turn again`}
+          accessibilityHint={tMobile('screens2.chat.retryTurnHint', { name: view.agentName })}
           style={{ alignSelf: 'flex-start', paddingHorizontal: 18 }}
         />
       ) : null}

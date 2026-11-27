@@ -25,6 +25,7 @@ import {
   assessmentHeadline,
   DEVICE_SKILL_COPY,
   describeScheduleWhen,
+  deviceSkillCopy,
   FEEDBACK_ASSESSMENT_STATE_LABELS,
   FEEDBACK_OUTCOME_LABELS,
   FEEDBACK_STATUS_LABELS,
@@ -44,9 +45,17 @@ import {
   taskResultLine,
   thingWatchCardLines,
 } from '@whombat/core';
-import { formatClock, formatDuration, plural, shortSha } from '@whombat/core/text';
+import { interpolate } from '@whombat/core/i18n';
+import { formatClock, formatDuration, shortSha } from '@whombat/core/text';
 import { lookPlanCardView } from './home/lookPlan';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
 import { runShowsAsLine } from './runs';
+
+/** The settled lines' own words, in a locale (English when none). */
+function words(locale?: string | null) {
+  return clientTree(locale, CARDS_AREA_WORDS).display;
+}
 
 /* How a card shows --------------------------------------------------------------------------------------------- */
 
@@ -155,11 +164,21 @@ export interface SettledLine {
 export function approvalLine(
   approval: Pick<Approval, 'state' | 'title'>,
   deciderName: string | null,
+  locale?: string | null,
 ): SettledLine {
-  const by = deciderName ? ` by ${deciderName}` : '';
+  const w = words(locale);
+  const name = deciderName ?? '';
   return approval.state === 'declined'
-    ? { lead: `Declined${by}`, detail: approval.title, tone: 'mut' }
-    : { lead: `Approved${by}`, detail: approval.title, tone: 'ok' };
+    ? {
+        lead: deciderName ? interpolate(w.declinedBy, { name }) : w.declined,
+        detail: approval.title,
+        tone: 'mut',
+      }
+    : {
+        lead: deciderName ? interpolate(w.approvedBy, { name }) : w.approved,
+        detail: approval.title,
+        tone: 'ok',
+      };
 }
 
 /**
@@ -168,11 +187,13 @@ export function approvalLine(
  */
 export function deploySettledLine(
   card: Pick<DeployCard, 'status' | 'service' | 'environment' | 'sha'>,
+  locale?: string | null,
 ): SettledLine {
-  const lead =
-    card.status === 'succeeded'
-      ? `Deployed ${card.service} to ${card.environment}`
-      : `Deploy of ${card.service} to ${card.environment} failed`;
+  const w = words(locale);
+  const lead = interpolate(card.status === 'succeeded' ? w.deployed : w.deployFailed, {
+    service: card.service,
+    environment: card.environment,
+  });
   return {
     lead,
     detail: card.sha ? shortSha(card.sha.toLowerCase()) : null,
@@ -188,9 +209,10 @@ export function deploySettledLine(
 export function featureRequestLine(
   request: Pick<FeatureRequestView, 'state' | 'choice' | 'note' | 'declineReason' | 'title'>,
   deciderName: string | null,
+  locale?: string | null,
 ): SettledLine {
   const outcome = featureRequestOutcome(request, deciderName);
-  if (!outcome) return { lead: 'Waiting for you', detail: request.title, tone: 'live' };
+  if (!outcome) return { lead: words(locale).waitingForYou, detail: request.title, tone: 'live' };
   const approved = request.choice === 'approve' || request.choice === 'build';
   return {
     lead: approved && outcome.detail ? `${outcome.lead} · ${outcome.detail}` : outcome.lead,
@@ -200,18 +222,23 @@ export function featureRequestLine(
 }
 
 /** `Plan · 5 of 5 done · Ship the invoice PDF`; a plan whose every step was cancelled: `Plan · Cancelled`. */
-export function planLine(plan: Pick<Plan, 'steps' | 'title'>): SettledLine {
+export function planLine(plan: Pick<Plan, 'steps' | 'title'>, locale?: string | null): SettledLine {
   const { done, total } = planProgress(plan);
+  const w = words(locale);
   return total === 0
-    ? { lead: 'Plan · Cancelled', detail: plan.title, tone: 'mut' }
-    : { lead: `Plan · ${done} of ${total} done`, detail: plan.title, tone: 'ok' };
+    ? { lead: w.planCancelled, detail: plan.title, tone: 'mut' }
+    : { lead: interpolate(w.planDone, { done, total }), detail: plan.title, tone: 'ok' };
 }
 
 /** `Switched on · Daikin Altherma heat pump`; `Not switched on · …` (one-whombat-shell.md AP-1274). */
-export function deviceSkillLine(card: Pick<DeviceSkillCard, 'status' | 'name'>): SettledLine {
+export function deviceSkillLine(
+  card: Pick<DeviceSkillCard, 'status' | 'name'>,
+  locale?: string | null,
+): SettledLine {
+  const copy = locale ? deviceSkillCopy(locale) : DEVICE_SKILL_COPY;
   return card.status === 'declined'
-    ? { lead: DEVICE_SKILL_COPY.declined, detail: card.name, tone: 'mut' }
-    : { lead: DEVICE_SKILL_COPY.on, detail: card.name, tone: 'ok' };
+    ? { lead: copy.declined, detail: card.name, tone: 'mut' }
+    : { lead: copy.on, detail: card.name, tone: 'ok' };
 }
 
 /**
@@ -224,9 +251,11 @@ export function scheduleLine(
   timeZone: string,
   /** Leaves out this year (`Sun 4 Oct`); the year shows without it. */
   nowMs?: number,
+  locale?: string | null,
 ): SettledLine {
   const schedule = card.schedule;
-  if (!schedule) return { lead: `${agentName} scheduled a task`, detail: null, tone: 'mut' };
+  if (!schedule)
+    return { lead: interpolate(words(locale).scheduledTask, { agentName }), detail: null, tone: 'mut' };
   const when = describeScheduleWhen(schedule.when, timeZone, nowMs);
   const prompt = schedule.prompt ? schedulePromptLine(schedule.prompt) : null;
   if (schedule.status === 'ended') {
@@ -243,20 +272,29 @@ export function scheduleLine(
 /** `Assessment · FB-3B50-6X0Q · Real bug · high confidence` with who chose what: `John chose “Hand to Banjo”`. */
 export function assessmentLine(
   card: Pick<AssessmentCard, 'reference' | 'decided' | 'assessment'>,
+  locale?: string | null,
 ): SettledLine {
-  const chose = card.decided ? `chose “${card.decided.label}”` : null;
+  const w = words(locale);
+  const chose = card.decided ? interpolate(w.chose, { label: card.decided.label }) : null;
   return {
-    lead: `Assessment · ${card.reference}`,
+    lead: interpolate(w.assessment, { reference: card.reference }),
     detail: [assessmentHeadline(card.assessment), chose].filter(Boolean).join(' · '),
     tone: 'ok',
   };
 }
 
 /** `Turn failed · Tried again at 13:02`. */
-export function turnFailedLine(card: Pick<TurnFailedCard, 'retriedAt'>, timeZone: string): SettledLine {
+export function turnFailedLine(
+  card: Pick<TurnFailedCard, 'retriedAt'>,
+  timeZone: string,
+  locale?: string | null,
+): SettledLine {
+  const w = words(locale);
   return {
-    lead: 'Turn failed',
-    detail: card.retriedAt ? `Tried again at ${formatClock(card.retriedAt, timeZone)}` : null,
+    lead: w.turnFailed,
+    detail: card.retriedAt
+      ? interpolate(w.triedAgain, { clock: formatClock(card.retriedAt, timeZone) })
+      : null,
     tone: 'mut',
   };
 }
@@ -272,11 +310,14 @@ export const FIND_MY_WATCH_TONES = {
   stopped: 'warn',
 } as const satisfies Record<FindMyWatchStatus, SettledLine['tone']>;
 
+/** The watch card's few words of its own, in a locale: its button, and why a Cancel didn't go through. */
+export function findMyWatchWords(locale?: string | null) {
+  const w = words(locale);
+  return { cancel: w.watchCancel, failed: w.watchFailed };
+}
+
 /** The watch card's few words of its own: its button, and why a Cancel didn't go through (the rest is core's). */
-export const FIND_MY_WATCH_WORDS = {
-  cancel: 'Cancel',
-  failed: 'That didn’t work. Try again in a moment.',
-} as const;
+export const FIND_MY_WATCH_WORDS = findMyWatchWords();
 
 /**
  * An ended watch's one line, in core's words (`findMyWatchCardLines`) split at its last ` · ` the way a task's line
@@ -350,18 +391,19 @@ export function reportTone(card: Pick<ReportCard, 'status' | 'assessment'>): Set
  * (`Bug report · {the visitor's words}`), while it runs `Assessing · …`, and `Assessment failed` / `blocked` / `paused`
  * when it can't. Content removed: `… · Content removed`, quiet.
  */
-export function reportLine(card: ReportCard): ReportLine {
+export function reportLine(card: ReportCard, locale?: string | null): ReportLine {
   const { assessment } = card;
+  const w = words(locale);
   let lead: string;
   if (assessment.state === 'done')
     lead = assessment.outcome ? FEEDBACK_OUTCOME_LABELS[assessment.outcome] : FEEDBACK_TYPE_LABELS[card.type];
-  else if (assessment.state === 'running') lead = 'Assessing';
+  else if (assessment.state === 'running') lead = w.assessing;
   else if (assessment.state === 'failed' || assessment.state === 'blocked' || assessment.state === 'paused')
     lead = FEEDBACK_ASSESSMENT_STATE_LABELS[assessment.state];
   else lead = FEEDBACK_TYPE_LABELS[card.type];
   const assessed = assessment.state === 'done' ? assessment.summary?.trim() : '';
-  const words = card.summary.trim();
-  const detail = card.contentRemoved ? 'Content removed' : assessed || words || null;
+  const said = card.summary.trim();
+  const detail = card.contentRemoved ? w.contentRemoved : assessed || said || null;
   return {
     lead,
     detail,
@@ -370,7 +412,7 @@ export function reportLine(card: ReportCard): ReportLine {
     meta: [
       card.product,
       card.status === 'new' ? null : FEEDBACK_STATUS_LABELS[card.status],
-      card.attachments > 0 ? plural(card.attachments, 'screenshot') : null,
+      card.attachments > 0 ? w.screenshots(card.attachments) : null,
     ].filter((m): m is string => !!m),
     quiet: card.contentRemoved,
     label: `${FEEDBACK_TYPE_LABELS[card.type]} ${card.reference}: ${reportCardState(card)}`,
@@ -495,12 +537,13 @@ export interface TaskCardView {
 export function taskCardView(
   card: Pick<TaskCard, 'title' | 'server' | 'state' | 'startedAt' | 'endedAt'>,
   nowMs: number,
+  locale?: string | null,
 ): TaskCardView {
   return {
     title: card.title,
     elapsed: card.state === 'lost' ? null : formatTaskDuration(taskCardElapsedMs(card, nowMs)),
     state: TASK_CARD_WORDS.states[card.state],
-    label: `Task on ${card.server}: ${card.title}`,
+    label: interpolate(words(locale).taskOn, { server: card.server, title: card.title }),
   };
 }
 
@@ -513,12 +556,12 @@ export interface RunChips {
   files: string | null;
 }
 
-export function runChips(run: Pick<Run, 'prNumber' | 'diff'>): RunChips {
+export function runChips(run: Pick<Run, 'prNumber' | 'diff'>, locale?: string | null): RunChips {
   const changed = run.diff.files > 0;
   return {
     prNumber: run.prNumber,
     diff: changed ? `+${run.diff.add} −${run.diff.del}` : null,
-    files: changed ? `${run.diff.files} ${run.diff.files === 1 ? 'file' : 'files'}` : null,
+    files: changed ? words(locale).files(run.diff.files) : null,
   };
 }
 
@@ -532,12 +575,14 @@ export interface RunLiveText {
 export function runLiveText(
   run: Pick<Run, 'number' | 'title' | 'activity' | 'startedAt'>,
   nowMs: number,
+  locale?: string | null,
 ): RunLiveText {
   const activity = run.activity.trim();
+  const w = words(locale);
   return {
-    title: `Run #${run.number} · ${run.title}`,
-    now: activity ? `Now: ${activity}` : null,
-    elapsed: formatDuration(Math.max(0, nowMs - new Date(run.startedAt).getTime())),
+    title: interpolate(w.runTitle, { number: run.number, title: run.title }),
+    now: activity ? interpolate(w.runNow, { activity }) : null,
+    elapsed: formatDuration(Math.max(0, nowMs - new Date(run.startedAt).getTime()), locale),
   };
 }
 

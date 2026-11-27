@@ -25,18 +25,18 @@ import {
   LOCAL_HEADER_BYTES,
   openedPage,
   openingPage,
-  PAGES_COPY,
   type PageAt,
   pageBefore,
   pageFileLine,
   pageSubtitle,
+  pagesCopy,
   pagesInjection,
   pagesLoaderHtml,
   sessionReadRange,
   sharedCopyPath,
 } from '../data/pageSets';
 import { PREVIEW_WEBVIEW_PROPS } from '../data/richPreview';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { rangeToFile } from '../managed/files';
 import { Text } from '../theme/Text';
@@ -68,6 +68,8 @@ export function PageSetViewer({
   onDownload: () => Promise<void>;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = pagesCopy(rawLocale);
   const title = pageSetTitle(attachment.name);
   const ref = useMemo(() => resourceFromUrl(attachment.url), [attachment.url]);
   const read = useMemo(() => (ref ? sessionReadRange(access.session, ref) : null), [access.session, ref]);
@@ -195,8 +197,8 @@ export function PageSetViewer({
             borderBottomColor: theme.colors.line,
           }}
         >
-          <HeaderButton icon={X} label={PAGES_COPY.close} onPress={onClose} />
-          {pages.length > 1 ? <HeaderButton icon={ArrowLeft} label={PAGES_COPY.back} onPress={back} /> : null}
+          <HeaderButton icon={X} label={copy.close} onPress={onClose} />
+          {pages.length > 1 ? <HeaderButton icon={ArrowLeft} label={copy.back} onPress={back} /> : null}
           <View style={{ flex: 1, paddingHorizontal: 4 }} accessible accessibilityRole="header">
             <Text size={15} weight={600} numberOfLines={1}>
               {title}
@@ -209,7 +211,7 @@ export function PageSetViewer({
           </View>
           <HeaderButton
             icon={Download}
-            label={`${PAGES_COPY.download} ${attachment.name}`}
+            label={`${copy.download} ${attachment.name}`}
             onPress={download}
             busy={downloading}
           />
@@ -238,7 +240,7 @@ export function PageSetViewer({
         {notice && reader && read && ref ? (
           <NoticeBar
             notice={notice}
-            download={(path) => shareSetFile(attachment.id, reader, read, access, ref, path)}
+            download={(path) => shareSetFile(attachment.id, reader, read, access, ref, path, rawLocale)}
           />
         ) : null}
       </View>
@@ -300,6 +302,8 @@ function PageFrame({
 /** Over the page until it is shown: Opening…, or why not with Try again. */
 function Cover({ failed, onTryAgain }: { failed: boolean; onTryAgain: () => void }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = pagesCopy(rawLocale);
   return (
     <View
       style={{
@@ -323,15 +327,15 @@ function Cover({ failed, onTryAgain }: { failed: boolean; onTryAgain: () => void
             accessibilityLiveRegion="polite"
             style={{ textAlign: 'center' }}
           >
-            {PAGES_COPY.failed}
+            {copy.failed}
           </Text>
-          <Button label={PAGES_COPY.tryAgain} variant="secondary" onPress={onTryAgain} />
+          <Button label={copy.tryAgain} variant="secondary" onPress={onTryAgain} />
         </>
       ) : (
         <>
           <ActivityIndicator color={theme.colors.mut} />
           <Text size={13} color={theme.colors.mut} accessibilityLiveRegion="polite">
-            {PAGES_COPY.opening}
+            {copy.opening}
           </Text>
         </>
       )}
@@ -342,6 +346,8 @@ function Cover({ failed, onTryAgain }: { failed: boolean; onTryAgain: () => void
 /** Under the page: what a link asked for, with the one thing to do about it. */
 function NoticeBar({ notice, download }: { notice: Notice; download: (path: string) => Promise<void> }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const copy = pagesCopy(rawLocale);
   const theme = useTheme();
   const [state, setState] = useState<'idle' | 'busy' | 'failed'>('idle');
   // A new notice starts afresh.
@@ -355,8 +361,8 @@ function NoticeBar({ notice, download }: { notice: Notice; download: (path: stri
     notice.kind === 'file'
       ? pageFileLine(notice.path, notice.size)
       : notice.kind === 'external'
-        ? externalLine(notice.host)
-        : PAGES_COPY.missing;
+        ? externalLine(notice.host, rawLocale)
+        : copy.missing;
   const save = () => {
     if (notice.kind !== 'file' || state === 'busy') return;
     setState('busy');
@@ -392,19 +398,19 @@ function NoticeBar({ notice, download }: { notice: Notice; download: (path: stri
       </View>
       {notice.kind === 'file' ? (
         <Button
-          label={PAGES_COPY.download}
+          label={copy.download}
           variant="secondary"
           busy={state === 'busy'}
           onPress={save}
-          accessibilityLabel={`${PAGES_COPY.download} ${line}`}
+          accessibilityLabel={`${copy.download} ${line}`}
           style={{ paddingHorizontal: 16 }}
         />
       ) : notice.kind === 'external' ? (
         <Button
-          label={PAGES_COPY.open}
+          label={copy.open}
           variant="secondary"
           onPress={() => void Linking.openURL(notice.url).catch(() => {})}
-          accessibilityLabel={`${PAGES_COPY.open} ${notice.host}`}
+          accessibilityLabel={`${copy.open} ${notice.host}`}
           style={{ paddingHorizontal: 16 }}
         />
       ) : null}
@@ -453,6 +459,7 @@ async function shareSetFile(
   access: FileAccess,
   ref: ResourceRef,
   path: string,
+  locale: string,
 ): Promise<void> {
   const entry = (await reader.entries()).get(path);
   if (!entry) throw new Error('not in the set');
@@ -469,7 +476,7 @@ async function shareSetFile(
     access.session,
     ref,
     { start: dataAt, end: dataAt + entry.size },
-    { dir: folder.uri, target: new File(folder, name).uri },
+    { dir: folder.uri, target: new File(folder, name).uri, locale },
   );
   await Sharing.shareAsync(uri, { mimeType: pageFileType(path), dialogTitle: name });
 }

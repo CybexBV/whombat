@@ -7,15 +7,17 @@
  * the app's).
  */
 import { agentWords } from '@whombat/client';
+import { mobileTranslator } from '../i18n/translate';
 import { type KeyValueStore, STORAGE_KEYS } from '../lib/kv';
 
 /** The sheet's words, the web's own; `{Agent}` is the assistant's name. */
-export function pushPromptCopy(agent: string | null | undefined) {
+export function pushPromptCopy(agent: string | null | undefined, locale?: string) {
+  const { t } = mobileTranslator(locale);
   return {
-    title: `Get a ping when ${agentWords(agent).name} needs you?`,
-    text: 'Only for things that need you, like an approval or a backup that failed. You can change this in Settings.',
-    turnOn: 'Turn on',
-    notNow: 'Not now',
+    title: t('data.pushPrompt.title', { name: agentWords(agent, locale).name }),
+    text: t('data.pushPrompt.text'),
+    turnOn: t('data.pushPrompt.turnOn'),
+    notNow: t('data.pushPrompt.notNow'),
   } as const;
 }
 

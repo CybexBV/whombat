@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import { coreTree, coreWords } from '../i18n/catalog.js';
+import { coreTree, coreWords, hasCoreMessage, tCore } from '../i18n/catalog.js';
 import { ConnectionId } from '../ids.js';
 import { Email, Timestamp } from './common.js';
 
@@ -75,7 +75,7 @@ export function providerServiceLabels(locale?: string | null) {
   const words = coreTree(locale, 'connector.providerService', PROVIDER_SERVICE_LABELS_SHAPE);
   return {
     ...words,
-    imap: SERVICE_LABELS,
+    imap: serviceLabels(locale),
   };
 }
 
@@ -95,13 +95,18 @@ export const CONNECTOR_PROVIDER_SERVICES: Record<ConnectorProvider, readonly Con
 };
 
 /** “Google Drive” on Google, “Drive” without a provider. */
-export function serviceLabel(service: ConnectorService, provider?: ConnectorProvider | null): string {
-  return provider ? PROVIDER_SERVICE_LABELS[provider][service] : SERVICE_LABELS[service];
+export function serviceLabel(
+  service: ConnectorService,
+  provider?: ConnectorProvider | null,
+  locale?: string | null,
+): string {
+  return provider ? providerServiceLabels(locale)[provider][service] : serviceLabels(locale)[service];
 }
 
 /**
  * A connector tool's error when the owner's connection is missing, not active or lacks the service:
- * “Mara hasn’t connected Google Drive. They can connect it in Settings → Connections.”
+ * “Mara hasn’t connected Google Drive. They can connect it in Settings → Connections.” The agent reads it, so it stays
+ * English.
  */
 export function connectorMissingText(
   ownerShortName: string,
@@ -218,7 +223,11 @@ export function clientIdHint(clientId: string): string {
 }
 
 /** A secret belongs to its client: replacing the Client ID needs the new client's secret (IN-27). */
-export const NEW_CLIENT_NEEDS_SECRET_TEXT = 'A new Client ID needs its client secret too.';
+export function newClientNeedsSecretText(locale?: string | null): string {
+  return tCore(locale, 'connectorSetup.newClientNeedsSecret');
+}
+
+export const NEW_CLIENT_NEEDS_SECRET_TEXT = newClientNeedsSecretText('en');
 
 /* ---------------------------------------------------------------------------------------------- */
 /* Connections                                                                                    */
@@ -659,9 +668,11 @@ export function imapProviderFor(email: string, mxHosts: readonly string[] = []):
   return null;
 }
 
-/** A known provider as the connect form shows it (CM-21). */
-export function imapProviderHint(provider: ImapProvider): ImapProviderHint {
-  return { name: provider.name, text: provider.text, url: provider.url, useInstead: provider.useInstead };
+/** A known provider as the connect form shows it (CM-21), its sentence in a locale. */
+export function imapProviderHint(provider: ImapProvider, locale?: string | null): ImapProviderHint {
+  const key = `imap.hint.${provider.id}`;
+  const text = hasCoreMessage(key) ? tCore(locale, key) : provider.text;
+  return { name: provider.name, text, url: provider.url, useInstead: provider.useInstead };
 }
 
 /** The servers to try when nothing is found (CM-D02): `imap.<domain>` on 993 with TLS, `smtp.<domain>` on 587. */
@@ -682,10 +693,13 @@ export function mailDefaultPort(side: 'imap' | 'smtp', security: MailSecurity): 
 }
 
 /** The found servers in one line (CM-20): “imap.fastmail.com and smtp.fastmail.com”, one name when both are the same. */
-export function imapServersLine(servers: { imapHost: string; smtpHost: string }): string {
+export function imapServersLine(
+  servers: { imapHost: string; smtpHost: string },
+  locale?: string | null,
+): string {
   return servers.imapHost === servers.smtpHost
     ? servers.imapHost
-    : `${servers.imapHost} and ${servers.smtpHost}`;
+    : tCore(locale, 'imap.servers', { imap: servers.imapHost, smtp: servers.smtpHost });
 }
 
 /**
@@ -716,21 +730,27 @@ export type ImapConnectErrorDetails = z.infer<typeof ImapConnectErrorDetails>;
 export function imapConnectFailureText(
   reason: ImapConnectFailure,
   server: { host?: string; port?: number } = {},
+  locale?: string | null,
 ): string {
   const where = server.host
-    ? `${server.host}${server.port ? ` on port ${server.port}` : ''}`
-    : 'the mail server';
+    ? server.port
+      ? tCore(locale, 'imap.failure.hostPort', { host: server.host, port: server.port })
+      : server.host
+    : tCore(locale, 'imap.failure.theMailServer');
   switch (reason) {
     case 'imap_refused':
-      return 'The mail server refused the password. If your provider uses app passwords, make one and use that.';
     case 'smtp_refused':
-      return 'The server for sending mail refused the password. If your provider uses app passwords, make one and use that.';
+      return tCore(locale, `imap.failure.${reason}`);
     case 'imap_unreachable':
     case 'smtp_unreachable':
-      return `Whombat couldn’t reach ${where}.`;
+      return tCore(locale, 'imap.failure.unreachable', { where });
     case 'not_allowed':
-      return `Whombat isn’t allowed to reach ${server.host ?? 'that server'}. A server on your network needs to be on the home network list first.`;
+      return tCore(locale, 'imap.failure.not_allowed', {
+        host: server.host ?? tCore(locale, 'imap.failure.thatServer'),
+      });
     case 'certificate':
-      return `${server.host ?? 'The mail server'} didn’t show a valid certificate, so Whombat didn’t send the password.`;
+      return tCore(locale, 'imap.failure.certificate', {
+        host: server.host ?? tCore(locale, 'imap.failure.theMailServerStart'),
+      });
   }
 }

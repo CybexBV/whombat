@@ -12,108 +12,110 @@ import {
   type DelegationTaskState,
   formatTaskDuration,
 } from '@whombat/core';
-import { DELEGATION_AI_WORDS, delegationAiLine } from './delegationAi';
+import { interpolate } from '@whombat/core/i18n';
+import { DELEGATION_AI_WORDS, delegationAiLine, delegationAiWords } from './delegationAi';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
 
-export const DELEGATION_WORDS = {
-  /** The card's name in front of what it is for: “Tasks · Polish the Settings page” (as its head says). */
-  name: 'Tasks',
-  /** The checklist's line while it waits for the person. */
-  offer: 'Pick what to hand over',
-  /** A council in the thread is looking at the offered list: Hand over waits for its answer. */
-  checkingWord: 'Council at work',
-  checking: 'The council is looking at this list. Hand it over once it answers.',
-  ticked: (n: number, of: number) => `${n} of ${of} ticked`,
-  /** After the checklist's line when Whombat merges each one's pull request. */
-  merges: 'checked and merged together',
-  states: {
-    offered: 'Not handed over yet',
-    skipped: 'Not handed over',
-    queued: 'Waiting its turn',
-    working: 'Working',
-    done: 'Done',
-    failed: 'Ran into a problem',
-    stopped: 'Stopped',
-    timed_out: 'Ran out of time',
-  } satisfies Record<DelegationTaskState, string>,
-  /** A done task's pull request when Whombat merges them. */
-  merge: {
-    waiting: 'Waiting to merge',
-    merging: 'Merging',
-    merged: 'Merged',
-    not_merged: 'Not merged',
-  } satisfies Record<DelegationTaskMerge, string>,
-  /** A queued task that starts after another: “After 1”. */
-  after: (n: number) => `After ${n}`,
-  /** A task done in another's thread, on its branch and in its pull request (DLG-42): “With 1”. */
-  with: (n: number) => `With ${n}`,
-  /** One thread doing several tasks: one row for them, “4 of 9 done”, its items under it. */
-  together: {
-    title: (n: number) => `${n} items together`,
-    done: (n: number, of: number) => `${n} of ${of} done`,
-    itemDone: 'Done',
-    itemWorking: 'Working on it',
-  },
-  /** A queued task whose task before it didn't finish. */
-  blocked: (n: number) => `Waits for ${n}, which didn’t finish`,
-  pending: {
-    /** A question the assistant answers itself (T3-17): nothing for the person to do. */
-    question: (lead: string | null) => (lead ? `Asked ${lead}` : 'Asked a question'),
-    approval: 'Needs your OK in T3 Code',
-  },
-  /** Its pull request's checks (DLG-20, DLG-21). */
-  checks: {
-    running: 'Waiting for checks',
-    failing: 'Checks failing',
-  },
-  /** The head line: “4 of 10 merged · 3 working · 1 needs a look”. */
-  progress: {
-    merged: (n: number, of: number) => `${n} of ${of} merged`,
-    done: (n: number, of: number) => `${n} of ${of} done`,
-    working: (n: number) => `${n} working`,
-    look: (n: number) => `${n} need${n === 1 ? 's' : ''} a look`,
-  },
-  /** The line the finished tasks fold into (DLG-28): “4 merged”, “1 done”. */
-  folded: (n: number, merged: boolean) => `${n} ${merged ? 'merged' : 'done'}`,
-  showFolded: 'Show them',
-  hideFolded: 'Hide them',
-  /** A task's menu (⋯), and its pictures. */
-  more: (title: string) => `More for ${title}`,
-  pictures: (n: number) => (n === 1 ? '1 picture' : `${n} pictures`),
-  picturesHint: 'Before on top, after below. The numbers match the notes.',
-  done: 'Done',
-  stopped: 'Stopped',
-  notHanded: 'Not handed over',
-  /** The final line when some tasks didn't finish: “Done, 1 didn’t finish”. */
-  doneSome: (n: number) => `Done, ${n} didn’t finish`,
-  /** The final line when some pull requests weren't merged: “Done, 1 not merged”. */
-  doneUnmerged: (n: number) => `Done, ${n} not merged`,
-  handOver: (n: number) => (n ? `Hand over ${n}` : 'Hand over'),
-  change: 'Change something',
-  notNow: 'Not now',
-  stop: 'Stop',
-  stopTask: 'Stop this task',
-  openThread: 'Open in T3 Code',
-  pullRequest: 'Pull request',
-  /** Stop asks first: it stops work on the person's computer. */
-  stopAsk: {
-    title: 'Stop every task?',
-    body: 'Tasks at work stop, and the rest won’t start.',
-    keep: 'Keep going',
-  },
-  stopTaskAsk: {
-    title: 'Stop this task?',
-    body: 'Its thread in T3 Code stops, including any tasks sharing it.',
-    keep: 'Keep going',
-  },
-  /** A press that didn't go through (the server's own words come first when it has some). */
-  failed: {
-    pick: 'Couldn’t change the list. Try again.',
-    start: 'Couldn’t hand them over. Try again.',
-    stop: 'Couldn’t stop it. Try again.',
-  },
-  /** For screen readers on a checkbox. */
-  tick: (title: string) => `Hand over: ${title}`,
-} as const;
+/** The delegation card's words, in a locale (English when none). */
+export function delegationWords(locale?: string | null) {
+  const w = clientTree(locale, CARDS_AREA_WORDS).delegation;
+  return {
+    /** The card's name in front of what it is for: “Tasks · Polish the Settings page” (as its head says). */
+    name: w.name,
+    /** The checklist's line while it waits for the person. */
+    offer: w.offer,
+    /** A council in the thread is looking at the offered list: Hand over waits for its answer. */
+    checkingWord: w.checkingWord,
+    checking: w.checking,
+    ticked: (n: number, of: number) => interpolate(w.ticked, { n, of }),
+    /** After the checklist's line when Whombat merges each one's pull request. */
+    merges: w.merges,
+    states: {
+      offered: w.states.offered,
+      skipped: w.states.skipped,
+      queued: w.states.queued,
+      working: w.states.working,
+      done: w.states.done,
+      failed: w.states.failed,
+      stopped: w.states.stopped,
+      timed_out: w.states.timed_out,
+    } satisfies Record<DelegationTaskState, string>,
+    /** A done task's pull request when Whombat merges them. */
+    merge: {
+      waiting: w.merge.waiting,
+      merging: w.merge.merging,
+      merged: w.merge.merged,
+      not_merged: w.merge.not_merged,
+    } satisfies Record<DelegationTaskMerge, string>,
+    /** A queued task that starts after another: “After 1”. */
+    after: (n: number) => interpolate(w.after, { n }),
+    /** A task done in another's thread, on its branch and in its pull request (DLG-42): “With 1”. */
+    with: (n: number) => interpolate(w.with, { n }),
+    /** One thread doing several tasks: one row for them, “4 of 9 done”, its items under it. */
+    together: {
+      title: (n: number) => interpolate(w.together.title, { n }),
+      done: (n: number, of: number) => interpolate(w.together.done, { n, of }),
+      itemDone: w.together.itemDone,
+      itemWorking: w.together.itemWorking,
+    },
+    /** A queued task whose task before it didn't finish. */
+    blocked: (n: number) => interpolate(w.blocked, { n }),
+    pending: {
+      /** A question the assistant answers itself (T3-17): nothing for the person to do. */
+      question: (lead: string | null) => (lead ? interpolate(w.pending.asked, { lead }) : w.pending.question),
+      approval: w.pending.approval,
+    },
+    /** Its pull request's checks (DLG-20, DLG-21). */
+    checks: { running: w.checks.running, failing: w.checks.failing },
+    /** The head line: “4 of 10 merged · 3 working · 1 needs a look”. */
+    progress: {
+      merged: (n: number, of: number) => interpolate(w.progress.merged, { n, of }),
+      done: (n: number, of: number) => interpolate(w.progress.done, { n, of }),
+      working: (n: number) => interpolate(w.progress.working, { n }),
+      look: (n: number) => w.progress.look(n),
+    },
+    /** The line the finished tasks fold into (DLG-28): “4 merged”, “1 done”. */
+    folded: (n: number, merged: boolean) => interpolate(merged ? w.foldedMerged : w.foldedDone, { n }),
+    showFolded: w.showFolded,
+    hideFolded: w.hideFolded,
+    /** A task's menu (⋯), and its pictures. */
+    more: (title: string) => interpolate(w.more, { title }),
+    pictures: (n: number) => w.pictures(n),
+    picturesHint: w.picturesHint,
+    done: w.done,
+    stopped: w.stopped,
+    notHanded: w.notHanded,
+    /** The final line when some tasks didn't finish: “Done, 1 didn’t finish”. */
+    doneSome: (n: number) => interpolate(w.doneSome, { n }),
+    /** The final line when some pull requests weren't merged: “Done, 1 not merged”. */
+    doneUnmerged: (n: number) => interpolate(w.doneUnmerged, { n }),
+    handOver: (n: number) => (n ? interpolate(w.handOverN, { n }) : w.handOver),
+    change: w.change,
+    notNow: w.notNow,
+    stop: w.stop,
+    stopTask: w.stopTask,
+    openThread: w.openThread,
+    pullRequest: w.pullRequest,
+    /** Stop asks first: it stops work on the person's computer. */
+    stopAsk: { title: w.stopAsk.title, body: w.stopAsk.body, keep: w.stopAsk.keep },
+    stopTaskAsk: { title: w.stopTaskAsk.title, body: w.stopTaskAsk.body, keep: w.stopTaskAsk.keep },
+    /** A press that didn't go through (the server's own words come first when it has some). */
+    failed: { pick: w.failed.pick, start: w.failed.start, stop: w.failed.stop },
+    /** For screen readers on a checkbox. */
+    tick: (title: string) => interpolate(w.tick, { title }),
+    /** A checklist row's state for screen readers. */
+    tickedWord: w.ticked1,
+    notTicked: w.notTicked,
+  };
+}
+
+/** The delegation card's words, in English. */
+export const DELEGATION_WORDS = delegationWords();
+
+type DelegationWords = ReturnType<typeof delegationWords>;
+const wordsIn = (locale?: string | null): DelegationWords =>
+  locale ? delegationWords(locale) : DELEGATION_WORDS;
 
 /** An item of a thread doing several tasks, under that thread's row. */
 export interface DelegationItemView {
@@ -206,7 +208,12 @@ function doneWith(t: DelegationCardTask, tasks: readonly DelegationCardTask[]): 
   return t.state === 'working' && t.url && t.url === before.url ? before : null;
 }
 
-function statusOf(t: DelegationCardTask, tasks: readonly DelegationCardTask[], lead: string | null): string {
+function statusOf(
+  t: DelegationCardTask,
+  tasks: readonly DelegationCardTask[],
+  lead: string | null,
+  DELEGATION_WORDS: DelegationWords,
+): string {
   const mate = doneWith(t, tasks);
   if (mate && !t.merge) return DELEGATION_WORDS.with(mate.n);
   if (t.state === 'queued' && t.after !== null) {
@@ -232,7 +239,9 @@ export function delegationTaskView(
   card: Pick<DelegationCard, 'stage' | 'live' | 'tasks'>,
   nowMs: number,
   lead: string | null = null,
+  locale?: string | null,
 ): DelegationTaskView {
+  const DELEGATION_WORDS = wordsIn(locale);
   const working = atWork(t);
   const start = t.since ? Date.parse(t.since) : null;
   const end = t.endedAt ? Date.parse(t.endedAt) : nowMs;
@@ -240,7 +249,7 @@ export function delegationTaskView(
     start !== null && Number.isFinite(start) && (t.state === 'working' || t.endedAt)
       ? formatTaskDuration(end - start)
       : null;
-  const status = statusOf(t, card.tasks, lead);
+  const status = statusOf(t, card.tasks, lead, DELEGATION_WORDS);
   // Done with another task in its thread: that one's row says what the thread does now.
   const detail = working && !t.pending && !doneWith(t, card.tasks) ? t.step : null;
   const handed = card.stage !== 'offer';
@@ -262,7 +271,7 @@ export function delegationTaskView(
     detail,
     elapsed,
     program: t.program,
-    ai: delegationAiLine(t.ai),
+    ai: delegationAiLine(t.ai, locale),
     note: t.note,
     url: t.url,
     pr: t.pr,
@@ -272,8 +281,8 @@ export function delegationTaskView(
     label: `${t.n}. ${t.title}: ${
       card.stage === 'offer' && t.state === 'offered'
         ? t.picked
-          ? 'ticked'
-          : 'not ticked'
+          ? DELEGATION_WORDS.tickedWord
+          : DELEGATION_WORDS.notTicked
         : `${lowerFirst(status)}${detail ? `, ${lowerFirst(detail)}` : ''}`
     }`,
   };
@@ -329,6 +338,7 @@ function progressLine(
   tasks: readonly DelegationCardTask[],
   merging: boolean,
   along: ReadonlySet<string> = new Set(),
+  DELEGATION_WORDS: DelegationWords = wordsIn(),
 ): string {
   const reported = merging ? 0 : tasks.filter((t) => t.state === 'working' && t.reported).length;
   const finished = tasks.filter(finishedWell).length + reported;
@@ -364,6 +374,7 @@ function togetherView(
   first: DelegationTaskView,
   lead: DelegationCardTask,
   tasks: readonly DelegationCardTask[],
+  DELEGATION_WORDS: DelegationWords = wordsIn(),
 ): DelegationTaskView {
   const words = DELEGATION_WORDS.together;
   const title = words.title(tasks.length);
@@ -405,7 +416,9 @@ export function delegationCardView(
   card: DelegationCard,
   nowMs: number,
   lead: string | null = null,
+  locale?: string | null,
 ): DelegationCardView {
+  const DELEGATION_WORDS = wordsIn(locale);
   const heading = `${DELEGATION_WORDS.name} · ${card.title}`;
   const offer = card.live && card.stage === 'offer';
   // Once handed over, the tasks not handed over leave the card (DLG-04).
@@ -415,9 +428,9 @@ export function delegationCardView(
   const views = listed
     .filter((t) => !along.has(t.id))
     .map((t) => {
-      const view = delegationTaskView(t, card, nowMs, lead);
+      const view = delegationTaskView(t, card, nowMs, lead, locale);
       const members = together.get(t.id);
-      return members ? togetherView(view, t, members) : view;
+      return members ? togetherView(view, t, members, DELEGATION_WORDS) : view;
     });
   const offered = card.tasks.filter((t) => t.state === 'offered');
   const picked = offered.filter((t) => t.picked).length;
@@ -437,9 +450,9 @@ export function delegationCardView(
           ? DELEGATION_WORDS.doneUnmerged(unmerged)
           : DELEGATION_WORDS.done;
   const handedOver = card.tasks.filter((t) => t.state !== 'offered' && t.state !== 'skipped');
-  const aiLine = delegationAiLine(card.ai);
+  const aiLine = delegationAiLine(card.ai, locale);
   const pickedOwn = offered.filter((t) => t.picked && t.ai).length;
-  const progress = progressLine(handedOver, !!card.merge, along);
+  const progress = progressLine(handedOver, !!card.merge, along, DELEGATION_WORDS);
   const stage = offer
     ? `${DELEGATION_WORDS.offer} · ${DELEGATION_WORDS.ticked(picked, offered.length)}${card.merge ? ` · ${DELEGATION_WORDS.merges}` : ''}`
     : (ended ?? progress);
@@ -459,7 +472,11 @@ export function delegationCardView(
     handOver: DELEGATION_WORDS.handOver(picked),
     aiChoosable: offer && card.ai !== undefined,
     ai: aiLine,
-    aiSummary: aiLine ? (pickedOwn ? DELEGATION_AI_WORDS.others(aiLine) : aiLine) : null,
+    aiSummary: aiLine
+      ? pickedOwn
+        ? (locale ? delegationAiWords(locale) : DELEGATION_AI_WORDS).others(aiLine)
+        : aiLine
+      : null,
     aiShared: picked - pickedOwn,
     stoppable:
       card.live &&

@@ -5,11 +5,12 @@
  * gear on a tile, a figure or a pinned chart (34 drawn, 44 to the finger), a small chart (a line, its wash and a dot at
  * the newest reading) and the bar of parts under Whombat's own counts.
  */
-import { ARRANGE_WORDS, type FigureTone } from '@whombat/client';
+import { arrangeWords, type FigureTone } from '@whombat/client';
 import { useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { sparkPaths } from '../../data/overviewArranged';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Check, Settings } from '../../ui/icons';
@@ -21,6 +22,8 @@ const GEAR = 34;
 
 /** Arrange at the end of the title's row: a round gear, or while arranging a filled “✓ Done”. */
 export function ArrangeToggle({ arranging, onPress }: { arranging: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -28,7 +31,7 @@ export function ArrangeToggle({ arranging, onPress }: { arranging: boolean; onPr
       feedback="fade"
       ringRadius={20}
       accessibilityRole="button"
-      accessibilityLabel={arranging ? ARRANGE_WORDS.doneLabel : ARRANGE_WORDS.arrangeLabel}
+      accessibilityLabel={arranging ? arrangeWordsHere.doneLabel : arrangeWordsHere.arrangeLabel}
       accessibilityState={{ selected: arranging }}
       hitSlop={hitSlopFor(40)}
       style={{
@@ -50,7 +53,7 @@ export function ArrangeToggle({ arranging, onPress }: { arranging: boolean; onPr
         <>
           <Check size={16} color={theme.colors.btnfg} strokeWidth={2} />
           <Text size={14} weight={500} color={theme.colors.btnfg}>
-            {ARRANGE_WORDS.done}
+            {arrangeWordsHere.done}
           </Text>
         </>
       ) : (
@@ -62,6 +65,8 @@ export function ArrangeToggle({ arranging, onPress }: { arranging: boolean; onPr
 
 /** “Arranging the Overview.” and what to do, in a dashed box under the title; what couldn't be saved under it. */
 export function ArrangeBar({ failed }: { failed: boolean }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -79,13 +84,13 @@ export function ArrangeBar({ failed }: { failed: boolean }) {
     >
       <Text size={14.5} lh={1.45} color={theme.colors.ink2}>
         <Text size={14.5} weight={600} color={theme.colors.ink}>
-          {ARRANGE_WORDS.barTitle}
+          {arrangeWordsHere.barTitle}
         </Text>{' '}
-        {ARRANGE_WORDS.barBodyPhone}
+        {arrangeWordsHere.barBodyPhone}
       </Text>
       {failed ? (
         <Text size={14} weight={500} lh={1.45} color={theme.colors.bad}>
-          {ARRANGE_WORDS.couldntSave}
+          {arrangeWordsHere.couldntSave}
         </Text>
       ) : null}
     </View>

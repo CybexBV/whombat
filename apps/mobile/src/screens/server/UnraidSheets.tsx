@@ -17,7 +17,7 @@ import {
 import type { HostGuest, HostUnraidDetail } from '@whombat/core';
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { OneCard } from '../../ui/assistant';
 import { Facts } from '../../ui/facts';
 import { OneSheet } from '../../ui/oneSheet';
@@ -54,6 +54,8 @@ export function StopArraySheet({
   guests: readonly HostGuest[];
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -62,17 +64,17 @@ export function StopArraySheet({
       onClose={() => !busy && onClose()}
       badge={serverName}
       tone="bad"
-      title={`Stop the array on ${serverName}?`}
-      body={arrayStopWords(unraid, guests, serverName)}
+      title={tMobile('screens2.unraid.stopAsk', { name: serverName })}
+      body={arrayStopWords(unraid, guests, serverName, rawLocale)}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Stop the array',
+          label: tMobile('screens2.unraid.stopArray'),
           variant: 'primary',
           onPress: () => void run('array.stop', { confirm: true }).then((o) => close(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -97,24 +99,24 @@ export function CheckParitySheet({
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Check parity on ${serverName}`}
+      title={tMobile('screens2.unraid.checkParityOn', { name: serverName })}
       body={tMobile('screens.it-reads-every-disk-that-takes-hours-and')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Start the check',
+          label: tMobile('screens2.unraid.startCheck'),
           variant: 'primary',
           onPress: () =>
             void run('parity.start', { params: { correct } }).then((o) => close(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
       <View style={{ marginTop: 12 }}>
         <SwitchLine
-          label="Write corrections (only when you know why there are errors)"
+          label={tMobile('screens2.unraid.writeCorrections')}
           value={correct}
           onChange={setCorrect}
         />
@@ -148,12 +150,12 @@ export function CancelParitySheet({
       buttons={[
         {
           id: 'go',
-          label: 'Cancel the check',
+          label: tMobile('screens2.unraid.cancelCheck'),
           variant: 'primary',
           onPress: () =>
             void run('parity.cancel', { confirm: true }).then((o) => close(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Keep checking', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.unraid.keepChecking'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -174,6 +176,8 @@ export function DiskSheet({
   canChange: boolean;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   const op = row.spunDown ? 'disk.spin_up' : 'disk.spin_down';
@@ -199,7 +203,7 @@ export function DiskSheet({
           ? [
               {
                 id: 'spin',
-                label: row.spunDown ? 'Spin up' : 'Spin down',
+                label: tMobile(row.spunDown ? 'screens2.unraid.spinUp' : 'screens2.unraid.spinDown'),
                 variant: 'secondary' as const,
                 onPress: () =>
                   void run(op, {
@@ -211,7 +215,7 @@ export function DiskSheet({
           : []),
         {
           id: 'close',
-          label: 'Close',
+          label: tMobile('screens2.common.close'),
           variant: canChange && row.canSpin ? 'quiet' : 'primary',
           onPress: onClose,
         },
@@ -221,7 +225,7 @@ export function DiskSheet({
       <View style={{ marginTop: 14 }}>
         <OneCard>
           <View style={{ padding: 14 }}>
-            <Facts facts={diskFacts(row.disk)} />
+            <Facts facts={diskFacts(row.disk, rawLocale)} />
           </View>
         </OneCard>
       </View>
@@ -248,8 +252,8 @@ export function PluginUpdateSheet({
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   const title = plugin
-    ? `Update ${plugin.name} to ${plugin.update}?`
-    : `Update ${count === 1 ? 'the plugin' : `${count} plugins`} on ${serverName}?`;
+    ? tMobile('screens2.unraid.updatePluginAsk', { name: plugin.name, version: plugin.update ?? '' })
+    : tMobile('screens2.unraid.updatePluginsAsk', { count, server: serverName });
   return (
     <OneSheet
       visible
@@ -262,7 +266,7 @@ export function PluginUpdateSheet({
       buttons={[
         {
           id: 'go',
-          label: plugin ? 'Update' : 'Update all',
+          label: tMobile(plugin ? 'screens.update' : 'screens2.common.updateAll'),
           variant: 'primary',
           onPress: () =>
             void run('plugin.update', {
@@ -271,7 +275,7 @@ export function PluginUpdateSheet({
               ...(plugin ? { follow: { kind: 'plugin.update', extra: plugin.name } } : {}),
             }).then((o) => close(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -292,6 +296,8 @@ export function NotificationSheet({
   canChange: boolean;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -308,17 +314,23 @@ export function NotificationSheet({
           ? [
               {
                 id: 'archive',
-                label: 'Archive',
+                label: tMobile('screens2.common.archive'),
                 variant: 'primary' as const,
                 onPress: () =>
                   void run('notification.archive', {
                     params: { id: row.id },
-                    done: unraidChangeWords('notification.archive', serverName, { target: row.id }).finished,
+                    done: unraidChangeWords('notification.archive', serverName, { target: row.id }, rawLocale)
+                      .finished,
                   }).then((o) => close(o, onClose, setError)),
               },
             ]
           : []),
-        { id: 'close', label: 'Close', variant: canChange ? 'quiet' : 'primary', onPress: onClose },
+        {
+          id: 'close',
+          label: tMobile('screens2.common.close'),
+          variant: canChange ? 'quiet' : 'primary',
+          onPress: onClose,
+        },
       ]}
       note={error}
     />

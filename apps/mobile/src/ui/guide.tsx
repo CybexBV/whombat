@@ -7,7 +7,7 @@
 
 import type { GuideActInput } from '@whombat/client';
 import { problemText, vaultAskOf } from '@whombat/client';
-import { CONNECT_FORM_TEXT, cardOAuthStartBody, connectProblem } from '@whombat/client/connections';
+import { cardOAuthStartBody, connectFormText, connectProblem } from '@whombat/client/connections';
 import {
   useConnectionWrite,
   useStartGoogleConnection,
@@ -44,15 +44,15 @@ import {
   connectStartProblem,
   connectWebUrl,
   formValues,
-  GUIDE_TEXT,
   type GuideWeb,
   guideAppUrl,
   guideHrefUrl,
+  guideText,
   guideView,
   missingFields,
   toggleOption,
 } from '../data/guides';
-import { useI18n } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { holdPhoneConnect } from '../managed/connectReturn';
 import { useManaged } from '../managed/context';
 import { openAppUrl } from '../navigation/hooks';
@@ -115,12 +115,15 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 /** What a status dot means, for TalkBack. */
-const STATUS_WORDS: Record<GuideStatusState, string> = {
-  ok: 'Working',
-  warn: 'Needs attention',
-  bad: 'Not working',
-  mut: 'Not checked',
-};
+function statusWords(locale?: string | null): Record<GuideStatusState, string> {
+  const tr = mobileTranslator(locale);
+  return {
+    ok: tr.t('screens2.guide.ok'),
+    warn: tr.t('screens2.guide.warn'),
+    bad: tr.t('screens2.guide.bad'),
+    mut: tr.t('screens2.guide.mut'),
+  };
+}
 
 function openUrl(url: string) {
   void Linking.openURL(url).catch(() => {});
@@ -128,7 +131,8 @@ function openUrl(url: string) {
 
 export function GuideCardView({ card, onAct, web }: GuideCardViewProps) {
   const theme = useTheme();
-  const view = guideView(card);
+  const { rawLocale } = useI18n();
+  const view = guideView(card, rawLocale);
   const ask = vaultAskOf(card);
   // One act at a time: the card locks at once (optimistically), this covers the moment before.
   const [sending, setSending] = useState(false);
@@ -485,6 +489,7 @@ function ConnectOAuthActionButton({
   onProblem: (text: string | null) => void;
 }) {
   const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
 
   const managed = useManaged();
   const { slug } = useBurrow();
@@ -500,12 +505,15 @@ function ConnectOAuthActionButton({
         body: cardOAuthStartBody(oauth),
       });
       if (result.status !== 'ok') {
-        onProblem(CONNECT_FORM_TEXT.notThrough);
+        onProblem(connectFormTextHere.notThrough);
         return;
       }
       openUrl(result.data.authorizeUrl);
     } catch (err) {
-      onProblem(connectProblem(err).message ?? problemText(err, CONNECT_FORM_TEXT.cantStart, rawLocale));
+      onProblem(
+        connectProblem(err, undefined, undefined, rawLocale).message ??
+          problemText(err, connectFormTextHere.cantStart, rawLocale),
+      );
     }
   }
 
@@ -563,6 +571,9 @@ function ActionsBlock({
 /* Copy rows ------------------------------------------------------------------------------------------- */
 
 function CopyRow({ label, value }: { label: string; value: string }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const words = guideText(rawLocale);
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -608,7 +619,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
           onPress={copy}
           feedback="wash"
           ringRadius={10}
-          accessibilityLabel={copied ? `${label} copied` : `Copy ${label}`}
+          accessibilityLabel={tMobile(copied ? 'screens2.guide.copied' : 'screens2.guide.copy', { label })}
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -627,7 +638,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
             <CopyIcon size={16} color={theme.colors.ink2} strokeWidth={1.75} />
           )}
           <Text size={14} weight={500} accessibilityLiveRegion="polite">
-            {copied ? GUIDE_TEXT.copied : GUIDE_TEXT.copy}
+            {copied ? words.copied : words.copy}
           </Text>
         </Touchable>
       </View>
@@ -682,6 +693,7 @@ function LinksBlock({ block }: { block: GuideLinksBlock }) {
 }
 
 function StatusBlock({ block, web }: { block: GuideStatusBlock; web: GuideWeb }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const colors: Record<GuideStatusState, string> = {
     ok: theme.colors.ok,
@@ -695,7 +707,7 @@ function StatusBlock({ block, web }: { block: GuideStatusBlock; web: GuideWeb })
         const url = row.href ? guideHrefUrl(web, row.href) : null;
         const body = (
           <>
-            <StatusDot color={colors[row.state]} label={STATUS_WORDS[row.state]} />
+            <StatusDot color={colors[row.state]} label={statusWords(rawLocale)[row.state]} />
             <View style={{ flex: 1, gap: 2 }}>
               <Text size={14.5} weight={500} lh={1.35}>
                 {row.label}
@@ -724,7 +736,9 @@ function StatusBlock({ block, web }: { block: GuideStatusBlock; web: GuideWeb })
             onPress={() => openUrl(url)}
             feedback="wash"
             accessibilityRole="link"
-            accessibilityLabel={[row.label, STATUS_WORDS[row.state], row.detail].filter(Boolean).join(', ')}
+            accessibilityLabel={[row.label, statusWords(rawLocale)[row.state], row.detail]
+              .filter(Boolean)
+              .join(', ')}
             accessibilityHint={url}
             style={{ ...style, minHeight: 44 }}
           >
@@ -787,6 +801,8 @@ function FormBlock({
   busy: boolean;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const words = guideText(rawLocale);
   const [values, setValues] = useState<Record<string, string>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, string>>({});
@@ -800,14 +816,14 @@ function FormBlock({
     try {
       picked = await pickJsonFile();
     } catch {
-      setErrors((e) => ({ ...e, [id]: GUIDE_TEXT.fileUnreadable }));
+      setErrors((e) => ({ ...e, [id]: words.fileUnreadable }));
       return;
     }
     if (!picked) return;
     const applied =
       picked.text === null
-        ? { values: {}, error: GUIDE_TEXT.fileTooBig }
-        : applyClientFile(block.fields, id, picked.text);
+        ? { values: {}, error: words.fileTooBig }
+        : applyClientFile(block.fields, id, picked.text, rawLocale);
     const { name } = picked;
     if (applied.error) {
       setErrors((e) => ({ ...e, [id]: applied.error ?? '' }));
@@ -824,7 +840,7 @@ function FormBlock({
     });
   };
   const submit = async () => {
-    const missing = missingFields(block.fields, values);
+    const missing = missingFields(block.fields, values, rawLocale);
     if (Object.keys(missing).length) {
       setErrors(missing);
       return;
@@ -850,7 +866,7 @@ function FormBlock({
               disabled={busy}
               feedback="wash"
               ringRadius={10}
-              accessibilityLabel={`${GUIDE_TEXT.chooseFile}, ${field.label}`}
+              accessibilityLabel={`${words.chooseFile}, ${field.label}`}
               accessibilityHint={files[field.id]}
               style={{
                 flexDirection: 'row',
@@ -866,7 +882,7 @@ function FormBlock({
             >
               <FileText size={18} color={theme.colors.ink2} strokeWidth={1.75} />
               <Text size={14.5} weight={500} numberOfLines={1} style={{ flex: 1 }}>
-                {files[field.id] ?? GUIDE_TEXT.chooseFile}
+                {files[field.id] ?? words.chooseFile}
               </Text>
               {files[field.id] ? (
                 <Check size={16} color={theme.faces.banjo.accent} strokeWidth={2.25} />
@@ -946,23 +962,23 @@ function ConnectBlock({ block, web }: { block: GuideConnectBlock; web: GuideWeb 
         if (result.status === 'ok') void Linking.openURL(result.data.authorizeUrl).catch(() => {});
       }
     } catch (err) {
-      setProblem(problemText(err, connectStartProblem(block), rawLocale));
+      setProblem(problemText(err, connectStartProblem(block, rawLocale), rawLocale));
     }
   }
 
   return (
     <View style={{ gap: 10 }}>
       <Text size={13.5} lh={1.45} color={theme.colors.ink2}>
-        {connectNote(block)}
+        {connectNote(block, rawLocale)}
       </Text>
       {here ? (
         <Button
-          label={connectAppLabel(block)}
+          label={connectAppLabel(block, rawLocale)}
           busy={startGoogle.isPending || startMicrosoft.isPending}
           onPress={() => void start()}
         />
       ) : url ? (
-        <Button label={connectLabel(block)} accessibilityHint={url} onPress={() => openUrl(url)} />
+        <Button label={connectLabel(block, rawLocale)} accessibilityHint={url} onPress={() => openUrl(url)} />
       ) : null}
       {problem ? (
         <Text size={13} lh={1.4} color={theme.colors.bad} accessibilityLiveRegion="polite">

@@ -5,14 +5,15 @@
  * or one waiting for the person. Each saves at once (`useSaveChatPreferences`); a failure puts it back and says why
  * under them. The same choice row is in Settled (`QuietChoiceRow`).
  */
-import { INBOX_WORDS, quietChoiceOf, SETTLE_QUIET_CHOICES } from '@whombat/client';
+import { inboxWords, quietChoiceOf, settleQuietChoices } from '@whombat/client';
 import { useState } from 'react';
 import { Switch, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
-import { chatPreferencesOf, SETTLE_COPY, withMergedSwitch, withQuietDays } from '../data/threadSettle';
+import { chatPreferencesOf, withMergedSwitch, withQuietDays } from '../data/threadSettle';
 import { useAgentWords } from '../data/useAgent';
 import { useSaveChatPreferences } from '../data/useThreadSettle';
+import { useI18n, useMobileT } from '../i18n';
 import { errorText } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -23,16 +24,20 @@ import { switchColors } from '../ui/switchColors';
 import { Touchable } from '../ui/Touchable';
 
 /** The quiet days' menu: the four choices, the one in force ticked. */
-function quietMenu(days: number | null): NativeMenuSpec {
-  const chosen = quietChoiceOf(days);
+function quietMenu(days: number | null, locale: string): NativeMenuSpec {
+  const chosen = quietChoiceOf(days, locale);
   return plainMenu([
-    SETTLE_QUIET_CHOICES.map((c) => ({ id: String(c.days), title: c.label, checked: c === chosen })),
+    settleQuietChoices(locale).map((c) => ({
+      id: String(c.days),
+      title: c.label,
+      checked: c.days === chosen.days,
+    })),
   ]);
 }
 
 /** A pick from it: the days, or null for Never; undefined for an id it never sent. */
 function quietPick(id: string): number | null | undefined {
-  const c = SETTLE_QUIET_CHOICES.find((x) => String(x.days) === id);
+  const c = settleQuietChoices().find((x) => String(x.days) === id);
   return c ? c.days : undefined;
 }
 
@@ -48,11 +53,13 @@ export function QuietChoiceRow({
   disabled?: boolean;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const words = inboxWords(rawLocale);
   const { bootstrap } = useBurrow();
   const save = useSaveChatPreferences();
   const days = chatPreferencesOf(bootstrap.preferences).settleQuietDays;
-  const chosen = quietChoiceOf(days);
-  const spec = quietMenu(days);
+  const chosen = quietChoiceOf(days, rawLocale);
+  const spec = quietMenu(days, rawLocale);
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState(false);
   const pick = async (id: string) => {
@@ -64,7 +71,7 @@ export function QuietChoiceRow({
     try {
       await save((p) => withQuietDays(p, next));
     } catch (error) {
-      onProblem(errorText(error));
+      onProblem(errorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -82,10 +89,10 @@ export function QuietChoiceRow({
     >
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text size={15} weight={600}>
-          {INBOX_WORDS.quietChoice}
+          {words.quietChoice}
         </Text>
         <Text size={13} lh={1.45} color={theme.colors.mut}>
-          {INBOX_WORDS.quietChoiceHint}
+          {words.quietChoiceHint}
         </Text>
       </View>
       <Text size={14} color={theme.colors.ink2}>
@@ -94,7 +101,7 @@ export function QuietChoiceRow({
       <ChevronRight size={16} color={theme.colors.mut} strokeWidth={1.75} />
     </View>
   );
-  const label = `${INBOX_WORDS.quietChoice}, ${chosen.label}`;
+  const label = `${words.quietChoice}, ${chosen.label}`;
   return hasNativeMenu ? (
     <NativeMenu spec={spec} onPick={(id) => void pick(id)} trigger="tap" label={label}>
       {face}
@@ -106,7 +113,7 @@ export function QuietChoiceRow({
         disabled={disabled || busy}
         feedback="wash"
         accessibilityLabel={label}
-        accessibilityHint={INBOX_WORDS.quietChoiceHint}
+        accessibilityHint={words.quietChoiceHint}
         style={{ minHeight: 56 }}
       >
         {face}
@@ -114,7 +121,7 @@ export function QuietChoiceRow({
       <MenuSheet
         spec={spec}
         visible={sheet}
-        label={INBOX_WORDS.quietChoice}
+        label={words.quietChoice}
         onClose={() => setSheet(false)}
         onPick={(id) => void pick(id)}
       />
@@ -124,7 +131,9 @@ export function QuietChoiceRow({
 
 export function ChatSettleSection() {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
   const words = useAgentWords();
+  const { t } = useMobileT();
   const { bootstrap } = useBurrow();
   const save = useSaveChatPreferences();
   const merged = chatPreferencesOf(bootstrap.preferences).settleMerged;
@@ -136,14 +145,14 @@ export function ChatSettleSection() {
     try {
       await save((p) => withMergedSwitch(p, value));
     } catch (error) {
-      setProblem(errorText(error));
+      setProblem(errorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
   };
   return (
     <View style={{ gap: 8 }}>
-      <SectionLabel>{SETTLE_COPY.chat}</SectionLabel>
+      <SectionLabel>{t('settings2.settle.chat')}</SectionLabel>
       <View
         style={{
           borderRadius: 20,
@@ -168,18 +177,18 @@ export function ChatSettleSection() {
         >
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Text size={15} weight={600}>
-              {SETTLE_COPY.merged}
+              {t('settings2.settle.merged')}
             </Text>
             <Text size={13} lh={1.45} color={theme.colors.mut}>
-              {SETTLE_COPY.mergedHint}
+              {t('settings2.settle.mergedHint')}
             </Text>
           </View>
           <Switch
             value={merged}
             disabled={busy}
             onValueChange={(v) => void turn(v)}
-            accessibilityLabel={SETTLE_COPY.merged}
-            accessibilityHint={SETTLE_COPY.mergedHint}
+            accessibilityLabel={t('settings2.settle.merged')}
+            accessibilityHint={t('settings2.settle.mergedHint')}
             accessibilityRole="switch"
             {...switchColors(theme, merged)}
             style={{ minHeight: 44 }}
@@ -187,7 +196,7 @@ export function ChatSettleSection() {
         </View>
       </View>
       <Text size={12.5} lh={1.5} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-        {SETTLE_COPY.note(words)}
+        {t('settings2.settle.note', { name: words.Name })}
       </Text>
       {problem ? (
         <Text

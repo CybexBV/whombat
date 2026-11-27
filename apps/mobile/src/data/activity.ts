@@ -4,6 +4,7 @@
  * unit-tested.
  */
 import { type Activity, type ActivityStatus, collapseActivity, formatAgo } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /** The status dot: running in the developer green, waiting warn, failed bad, interrupted mut, done ok. */
 export type ActivityDot = 'live' | 'ok' | 'warn' | 'bad' | 'mut';
@@ -17,16 +18,23 @@ export const ACTIVITY_DOTS: Record<ActivityStatus, ActivityDot> = {
 };
 
 /** Screen-reader words for the dot. */
-export const ACTIVITY_STATUS_LABELS: Record<ActivityStatus, string> = {
-  running: 'Running',
-  waiting: 'Waiting',
-  failed: 'Failed',
-  interrupted: 'Interrupted',
-  done: 'Done',
-};
+export function activityStatusLabels(locale?: string): Record<ActivityStatus, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    running: t('data.activity.running'),
+    waiting: t('data.activity.waiting'),
+    failed: t('data.run.step.failed'),
+    interrupted: t('data.activity.interrupted'),
+    done: t('data.run.step.done'),
+  };
+}
+export const ACTIVITY_STATUS_LABELS = activityStatusLabels();
 
 /** Under evidence that was shortened (input over 1 KB, output over 4 KB). */
-export const ACTIVITY_TRUNCATED_TEXT = 'Shortened to fit · the rest isn’t kept.';
+export function activityTruncatedText(locale?: string): string {
+  return mobileTranslator(locale).t('data.activity.truncated');
+}
+export const ACTIVITY_TRUNCATED_TEXT = activityTruncatedText();
 
 export interface ActivityRowView {
   id: string;
@@ -51,8 +59,9 @@ export interface ActivitySectionModel {
   entries: ActivityEntryView[];
 }
 
-export function activityRow(a: Activity, now: Date, timeZone: string): ActivityRowView {
-  const time = formatAgo(a.updatedAt, now, timeZone);
+export function activityRow(a: Activity, now: Date, timeZone: string, locale?: string): ActivityRowView {
+  const time = formatAgo(a.updatedAt, now, timeZone, locale);
+  const statusLabel = activityStatusLabels(locale)[a.status];
   const evidence =
     a.evidence && (a.evidence.input || a.evidence.output)
       ? { input: a.evidence.input, output: a.evidence.output, truncated: a.evidence.truncated }
@@ -60,15 +69,13 @@ export function activityRow(a: Activity, now: Date, timeZone: string): ActivityR
   return {
     id: a.id,
     dot: ACTIVITY_DOTS[a.status],
-    statusLabel: ACTIVITY_STATUS_LABELS[a.status],
+    statusLabel,
     title: a.title,
     detail: a.detail,
     object: a.object,
     time,
     evidence,
-    accessibilityLabel: [a.title, a.detail, a.object, ACTIVITY_STATUS_LABELS[a.status], time]
-      .filter(Boolean)
-      .join(', '),
+    accessibilityLabel: [a.title, a.detail, a.object, statusLabel, time].filter(Boolean).join(', '),
   };
 }
 
@@ -80,12 +87,13 @@ export function activitySection(
   res: { activities: readonly Activity[] } | undefined,
   now: Date,
   timeZone: string,
+  locale?: string,
 ): ActivitySectionModel {
   if (!res) return { entries: [] };
   const entries = collapseActivity(res.activities).map((e): ActivityEntryView => {
     if (e.type === 'row')
-      return { type: 'row', key: e.activity.id, row: activityRow(e.activity, now, timeZone) };
-    const rows = e.items.map((a) => activityRow(a, now, timeZone));
+      return { type: 'row', key: e.activity.id, row: activityRow(e.activity, now, timeZone, locale) };
+    const rows = e.items.map((a) => activityRow(a, now, timeZone, locale));
     return {
       type: 'group',
       key: `group-${e.items[0]?.id ?? e.title}`,

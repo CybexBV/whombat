@@ -10,19 +10,20 @@
  *   with Close while it runs and Done after. A network that refuses (a wrong password, not found) goes back to its form
  *   with why.
  *
- * The steps' logic is `machine.ts` (tested); the rows and words are the shared `wifiRows` and `NETWORK_TEXT`. Closing
+ * The steps' logic is `machine.ts` (tested); the rows and words are the shared `wifiRows` and `networkTextHere`. Closing
  * forgets everything typed, the password above all.
  */
 import {
-  NETWORK_TEXT,
   type NetworkApi,
   type NetworkChange,
   networkErrorText,
+  networkText,
   type WifiRowView,
   wifiRows,
 } from '@whombat/client';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, TextInput, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
@@ -46,9 +47,6 @@ import {
 } from './machine';
 import { ErrorLine, Field } from './ui';
 
-const T = NETWORK_TEXT;
-const D = T.dialog;
-
 type Scan = { rows: WifiRowView[] } | { note: string } | null;
 
 export function WifiSheet({
@@ -68,6 +66,9 @@ export function WifiSheet({
   change: NetworkChange | null;
   onStarted: (change: NetworkChange) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
+  const D = networkText(rawLocale).dialog;
   const theme = useTheme();
   const [step, setStep] = useState<WifiStep>({ at: 'list' });
   const [scan, setScan] = useState<Scan>(null);
@@ -86,7 +87,7 @@ export function WifiSheet({
       if (mine !== looking.current) return;
       setScan(
         r.scan
-          ? { rows: wifiRows(r.scan) }
+          ? { rows: wifiRows(r.scan, rawLocale) }
           : { note: r.reason === 'no_wifi' ? T.errors.no_wifi(name) : D.couldNotLook },
       );
     } catch {
@@ -113,13 +114,13 @@ export function WifiSheet({
 
   // The change this sheet started: a network that refused goes back to its form with why.
   useEffect(() => {
-    const back = wifiAfterChange(step, change, name);
+    const back = wifiAfterChange(step, change, name, rawLocale);
     if (!back) return;
     setStep(back.step);
     setForm((f) => ({ ...f, password: '' }));
     setProblem(back.problem);
     setNote(back.note);
-  }, [step, change, name]);
+  }, [step, change, name, rawLocale]);
 
   const choose = (network: WifiRowView | null) => {
     setStep({ at: 'form', network });
@@ -131,7 +132,7 @@ export function WifiSheet({
 
   const join = async () => {
     if (step.at !== 'form') return;
-    const p = wifiFormProblem(step, form);
+    const p = wifiFormProblem(step, form, rawLocale);
     setProblem(p);
     setNote(null);
     if (p) return;
@@ -141,17 +142,17 @@ export function WifiSheet({
       onStarted(started);
       setStep({ at: 'following', id: started.id, ssid: started.ssid, network: step.network });
     } catch (error) {
-      setNote(networkErrorText(error, name));
+      setNote(networkErrorText(error, name, rawLocale));
     } finally {
       setBusy(false);
     }
   };
 
-  const head = wifiSheetHead(step, name);
+  const head = wifiSheetHead(step, name, rawLocale);
   const fields = wifiFormFields(step, form);
   const at = (field: WifiProblem['field']) => (problem?.field === field ? problem.text : null);
   const followed = step.at === 'following' && change?.id === step.id ? change : null;
-  const line = step.at === 'following' ? wifiFollowLine(followed, name) : null;
+  const line = step.at === 'following' ? wifiFollowLine(followed, name, rawLocale) : null;
 
   return (
     <Sheet visible={visible} onClose={onClose} label={head.title} closeLabel={D.cancel}>
@@ -435,6 +436,8 @@ function PasswordField({
   onToggle: () => void;
   invalid: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const D = networkText(rawLocale).dialog;
   const theme = useTheme();
   const metrics = textMetrics({ size: 16, family: 'mono' });
   const toggled = useRef(false);

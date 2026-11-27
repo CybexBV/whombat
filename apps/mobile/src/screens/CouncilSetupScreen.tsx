@@ -9,7 +9,7 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useQueryClient } from '@tanstack/react-query';
-import { COUNCIL_SETUP_WORDS } from '@whombat/client';
+import { councilSetupWords } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useApiMutation } from '@whombat/client/react';
 import { api } from '@whombat/core';
@@ -29,6 +29,7 @@ import {
   sameCouncilDraft,
 } from '../data/councilSetups';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -45,6 +46,8 @@ import { outcomeText, showNotice } from './feedback';
 type Props = NativeStackScreenProps<RootStackParamList, 'SettingsCouncil'>;
 
 export function CouncilSetupScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const councilSetupWordsHere = councilSetupWords(rawLocale);
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
@@ -57,7 +60,7 @@ export function CouncilSetupScreen({ navigation }: Props) {
   const [refusal, setRefusal] = useState<string | null>(null);
   const draft = edits ?? original;
   const dirty = !!edits && !!original && !sameCouncilDraft(edits, original);
-  const guard = useUnsavedGuard(assistant, COUNCIL_SETUP_WORDS.title);
+  const guard = useUnsavedGuard(assistant, councilSetupWordsHere.title);
   const { onDirtyChange } = guard;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   const save = useApiMutation(api.councils.saveSetup);
@@ -81,14 +84,14 @@ export function CouncilSetupScreen({ navigation }: Props) {
       { params: { burrow: slug }, body: councilDraftBody(draft) },
       {
         onSuccess: (result) => {
-          const text = outcomeText(result);
+          const text = outcomeText(result, rawLocale);
           if (text) return setRefusal(text.title);
           haptic('success');
-          showNotice(COUNCIL_SETUP_WORDS.saved);
+          showNotice(councilSetupWordsHere.saved);
           void qc.invalidateQueries({ queryKey: queryKeys.scope('councils.setup', { burrow: slug }) });
           guard.leave(goBack);
         },
-        onError: (error) => setRefusal(councilActionProblem(error)),
+        onError: (error) => setRefusal(councilActionProblem(error, rawLocale)),
       },
     );
   };
@@ -104,20 +107,20 @@ export function CouncilSetupScreen({ navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 14 }}>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
-            {COUNCIL_SETUP_WORDS.title}
+            {councilSetupWordsHere.title}
           </Text>
         </View>
         {!data ? (
           query.error ? (
             <ErrorState
-              text={councilActionProblem(query.error)}
+              text={councilActionProblem(query.error, rawLocale)}
               {...(olderWhombat(query.error) ? {} : { onRetry: () => void query.refetch() })}
             />
           ) : (
-            <SkeletonRows count={3} lines={2} label={COUNCIL_SETUP_WORDS.title} />
+            <SkeletonRows count={3} lines={2} label={councilSetupWordsHere.title} />
           )
         ) : !options ? (
-          <Quiet>{COUNCIL_SETUP_WORDS.t3[data.t3 === 'ready' ? 'unreachable' : data.t3]}</Quiet>
+          <Quiet>{councilSetupWordsHere.t3[data.t3 === 'ready' ? 'unreachable' : data.t3]}</Quiet>
         ) : draft ? (
           <CouncilForm draft={draft} onChange={change} />
         ) : null}
@@ -145,14 +148,14 @@ export function CouncilSetupScreen({ navigation }: Props) {
           ) : null}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
-              label={COUNCIL_SETUP_WORDS.cancel}
+              label={councilSetupWordsHere.cancel}
               variant="secondary"
               size="lg"
               onPress={goBack}
               style={{ flex: 1 }}
             />
             <Button
-              label={COUNCIL_SETUP_WORDS.save}
+              label={councilSetupWordsHere.save}
               size="lg"
               onPress={onSave}
               busy={save.isPending}
@@ -169,23 +172,25 @@ export function CouncilSetupScreen({ navigation }: Props) {
 
 /** The form itself: rounds and score. */
 function CouncilForm({ draft, onChange }: { draft: CouncilDraft; onChange: (next: CouncilDraft) => void }) {
-  const target = councilTargetPicker(draft);
+  const { rawLocale } = useI18n();
+  const councilSetupWordsHere = councilSetupWords(rawLocale);
+  const target = councilTargetPicker(draft, rawLocale);
   return (
     <Section>
       <View style={{ paddingTop: 12, paddingHorizontal: 16, gap: 10 }}>
         <Text size={15.5} weight={500}>
-          {COUNCIL_SETUP_WORDS.rounds}
+          {councilSetupWordsHere.rounds}
         </Text>
         <Segmented<string>
-          label={COUNCIL_SETUP_WORDS.rounds}
+          label={councilSetupWordsHere.rounds}
           options={COUNCIL_ROUND_CHOICES}
           value={String(draft.rounds)}
           onChange={(v) => onChange({ ...draft, rounds: Number(v) })}
         />
       </View>
-      <Hint>{COUNCIL_SETUP_WORDS.roundsHint}</Hint>
+      <Hint>{councilSetupWordsHere.roundsHint}</Hint>
       <PickerRow {...target} onPick={(id) => onChange({ ...draft, target: Number(id) })} last />
-      <Hint last>{COUNCIL_SETUP_WORDS.targetHint}</Hint>
+      <Hint last>{councilSetupWordsHere.targetHint}</Hint>
     </Section>
   );
 }

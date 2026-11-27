@@ -8,19 +8,19 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  TEAM_REPORT_WORDS,
   teamReportGroups,
   teamReportRowLabel,
   teamReportRowLine,
   teamReportsUnavailableText,
   teamReportWhen,
+  teamReportWords,
 } from '@whombat/client';
 import { teamReportErrorText, useTeamReports } from '@whombat/client/react';
 import type { TeamReportRow } from '@whombat/core';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Card, Note } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -35,6 +35,8 @@ import { KindTile } from './teamReportParts';
 type Props = NativeStackScreenProps<RootStackParamList, 'TeamReports'>;
 
 export function TeamReportsScreen({ navigation, route }: Props) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -54,14 +56,14 @@ export function TeamReportsScreen({ navigation, route }: Props) {
     return (
       <Screen>
         {back}
-        <ErrorState text={TEAM_REPORT_WORDS.updateFirst} />
+        <ErrorState text={teamReportWordsHere.updateFirst} />
       </Screen>
     );
   if (list.isError && !list.data)
     return (
       <Screen>
         {back}
-        <ErrorState text={teamReportErrorText(list.error)} onRetry={() => void list.refetch()} />
+        <ErrorState text={teamReportErrorText(list.error, rawLocale)} onRetry={() => void list.refetch()} />
       </Screen>
     );
   if (!list.data)
@@ -76,8 +78,8 @@ export function TeamReportsScreen({ navigation, route }: Props) {
   const closedOpen = !groups.foldable || showClosed;
   const closedRows = closedOpen ? groups.closed : groups.closedWhileFolded;
   const open = (r: TeamReportRow) =>
-    navigation.navigate('TeamReport', { reportId: r.id, back: TEAM_REPORT_WORDS.back });
-  const unavailable = available ? null : teamReportsUnavailableText(reason);
+    navigation.navigate('TeamReport', { reportId: r.id, back: teamReportWordsHere.back });
+  const unavailable = available ? null : teamReportsUnavailableText(reason, rawLocale);
   return (
     <Screen>
       {back}
@@ -96,20 +98,20 @@ export function TeamReportsScreen({ navigation, route }: Props) {
           />
         }
       >
-        <LargeTitle title={TEAM_REPORT_WORDS.title} />
+        <LargeTitle title={teamReportWordsHere.title} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
-          <Note text={reports.length ? TEAM_REPORT_WORDS.intro : TEAM_REPORT_WORDS.empty} />
-          {stale ? <QuietLine text={TEAM_REPORT_WORDS.stale} /> : null}
+          <Note text={reports.length ? teamReportWordsHere.intro : teamReportWordsHere.empty} />
+          {stale ? <QuietLine text={teamReportWordsHere.stale} /> : null}
           {available ? (
             <Button
-              label={TEAM_REPORT_WORDS.newReport}
-              onPress={() => navigation.navigate('TeamReportNew', { back: TEAM_REPORT_WORDS.back })}
+              label={teamReportWordsHere.newReport}
+              onPress={() => navigation.navigate('TeamReportNew', { back: teamReportWordsHere.back })}
             />
           ) : unavailable ? (
             <QuietLine text={unavailable} />
           ) : null}
           {groups.open.length ? (
-            <Card label={TEAM_REPORT_WORDS.open.toUpperCase()}>
+            <Card label={teamReportWordsHere.open.toUpperCase()}>
               {groups.open.map((r, i) => (
                 <ReportRow key={r.id} row={r} first={i === 0} onPress={() => open(r)} />
               ))}
@@ -118,7 +120,7 @@ export function TeamReportsScreen({ navigation, route }: Props) {
           {groups.closed.length ? (
             <View>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <SectionLabel>{`${TEAM_REPORT_WORDS.closed.toUpperCase()} · ${groups.closed.length}`}</SectionLabel>
+                <SectionLabel>{`${teamReportWordsHere.closed.toUpperCase()} · ${groups.closed.length}`}</SectionLabel>
                 {groups.foldable ? (
                   <Touchable
                     onPress={() => setShowClosed((v) => !v)}
@@ -126,11 +128,11 @@ export function TeamReportsScreen({ navigation, route }: Props) {
                     ringRadius={10}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: closedOpen }}
-                    accessibilityLabel={`${closedOpen ? TEAM_REPORT_WORDS.hideClosed : TEAM_REPORT_WORDS.showClosed} ${TEAM_REPORT_WORDS.closed.toLowerCase()} reports`}
+                    accessibilityLabel={`${closedOpen ? teamReportWordsHere.hideClosed : teamReportWordsHere.showClosed} ${teamReportWordsHere.closed.toLowerCase()} reports`}
                     style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 10 }}
                   >
                     <Text size={14} weight={500} color={theme.colors.ink2}>
-                      {closedOpen ? TEAM_REPORT_WORDS.hideClosed : TEAM_REPORT_WORDS.showClosed}
+                      {closedOpen ? teamReportWordsHere.hideClosed : teamReportWordsHere.showClosed}
                     </Text>
                   </Touchable>
                 ) : null}
@@ -165,6 +167,7 @@ function QuietLine({ text }: { text: string }) {
  * (blue when new), and under it its number, kind and status. The whole row opens the report.
  */
 function ReportRow({ row, first, onPress }: { row: TeamReportRow; first: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
@@ -174,7 +177,7 @@ function ReportRow({ row, first, onPress }: { row: TeamReportRow; first: boolean
       onPress={onPress}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityLabel={teamReportRowLabel(row)}
+      accessibilityLabel={teamReportRowLabel(row, rawLocale)}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -206,11 +209,11 @@ function ReportRow({ row, first, onPress }: { row: TeamReportRow; first: boolean
             color={fresh ? theme.chart.chart1 : theme.colors.mut}
             style={{ fontVariant: ['tabular-nums'] }}
           >
-            {teamReportWhen(row.updatedAt, now.getTime(), timeZone)}
+            {teamReportWhen(row.updatedAt, now.getTime(), timeZone, rawLocale)}
           </Text>
         </View>
         <Text size={12.5} mono lh={1.4} color={theme.colors.mut} numberOfLines={1}>
-          {teamReportRowLine(row)}
+          {teamReportRowLine(row, rawLocale)}
         </Text>
       </View>
       <RowChevron />

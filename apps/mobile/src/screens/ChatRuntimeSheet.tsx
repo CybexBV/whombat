@@ -39,7 +39,7 @@ import {
   chatStartRuntime,
   chatThreadChoice,
   chatThreadState,
-  LOCAL_MODEL_TEXT,
+  localModelText,
   modelRuntimeSaved,
 } from '@whombat/client';
 import { useChatRuntime, useMakeChatDefault, useSetThreadRuntime } from '@whombat/client/react';
@@ -57,7 +57,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useTheAgentHere } from '../data/useAgent';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -193,7 +193,9 @@ export function ChatRuntimeSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
+  const localModelTextHere = localModelText(rawLocale);
   const chatRuntimeCopyHere = chatRuntimeCopy(rawLocale);
   const modelEffortCopyHere = modelEffortCopy(rawLocale);
 
@@ -299,7 +301,7 @@ export function ChatRuntimeSheet({
           ))}
         </View>
         <ModelRows
-          label={`${name}’s model`}
+          label={tMobile('screens2.runtime.model', { name })}
           rows={rows.rows}
           more={rows.more}
           onPick={pickModel}
@@ -308,8 +310,8 @@ export function ChatRuntimeSheet({
         {runtime.provider === 'local' ? (
           <View style={{ paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12, gap: 10 }}>
             <FormField
-              label={LOCAL_MODEL_TEXT.another}
-              hint={LOCAL_MODEL_TEXT.anotherHint}
+              label={localModelTextHere.another}
+              hint={localModelTextHere.anotherHint}
               value={typed}
               onChangeText={setTyped}
               mono
@@ -319,10 +321,10 @@ export function ChatRuntimeSheet({
               onSubmitEditing={applyTyped}
             />
             <Button
-              label={LOCAL_MODEL_TEXT.use}
+              label={localModelTextHere.use}
               variant="secondary"
               disabled={!typed.trim()}
-              accessibilityHint={`${name}’s model: ${typed.trim()}`}
+              accessibilityHint={tMobile('screens2.runtime.modelIs', { name, model: typed.trim() })}
               onPress={applyTyped}
             />
           </View>

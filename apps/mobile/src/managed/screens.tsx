@@ -27,12 +27,12 @@ import {
   modelLabel,
   type NearbyAppliance,
   newRecoveryKit,
-  PASSKEY_COPY,
   PasskeyCancelled,
   type PasskeyPlatform,
   type PhoneSignInLink,
   parseClaimQr,
   parseSetupLink,
+  passkeyCopy,
   passkeyErrorText,
   type RecoveryKit,
   readKitFile,
@@ -47,13 +47,13 @@ import { type ApplianceSession, OperationError, sessionOps } from '@whombat/clie
 import { normalizeClaimSecret } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, View } from 'react-native';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button, Loading } from '../ui/primitives';
 import { phoneCommunityText } from './community';
 import { UI_ORIGINS } from './config';
-import { COPY, managedCopy } from './copy';
+import { managedCopy } from './copy';
 import { type KitPrinter, KitWays } from './KitWays';
 import { OrDivider, PhoneHero, PhoneScanner, ScanButton } from './PhoneSignInScreens';
 import { QrScanner } from './QrScanner';
@@ -67,20 +67,23 @@ import { Card, ErrorLine, Field, Frame, Note, Row } from './ui';
  * to the Whombat open there. Email (the magic link) stays, one tap away.
  */
 /** A failure of a passkey ceremony, said in the screen's error line; null when the person just closed the prompt. */
-function passkeyFailureText(error: unknown): string | null {
-  return error instanceof PasskeyCancelled ? null : passkeyErrorText(error);
+function passkeyFailureText(error: unknown, locale?: string | null): string | null {
+  return error instanceof PasskeyCancelled ? null : passkeyErrorText(error, locale);
 }
 
 /** “Sign in with a passkey” (PK-04, passkeys.md AP-799): one touch signs in and opens the Whombat the passkey names. */
 function PasskeyButton({
   onPasskey,
   onError,
-  label = PASSKEY_COPY.signIn,
+  label: labelGiven,
 }: {
   onPasskey: () => Promise<void>;
   onError: (text: string | null) => void;
   label?: string;
 }) {
+  const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
+  const label = labelGiven ?? passkeyCopyHere.signIn;
   const [busy, setBusy] = useState(false);
   return (
     <Button
@@ -88,12 +91,12 @@ function PasskeyButton({
       variant="secondary"
       size="lg"
       busy={busy}
-      accessibilityHint={PASSKEY_COPY.signInHint}
+      accessibilityHint={passkeyCopyHere.signInHint}
       onPress={() => {
         setBusy(true);
         onError(null);
         onPasskey()
-          .catch((e: unknown) => onError(passkeyFailureText(e)))
+          .catch((e: unknown) => onError(passkeyFailureText(e, rawLocale)))
           .finally(() => setBusy(false));
       }}
     />
@@ -412,7 +415,7 @@ export function AppliancesScreen({
                         label={managedCopyHere.appliances.forget}
                         variant="secondary"
                         onPress={() => onForget(a)}
-                        accessibilityHint={`Forgets ${name} on this phone`}
+                        accessibilityHint={mobileTranslator(rawLocale).t('managed2.forgetHint', { name })}
                       />
                     ) : null
                   }
@@ -436,7 +439,11 @@ export function AppliancesScreen({
                 key={a.device}
                 first={i === 0}
                 dot={online ? 'ok' : 'mut'}
-                dotLabel={online ? managedCopyHere.appliances.online : 'Offline'}
+                dotLabel={
+                  online
+                    ? managedCopyHere.appliances.online
+                    : mobileTranslator(rawLocale).t('managed2.offline')
+                }
                 title={name}
                 meta={meta}
                 action={
@@ -444,7 +451,7 @@ export function AppliancesScreen({
                     label={managedCopyHere.appliances.open}
                     variant="secondary"
                     onPress={() => onOpen(a)}
-                    accessibilityHint={`Opens ${name}`}
+                    accessibilityHint={mobileTranslator(rawLocale).t('managed2.opensHint', { name })}
                   />
                 }
               />
@@ -625,7 +632,10 @@ export interface ClaimScreenProps {
   onBack: () => void;
 }
 
-const backToList = (onBack: () => void) => ({ label: COPY.appliances.title, onPress: onBack });
+const backToList = (onBack: () => void, locale?: string) => ({
+  label: managedCopy(locale).appliances.title,
+  onPress: onBack,
+});
 
 /** `claims.nearby` is on its way. */
 export function ClaimLookingScreen({ onBack }: { onBack: () => void }) {
@@ -637,7 +647,7 @@ export function ClaimLookingScreen({ onBack }: { onBack: () => void }) {
       kicker={managedCopyHere.claim.kicker}
       title={managedCopyHere.claim.title}
       tip={managedCopyHere.claim.tip}
-      back={backToList(onBack)}
+      back={backToList(onBack, rawLocale)}
     >
       <Note text={managedCopyHere.claim.looking} />
     </Frame>
@@ -734,14 +744,14 @@ export function ClaimFoundScreen({
       title={managedCopyHere.claim.foundTitle}
       sub={managedCopyHere.claim.foundSub}
       tip={managedCopyHere.claim.tip}
-      back={backToList(onBack)}
+      back={backToList(onBack, rawLocale)}
     >
       <Card>
         <Row
           first
           dot="ok"
           dotLabel={managedCopyHere.appliances.online}
-          title={modelLabel(box.model)}
+          title={modelLabel(box.model, rawLocale)}
           meta={box.device}
         />
       </Card>
@@ -791,7 +801,7 @@ export function ClaimPickScreen({
       title={managedCopyHere.claim.severalTitle(boxes.length)}
       sub={managedCopyHere.claim.severalSub}
       tip={managedCopyHere.claim.tip}
-      back={backToList(onBack)}
+      back={backToList(onBack, rawLocale)}
     >
       <Card>
         {boxes.map((b, i) => (
@@ -800,14 +810,14 @@ export function ClaimPickScreen({
             first={i === 0}
             dot="ok"
             dotLabel={managedCopyHere.appliances.online}
-            title={modelLabel(b.model)}
+            title={modelLabel(b.model, rawLocale)}
             meta={b.device}
             action={
               <Button
                 label={managedCopyHere.claim.pick}
                 variant="secondary"
                 onPress={() => onPick(b)}
-                accessibilityHint={managedCopyHere.claim.pickLabel(modelLabel(b.model), b.device)}
+                accessibilityHint={managedCopyHere.claim.pickLabel(modelLabel(b.model, rawLocale), b.device)}
               />
             }
           />
@@ -841,7 +851,7 @@ export function ClaimNoneScreen({
       title={managedCopyHere.claim.noneTitle}
       sub={managedCopyHere.claim.noneSub}
       tip={managedCopyHere.claim.tip}
-      back={backToList(onBack)}
+      back={backToList(onBack, rawLocale)}
     >
       <Button label={managedCopyHere.claim.lookAgain} size="lg" onPress={onLookAgain} />
       <Button label={managedCopyHere.claim.withCard} variant="quiet" onPress={onCard} />
@@ -876,7 +886,7 @@ export function ClaimCardScreen({
       title={managedCopyHere.claim.cardTitle}
       sub={managedCopyHere.claim.cardSub}
       tip={managedCopyHere.claim.cardTip}
-      back={backToList(onBack)}
+      back={backToList(onBack, rawLocale)}
     >
       <Button
         label={managedCopyHere.claim.scan}
@@ -1056,7 +1066,9 @@ export function RecoveryKitScreen({
         title={managedCopyHere.kit.rotateTitle}
         sub={managedCopyHere.kit.rotateSub}
         tip={managedCopyHere.kit.tip}
-        {...(onBack ? { back: { label: 'Back', onPress: onBack } } : {})}
+        {...(onBack
+          ? { back: { label: mobileTranslator(rawLocale).t('managed2.back'), onPress: onBack } }
+          : {})}
       >
         <Field
           label={managedCopyHere.kit.currentKey}
@@ -1489,13 +1501,14 @@ export function SetupScreen({
   onScreen?: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   const t = managedCopyHere.setup;
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const ways = [
-    ...(onPasskey ? [PASSKEY_COPY.setupWay] : []),
+    ...(onPasskey ? [passkeyCopyHere.setupWay] : []),
     ...(onScreen ? [managedCopyHere.screen.way] : []),
     ...t.ways,
   ];
@@ -1513,7 +1526,7 @@ export function SetupScreen({
         ))}
       </Card>
       {onPasskey ? (
-        <PasskeyButton onPasskey={onPasskey} onError={setError} label={PASSKEY_COPY.setupUse} />
+        <PasskeyButton onPasskey={onPasskey} onError={setError} label={passkeyCopyHere.setupUse} />
       ) : null}
       {onScreen ? (
         <Button label={managedCopyHere.screen.use} variant="secondary" size="lg" onPress={onScreen} />
@@ -1584,7 +1597,7 @@ export function IdentityStopScreen({
               size="lg"
               onPress={() =>
                 Alert.alert(t.forget, t.forgetConfirm, [
-                  { text: 'Cancel', style: 'cancel' },
+                  { text: mobileTranslator(rawLocale).t('managed2.cancel'), style: 'cancel' },
                   { text: t.forget, style: 'destructive', onPress: onForget },
                 ])
               }
@@ -1601,13 +1614,14 @@ export function IdentityStopScreen({
 /** While a passkey opens the Whombat: the sign-in frame, nothing to do. */
 export function PasskeyProgressScreen({ name }: { name: string | null }) {
   const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   return (
     <Frame
       kicker={managedCopyHere.signIn.kicker}
-      title={PASSKEY_COPY.opening(name)}
-      sub={PASSKEY_COPY.openingText}
+      title={passkeyCopyHere.opening(name)}
+      sub={passkeyCopyHere.openingText}
     >
       <Loading />
     </Frame>
@@ -1625,6 +1639,7 @@ export function PasskeyStopScreen({
   onBack: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   return (
@@ -1633,7 +1648,7 @@ export function PasskeyStopScreen({
       text={text}
       actions={
         <>
-          <Button label={PASSKEY_COPY.otherWay} size="lg" onPress={onOtherWay} />
+          <Button label={passkeyCopyHere.otherWay} size="lg" onPress={onOtherWay} />
           <Button label={managedCopyHere.connection.back} variant="secondary" size="lg" onPress={onBack} />
         </>
       }

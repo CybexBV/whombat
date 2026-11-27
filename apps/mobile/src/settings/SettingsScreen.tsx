@@ -17,6 +17,7 @@ import {
   agentFaceOf,
   agentGroupParts,
   hasLooksAhead,
+  settingsGroupText,
   settingsHomeRows,
   settingsHomeText,
 } from '@whombat/client';
@@ -134,7 +135,7 @@ export function SettingsScreen() {
   const home = Object.fromEntries(
     settingsHomeRows(agentName, parts, agentParts, rawLocale).map((r) => [r.key, r]),
   ) as Record<string, { title: string; line: string }>;
-  const homeRows = { you: home.you?.title ?? 'You' };
+  const homeRows = { you: home.you?.title ?? settingsGroupText(rawLocale).groups('').you };
   const homeLine = (key: SettingsRowKey) => home[key === 'screen' ? 'screens' : key]?.line ?? null;
   const [switching, setSwitching] = useState(false);
 

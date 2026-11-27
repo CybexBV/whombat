@@ -5,7 +5,10 @@
  * Other) — and `hardwareReportText`, the text file **Download report** saves (the phone shares it) for support. From what
  * the machine reports, never a list of models (HD-01). Shared by the web and the phone. Pure.
  */
+import { formatLocaleNumber, interpolate } from '@whombat/core/i18n';
 import { dayKey, formatBytes } from '@whombat/core/text';
+import { clientTree } from '../i18n/catalog';
+import { HARDWARE_WORDS } from '../i18n/messages/hostManaged/hardware';
 import { sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import {
@@ -59,72 +62,57 @@ export const HARDWARE_GROUP_OF: Record<HardwareKind, HardwareGroup> = {
   other: 'other',
 };
 
-/** What a device of each kind is called in a sentence: “This Wi-Fi card has no driver yet.” */
-const NOUN: Record<HardwareKind, string> = {
-  wired: 'network adapter',
-  wifi: 'Wi-Fi card',
-  bluetooth: 'Bluetooth adapter',
-  sound: 'sound card',
-  graphics: 'graphics card',
-  display: 'screen connector',
-  storage: 'disk',
-  camera: 'camera',
-  battery: 'battery',
-  input: 'input device',
-  usb: 'USB device',
-  other: 'device',
-};
+/** HARDWARE's words, in a locale (English when none is given). */
+export function hardwareText(locale?: string | null) {
+  const w = clientTree(locale, HARDWARE_WORDS);
+  const part = (template: string) => (kind: HardwareKind) =>
+    interpolate(template, { part: w.thisPart[kind] ?? w.thisPart.other });
+  return {
+    section: w.section,
+    groups: w.groups as Record<HardwareGroup, string>,
+    download: w.download,
+    share: w.share,
+    intro: w.intro,
+    unavailable: w.unavailable,
+    tryAgain: w.tryAgain,
+    allWork: w.allWork,
+    virtual: (hypervisor: string | undefined) =>
+      hypervisor ? interpolate(w.virtualOn, { hypervisor }) : w.virtual,
+    unknownMachine: w.unknownMachine,
+    cores: (cores: number, threads: number) =>
+      threads > cores ? interpolate(w.coresThreads, { cores, threads }) : interpolate(w.cores, { cores }),
+    memory: (bytes: number) => interpolate(w.memory, { size: formatBytes(bytes, locale) }),
+    kernel: (kernel: string) => interpolate(w.kernel, { kernel }),
+    /** The same words for every kind: “This Wi-Fi card has no driver yet.” */
+    status: {
+      no_driver: part(w.status.no_driver),
+      no_firmware: part(w.status.no_firmware),
+      disabled: part(w.status.disabled),
+    } as Record<Exclude<HardwareStatus, 'ok'>, (kind: HardwareKind) => string>,
+    noDriver: w.noDriver,
+    connected: w.connected,
+    notConnected: w.notConnected,
+    screenConnected: w.screenConnected,
+    inputs: (n: number) => w.inputs(n),
+    outputs: (n: number) => w.outputs(n),
+    /** The machine's facts as tiles (`hardwareSpecs`). */
+    specs: w.specs,
+    disks: (n: number) => w.disks(n),
+    /** The badge under the machine's name when every part works. */
+    everyPartWorks: w.everyPartWorks,
+    /** The card of the parts that don't work as they should. */
+    problemsLabel: w.problemsLabel,
+    /** The badge under the machine's name when a part doesn't work as it should. */
+    needAttention: (n: number) => w.needAttention(n),
+    /** How many parts a group has, after its name. */
+    parts: (n: number) => w.parts(n),
+  } as const;
+}
 
-export const HARDWARE_TEXT = {
-  section: 'HARDWARE',
-  groups: {
-    network: 'Network',
-    sound: 'Sound',
-    graphics: 'Graphics & screens',
-    storage: 'Storage',
-    power: 'Power',
-    other: 'Other',
-  } as Record<HardwareGroup, string>,
-  download: 'Download report',
-  share: 'Share report',
-  intro:
-    'What this machine has and whether each part works. Send the report to support when something doesn’t.',
-  unavailable: 'The hardware couldn’t be read right now.',
-  tryAgain: 'Try again',
-  allWork: 'Every part has a driver.',
-  virtual: (hypervisor: string | undefined) =>
-    hypervisor ? `Virtual machine (${hypervisor})` : 'Virtual machine',
-  unknownMachine: 'This machine',
-  cores: (cores: number, threads: number) =>
-    threads > cores ? `${cores} cores, ${threads} threads` : `${cores} cores`,
-  memory: (bytes: number) => `${formatBytes(bytes)} memory`,
-  kernel: (kernel: string) => `Linux ${kernel}`,
-  /** HD-11's words for the Wi-Fi card, the same for every kind. */
-  status: {
-    no_driver: (kind: HardwareKind) => `This ${NOUN[kind]} has no driver yet.`,
-    no_firmware: (kind: HardwareKind) => `This ${NOUN[kind]} needs firmware that isn’t there.`,
-    disabled: (kind: HardwareKind) => `This ${NOUN[kind]} is switched off.`,
-  } as Record<Exclude<HardwareStatus, 'ok'>, (kind: HardwareKind) => string>,
-  noDriver: 'No driver',
-  connected: 'Connected',
-  notConnected: 'Not connected',
-  screenConnected: 'Screen connected',
-  inputs: (n: number) => (n === 1 ? '1 input' : `${n} inputs`),
-  outputs: (n: number) => (n === 1 ? '1 output' : `${n} outputs`),
-  /** The machine's facts as tiles (`hardwareSpecs`). */
-  specs: { cpu: 'Processor', memory: 'Memory', storage: 'Storage', system: 'System' },
-  disks: (n: number) => (n === 1 ? '1 disk' : `${n} disks`),
-  /** The badge under the machine's name when every part works. */
-  everyPartWorks: 'Every part works',
-  /** The card of the parts that don't work as they should. */
-  problemsLabel: 'Needs attention',
-  /** The badge under the machine's name when a part doesn't work as it should. */
-  needAttention: (n: number) => (n === 1 ? '1 part needs attention' : `${n} parts need attention`),
-  /** How many parts a group has, after its name. */
-  parts: (n: number) => (n === 1 ? '1 part' : `${n} parts`),
-} as const;
+export type HardwareText = ReturnType<typeof hardwareText>;
 
-const T = HARDWARE_TEXT;
+/** HARDWARE's words in English. */
+export const HARDWARE_TEXT: HardwareText = hardwareText('en');
 
 /* The section ----------------------------------------------------------------------------------------------------- */
 
@@ -161,24 +149,31 @@ export interface HardwareSectionView {
 }
 
 /** A device's status in words, or null when it works. */
-export function hardwareStatusText(d: Pick<HardwareDevice, 'kind' | 'status'>): string | null {
-  return d.status === 'ok' ? null : T.status[d.status](d.kind);
+export function hardwareStatusText(
+  d: Pick<HardwareDevice, 'kind' | 'status'>,
+  locale?: string | null,
+): string | null {
+  return d.status === 'ok' ? null : hardwareText(locale).status[d.status](d.kind);
 }
 
-/** Link speed as people read it: `100 Mbit/s`, `1 Gbit/s`, `2.5 Gbit/s`. */
-export function formatLinkSpeed(mbps: number): string {
+/** Link speed as people read it: `100 Mbit/s`, `1 Gbit/s`, `2.5 Gbit/s` (`2,5 Gbit/s` in Dutch). */
+export function formatLinkSpeed(mbps: number, locale?: string | null): string {
   if (mbps < 1000) return `${mbps} Mbit/s`;
   const g = mbps / 1000;
-  return `${Number.isInteger(g) ? g : g.toFixed(1).replace(/\.0$/, '')} Gbit/s`;
+  const shown = formatLocaleNumber(Number(g.toFixed(1)), locale, {
+    maximumFractionDigits: 1,
+    useGrouping: false,
+  });
+  return `${shown} Gbit/s`;
 }
 
 /** What a device is and does, in a few words (its vendor first). */
-function details(d: HardwareDevice): string[] {
+function details(d: HardwareDevice, T: HardwareText, locale?: string | null): string[] {
   const out: string[] = [];
   switch (d.kind) {
     case 'wired':
       if (d.link) out.push(d.link === 'up' ? T.connected : T.notConnected);
-      if (d.link === 'up' && d.speedMbps) out.push(formatLinkSpeed(d.speedMbps));
+      if (d.link === 'up' && d.speedMbps) out.push(formatLinkSpeed(d.speedMbps, locale));
       break;
     case 'wifi':
       if (d.link === 'up') out.push(T.connected);
@@ -191,7 +186,7 @@ function details(d: HardwareDevice): string[] {
       if (d.connected !== undefined) out.push(d.connected ? T.screenConnected : T.notConnected);
       break;
     case 'storage':
-      if (d.sizeBytes) out.push(formatBytes(d.sizeBytes));
+      if (d.sizeBytes) out.push(formatBytes(d.sizeBytes, locale));
       break;
     default:
       break;
@@ -205,7 +200,8 @@ const dotOf = (status: HardwareStatus): Dot | null =>
 const keyOf = (d: HardwareDevice, i: number) => `${d.kind}:${d.interface ?? d.card ?? d.id ?? d.name}:${i}`;
 
 /** The machine's name: vendor and model, or a virtual machine and its hypervisor. */
-export function hardwareMachineName(h: Pick<HostHardware, 'machine'>): string {
+export function hardwareMachineName(h: Pick<HostHardware, 'machine'>, locale?: string | null): string {
+  const T = hardwareText(locale);
   const m = h.machine;
   if (m.virtual) return T.virtual(m.hypervisor);
   const name = [m.vendor, m.model].filter(Boolean).join(' ');
@@ -213,13 +209,14 @@ export function hardwareMachineName(h: Pick<HostHardware, 'machine'>): string {
 }
 
 /** What HARDWARE shows (AP-3214…AP-3216). */
-export function hardwareSectionView(h: HostHardware): HardwareSectionView {
+export function hardwareSectionView(h: HostHardware, locale?: string | null): HardwareSectionView {
+  const T = hardwareText(locale);
   // The contracts' order: Wi-Fi, wired, sound and graphics first (CT-562).
   const problems = hardwareProblems(h).map((d, i) => ({
     key: `${d.kind}:${d.name}:${i}`,
     kind: d.kind,
     title: d.name,
-    meta: hardwareStatusText(d) as string,
+    meta: hardwareStatusText(d, locale) as string,
     dot: dotOf(d.status) as Dot,
   }));
   const groups = HARDWARE_GROUPS.map((group) => ({
@@ -229,7 +226,7 @@ export function hardwareSectionView(h: HostHardware): HardwareSectionView {
       .map((d, i) => ({ d, i }))
       .filter(({ d }) => HARDWARE_GROUP_OF[d.kind] === group)
       .map(({ d, i }) => {
-        const meta = [d.vendor ?? null, ...details(d)].filter(Boolean).join(' · ');
+        const meta = [d.vendor ?? null, ...details(d, T, locale)].filter(Boolean).join(' · ');
         return {
           key: keyOf(d, i),
           kind: d.kind,
@@ -242,7 +239,7 @@ export function hardwareSectionView(h: HostHardware): HardwareSectionView {
       }),
   })).filter((g) => g.rows.length > 0);
   return {
-    machine: hardwareMachineName(h),
+    machine: hardwareMachineName(h, locale),
     machineMeta: [
       h.cpu.model,
       T.cores(h.cpu.cores, h.cpu.threads),
@@ -270,7 +267,9 @@ export interface HardwareSpec {
  */
 export function hardwareSpecs(
   h: Pick<HostHardware, 'cpu' | 'memoryBytes' | 'kernel' | 'devices'>,
+  locale?: string | null,
 ): HardwareSpec[] {
+  const T = hardwareText(locale);
   const out: HardwareSpec[] = [];
   const cores = h.cpu.cores > 0 ? T.cores(h.cpu.cores, h.cpu.threads) : null;
   if (h.cpu.model || cores)
@@ -281,13 +280,16 @@ export function hardwareSpecs(
       line: h.cpu.model ? cores : null,
     });
   if (h.memoryBytes > 0)
-    out.push({ key: 'memory', label: T.specs.memory, value: formatBytes(h.memoryBytes), line: null });
+    out.push({ key: 'memory', label: T.specs.memory, value: formatBytes(h.memoryBytes, locale), line: null });
   const disks = h.devices.filter((d) => d.kind === 'storage' && d.sizeBytes);
   if (disks.length > 0)
     out.push({
       key: 'storage',
       label: T.specs.storage,
-      value: formatBytes(disks.reduce((sum, d) => sum + (d.sizeBytes ?? 0), 0)),
+      value: formatBytes(
+        disks.reduce((sum, d) => sum + (d.sizeBytes ?? 0), 0),
+        locale,
+      ),
       line: T.disks(disks.length),
     });
   if (h.kernel) out.push({ key: 'system', label: T.specs.system, value: T.kernel(h.kernel), line: null });
@@ -348,7 +350,8 @@ function reportDetails(d: HardwareDevice): string {
  * The hardware report as a text file (HD-03, AP-3217): a header (the Whombat, the app's version, when it was
  * collected), the machine, CPU, memory and kernel, the problems in words, one aligned line per device (kind, name,
  * vendor, bus, id, driver, status, details) grouped as the section shows them, and the kernel's lines. Plain UTF-8,
- * one `\n` per line; no serial numbers or MAC addresses (the report never has them).
+ * one `\n` per line; no serial numbers or MAC addresses (the report never has them). It stays in English whatever the
+ * app's language: it is written for support, who read every report the same way.
  */
 export function hardwareReportText(h: HostHardware, about: { burrow: string; version: string }): string {
   const m = h.machine;

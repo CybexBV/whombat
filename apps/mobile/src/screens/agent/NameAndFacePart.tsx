@@ -19,12 +19,12 @@ import {
   characterLine,
   cleanAgentName,
   faceChoices,
-  NAME_AND_FACE_TEXT,
+  nameAndFaceText,
   updateRefusalText,
 } from '../../data/agentName';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { useAgentWords } from '../../data/useAgent';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { textMetrics } from '../../theme/type';
@@ -39,7 +39,9 @@ import { type PartProps, PartScroll } from './parts';
 const FACE_WASH = 0.14;
 
 export function NameAndFacePart({ profile, refetch }: PartProps) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
+  const copy = nameAndFaceText(rawLocale);
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const words = useAgentWords();
@@ -69,7 +71,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
   const saveName = () => {
     if (busy || !canSaveName(draft, agent.name)) return;
     const name = cleanAgentName(draft);
-    const local = agentNameProblem(name);
+    const local = agentNameProblem(name, rawLocale);
     setNote(null);
     if (local) {
       setProblem(local);
@@ -82,19 +84,20 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
       .mutateAsync({ params: { burrow: slug }, body: { name } })
       .then(
         (result) => {
-          const refused = outcomeText(result);
+          const refused = outcomeText(result, rawLocale);
           if (refused) return say(refused.body, true);
           if (result.status !== 'ok') return;
           const saved = result.data.agent.name;
           if (saved !== name) {
             setDraft(saved);
-            return say('Couldn’t save that. Try again in a moment.', true);
+            return say(tMobile('screens2.agent.nameFailed'), true);
           }
           say(words.renamed(saved), false);
         },
         (error: unknown) => {
           const text =
-            (error instanceof ApiError ? updateRefusalText(error, 'name') : null) ?? errorText(error);
+            (error instanceof ApiError ? updateRefusalText(error, 'name') : null) ??
+            errorText(error, rawLocale);
           setProblem(text);
           AccessibilityInfo.announceForAccessibility(text);
         },
@@ -112,7 +115,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
       .mutateAsync({ params: { burrow: slug }, body: { face: next } })
       .then(
         (result) => {
-          const refused = outcomeText(result);
+          const refused = outcomeText(result, rawLocale);
           if (refused) {
             setPicked(null);
             return say(refused.body, true);
@@ -123,14 +126,15 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
           }
           if (agentFaceOf(result.data.agent) !== next) {
             setPicked(null);
-            return say('Couldn’t save that face. Try again in a moment.', true);
+            return say(tMobile('screens2.agent.faceFailed'), true);
           }
           say(words.newFace, false);
         },
         (error: unknown) => {
           setPicked(null);
           say(
-            (error instanceof ApiError ? updateRefusalText(error, 'face') : null) ?? errorText(error),
+            (error instanceof ApiError ? updateRefusalText(error, 'face') : null) ??
+              errorText(error, rawLocale),
             true,
           );
         },
@@ -139,8 +143,8 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
   };
 
   const wears = picked ?? face;
-  const choices = faceChoices(face, picked);
-  const character = characterLine(wears);
+  const choices = faceChoices(face, picked, rawLocale);
+  const character = characterLine(wears, rawLocale);
   const input = textMetrics({ size: 16 });
   const rowStyle = { paddingHorizontal: 16, paddingVertical: 16, gap: 12 } as const;
   const hairline = { borderTopWidth: 1, borderTopColor: theme.colors.line } as const;
@@ -162,7 +166,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
             </View>
             <View style={{ flex: 1, gap: 6 }}>
               <Text size={12} weight={500} mono color={theme.colors.mut}>
-                {NAME_AND_FACE_TEXT.name}
+                {copy.name}
               </Text>
               <TextInput
                 value={draft}
@@ -202,7 +206,7 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
             </View>
           </View>
           <Button
-            label={NAME_AND_FACE_TEXT.save}
+            label={copy.save}
             variant="secondary"
             busy={busy === 'name'}
             disabled={!canSaveName(draft, agent.name) || busy === 'face'}
@@ -225,15 +229,15 @@ export function NameAndFacePart({ profile, refetch }: PartProps) {
         <View style={[rowStyle, hairline]}>
           <View style={{ gap: 3 }}>
             <Text size={15} weight={600}>
-              {NAME_AND_FACE_TEXT.face}
+              {copy.face}
             </Text>
             <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-              {NAME_AND_FACE_TEXT.faceLine(words)}
+              {copy.faceLine(words)}
             </Text>
           </View>
           <View
             accessibilityRole="radiogroup"
-            accessibilityLabel={NAME_AND_FACE_TEXT.face}
+            accessibilityLabel={copy.face}
             style={{ flexDirection: 'row', gap: 8, paddingTop: 6 }}
           >
             {choices.map((c) => (

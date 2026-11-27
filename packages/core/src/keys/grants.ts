@@ -4,7 +4,7 @@
  */
 import { z } from 'zod';
 import type { Grant, GrantInput } from '../domain/grant.js';
-import { coreTranslator } from '../i18n/catalog.js';
+import { coreTranslator, isEnglishLocale } from '../i18n/catalog.js';
 import {
   agentMaxTier,
   canonicalKey,
@@ -559,8 +559,8 @@ export function keysSummary(grants: readonly Pick<Grant, 'keyId' | 'tier'>[]): K
 }
 
 /** "3 keys · 1 ask first". */
-export function formatKeysSummary(s: KeysSummary): string {
-  return `${s.keys} ${s.keys === 1 ? 'key' : 'keys'} · ${s.askFirst} ask first`;
+export function formatKeysSummary(s: KeysSummary, locale?: string | null): string {
+  return coreTranslator(locale).tp('grantChange.summary', s.keys, { askFirst: s.askFirst });
 }
 
 /**
@@ -624,9 +624,11 @@ export function possessive(name: string): string {
 
 /**
  * Audit text of a grant change, e.g. "Gave Banjo a new key: Run tests",
- * "Moved Neo’s “Deploy to production” key to ask first".
+ * "Moved Neo’s “Deploy to production” key to ask first". The signed `Keys` event stores the English (no locale); a
+ * locale gives the same sentence for reading only.
  */
-export function describeGrantChange(agentName: string, change: GrantChange): string {
+export function describeGrantChange(agentName: string, change: GrantChange, locale?: string | null): string {
+  if (!isEnglishLocale(locale)) return describeGrantChangeIn(agentName, change, locale);
   const label = grantLabel({ keyId: change.keyId });
   const who = possessive(agentName);
   const { from, to } = change;
@@ -642,6 +644,18 @@ export function describeGrantChange(agentName: string, change: GrantChange): str
   // to === 'ask'
   if (from === 'can') return `Moved ${who} “${label}” key to ask first`;
   return `Gave ${agentName} a new key that asks first: ${label}`;
+}
+
+/** `describeGrantChange` in a reader's language. */
+function describeGrantChangeIn(agentName: string, change: GrantChange, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  const vars = { agent: agentName, label: keyLabel(change.keyId, locale) };
+  const { from, to } = change;
+  if (change.kind === 'scope_changed') return tr.t('grantChange.scope', vars);
+  if (to === null || to === 'cannot')
+    return tr.t(from === null ? 'grantChange.markedNone' : 'grantChange.taken', vars);
+  if (to === 'can') return tr.t(from === 'ask' ? 'grantChange.noLongerAsks' : 'grantChange.gave', vars);
+  return tr.t(from === 'can' ? 'grantChange.toAsk' : 'grantChange.gaveAsks', vars);
 }
 
 /** Validates a grant set before saving: known keys, no duplicates, tiers within caps. */

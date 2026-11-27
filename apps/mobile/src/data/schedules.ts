@@ -6,7 +6,7 @@
  * (`SCHEDULE_COPY`, `describeScheduleWhen`, `scheduleActions`), and the few it leaves to the clients are
  * `@whombat/client`'s. Pure.
  */
-import { SCHEDULE_TEXT, scheduleStatusText, scheduleTimeText } from '@whombat/client';
+import { scheduleStatusText, scheduleText, scheduleTimeText } from '@whombat/client';
 import {
   type AgentScheduleView,
   describeScheduleWhen,
@@ -47,16 +47,17 @@ export function scheduleRows(
   agentName: string,
   timeZone: string,
   now: Date,
+  locale?: string,
 ): ScheduleRow[] {
-  const copy = scheduleCopy(agentName);
+  const copy = scheduleCopy(agentName, locale);
   return schedules.map((s) => {
     const can = scheduleActions(s);
     const what = schedulePromptLine(s.prompt, 120);
-    const when = `${describeScheduleWhen(s.when, timeZone, now)} · ${scheduleStatusText(s)}`;
+    const when = `${describeScheduleWhen(s.when, timeZone, now, locale)} · ${scheduleStatusText(s, locale)}`;
     const facts = [
-      ...(s.nextAt ? [{ label: copy.next, value: scheduleTimeText(s.nextAt, timeZone, now) }] : []),
+      ...(s.nextAt ? [{ label: copy.next, value: scheduleTimeText(s.nextAt, timeZone, now, locale) }] : []),
       ...(s.endsAt && s.status !== 'ended'
-        ? [{ label: copy.ends, value: scheduleTimeText(s.endsAt, timeZone, now) }]
+        ? [{ label: copy.ends, value: scheduleTimeText(s.endsAt, timeZone, now, locale) }]
         : []),
       { label: copy.runs, value: String(s.runs) },
     ];
@@ -75,15 +76,16 @@ export function scheduleRows(
 }
 
 /** A button's words: Pause, Resume, Remove. */
-export function scheduleActionLabel(action: ScheduleAction, agentName: string): string {
-  return scheduleCopy(agentName)[action];
+export function scheduleActionLabel(action: ScheduleAction, agentName: string, locale?: string): string {
+  return scheduleCopy(agentName, locale)[action];
 }
 
 /** What a change says once it went through. */
-export function scheduleDoneText(action: ScheduleAction, agentName: string): string {
+export function scheduleDoneText(action: ScheduleAction, agentName: string, locale?: string): string {
+  const text = scheduleText(locale);
   return action === 'pause'
-    ? SCHEDULE_TEXT.paused
+    ? text.paused
     : action === 'resume'
-      ? SCHEDULE_TEXT.resumed
-      : scheduleCopy(agentName).cancelled;
+      ? text.resumed
+      : scheduleCopy(agentName, locale).cancelled;
 }

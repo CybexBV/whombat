@@ -106,8 +106,9 @@ function StepMore({
   onPick: (id: string) => void;
   onMore: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
-  const label = `More for ${step.title}`;
+  const label = tMobile('screens2.plan.moreFor', { title: step.title });
   const face = busy ? (
     <ActivityIndicator size="small" color={theme.colors.mut} />
   ) : (
@@ -149,6 +150,7 @@ function StepRow({
   onMore: (step: PlanStepView) => void;
   onLayoutY: (y: number) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const titleColor = step.titleStyle === 'normal' ? theme.colors.ink : theme.colors.mut;
@@ -209,7 +211,7 @@ function StepRow({
               onPress={() => navigateTo(navigation, l.route)}
               feedback="wash"
               accessibilityRole="link"
-              accessibilityLabel={`Open ${l.label}`}
+              accessibilityLabel={tMobile('screens2.common.openName', { name: l.label })}
               ringRadius={999}
               style={{
                 minHeight: 44,
@@ -247,12 +249,13 @@ function StepRow({
 }
 
 export function PlanScreen({ route, navigation }: Props) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
-  const { planId, stepId, back = 'Back' } = route.params;
+  const { planId, stepId, back: backParam } = route.params;
+  const back = backParam ?? tMobile('screens2.common.back');
   const query = usePlan({ params: { burrow: slug, planId } });
   const start = usePlanWrite(api.plans.startStep);
   const update = usePlanWrite(api.plans.updateStep);
@@ -302,14 +305,15 @@ export function PlanScreen({ route, navigation }: Props) {
     );
   }
 
-  const model = planScreen(plan, 'Plan');
+  const model = planScreen(plan, tMobile('screens2.plan.plan'), rawLocale);
   const params = (id: string) => ({ burrow: slug, planId: plan.id, stepId: id });
   const settle = {
     onSuccess: (res: Parameters<typeof outcomeText>[0]) => {
-      const text = outcomeText(res);
+      const text = outcomeText(res, rawLocale);
       if (text) Alert.alert(text.title, text.body);
     },
-    onError: (err: unknown) => Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(err)),
+    onError: (err: unknown) =>
+      Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(err, rawLocale)),
     onSettled: () => setBusy(null),
   };
   const act = (step: PlanStepView, button: PlanStepButton) => {
@@ -329,8 +333,8 @@ export function PlanScreen({ route, navigation }: Props) {
         tMobile('screens.cancel-this-step'),
         tMobile('screens.it-stays-on-the-plan-struck-through-and'),
         [
-          { text: 'Keep it', style: 'cancel' },
-          { text: 'Cancel step', style: 'destructive', onPress: run },
+          { text: tMobile('screens2.common.keepIt'), style: 'cancel' },
+          { text: tMobile('screens2.plan.cancelStep'), style: 'destructive', onPress: run },
         ],
       );
     else run();
@@ -343,7 +347,7 @@ export function PlanScreen({ route, navigation }: Props) {
       <MenuSheet
         spec={menuFor ? stepMenu(menuFor) : null}
         visible={menuFor !== null}
-        label={menuFor ? `More for ${menuFor.title}` : tClient('usage.more')}
+        label={menuFor ? tMobile('screens2.plan.moreFor', { title: menuFor.title }) : tClient('usage.more')}
         onClose={() => setMenuFor(null)}
         onPick={(id) => {
           const step = menuFor;

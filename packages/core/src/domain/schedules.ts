@@ -11,9 +11,10 @@
  * Automations (BP-C) are unchanged: a person publishes those.
  */
 import { z } from 'zod';
-import { checkSchedule, cronWords, nextFireAfter, ScheduleError } from '../automations/schedule.js';
+import { checkSchedule, describeSchedule, nextFireAfter, ScheduleError } from '../automations/schedule.js';
+import { coreWords, tCore } from '../i18n/catalog.js';
 import { AgentScheduleId, ConversationId, MessageId, PrincipalId, RunId } from '../ids.js';
-import { type DateInput, formatClock, formatDate, formatWeekday, toDate } from '../text/time.js';
+import { type DateInput, formatClock, formatDate, formatShortWeekday, toDate } from '../text/time.js';
 import { Count, Timestamp } from './common.js';
 
 /** A scheduled turn's prompt, in characters (RA-30). */
@@ -194,20 +195,24 @@ export function scheduleLimitProblem(activeCount: number): string | null {
  * weekday at 09:00”, “Every Friday at 16:00 (New York time)” when its zone isn't `timeZone`, “On its own schedule” for a
  * cron expression words can't say. Never the expression itself.
  */
-export function describeScheduleWhen(when: ScheduleWhen, timeZone: string, now?: DateInput): string {
+export function describeScheduleWhen(
+  when: ScheduleWhen,
+  timeZone: string,
+  now?: DateInput,
+  locale?: string | null,
+): string {
   if (when.kind === 'at') {
-    const day = `${formatWeekday(when.at, timeZone).slice(0, 3)} ${formatDate(when.at, timeZone, now === undefined ? {} : { now })}`;
-    return `Once, ${day} at ${formatClock(when.at, timeZone)}`;
+    const date = formatDate(when.at, timeZone, now === undefined ? {} : { now }, locale);
+    const day = `${formatShortWeekday(when.at, timeZone, locale)} ${date}`;
+    return tCore(locale, 'schedules.once', { day, time: formatClock(when.at, timeZone) });
   }
-  if (when.kind === 'every') {
-    const m = when.minutes;
-    if (m % 1440 === 0) return m === 1440 ? 'Every day' : `Every ${m / 1440} days`;
-    if (m % 60 === 0) return m === 60 ? 'Every hour' : `Every ${m / 60} hours`;
-    return `Every ${m} minutes`;
-  }
-  const words = cronWords(when.expr) ?? 'On its own schedule';
+  if (when.kind === 'every')
+    return describeSchedule({ kind: 'interval', everyMinutes: when.minutes }, timeZone, locale);
+  const words = describeSchedule({ kind: 'cron', expr: when.expr }, when.zone, locale);
   // The Whombat's own time zone goes without saying; another one is named by its city.
-  return when.zone === timeZone ? words : `${words} (${zoneWords(when.zone)} time)`;
+  return when.zone === timeZone
+    ? words
+    : tCore(locale, 'schedules.otherZone', { when: words, zone: zoneWords(when.zone) });
 }
 
 /** A time zone as people know it: `America/New_York` → “New York”, `UTC` stays. */
@@ -248,54 +253,68 @@ export type StoredScheduleCard = z.infer<typeof StoredScheduleCard>;
 export function scheduleCardTitle(
   agentName: string,
   schedule: Pick<AgentScheduleView, 'prompt'> | null,
+  locale?: string | null,
 ): string {
   return schedule?.prompt
-    ? `${agentName} scheduled: ${schedulePromptLine(schedule.prompt)}`
-    : `${agentName} scheduled a task`;
+    ? tCore(locale, 'schedules.cardTitle', { agent: agentName, prompt: schedulePromptLine(schedule.prompt) })
+    : tCore(locale, 'schedules.cardTitleNone', { agent: agentName });
 }
 
-/** The card as text (inbox, search, other agents' windows): when and the status, never the prompt. */
+/**
+ * The card as text (inbox, search, other agents' windows): when and the status, never the prompt. Agents read it, so it
+ * stays English.
+ */
 export function scheduleCardText(card: Pick<ScheduleCard, 'schedule'>, timeZone: string): string {
   if (!card.schedule) return '[schedule]';
   return `[schedule: ${describeScheduleWhen(card.schedule.when, timeZone)}; ${SCHEDULE_STATUS_LABELS[card.schedule.status].toLowerCase()}]`;
 }
 
+const SCHEDULE_COPY_KEYS = [
+  'tab',
+  'title',
+  'intro',
+  'empty',
+  'next',
+  'ends',
+  'runs',
+  'pause',
+  'resume',
+  'remove',
+  'removeConfirm',
+  'cancel',
+  'cancelled',
+] as const;
+type ScheduleCopyKey = (typeof SCHEDULE_COPY_KEYS)[number];
+
+/** Status labels (the Schedules tab, the card), in a locale. */
+export function scheduleStatusLabels(locale?: string | null): Readonly<Record<ScheduleStatus, string>> {
+  return coreWords(locale, 'schedules.status', SCHEDULE_STATUSES);
+}
+
 /** Status labels (the Schedules tab, the card). */
-export const SCHEDULE_STATUS_LABELS: Readonly<Record<ScheduleStatus, string>> = {
-  active: 'Active',
-  paused: 'Paused',
-  ended: 'Ended',
-};
+export const SCHEDULE_STATUS_LABELS: Readonly<Record<ScheduleStatus, string>> = scheduleStatusLabels('en');
+
+/** Why it ended, as the card and the tab say it, in a locale. */
+export function scheduleEndLabels(locale?: string | null): Readonly<Record<ScheduleEndReason, string>> {
+  return coreWords(locale, 'schedules.end', SCHEDULE_END_REASONS);
+}
 
 /** Why it ended, as the card and the tab say it. */
-export const SCHEDULE_END_LABELS: Readonly<Record<ScheduleEndReason, string>> = {
-  done: 'Done',
-  cancelled: 'Cancelled',
-  expired: 'Ran its 90 days',
-};
+export const SCHEDULE_END_LABELS: Readonly<Record<ScheduleEndReason, string>> = scheduleEndLabels('en');
+
+/** The Schedules tab and the card in a locale, `{agent}` still to fill in (`scheduleCopy` does). */
+export function scheduleCopyWords(locale?: string | null): Readonly<Record<ScheduleCopyKey, string>> {
+  return coreWords(locale, 'schedules.copy', SCHEDULE_COPY_KEYS);
+}
 
 /** The Schedules tab and the card. `{agent}` is the agent's name (`scheduleCopy` fills it in). */
-export const SCHEDULE_COPY = {
-  tab: 'Schedules',
-  title: 'SCHEDULES',
-  intro: 'Reminders and checks {agent} set for itself.',
-  empty: '{agent} hasn’t scheduled anything.',
-  next: 'Next',
-  ends: 'Stops',
-  runs: 'Times run',
-  pause: 'Pause',
-  resume: 'Resume',
-  remove: 'Remove',
-  removeConfirm: 'Remove this schedule? {agent} won’t run it again.',
-  cancel: 'Cancel',
-  cancelled: 'Cancelled. {agent} won’t run it again.',
-} as const;
+export const SCHEDULE_COPY: Readonly<Record<ScheduleCopyKey, string>> = scheduleCopyWords('en');
 
-/** `SCHEDULE_COPY` with the agent's name filled in. */
-export function scheduleCopy(agentName: string): { -readonly [K in keyof typeof SCHEDULE_COPY]: string } {
+/** `SCHEDULE_COPY` with the agent's name filled in, in a locale. */
+export function scheduleCopy(agentName: string, locale?: string | null): Record<ScheduleCopyKey, string> {
   return Object.fromEntries(
-    Object.entries(SCHEDULE_COPY).map(([k, v]) => [k, v.replaceAll('{agent}', agentName)]),
-  ) as { -readonly [K in keyof typeof SCHEDULE_COPY]: string };
+    Object.entries(scheduleCopyWords(locale)).map(([k, v]) => [k, v.replaceAll('{agent}', agentName)]),
+  ) as Record<ScheduleCopyKey, string>;
 }
 
 /** Which buttons a schedule offers a viewer who may change it: Pause while active, Resume while paused or expired. */

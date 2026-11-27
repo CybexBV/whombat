@@ -78,6 +78,7 @@ export function ConversationMenu({
   conversation,
   ...links
 }: MenuLinks & { label: string; conversation: MenuConversation }) {
+  const { rawLocale } = useI18n();
   const [open, setOpen] = useState(false);
   const model = useConversationMenu(conversation, links);
   if (hasNativeMenu)
@@ -85,7 +86,7 @@ export function ConversationMenu({
       <NativeMenu
         trigger="tap"
         label={label}
-        spec={conversationMenu(notifyOptions(conversation), model.links)}
+        spec={conversationMenu(notifyOptions(conversation, rawLocale), model.links, rawLocale)}
         onPick={(id) => {
           const p = parseConversationPick(id);
           if (p?.kind === 'notify') model.pick(p.level);
@@ -113,6 +114,7 @@ export function ConversationMenu({
 
 /** What the menu holds, as a sheet or iOS's own: a notification level to pick, and the links. */
 function useConversationMenu(conversation: MenuConversation, { onPins, onPlans, onFiles }: MenuLinks) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
   const filesCopyHere = filesCopy(rawLocale);
 
@@ -127,8 +129,8 @@ function useConversationMenu(conversation: MenuConversation, { onPins, onPlans, 
       notify: notifyBody(conversation.kind, level),
     });
   const links: (ConversationMenuLink & { icon: LucideIcon; onPress: () => void })[] = [
-    { key: 'pins', label: 'Pinned messages', icon: Pin, onPress: onPins },
-    { key: 'plans', label: 'Plans', icon: ListChecks, onPress: onPlans },
+    { key: 'pins', label: tMobile('screens2.menu.pinned'), icon: Pin, onPress: onPins },
+    { key: 'plans', label: tMobile('screens.plans'), icon: ListChecks, onPress: onPlans },
     ...(files ? [{ key: 'files' as const, label: filesCopyHere.title, icon: Folder, onPress: onFiles }] : []),
   ];
   return { pick, links };
@@ -144,7 +146,7 @@ export function ConversationMenuSheet({
   onClose: () => void;
   conversation: MenuConversation;
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { pick, links } = useConversationMenu(conversation, menuLinks);
@@ -162,7 +164,7 @@ export function ConversationMenuSheet({
         >
           {tMobile('screens.notifications')}
         </Text>
-        {notifyOptions(conversation).map((o) => (
+        {notifyOptions(conversation, rawLocale).map((o) => (
           <Touchable
             key={o.level}
             onPress={() => pick(o.level)}

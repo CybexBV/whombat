@@ -79,7 +79,7 @@ function pairing(over: Partial<BluetoothPairing> = {}): BluetoothPairing {
 
 describe('BLUETOOTH', () => {
   it('names every kind and says connected with the battery', () => {
-    expect(BLUETOOTH_KINDS.map(bluetoothKindText)).toEqual([
+    expect(BLUETOOTH_KINDS.map((k) => bluetoothKindText(k))).toEqual([
       'Keyboard',
       'Mouse',
       'Headphones',

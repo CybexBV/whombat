@@ -16,10 +16,10 @@ import {
   thingSeriesToken,
 } from '@whombat/client';
 import {
-  DASHBOARD_RANGE_WORDS,
+  dashboardRangeWords,
   formatTick,
   formatTooltipTime,
-  HOST_RANGE_WORDS,
+  hostRangeWords,
   timeTicks,
 } from '@whombat/client/hosts';
 import type {
@@ -32,6 +32,7 @@ import type {
   ThingSeriesColor,
   ThingTone,
 } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import { toDate } from '@whombat/core/text';
 import { mobileTranslator } from '../i18n/translate';
 import type { ChartSwatch, HostReadout } from './hostStatus';
@@ -85,7 +86,7 @@ export function hasLine(values: readonly (number | null)[] | undefined | null): 
  * What a small line shows, in words for TalkBack (“steady, with a peak”, “rising”): the last quarter against the first,
  * and a peak over twice the average. Null with fewer than four values.
  */
-export function trendWords(values: readonly (number | null)[]): string | null {
+export function trendWords(values: readonly (number | null)[], locale?: string): string | null {
   const v = numbers(values);
   if (v.length < 4) return null;
   const q = Math.max(1, Math.floor(v.length / 4));
@@ -93,16 +94,26 @@ export function trendWords(values: readonly (number | null)[]): string | null {
   const lo = Math.min(...v);
   const hi = Math.max(...v);
   const spread = hi - lo;
-  const way = spread === 0 || Math.abs(shift) < spread * 0.25 ? 'steady' : shift > 0 ? 'rising' : 'falling';
+  const { t } = mobileTranslator(locale);
+  const way =
+    spread === 0 || Math.abs(shift) < spread * 0.25
+      ? t('data.dashboard.steady')
+      : shift > 0
+        ? t('data.dashboard.rising')
+        : t('data.dashboard.falling');
   const avg = mean(v);
   const peak = hi > avg * 2 && hi - avg > spread * 0.5;
-  return peak ? `${way}, with a peak` : way;
+  return peak ? t('data.dashboard.withPeak', { way }) : way;
 }
 
 /** A figure's small line said with its range: “Last 24 hours: steady, with a peak”. */
-export function rangeTrend(values: readonly (number | null)[], range: HostSeriesRange): string | null {
-  const words = trendWords(values);
-  return words ? `${HOST_RANGE_WORDS[range]}: ${words}` : null;
+export function rangeTrend(
+  values: readonly (number | null)[],
+  range: HostSeriesRange,
+  locale?: string,
+): string | null {
+  const words = trendWords(values, locale);
+  return words ? `${hostRangeWords(locale)[range]}: ${words}` : null;
 }
 
 /* The range control ----------------------------------------------------------------------------------------------- */
@@ -119,12 +130,17 @@ export interface RangeOption {
  * The control's options, shortest first; none when there is nothing to choose (absent or one range, DS-03). A server's
  * are `SERVER_DASHBOARD_PHONE_RANGES` (90 days left out: no room, little use on a phone).
  */
-export function rangeOptions(ranges: readonly HostSeriesRange[] | null | undefined): RangeOption[] {
+export function rangeOptions(
+  ranges: readonly HostSeriesRange[] | null | undefined,
+  locale?: string,
+): RangeOption[] {
   if (!ranges || ranges.length < 2) return [];
+  const short = dashboardRangeWords(locale);
+  const spoken = hostRangeWords(locale);
   return ranges.map((value) => ({
     value,
-    label: DASHBOARD_RANGE_WORDS[value],
-    spoken: HOST_RANGE_WORDS[value],
+    label: short[value],
+    spoken: spoken[value],
   }));
 }
 
@@ -145,12 +161,16 @@ export interface FigureTile {
   spoken: string;
 }
 
-export function figureTiles(items: readonly ThingPageKpi[], range: HostSeriesRange): FigureTile[] {
+export function figureTiles(
+  items: readonly ThingPageKpi[],
+  range: HostSeriesRange,
+  locale?: string,
+): FigureTile[] {
   return items.map((k) => {
     const spark = hasLine(k.spark) ? k.spark : null;
     const meter = !spark && typeof k.meter === 'number' ? Math.max(0, Math.min(1, k.meter)) : null;
     const value = k.rest?.trim() ? `${k.value} ${k.rest.trim()}` : k.value;
-    const trend = spark ? rangeTrend(spark, range) : null;
+    const trend = spark ? rangeTrend(spark, range, locale) : null;
     return {
       key: k.key,
       label: k.label,
@@ -364,8 +384,12 @@ export function axisWord(v: number, unit: string | null | undefined): string {
 }
 
 /** A figure in a readout: one decimal under 10 unless the line counts whole things, none above (DS-15). */
-function valueWords(v: number, unit: string | undefined, whole: boolean): string {
-  const n = whole || Math.abs(v) >= 10 ? Math.round(v).toLocaleString('en-US') : v.toFixed(1);
+function valueWords(v: number, unit: string | undefined, whole: boolean, locale?: string): string {
+  const digits = whole || Math.abs(v) >= 10 ? 0 : 1;
+  const n = new Intl.NumberFormat(formatLocaleOf(locale), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(digits ? v : Math.round(v));
   return unit ? `${n} ${unit}` : n;
 }
 
@@ -375,7 +399,12 @@ function valueWords(v: number, unit: string | undefined, whole: boolean): string
  * (memory in GB beside CPU in %) is scaled onto the left one and the readout says its own figure —; the words along the
  * bottom from the range (the forecast's day at the far end); bars stacked per point. Null when nothing was read.
  */
-export function chartCard(panel: ChartPanel, range: HostSeriesRange, timeZone: string): ChartCardView | null {
+export function chartCard(
+  panel: ChartPanel,
+  range: HostSeriesRange,
+  timeZone: string,
+  locale?: string,
+): ChartCardView | null {
   const count = Math.min(panel.timestamps.length, ...panel.series.map((s) => s.values.length));
   const series = panel.series.map((s) => ({ ...s, values: s.values.slice(-count) }));
   if (count < 1 || !series.some((s) => s.values.some((v) => v !== null))) return null;
@@ -409,7 +438,8 @@ export function chartCard(panel: ChartPanel, range: HostSeriesRange, timeZone: s
       values: s.values.map((v) => (v === null ? null : v * scale)),
       raw: s.values,
       latest:
-        s.latest?.trim() || (lastValue === null ? null : valueWords(lastValue, s.unit, whole[i] ?? false)),
+        s.latest?.trim() ||
+        (lastValue === null ? null : valueWords(lastValue, s.unit, whole[i] ?? false, locale)),
     };
   });
 
@@ -445,24 +475,34 @@ export function chartCard(panel: ChartPanel, range: HostSeriesRange, timeZone: s
     panel.labels && panel.labels.length >= count ? panel.labels.slice(-count).map((l) => l.trim()) : null;
   const ticks = labels
     ? labels.map((label, index) => ({ index, label }))
-    : timeTicks(panel.timestamps.slice(-count), range, timeZone);
+    : timeTicks(
+        panel.timestamps.slice(-count),
+        range,
+        timeZone,
+        mobileTranslator(locale).t('data.dashboard.now'),
+      );
   const forecastDay =
     forecast && panel.forecast
-      ? [{ index: slots - 1, label: formatTick('30d', toDate(panel.forecast.at).getTime(), timeZone) }]
+      ? [
+          {
+            index: slots - 1,
+            label: formatTick('30d', toDate(panel.forecast.at).getTime(), timeZone, locale),
+          },
+        ]
       : [];
   const when = (index: number): string =>
     labels
       ? (labels[index] ?? '')
       : times[index] === undefined
         ? ''
-        : formatTooltipTime(range, times[index] as number, timeZone);
+        : formatTooltipTime(range, times[index] as number, timeZone, locale);
   const readout = (index: number): HostReadout => ({
     title: when(index),
     lines: series.map((s, i) => {
       const v = s.values[index];
       return {
         swatch: thingSeriesToken(s.color, i),
-        value: v === null || v === undefined ? '—' : valueWords(v, s.unit, whole[i] ?? false),
+        value: v === null || v === undefined ? '—' : valueWords(v, s.unit, whole[i] ?? false, locale),
         rest: s.label,
       };
     }),
@@ -631,12 +671,15 @@ export interface TableRowView {
 const cellWords = (c: ThingPageCell) => (c.note ? `${c.text} (${c.note})` : c.text);
 
 /** A dot's words for TalkBack; a fine one says nothing (the usual case). */
-const DOT_WORDS: Record<NonNullable<ThingPageCell['dot']>, string | null> = {
-  ok: null,
-  warn: 'Needs a look',
-  bad: 'Problem',
-  off: 'Off',
-};
+function dotWords(locale?: string): Record<NonNullable<ThingPageCell['dot']>, string | null> {
+  const { t } = mobileTranslator(locale);
+  return {
+    ok: null,
+    warn: t('data.dashboard.dot.warn'),
+    bad: t('data.dashboard.dot.bad'),
+    off: t('data.dashboard.dot.off'),
+  };
+}
 
 /** A console stays on the web (the phone has none): its button is left out. */
 export const isConsoleHref = (href: string) => /[?&]console=/.test(href);
@@ -648,7 +691,12 @@ export const isConsoleHref = (href: string) => /[?&]console=/.test(href);
  * A cell's `action` (0.121) is a button of the row instead of its words; a cell's `url` opens the row in the browser
  * when it has no page of the app (the title's first, `href` wins; service-dashboards.md AP-4644).
  */
-export function tableRows(panel: Extract<ThingPagePanel, { kind: 'table' }>): TableRowView[] {
+export function tableRows(
+  panel: Extract<ThingPagePanel, { kind: 'table' }>,
+  locale?: string,
+): TableRowView[] {
+  const dots = dotWords(locale);
+  const trendLabel = mobileTranslator(locale).t('data.dashboard.trend');
   const [first, ...rest] = panel.columns;
   return panel.rows.map((r) => {
     const head = first ? r.cells[first.key] : undefined;
@@ -680,7 +728,7 @@ export function tableRows(panel: Extract<ThingPagePanel, { kind: 'table' }>): Ta
     const dot = head?.dot ?? others.find((o) => o.cell?.dot)?.cell?.dot ?? null;
     const title = head?.text.trim() || '—';
     const spark = sparkCell?.cell?.spark ?? null;
-    const trend = spark ? trendWords(spark) : null;
+    const trend = spark ? trendWords(spark, locale) : null;
     return {
       id: r.id,
       title,
@@ -699,11 +747,11 @@ export function tableRows(panel: Extract<ThingPagePanel, { kind: 'table' }>): Ta
       url,
       spoken: [
         head?.note ? `${title}, ${head.note}` : title,
-        dot ? DOT_WORDS[dot] : null,
+        dot ? dots[dot] : null,
         ...filled.map((o) =>
           o.column.label ? `${o.column.label}: ${cellWords(o.cell)}` : cellWords(o.cell),
         ),
-        trend && sparkCell ? `${sparkCell.column.label || 'Trend'}: ${trend}` : null,
+        trend && sparkCell ? `${sparkCell.column.label || trendLabel}: ${trend}` : null,
       ]
         .filter(Boolean)
         .join('. '),

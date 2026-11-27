@@ -1,0 +1,55 @@
+import { treeCatalogs } from '../../tree';
+
+/**
+ * The backup file's own words in This Whombat → MOVE TO ANOTHER WHOMBAT (`backup/model.ts`); the rest are the
+ * contracts' (`@whombat/core/backup`). `{dot}` is the middle dot.
+ */
+export const BACKUP_FILE_WORDS = treeCatalogs(
+  'hostManaged.backupFile',
+  {
+    section: 'MOVE TO ANOTHER WHOMBAT',
+    when: 'Make a file of what you choose and open it on another Whombat. Your backups already keep this one safe.',
+    downloading: 'Downloading {dot} {pct} %',
+    uploading: 'Uploading {dot} {pct} %',
+    uploaded: 'Uploaded {dot} {size}',
+    expires: 'expires in {left}',
+    expired: 'expired',
+    saved: 'Saved to your device.',
+    stopped: 'Uploading stopped at {pct} %. Choose the same file to go on.',
+    restoreAnother: 'Restore another file',
+    done: 'Done',
+    tryAgain: 'Try again',
+    openConnections: 'Open Connections',
+    openAutomations: 'Open Automations',
+    connection: 'Couldn’t reach your Whombat. Check your connection and try again.',
+    noAnswer: 'Your Whombat didn’t answer in time. Look again in a moment: it may still be working on it.',
+    failed: 'Something went wrong. Try again.',
+    download: 'Download',
+    minutes: { one: '1 minute', other: '{count} minutes' },
+    hours: { one: '1 hour', other: '{count} hours' },
+    madeOn: 'Made {date} on {name}',
+  },
+  {
+    section: 'VERHUIZEN NAAR EEN ANDERE WHOMBAT',
+    when: 'Maak een bestand van wat je kiest en open het op een andere Whombat. Je back-ups houden deze al veilig.',
+    downloading: 'Downloaden {dot} {pct} %',
+    uploading: 'Uploaden {dot} {pct} %',
+    uploaded: 'Geüpload {dot} {size}',
+    expires: 'verloopt over {left}',
+    expired: 'verlopen',
+    saved: 'Op je apparaat opgeslagen.',
+    stopped: 'Uploaden is gestopt bij {pct} %. Kies hetzelfde bestand om verder te gaan.',
+    restoreAnother: 'Een ander bestand terugzetten',
+    done: 'Klaar',
+    tryAgain: 'Opnieuw proberen',
+    openConnections: 'Koppelingen openen',
+    openAutomations: 'Automatiseringen openen',
+    connection: 'Kon je Whombat niet bereiken. Controleer je verbinding en probeer het opnieuw.',
+    noAnswer: 'Je Whombat antwoordde niet op tijd. Kijk zo nog eens: misschien is hij er nog mee bezig.',
+    failed: 'Er ging iets mis. Probeer het opnieuw.',
+    download: 'Downloaden',
+    minutes: { one: '1 minuut', other: '{count} minuten' },
+    hours: { one: '1 uur', other: '{count} uur' },
+    madeOn: 'Gemaakt op {date} op {name}',
+  },
+);

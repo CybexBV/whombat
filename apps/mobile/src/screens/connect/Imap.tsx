@@ -9,11 +9,11 @@
 import {
   draftFromSettings,
   hintLinks,
-  IMAP_COPY,
-  IMAP_DISCONNECTED_TEXT,
   type ImapConnectProblem,
   imapConnectedText,
   imapConnectProblem,
+  imapCopy,
+  imapDisconnectedText,
   looksLikeEmail,
   MAIL_SECURITY_LABELS,
   type MailDraftField,
@@ -69,6 +69,9 @@ export function ImapConnectForm({
   /** A provider's hint names Google or Microsoft 365 instead: their screen. */
   onOpenProvider: (provider: 'google' | 'microsoft') => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const imapCopyHere = imapCopy(rawLocale);
   const theme = useTheme();
   const discover = useImapDiscover();
   const connect = useImapConnect();
@@ -126,9 +129,9 @@ export function ImapConnectForm({
   async function submit() {
     if (connect.isPending) return;
     const fields: ImapConnectProblem['fields'] = {};
-    if (!looksLikeEmail(email)) fields.email = IMAP_COPY.emailMissing;
-    if (!password) fields.password = IMAP_COPY.passwordMissing;
-    const servers = draft ? settingsFromDraft(draft) : null;
+    if (!looksLikeEmail(email)) fields.email = imapCopyHere.emailMissing;
+    if (!password) fields.password = imapCopyHere.passwordMissing;
+    const servers = draft ? settingsFromDraft(draft, rawLocale) : null;
     if (servers?.errors) Object.assign(fields, servers.errors);
     if (Object.keys(fields).length) return setProblem({ message: null, fields, openServers: false });
     setProblem(NO_PROBLEM);
@@ -139,10 +142,10 @@ export function ImapConnectForm({
       });
       if (result.status === 'ok') {
         setPassword('');
-        showNotice(imapConnectedText(result.data.email));
+        showNotice(imapConnectedText(result.data.email, rawLocale));
       }
     } catch (error) {
-      const next = imapConnectProblem(error);
+      const next = imapConnectProblem(error, rawLocale);
       setProblem(next);
       if (next.openServers) openServers();
     } finally {
@@ -160,9 +163,9 @@ export function ImapConnectForm({
       footer={
         <Footer bottomInset={bottomInset}>
           <FormMessage text={problem.message} />
-          {connect.isPending ? <Busy text={IMAP_COPY.connecting} /> : null}
+          {connect.isPending ? <Busy text={imapCopyHere.connecting} /> : null}
           <Button
-            label={IMAP_COPY.connect}
+            label={imapCopyHere.connect}
             size="lg"
             busy={connect.isPending}
             onPress={() => void submit()}
@@ -173,19 +176,19 @@ export function ImapConnectForm({
       {header}
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
         <View style={{ paddingTop: 6 }}>
-          <StatusDot color={theme.colors.mut} label={ACCOUNT_NOT_CONNECTED} />
+          <StatusDot color={theme.colors.mut} label={tMobile('screens2.connect.notConnected')} />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text size={15} weight={600}>
-            {IMAP_COPY.name}
+            {imapCopyHere.name}
           </Text>
           <Text size={13} lh={1.4} color={theme.colors.mut}>
-            {IMAP_COPY.notConnected}
+            {imapCopyHere.notConnected}
           </Text>
         </View>
       </View>
       <FormField
-        label={sentenceCase(IMAP_COPY.email)}
+        label={sentenceCase(imapCopyHere.email)}
         value={email}
         onChangeText={(v) => {
           setEmail(v);
@@ -198,34 +201,34 @@ export function ImapConnectForm({
         {...PLAIN_INPUT}
       />
       <FormField
-        label={sentenceCase(IMAP_COPY.password)}
+        label={sentenceCase(imapCopyHere.password)}
         value={password}
         onChangeText={(v) => {
           setPassword(v);
           clear('password');
         }}
-        hint={IMAP_COPY.passwordHint}
+        hint={imapCopyHere.passwordHint}
         error={problem.fields.password}
         secret
         maxLength={1024}
         returnKeyType="go"
         onSubmitEditing={() => void submit()}
       />
-      {looking && !current ? <Busy text={IMAP_COPY.looking} /> : null}
+      {looking && !current ? <Busy text={imapCopyHere.looking} /> : null}
       {showFound && settings ? (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
           <View style={{ paddingTop: 6 }}>
-            <StatusDot color={theme.colors.ok} label={IMAP_COPY.found} />
+            <StatusDot color={theme.colors.ok} label={imapCopyHere.found} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text size={15} weight={600}>
-              {IMAP_COPY.found}
+              {imapCopyHere.found}
             </Text>
             <Text size={13} lh={1.4} mono color={theme.colors.mut}>
-              {imapServersLine({ imapHost: settings.imap.host, smtpHost: settings.smtp.host })}
+              {imapServersLine({ imapHost: settings.imap.host, smtpHost: settings.smtp.host }, rawLocale)}
             </Text>
           </View>
-          <TextLink label={IMAP_COPY.change} onPress={openServers} />
+          <TextLink label={imapCopyHere.change} onPress={openServers} />
         </View>
       ) : null}
       {draft ? (
@@ -246,8 +249,6 @@ export function ImapConnectForm({
     </Panel>
   );
 }
-
-const ACCOUNT_NOT_CONNECTED = 'Not connected';
 
 /** “EMAIL ADDRESS” → “Email address”: the phone's labels are in sentence case (Add a server's). */
 function sentenceCase(label: string): string {
@@ -275,6 +276,8 @@ function ServerFields({
   guessed: boolean;
   problems: ImapConnectProblem['fields'];
 }) {
+  const { rawLocale } = useI18n();
+  const imapCopyHere = imapCopy(rawLocale);
   const theme = useTheme();
   const side = (key: 'imap' | 'smtp', legend: string) => {
     const host: MailDraftField = key === 'imap' ? 'imapHost' : 'smtpHost';
@@ -288,7 +291,7 @@ function ServerFields({
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
           <View style={{ flex: 2.4, minWidth: 0 }}>
             <FormField
-              label={IMAP_COPY.server}
+              label={imapCopyHere.server}
               value={draft[host]}
               onChangeText={(v) => onChange({ ...draft, [host]: v })}
               error={problems[host]}
@@ -299,7 +302,7 @@ function ServerFields({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <FormField
-              label={IMAP_COPY.port}
+              label={imapCopyHere.port}
               value={draft[port]}
               onChangeText={(v) => onChange({ ...draft, [port]: v })}
               error={problems[port]}
@@ -310,7 +313,7 @@ function ServerFields({
           </View>
         </View>
         <Segmented<MailSecurity>
-          label={`${legend}: ${IMAP_COPY.security}`}
+          label={`${legend}: ${imapCopyHere.security}`}
           value={security}
           onChange={(value) => onChange(withSecurity(draft, key, value))}
           options={SECURITY_OPTIONS}
@@ -320,15 +323,15 @@ function ServerFields({
   };
   return (
     <View style={{ gap: 16 }}>
-      {guessed ? <Note>{IMAP_COPY.guessed}</Note> : null}
-      {side('imap', IMAP_COPY.incoming)}
-      {side('smtp', IMAP_COPY.outgoing)}
+      {guessed ? <Note>{imapCopyHere.guessed}</Note> : null}
+      {side('imap', imapCopyHere.incoming)}
+      {side('smtp', imapCopyHere.outgoing)}
       <FormField
-        label={sentenceCase(IMAP_COPY.username)}
+        label={sentenceCase(imapCopyHere.username)}
         value={draft.username}
         onChangeText={(v) => onChange({ ...draft, username: v })}
         placeholder={email.trim() || 'you@example.com'}
-        hint={IMAP_COPY.usernameHint}
+        hint={imapCopyHere.usernameHint}
         error={problems.username}
         {...PLAIN_INPUT}
       />
@@ -347,7 +350,8 @@ function ProviderHint({
   hint: ImapProviderHint;
   onOpenProvider: (provider: 'google' | 'microsoft') => void;
 }) {
-  const { instead, page } = hintLinks(hint);
+  const { rawLocale } = useI18n();
+  const { instead, page } = hintLinks(hint, rawLocale);
   return (
     <View style={{ gap: 2 }} accessibilityLiveRegion="polite">
       <Note>{hint.text}</Note>
@@ -377,6 +381,7 @@ export function MailAccount({
   bottomInset: number;
 }) {
   const { rawLocale } = useI18n();
+  const imapCopyHere = imapCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -391,7 +396,7 @@ export function MailAccount({
 
   async function onPassword() {
     if (connect.isPending) return;
-    if (!password) return setProblem({ ...NO_PROBLEM, fields: { password: IMAP_COPY.passwordMissing } });
+    if (!password) return setProblem({ ...NO_PROBLEM, fields: { password: imapCopyHere.passwordMissing } });
     setProblem(null);
     try {
       // The servers stay as they are: only the password is new.
@@ -399,27 +404,27 @@ export function MailAccount({
       if (result.status === 'ok') {
         setPassword('');
         setChanging(false);
-        showNotice(imapConnectedText(result.data.email));
+        showNotice(imapConnectedText(result.data.email, rawLocale));
       }
     } catch (error) {
-      setProblem(imapConnectProblem(error));
+      setProblem(imapConnectProblem(error, rawLocale));
     } finally {
       connect.reset();
     }
   }
 
   function onDisconnect() {
-    Alert.alert(IMAP_COPY.disconnectConfirm, IMAP_COPY.disconnectAsk, [
-      { text: IMAP_COPY.cancel, style: 'cancel' },
+    Alert.alert(imapCopyHere.disconnectConfirm, imapCopyHere.disconnectAsk, [
+      { text: imapCopyHere.cancel, style: 'cancel' },
       {
-        text: IMAP_COPY.disconnectConfirm,
+        text: imapCopyHere.disconnectConfirm,
         style: 'destructive',
         onPress: () =>
           void remove.mutateAsync({ params: { connectionId: connection.id } }).then(
             (result) => {
-              if (result.status === 'ok') showNotice(IMAP_DISCONNECTED_TEXT);
+              if (result.status === 'ok') showNotice(imapDisconnectedText(rawLocale));
             },
-            () => showFailure(IMAP_COPY.failed),
+            () => showFailure(imapCopyHere.failed, rawLocale),
           ),
       },
     ]);
@@ -431,9 +436,9 @@ export function MailAccount({
         changing ? (
           <Footer bottomInset={bottomInset}>
             <FormMessage text={problem?.message} />
-            {connect.isPending ? <Busy text={IMAP_COPY.connecting} /> : null}
+            {connect.isPending ? <Busy text={imapCopyHere.connecting} /> : null}
             <Button
-              label={IMAP_COPY.connectAgain}
+              label={imapCopyHere.connectAgain}
               size="lg"
               busy={connect.isPending}
               onPress={() => void onPassword()}
@@ -447,7 +452,7 @@ export function MailAccount({
         <View style={{ paddingTop: 6 }}>
           <StatusDot
             color={active ? theme.colors.ok : theme.colors.warn}
-            label={active ? IMAP_COPY.connected : IMAP_COPY.needsPassword}
+            label={active ? imapCopyHere.connected : imapCopyHere.needsPassword}
           />
         </View>
         <View style={{ flex: 1, gap: 2 }}>
@@ -455,7 +460,7 @@ export function MailAccount({
             {connection.email}
           </Text>
           <Text size={13} lh={1.4} color={active ? theme.colors.mut : theme.colors.warn}>
-            {mailAccountLine(connection)}
+            {mailAccountLine(connection, rawLocale)}
           </Text>
         </View>
       </View>
@@ -468,11 +473,11 @@ export function MailAccount({
             >
               <StatusDot
                 color={toneColor(theme, item.state === 'ok' ? 'ok' : item.state === 'error' ? 'bad' : 'warn')}
-                label={mailCheckName(item)}
+                label={mailCheckName(item, rawLocale)}
                 size={7}
               />
               <Text size={13.5} weight={500}>
-                {mailCheckName(item)}
+                {mailCheckName(item, rawLocale)}
               </Text>
               <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
                 {item.state === 'ok'
@@ -486,10 +491,10 @@ export function MailAccount({
       {changing ? (
         <View style={{ gap: 10 }}>
           <FormField
-            label={sentenceCase(IMAP_COPY.password)}
+            label={sentenceCase(imapCopyHere.password)}
             value={password}
             onChangeText={setPassword}
-            hint={IMAP_COPY.passwordHint}
+            hint={imapCopyHere.passwordHint}
             error={problem?.fields.password}
             secret
             autoFocus
@@ -498,7 +503,7 @@ export function MailAccount({
             onSubmitEditing={() => void onPassword()}
           />
           <Button
-            label={IMAP_COPY.cancel}
+            label={imapCopyHere.cancel}
             variant="quiet"
             onPress={() => {
               setChanging(false);
@@ -510,25 +515,27 @@ export function MailAccount({
       ) : (
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={active ? IMAP_COPY.changePassword : IMAP_COPY.newPassword}
+            label={active ? imapCopyHere.changePassword : imapCopyHere.newPassword}
             variant={active ? 'secondary' : 'primary'}
             onPress={() => setChanging(true)}
             style={{ flex: 1 }}
           />
-          <Button label={IMAP_COPY.disconnect} variant="secondary" onPress={onDisconnect} />
+          <Button label={imapCopyHere.disconnect} variant="secondary" onPress={onDisconnect} />
         </View>
       )}
       {active ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
             {check.isPending
-              ? IMAP_COPY.checking
+              ? imapCopyHere.checking
               : connection.checkedAt
-                ? `Checked ${formatAgo(connection.checkedAt, now, timeZone, rawLocale)}`
-                : IMAP_COPY.notChecked}
+                ? tMobile('screens2.connect.checked', {
+                    when: formatAgo(connection.checkedAt, now, timeZone, rawLocale),
+                  })
+                : imapCopyHere.notChecked}
           </Text>
           <Button
-            label={IMAP_COPY.checkAgain}
+            label={imapCopyHere.checkAgain}
             variant="secondary"
             disabled={check.isPending}
             onPress={() => check.mutate({ params: { connectionId: connection.id } })}

@@ -10,9 +10,9 @@
 
 import {
   ApiError,
-  AUTOMATION_ACTION_TEXT,
-  AUTOMATION_WAITING_TEXT,
-  DECISION_WAITING,
+  automationActionText,
+  automationWaitingText,
+  decisionWaiting,
   trackerReplyOutcome,
   trackerWriteOutcome,
 } from '@whombat/client';
@@ -29,7 +29,7 @@ import {
   stepKindLabel,
   type Tone,
   type TrackerWords,
-  UNKNOWN_TRACKER_WORDS,
+  unknownTrackerWords,
 } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
 import { type ScheduleRow, scheduleRows } from './schedules';
@@ -122,11 +122,11 @@ export function automationListText(locale?: string) {
     /** A plan waiting for a yes. */
     planWaiting: t('automations.automationListText.planWaiting'),
     /** Talk about it without a plan's thread: a new one, with this ready to finish. */
-    talkAbout: AUTOMATION_ACTION_TEXT.about,
+    talkAbout: automationActionText(locale).about,
     /** The agent's schedules on the list. */
     onlyTellsYou: t('automations.automationListText.onlyTellsYou'),
     noRuns: t('automations.automationListText.noRuns'),
-    open: AUTOMATION_WAITING_TEXT.open,
+    open: automationWaitingText(locale).open,
   } as const;
 }
 export const AUTOMATION_LIST_TEXT = automationListText();
@@ -179,17 +179,20 @@ export function onlyTellsYouRows(
   agentName: string,
   timeZone: string,
   now: Date,
+  locale?: string,
 ): OnlyTellsYouRow[] {
-  const next = scheduleCopy(agentName).next;
+  const next = scheduleCopy(agentName, locale).next;
+  const { t } = mobileTranslator(locale);
   return scheduleRows(
     schedules.filter((s) => s.status !== 'ended'),
     agentName,
     timeZone,
     now,
+    locale,
   ).map((row) => ({
     ...row,
     next: row.facts.find((f) => f.label === next) ?? null,
-    accessibilityLabel: `${sentence(row.what)} Only tells you. ${row.when}.`,
+    accessibilityLabel: t('data.automations.onlyTellsYouLabel', { what: sentence(row.what), when: row.when }),
   }));
 }
 
@@ -198,7 +201,10 @@ export function runActive(status: AutomationRunStatus): boolean {
 }
 
 /** The fold under a step's assessment that opens its technical part (contracts 0.68 `details`; AP-1010). */
-export const TECHNICAL_DETAILS = 'Technical details';
+export function technicalDetails(locale?: string): string {
+  return mobileTranslator(locale).t('data.automations.technicalDetails');
+}
+export const TECHNICAL_DETAILS = technicalDetails();
 
 /**
  * An agent step's assessment in plain words (contracts 0.67/0.68, CT-323/CT-324; automation-recipes.md AP-1010): its
@@ -282,7 +288,10 @@ export function stepAssessment(step: Pick<AutomationRunStep, 'kind' | 'output'>)
 }
 
 /** The tag after an assessment's line when the agent recommends a change (the web's words, AP-1053). */
-export const SUGGESTS_A_CHANGE = 'Suggests a change';
+export function suggestsAChange(locale?: string): string {
+  return mobileTranslator(locale).t('data.automations.suggestsAChange');
+}
+export const SUGGESTS_A_CHANGE = suggestsAChange();
 
 /**
  * What a recipe's check decided, in plain words: the server's `story` (contracts 0.68 `recipeConditionStory`, “No:
@@ -307,25 +316,30 @@ export function conditionStory(step: Pick<AutomationRunStep, 'kind' | 'output'>)
 export function stepOutcome(
   step: Pick<AutomationRunStep, 'kind' | 'state'> & Partial<Pick<AutomationRunStep, 'inputSummary'>>,
   o: Record<string, unknown>,
-  words: TrackerWords = UNKNOWN_TRACKER_WORDS,
+  words?: TrackerWords,
+  locale?: string,
 ): string | null {
+  const tracker = words ?? unknownTrackerWords(locale);
+  const { t } = mobileTranslator(locale);
   switch (step.kind) {
     case 'tracker_update':
-      return trackerWriteOutcome(o, words);
+      return trackerWriteOutcome(o, tracker, locale);
     case 'tracker_reply':
-      return trackerReplyOutcome(o, words);
+      return trackerReplyOutcome(o, tracker, locale);
     case 'tracker_decision':
-      return decisionOutcome(step, o);
+      return decisionOutcome(step, o, locale);
     case 'connection_actions':
       if (typeof o.summary === 'string' && o.summary.trim()) return o.summary.trim();
       if (typeof o.reason === 'string' && o.reason.trim()) return o.reason.trim();
       return null;
     case 'github_comment':
       if (typeof o.reason === 'string' && o.reason.trim()) return o.reason.trim();
-      return step.state === 'succeeded' && typeof o.number === 'number' ? `Commented on #${o.number}.` : null;
+      return step.state === 'succeeded' && typeof o.number === 'number'
+        ? t('data.automations.commentedOn', { number: o.number })
+        : null;
     case 'open_pull_request':
       return o.opened === true && typeof o.prNumber === 'number'
-        ? `Opened pull request #${o.prNumber}.`
+        ? t('data.automations.openedPr', { number: o.prNumber })
         : null;
     default:
       return null;
@@ -340,12 +354,13 @@ export function stepOutcome(
 function decisionOutcome(
   step: Pick<AutomationRunStep, 'state'> & Partial<Pick<AutomationRunStep, 'inputSummary'>>,
   o: Record<string, unknown>,
+  locale?: string,
 ): string | null {
   const said = step.inputSummary?.trim() || (typeof o.reason === 'string' ? o.reason.trim() : '');
   if (!said) return null;
   // One that ends in a quote (the person's own words) has its stop inside.
   const words = /[\p{L}\p{N}]$/u.test(said) ? `${said}.` : said;
-  return step.state === 'waiting' ? `${words} ${DECISION_WAITING}` : words;
+  return step.state === 'waiting' ? `${words} ${decisionWaiting(locale)}` : words;
 }
 
 /** Steps that say what they did in words (`stepOutcome`): their raw `text` never shows. */
@@ -357,32 +372,38 @@ const SAYS_IN_WORDS: ReadonlySet<AutomationRunStep['kind']> = new Set([
 ]);
 
 /** `words`: the tracker's as the automation keeps them (`automationTrackerWords`), for its tracker steps. */
-export function runSteps(
-  run: AutomationRun,
-  words: TrackerWords = UNKNOWN_TRACKER_WORDS,
-  locale?: string,
-): RunStepView[] {
+export function runSteps(run: AutomationRun, words?: TrackerWords, locale?: string): RunStepView[] {
+  const tracker = words ?? unknownTrackerWords(locale);
   const states = stepStateCopy(locale);
+  const { t } = mobileTranslator(locale);
   return run.steps.map((s) => {
     const o = s.output as Record<string, unknown>;
     // A step of a kind this version doesn't know (an older version's) without a name is “An earlier step”.
-    const name = s.name.trim() || stepKindLabel(s.kind);
+    const name = s.name.trim() || stepKindLabel(s.kind, locale);
     // A tracker write, reply or decision says what it did in words (`stepOutcome`), never its raw text.
     const text = typeof o.text === 'string' && !SAYS_IN_WORDS.has(s.kind) ? o.text : null;
-    const decision = o.decision === 'approved' ? 'Approved.' : o.decision === 'declined' ? 'Declined.' : null;
+    const decision =
+      o.decision === 'approved'
+        ? t('data.automations.approved')
+        : o.decision === 'declined'
+          ? t('data.automations.declined')
+          : null;
     const result =
-      typeof o.result === 'boolean' ? (o.result ? 'True: it went on.' : 'False: it stopped here.') : null;
+      typeof o.result === 'boolean'
+        ? o.result
+          ? t('data.automations.resultTrue')
+          : t('data.automations.resultFalse')
+        : null;
     // Coding work and reviews (docs/decisions/bp-automations.md BP-C26, BP-C27).
-    const branch = (o.workspace as { branch?: string } | undefined)?.branch ?? 'its branch';
+    const branch =
+      (o.workspace as { branch?: string } | undefined)?.branch ?? t('data.automations.itsBranch');
     const coding =
       [
-        typeof o.commits === 'number'
-          ? `${o.commits} new commit${o.commits === 1 ? '' : 's'} on ${branch}.`
-          : null,
+        typeof o.commits === 'number' ? t('data.automations.newCommits', { count: o.commits, branch }) : null,
         o.verdict === 'approve'
-          ? 'Verdict: Approve.'
+          ? t('data.automations.verdictApprove')
           : o.verdict === 'changes_needed'
-            ? 'Verdict: Changes needed.'
+            ? t('data.automations.verdictChanges')
             : null,
       ]
         .filter(Boolean)
@@ -396,7 +417,7 @@ export function runSteps(
     const input = s.kind === 'condition' ? null : s.inputSummary || null;
     const body =
       story ??
-      stepOutcome(s, o, words) ??
+      stepOutcome(s, o, tracker, locale) ??
       decision ??
       asked ??
       result ??
@@ -406,7 +427,12 @@ export function runSteps(
     const approvalOpen = s.approvalNumber !== null && s.state === 'waiting';
     const says = assessment
       ? [
-          `Assessment: ${[...assessment.tags, ...(assessment.suggests ? [SUGGESTS_A_CHANGE.toLowerCase()] : [])].join(', ')}.`,
+          t('data.automations.assessment', {
+            tags: [
+              ...assessment.tags,
+              ...(assessment.suggests ? [suggestsAChange(locale).toLowerCase()] : []),
+            ].join(', '),
+          }),
           assessment.summary,
         ]
       : [s.error ? null : body];
@@ -425,7 +451,7 @@ export function runSteps(
         `${name}, ${state.label}.`,
         ...says,
         s.error,
-        approvalOpen ? 'Opens the request.' : null,
+        approvalOpen ? t('data.automations.opensRequest') : null,
       ]
         .filter(Boolean)
         .map((part) => sentence(part as string))
@@ -451,7 +477,7 @@ const unreached = (step: AutomationRunStep | undefined) => step?.state === 'skip
  */
 export function runStepsView(
   run: AutomationRun,
-  words: TrackerWords = UNKNOWN_TRACKER_WORDS,
+  words?: TrackerWords,
   locale?: string,
 ): { steps: RunStepView[]; skipped: SkippedStepsView | null } {
   const all = runSteps(run, words, locale);

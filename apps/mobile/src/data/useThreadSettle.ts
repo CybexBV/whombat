@@ -24,14 +24,15 @@ import {
   type ThreadView,
 } from '@whombat/core';
 import { useCallback } from 'react';
+import { useI18n } from '../i18n';
 import { errorText, outcomeText } from '../screens/feedback';
 import { haptic } from '../ui/haptics';
 import { useBurrowBase } from './BurrowProvider';
 import {
   chatPreferencesOf,
   messageWithSettle,
-  SETTLE_COPY,
   type SettleChange,
+  settleCopy,
   type ThreadListState,
   threadsWithSettle,
 } from './threadSettle';
@@ -100,6 +101,7 @@ export interface SettleTarget {
 export function useSettleThread() {
   const { slug, clock } = useBurrowBase();
   const { client } = useWhombat();
+  const { rawLocale: locale } = useI18n();
   const qc = useQueryClient();
   const run = useCallback(
     (target: SettleTarget, settled: boolean, options: { undo?: boolean; onDone?: () => void } = {}) => {
@@ -119,7 +121,7 @@ export function useSettleThread() {
       if (settled) {
         haptic('success');
         if (options.undo !== false)
-          showToast(SETTLE_COPY.settled, {
+          showToast(settleCopy(locale).settled, {
             undo: () => run(target, false, { undo: false }),
             ms: SETTLE_UNDO_MS,
           });
@@ -129,7 +131,7 @@ export function useSettleThread() {
         .then((result) => {
           if (result.status !== 'ok') {
             putBack();
-            const said = outcomeText(result);
+            const said = outcomeText(result, locale);
             if (said) showToast(said.body);
             return;
           }
@@ -141,11 +143,11 @@ export function useSettleThread() {
         .catch((error: unknown) => {
           putBack();
           // The refusal in the server's words (“Dusty is still working on this.”).
-          showToast(errorText(error));
+          showToast(errorText(error, locale));
         })
         .finally(() => void qc.invalidateQueries({ queryKey: queryKeys.scope('chats.threads') }));
     },
-    [client, qc, slug, clock],
+    [client, qc, slug, clock, locale],
   );
   return run;
 }

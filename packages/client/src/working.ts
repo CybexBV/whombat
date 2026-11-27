@@ -110,7 +110,7 @@ export function threadWork(
       tone: 'live',
     };
   }
-  const handed = handoffRow(handoffs);
+  const handed = handoffRow(handoffs, locale);
   const by = handoffs[0];
   if (!handed || !by) return null;
   return {

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Linking } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { deviceBox } from '../data/secureBoxNative';
+import { useI18n } from '../i18n';
 import { initialNotificationUrl } from '../push/taps';
 import { navigationRef } from './hooks';
 import {
@@ -51,12 +52,13 @@ export interface NavigationPersistence {
 export function useNavigationPersistence(scope: string | null, managed: boolean): NavigationPersistence {
   // The bootstrap is read when the saved place is checked, not followed: every new message changes it.
   const { slug, currentBootstrap } = useBurrowBase();
+  const { rawLocale } = useI18n();
   const qc = useQueryClient();
   const [restore, setRestore] = useState<{ ready: boolean; state?: SavedState }>(() => ({
     ready: !scope || restoredOnce,
   }));
-  const world = useRef({ currentBootstrap, managed });
-  world.current = { currentBootstrap, managed };
+  const world = useRef({ currentBootstrap, managed, rawLocale });
+  world.current = { currentBootstrap, managed, rawLocale };
 
   useEffect(() => {
     if (restore.ready || !scope) return;
@@ -70,11 +72,12 @@ export function useNavigationPersistence(scope: string | null, managed: boolean)
       ]);
       // A link or a notification opened the app: it decides the screen.
       if (link ?? notification) return undefined;
-      const { currentBootstrap: bootstrap, managed: m } = world.current;
+      const { currentBootstrap: bootstrap, managed: m, rawLocale: locale } = world.current;
       return restorableNavigation(saved, {
         now: Date.now(),
         burrow: slug,
         world: { sidebar: bootstrap().sidebar, managed: m },
+        locale,
       });
     };
     const late = new Promise<undefined>((ok) => setTimeout(() => ok(undefined), RESTORE_WAIT_MS));

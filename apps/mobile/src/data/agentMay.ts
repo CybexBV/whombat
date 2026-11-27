@@ -9,12 +9,12 @@
 import {
   connectionPermission,
   keysSummary,
-  PERMISSION_WORDS,
   type PermissionConnection,
   type PermissionRow,
   type PermissionServer,
   type PermissionWord,
   permissionsText,
+  permissionWords,
   serverPermission,
   settingsKeyRow,
 } from '@whombat/client';
@@ -104,11 +104,12 @@ export interface MayFacts {
   deployWorkflow?: boolean | undefined;
   /** How many commands are always allowed; undefined while they load. */
   commands: number | null | undefined;
+  locale?: string;
 }
 
-function serverRow(server: PermissionServer, agent: string): MayServerRow {
-  const t = permissionsText(agent);
-  const row = serverPermission(server, agent);
+function serverRow(server: PermissionServer, agent: string, locale?: string): MayServerRow {
+  const t = permissionsText(agent, locale);
+  const row = serverPermission(server, agent, locale);
   const asks =
     row.word === 'watch'
       ? null
@@ -117,8 +118,9 @@ function serverRow(server: PermissionServer, agent: string): MayServerRow {
           asksFirst: server.asksFirst,
           hostsThisWhombat: server.hostsThisWhombat,
           available: true,
+          locale,
         });
-  const wordText = PERMISSION_WORDS[row.word];
+  const wordText = permissionWords(locale)[row.word];
   return {
     ...row,
     serverId: server.id,
@@ -129,10 +131,10 @@ function serverRow(server: PermissionServer, agent: string): MayServerRow {
   };
 }
 
-function connectionRow(c: MayConnection, agent: string): MayConnectionRow {
+function connectionRow(c: MayConnection, agent: string, locale?: string): MayConnectionRow {
   const name = c.label || catalogEntry(c.catalogId)?.name || c.catalogId;
-  const row = connectionPermission({ id: c.id, name, access: c.access ?? null }, agent);
-  const wordText = PERMISSION_WORDS[row.word];
+  const row = connectionPermission({ id: c.id, name, access: c.access ?? null }, agent, locale);
+  const wordText = permissionWords(locale)[row.word];
   return {
     ...row,
     thing: thingId(c.catalogId === 'device' ? 'device' : 'connection', c.id),
@@ -142,14 +144,14 @@ function connectionRow(c: MayConnection, agent: string): MayConnectionRow {
 }
 
 export function agentMayView(f: MayFacts): MayView {
-  const t = permissionsText(f.agent);
+  const t = permissionsText(f.agent, f.locale);
 
   const servers: MayView['servers'] =
     f.serversPresent === false
       ? null
       : {
           label: t.servers,
-          rows: (f.servers ?? []).map((s) => serverRow(s, f.agent)),
+          rows: (f.servers ?? []).map((s) => serverRow(s, f.agent, f.locale)),
           empty: f.servers === undefined || (f.servers?.length ?? 0) > 0 ? null : t.serversNone,
           loading: f.servers === undefined,
         };
@@ -159,7 +161,7 @@ export function agentMayView(f: MayFacts): MayView {
       ? null
       : {
           label: t.connections,
-          rows: (f.connections ?? []).map((c) => connectionRow(c, f.agent)),
+          rows: (f.connections ?? []).map((c) => connectionRow(c, f.agent, f.locale)),
           empty: f.connections && f.connections.length === 0 ? t.connectionsNone : null,
           loading: f.connections === undefined,
           how: f.connections?.length ? t.connectionsHow : null,
@@ -178,7 +180,10 @@ export function agentMayView(f: MayFacts): MayView {
 
   // The risky keys as the keys page shows them, summed up by word.
   const opts = accessOptions();
-  const rows = accessView(accessDraft(f.grants, opts), opts, { deployWorkflow: f.deployWorkflow }).rows;
+  const rows = accessView(accessDraft(f.grants, opts), opts, {
+    deployWorkflow: f.deployWorkflow,
+    locale: f.locale,
+  }).rows;
   const words = keysSummary([
     settingsKeyRow(f.grants),
     ...rows.map((r) => ({ label: r.label, tier: r.tier })),

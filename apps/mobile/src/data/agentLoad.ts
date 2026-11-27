@@ -5,6 +5,7 @@
  */
 import { ApiError, ContractError, NeedsNewerAppError, NetworkError } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
+import { mobileTranslator } from '../i18n/translate';
 
 export type AgentLoadProblem =
   /** Its keys don't match this app (`NeedsNewerAppError`): the update path, no Try again. */
@@ -14,20 +15,21 @@ export type AgentLoadProblem =
   /** Offline, the Whombat's licence, anything else: what happened and Try again. */
   | { kind: 'retry'; text: string };
 
-export const AGENT_GONE_TEXT = 'This isn’t here any more.';
-export const AGENT_OFFLINE_TEXT = 'Can’t reach your Whombat. Check your connection and try again.';
-export const AGENT_FAILED_TEXT = 'Couldn’t load these settings. Try again in a moment.';
+export const AGENT_GONE_TEXT = mobileTranslator().t('data.agentLoad.gone');
+export const AGENT_OFFLINE_TEXT = mobileTranslator().t('data.agentLoad.offline');
+export const AGENT_FAILED_TEXT = mobileTranslator().t('data.agentLoad.failed');
 
-export function agentLoadProblem(error: unknown): AgentLoadProblem {
+export function agentLoadProblem(error: unknown, locale?: string): AgentLoadProblem {
+  const { t } = mobileTranslator(locale);
   if (error instanceof NeedsNewerAppError) return { kind: 'newer' };
   if (error instanceof ApiError && (error.status === 404 || error.code === 'not_found'))
-    return { kind: 'gone', text: AGENT_GONE_TEXT };
-  if (error instanceof NetworkError) return { kind: 'retry', text: AGENT_OFFLINE_TEXT };
-  const licence = licenceRefusalText(error);
+    return { kind: 'gone', text: t('data.agentLoad.gone') };
+  if (error instanceof NetworkError) return { kind: 'retry', text: t('data.agentLoad.offline') };
+  const licence = licenceRefusalText(error, locale);
   if (licence) return { kind: 'retry', text: licence };
   if (error instanceof ApiError && error.status !== 500 && error.message)
     return { kind: 'retry', text: error.message };
-  return { kind: 'retry', text: AGENT_FAILED_TEXT };
+  return { kind: 'retry', text: t('data.agentLoad.failed') };
 }
 
 /**

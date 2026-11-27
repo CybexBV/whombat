@@ -9,13 +9,13 @@ import { useActivity } from '@whombat/client/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import {
-  ACTIVITY_TRUNCATED_TEXT,
   type ActivityDot,
   type ActivityRowView,
   activitySection,
+  activityTruncatedText,
 } from '../data/activity';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Section } from '../ui/primitives';
@@ -50,14 +50,16 @@ function Dot({ dot, label }: { dot: ActivityDot; label: string }) {
 }
 
 function Evidence({ evidence }: { evidence: NonNullable<ActivityRowView['evidence']> }) {
+  const { rawLocale } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View style={{ gap: 6 }}>
       <View
         accessible
         accessibilityLabel={[
-          evidence.input ? `Input: ${evidence.input}` : null,
-          evidence.output ? `Output: ${evidence.output}` : null,
+          evidence.input ? tMobile('screens2.run.input', { text: evidence.input }) : null,
+          evidence.output ? tMobile('screens2.run.output', { text: evidence.output }) : null,
         ]
           .filter(Boolean)
           .join('. ')}
@@ -82,7 +84,7 @@ function Evidence({ evidence }: { evidence: NonNullable<ActivityRowView['evidenc
       </View>
       {evidence.truncated ? (
         <Text size={11.5} mono color={theme.colors.mut}>
-          {ACTIVITY_TRUNCATED_TEXT}
+          {activityTruncatedText(rawLocale)}
         </Text>
       ) : null}
     </View>
@@ -205,13 +207,14 @@ function ActivityGroup({ title, time, rows }: { title: string; time: string; row
 }
 
 export function RunActivity({ runNumber }: { runNumber: number }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const ctx = useViewContext();
   const query = useActivity({ params: { burrow: slug }, query: { runNumber } }, { retry: false });
   // An older server without `activity.list` (or one that failed) shows no section rather than an error.
   if (!query.data) return null;
-  const model = activitySection(query.data, ctx.now, ctx.timeZone);
+  const model = activitySection(query.data, ctx.now, ctx.timeZone, rawLocale);
   if (model.entries.length === 0) return null;
   return (
     <Section title={tMobile('screens.activity')}>

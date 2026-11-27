@@ -11,10 +11,10 @@ import type { ChangeEntry } from '@whombat/core';
 import { useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { DONE_COPY } from '../data/done';
-import { OVERVIEW_TITLE } from '../data/shell';
+import { doneCopy } from '../data/done';
+import { overviewTitle } from '../data/shell';
 import { useAgentWords } from '../data/useAgent';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -31,6 +31,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Done'>;
 
 export function DoneScreen({ navigation, route }: Props) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const DONE_COPY = doneCopy(rawLocale);
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -41,7 +43,7 @@ export function DoneScreen({ navigation, route }: Props) {
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   return (
     <Screen>
-      <BackBar label={route.params?.back ?? OVERVIEW_TITLE} onPress={goBack} />
+      <BackBar label={route.params?.back ?? overviewTitle(rawLocale)} onPress={goBack} />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
@@ -149,6 +151,8 @@ function DonePage({
   onUndo: (change: ChangeEntry) => void;
   onMore: (cursor: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const DONE_COPY = doneCopy(rawLocale);
   const rows = useDoneRows(changes);
   return (
     <>

@@ -53,7 +53,7 @@ import { deskScreenWords, deskWords } from '@whombat/core/domain';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { TOAST_COPY, toasts } from '../../data/toast';
+import { toastCopy, toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
 import { useI18n, useMobileT } from '../../i18n';
 import { Field } from '../../managed/ui';
@@ -109,10 +109,9 @@ import {
 } from './draft';
 import { AskPageChip, PageChip, PageTimesSheet } from './PageTimes';
 import { TileGrid } from './TileGrid';
-import { didntFitLine, type KnownWidget, PHONE_SCREENS_TEXT, type TileLabel, tileLabel } from './tiles';
+import { didntFitLine, type KnownWidget, phoneScreensText, type TileLabel, tileLabel } from './tiles';
 import { WidgetSheet, type WidgetSheetActions } from './WidgetSheet';
 
-const M = PHONE_SCREENS_TEXT;
 export function SettingsScreenLayout() {
   const { rawLocale } = useI18n();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsScreenLayout'>>();
@@ -140,6 +139,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
   const { rawLocale } = useI18n();
   const { t } = useMobileT();
   const E = deskScreensText(rawLocale).editor;
+  const M = phoneScreensText(rawLocale);
   const screenWords = deskScreenWords(rawLocale);
   const failed = (error: unknown) =>
     Alert.alert(
@@ -204,7 +204,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
       if (account)
         return {
           name: account.item.name,
-          of: accountName(account.group),
+          of: accountName(account.group, rawLocale),
           mark: account.item.mark ?? account.group.mark ?? null,
           view: account.item.view ?? null,
         };
@@ -299,7 +299,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
   /** A toast whose Undo takes the change back. */
   const undoable = (text: string) =>
     toasts.show(text, {
-      action: { label: TOAST_COPY.undo, onPress: () => setDraft((d) => draftUndo(d) ?? d) },
+      action: { label: toastCopy(rawLocale).undo, onPress: () => setDraft((d) => draftUndo(d) ?? d) },
     });
 
   /** Adds a widget, chosen, and opens its sheet once *Add a widget* is down (DK-163). */
@@ -313,7 +313,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
     toasts.show(fillDeskWords(r.smaller ? E.addedSmaller : E.added, { name }));
   };
   const addFromCatalog = (row: CatalogEntry) => {
-    const { widget, known: remember } = fromCatalog(row.item, row.group);
+    const { widget, known: remember } = fromCatalog(row.item, row.group, rawLocale);
     add(widget, remember.name, remember);
   };
   const addBack = (w: DeskWidget) =>
@@ -342,7 +342,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
           const r = draftChoose(draft, picked.id, item, viewOf);
           if (r.ok && choiceGroup) {
             // Named and sized as the view it shows now until that view is read.
-            setKnown((k) => ({ ...k, [picked.id]: fromCatalog(item, choiceGroup).known }));
+            setKnown((k) => ({ ...k, [picked.id]: fromCatalog(item, choiceGroup, rawLocale).known }));
             setRechosen((was) => new Set([...was, picked.id]));
           }
           apply(r);
@@ -407,7 +407,7 @@ function Editor({ api, screen, back }: { api: DeskApi; screen: DeskScreenDetail;
     setDraft(draftTurn(draft, turn));
     toasts.show(turn === 'touch' ? E.turnTouch : fillDeskWords(E.turnAuto, { every: E.every[turn] }));
   };
-  const missing = didntFitLine(page.left.length);
+  const missing = didntFitLine(page.left.length, rawLocale);
 
   return (
     <Screen>
@@ -704,6 +704,7 @@ function PageCard({
 }) {
   const { rawLocale } = useI18n();
   const E = deskScreensText(rawLocale).editor;
+  const M = phoneScreensText(rawLocale);
   const theme = useTheme();
   const [typed, setTyped] = useState(name);
   useEffect(() => setTyped(name), [name]);

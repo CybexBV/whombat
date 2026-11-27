@@ -16,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { MacChoice } from '../connections/choices';
 import type { CommitResult } from '../http/types';
+import { useI18n } from '../i18n/react';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from '../react/context';
 import { queryHook, useCatalogConnections, useConnectionsCatalog } from '../react/queries';
@@ -101,18 +102,22 @@ export function useFindMyTab({
 }): FindMyTabState {
   const read = useHostFindMy(burrow, serverId);
   const ask = useHostFindMyAsk(burrow, serverId);
+  const { rawLocale: locale } = useI18n();
   const qc = useQueryClient();
   const mutate = useRef(ask.mutateAsync);
   mutate.current = ask.mutateAsync;
 
-  const run = useCallback(async (a: Ask): Promise<string | null> => {
-    try {
-      const result = await mutate.current(a);
-      return commitOutcomeText(result);
-    } catch (error) {
-      return hostErrorInfo(error).message;
-    }
-  }, []);
+  const run = useCallback(
+    async (a: Ask): Promise<string | null> => {
+      try {
+        const result = await mutate.current(a);
+        return commitOutcomeText(result, locale);
+      } catch (error) {
+        return hostErrorInfo(error, locale).message;
+      }
+    },
+    [locale],
+  );
   const readNow = useCallback(() => run({ kind: 'refresh' }), [run]);
   const showExactly = useCallback((person: string) => run({ kind: 'exact', person }), [run]);
 

@@ -6,15 +6,19 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View } from 'react-native';
 import { notePageError } from '../errors/nativeErrorNotes';
-import { useMobileT } from '../i18n';
+import { mobileTranslator, useMobileT } from '../i18n';
 import { Screen } from '../ui/headers';
 import { Button, QuietText } from '../ui/primitives';
 
-export const PAGE_FAILED_TEXT = {
-  text: 'This page didn’t load.',
-  retry: 'Try again',
-  back: 'Go back',
-};
+export function pageFailedText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    text: t('thingPage.thingPageCopy.failed'),
+    retry: t('search.searchCopy.retry'),
+    back: t('navigation.goBack'),
+  };
+}
+export const PAGE_FAILED_TEXT = pageFailedText();
 
 interface Props {
   children: ReactNode;

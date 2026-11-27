@@ -12,14 +12,14 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import {
-  DEPLOYS_TEXT,
   type DeployLineModel,
   type DeployServiceRow,
   deployBoard,
   deployDetail,
   deployHistory,
+  deploysText,
 } from '../data/deploys';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation, useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -61,6 +61,8 @@ export function useDeploys() {
 
 export function DeploysPanel({ deploys }: { deploys: ReturnType<typeof useDeploys> }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const DEPLOYS_TEXT = deploysText(rawLocale);
   const theme = useTheme();
   const ctx = useViewContext();
   const [open, setOpen] = useState<Deployment | null>(null);
@@ -154,6 +156,8 @@ export function DeploysPanel({ deploys }: { deploys: ReturnType<typeof useDeploy
 
 function DeployDetailSheet({ deployment, onClose }: { deployment: Deployment | null; onClose: () => void }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const DEPLOYS_TEXT = deploysText(rawLocale);
   const theme = useTheme();
   const ctx = useViewContext();
   const navigation = useAppNavigation();

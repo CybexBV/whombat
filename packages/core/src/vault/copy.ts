@@ -4,12 +4,13 @@
  * person's views add the detail.
  */
 import type { MessageVaultSave } from '../domain/message.js';
-import { coreTranslator } from '../i18n/catalog.js';
+import { coreTranslator, coreWords } from '../i18n/catalog.js';
 import { type DateInput, formatAgo, formatRecent, toDate } from '../text/time.js';
 import { vaultEntryAddress } from './network.js';
 import { VAULT_FAILURE_TEXT } from './request.js';
 import {
   type AuditVaultDetail,
+  VAULT_CALL_DEADLINE_MS,
   VAULT_TEMPLATE_DEFS,
   VAULT_USE_OUTCOME_LABELS,
   type VaultAuth,
@@ -420,6 +421,19 @@ export function vaultUseOutcomeText(use: Pick<VaultUse, 'outcome'>, locale?: str
 }
 
 /**
+ * A use's `what` in a locale: the forms `vaultTurnUseWhat` stores are Whombat's own English, so they are read here and
+ * worded again; anything else (a tool's name) is shown as stored.
+ */
+function vaultUseWhatText(what: string, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  if (tr.language === 'en') return what;
+  const m = /^in (.+)’s (browser|tools|commands) for this turn$/.exec(what);
+  if (!m) return what;
+  const place = m[2] as 'browser' | 'tools' | 'commands';
+  return tr.t(`vaultUse.what.${place}`, { agent: m[1] as string });
+}
+
+/**
  * A RECENT USE row (VT-71): agent · what · when · outcome (“Dusty · in Dusty’s commands … · done”); since 3.0 (CT-1511)
  * without “for whom”: every use is for the person.
  */
@@ -435,7 +449,7 @@ export function vaultUseRow(
   const agent = ctx.names(use.agentId)?.shortName ?? coreTranslator(ctx.locale).t('vault.theAgent');
   const when = formatRecent(use.at, ctx.now, ctx.timeZone, ctx.locale);
   const outcome = vaultUseOutcomeText(use, ctx.locale);
-  const what = use.what;
+  const what = vaultUseWhatText(use.what, ctx.locale);
   return {
     agent,
     what,
@@ -460,81 +474,117 @@ export function vaultLastUsedText(
 /* SSH keys (VT-S05, VT-S12, VT-S13) -------------------------------------------------------------- */
 
 /** How a key type is written: “ED25519”, “RSA”, “ECDSA” (as `ssh-keygen -l` does). */
-export const VAULT_SSH_KEY_TYPE_LABELS: Record<VaultSshKeyType, string> = {
-  ed25519: 'ED25519',
-  rsa: 'RSA',
-  ecdsa: 'ECDSA',
-};
+export const VAULT_SSH_KEY_TYPE_LABELS: Record<VaultSshKeyType, string> = vaultSshKeyTypeLabels('en');
+
+/** `VAULT_SSH_KEY_TYPE_LABELS` in a locale. */
+export function vaultSshKeyTypeLabels(locale?: string | null): Record<VaultSshKeyType, string> {
+  return coreWords(locale, 'vaultSsh.keyType', ['ed25519', 'rsa', 'ecdsa']);
+}
+
+const VAULT_SSH_COPY_KEYS = [
+  /** The form's segmented control, and the import fields. */
+  'key',
+  'generate',
+  'useOwn',
+  'privateKey',
+  'passphrase',
+  'generateHint',
+  'passphraseHint',
+  /** PUBLIC KEY. */
+  'publicKey',
+  'authorizedKeysHint',
+  'copy',
+  'copied',
+  'generateNew',
+  'replaceOwn',
+  'replaceWarning',
+  /** SERVERS. */
+  'servers',
+  'noServers',
+  'addServer',
+  'editServer',
+  'serverName',
+  'serverNameHint',
+  'host',
+  'port',
+  'username',
+  'check',
+  'edit',
+  'remove',
+  'removeServer',
+  'hostChangeNote',
+  /** The trust card: its question is `vaultSshTrustQuestion`, the fingerprint is under Technical details. */
+  'trustQuestion',
+  'trust',
+  'hostKeyUnconfirmed',
+  'hostKeyChanged',
+  /** The agent's key. */
+  'serversChooser',
+  'allServers',
+  /** Android (VT-S13). */
+  'sshOnWeb',
+] as const;
+
+/** The `ssh` entry's form and detail in a locale. */
+export function vaultSshCopy(
+  locale?: string | null,
+): Readonly<Record<(typeof VAULT_SSH_COPY_KEYS)[number], string>> {
+  return coreWords(locale, 'vaultSsh.copy', VAULT_SSH_COPY_KEYS);
+}
 
 /** The `ssh` entry's form and detail (VT-S13). */
-export const VAULT_SSH_COPY = {
-  /** The form's segmented control, and the import fields. */
-  key: 'Key',
-  generate: 'Generate a new key',
-  useOwn: 'Use my own key',
-  privateKey: 'Private key',
-  passphrase: 'Passphrase (if it has one)',
-  generateHint: 'Whombat makes the key. Its private half never leaves this Whombat.',
-  passphraseHint: 'Used once to open the key. Whombat doesn’t keep it.',
-  /** PUBLIC KEY. */
-  publicKey: 'PUBLIC KEY',
-  authorizedKeysHint:
-    'Add this line to ~/.ssh/authorized_keys for the user the agent signs in as, on every server below.',
-  copy: 'Copy',
-  copied: 'Copied',
-  generateNew: 'Generate a new key',
-  replaceOwn: 'Replace with my own key',
-  replaceWarning: 'The old key stops working on every server at once. The servers and their host keys stay.',
-  /** SERVERS. */
-  servers: 'SERVERS',
-  noServers: 'No servers yet. Add the servers this key signs in to.',
-  addServer: 'Add server',
-  editServer: 'Edit server',
-  serverName: 'Name',
-  serverNameHint: 'The agent uses this name, like web-1.',
-  host: 'Host',
-  port: 'Port',
-  username: 'Username',
-  check: 'Check',
-  edit: 'Edit',
-  remove: 'Remove',
-  removeServer: 'Remove this server? The agent can’t reach it with this key any more.',
-  hostChangeNote: 'Changing the host or port forgets its trusted host key.',
-  /** The trust card: its question is `vaultSshTrustQuestion`, the fingerprint is under Technical details. */
-  trustQuestion: 'Is this your server?',
-  trust: 'Yes, trust it',
-  hostKeyUnconfirmed: 'Not trusted yet',
-  hostKeyChanged: 'It doesn’t look like the same server any more. Check it before the agent uses it again.',
-  /** The agent's key. */
-  serversChooser: 'Servers',
-  allServers: 'All servers',
-  /** Android (VT-S13). */
-  sshOnWeb: 'SSH keys and servers are set up on the web, in the Vault.',
-} as const;
+export const VAULT_SSH_COPY = vaultSshCopy('en');
 
 /** A server's check line in the words of its last check (VT-S05). */
 export function vaultSshCheckSummary(
   outcome: VaultCheckOutcome,
   facts: { username?: string; reason?: string } = {},
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
+  // A check stores the English summary; the failure words are the request's own there.
+  const english = tr.language === 'en';
   switch (outcome) {
     case 'reached':
-      return facts.username ? `Signed in as ${facts.username}` : 'Signed in';
+      return facts.username
+        ? tr.t('vaultSsh.check.signedInAs', { username: facts.username })
+        : tr.t('vaultSsh.check.signedIn');
     case 'host_key_unconfirmed':
-      return VAULT_SSH_COPY.hostKeyUnconfirmed;
+      return tr.t('vaultSsh.copy.hostKeyUnconfirmed');
     case 'host_key_changed':
-      return VAULT_SSH_COPY.hostKeyChanged;
+      return tr.t('vaultSsh.copy.hostKeyChanged');
     case 'rejected':
-      return VAULT_FAILURE_TEXT.rejected;
+      return english ? VAULT_FAILURE_TEXT.rejected : tr.t('vaultSsh.check.rejected');
     case 'unreachable':
-      return VAULT_FAILURE_TEXT.unreachable;
+      return english ? VAULT_FAILURE_TEXT.unreachable : tr.t('vaultSsh.check.unreachable');
     case 'timeout':
-      return VAULT_FAILURE_TEXT.timeout;
+      return english
+        ? VAULT_FAILURE_TEXT.timeout
+        : tr.t('vaultSsh.check.timeout', { seconds: VAULT_CALL_DEADLINE_MS / 1000 });
     case 'not_allowed':
-      return `Not allowed: ${facts.reason ?? 'this address isn’t allowed.'}`;
+      return tr.t('vaultSsh.check.notAllowed', {
+        reason: facts.reason ?? tr.t('vaultSsh.check.notAllowedReason'),
+      });
     case 'bad_answer':
-      return 'It answered, but not as an SSH server.';
+      return tr.t('vaultSsh.check.badAnswer');
   }
+}
+
+/**
+ * A server's stored summary in a locale: Whombat's own English forms are worded again from the outcome, anything else
+ * (a reason the server wrote) is shown as stored.
+ */
+function vaultSshSummaryText(
+  outcome: VaultCheckOutcome | null,
+  summary: string,
+  locale?: string | null,
+): string {
+  if (outcome === null || coreTranslator(locale).language === 'en') return summary;
+  if (outcome === 'reached') {
+    const as = /^Signed in as (.+)$/.exec(summary);
+    if (as) return vaultSshCheckSummary('reached', { username: as[1] as string }, locale);
+  }
+  return summary === vaultSshCheckSummary(outcome) ? vaultSshCheckSummary(outcome, {}, locale) : summary;
 }
 
 /**
@@ -555,14 +605,19 @@ export function vaultSshServerCheckLine(
   server: Pick<VaultSshServer, 'check'>,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  if (!server.check.checkedAt) return VAULT_COPY.notChecked;
+  const tr = coreTranslator(locale);
+  if (!server.check.checkedAt) return tr.t('vault.copy.notChecked');
   const { outcome, summary } = server.check;
   const said =
     outcome === 'host_key_unconfirmed' || outcome === 'host_key_changed'
-      ? vaultSshCheckSummary(outcome)
-      : summary;
-  return `Checked ${formatAgo(server.check.checkedAt, now, timeZone)} · ${said}`;
+      ? vaultSshCheckSummary(outcome, {}, locale)
+      : vaultSshSummaryText(outcome, summary, locale);
+  return tr.t('vault.checkLine', {
+    ago: formatAgo(server.check.checkedAt, now, timeZone, locale),
+    summary: said,
+  });
 }
 
 /**
@@ -574,12 +629,14 @@ export function vaultSshServerCheckLine(
 export function vaultSshTrustQuestion(
   server: Pick<VaultSshServer, 'name' | 'host' | 'port'>,
   changed: boolean,
+  locale?: string | null,
 ): string {
   const host = server.host.includes(':') ? `[${server.host}]` : server.host;
   const where = server.port === 22 ? host : `${host}:${server.port}`;
-  return changed
-    ? `${server.name} at ${where} doesn’t look like the server Whombat knew. Did you set it up again or replace it?`
-    : `Is ${server.name} the server at ${where}?`;
+  return coreTranslator(locale).t(changed ? 'vaultSsh.trust.changed' : 'vaultSsh.trust.ask', {
+    name: server.name,
+    where,
+  });
 }
 
 /**
@@ -587,7 +644,10 @@ export function vaultSshTrustQuestion(
  * /etc/ssh/ssh_host_ed25519_key.pub` on the server.” In parts, so the command can be set as code; `text` is the whole
  * sentence without code marks.
  */
-export function vaultSshTrustCopy(hostKey: Pick<VaultSshHostKey, 'algorithm' | 'fingerprint'>): {
+export function vaultSshTrustCopy(
+  hostKey: Pick<VaultSshHostKey, 'algorithm' | 'fingerprint'>,
+  locale?: string | null,
+): {
   question: string;
   fingerprint: string;
   compare: string;
@@ -598,17 +658,18 @@ export function vaultSshTrustCopy(hostKey: Pick<VaultSshHostKey, 'algorithm' | '
 } {
   const fingerprint = `${hostKey.fingerprint} (${vaultSshHostKeyLabel(hostKey.algorithm)}).`;
   const command = `ssh-keygen -lf ${vaultSshHostKeyFile(hostKey.algorithm)}`;
+  const tr = coreTranslator(locale);
   const parts = {
-    question: VAULT_SSH_COPY.trustQuestion,
+    question: tr.t('vaultSsh.copy.trustQuestion'),
     fingerprint,
-    compare: 'Compare it with',
+    compare: tr.t('vaultSsh.trust.compare'),
     command,
-    after: 'on the server.',
+    after: tr.t('vaultSsh.trust.after'),
   };
   return {
     ...parts,
     text: `${parts.question} ${parts.fingerprint} ${parts.compare} ${parts.command} ${parts.after}`,
-    action: VAULT_SSH_COPY.trust,
+    action: tr.t('vaultSsh.copy.trust'),
   };
 }
 
@@ -616,10 +677,12 @@ export function vaultSshTrustCopy(hostKey: Pick<VaultSshHostKey, 'algorithm' | '
 export function vaultKeyServersText(
   servers: readonly string[] | null | undefined,
   entryServers: readonly Pick<VaultSshServer, 'id' | 'name'>[],
+  locale?: string | null,
 ): string {
-  if (servers === null || servers === undefined) return VAULT_SSH_COPY.allServers;
+  const tr = coreTranslator(locale);
+  if (servers === null || servers === undefined) return tr.t('vaultSsh.copy.allServers');
   const names = entryServers.filter((s) => servers.includes(s.id)).map((s) => s.name);
-  return names.length ? names.join(', ') : 'No servers';
+  return names.length ? names.join(', ') : tr.t('vaultSsh.keyServers.none');
 }
 
 /* The agent runs a person's Vault in their turn (0.112.0, Whombat vault-self-serve.md VS-04…VS-13; OA-10) -------- */
@@ -701,37 +764,40 @@ export function vaultUnheldAskLine(facts: {
  * How an entry reaches the agent in your chats (AC-31, AC-34; CT-1240), by kind (`VAULT_COMPUTER_COPY` until 3.0):
  * the agent's commands on your Whombat get the value or the key; nothing is swept after.
  */
-export const VAULT_KEYS_COPY = {
-  envName: 'ENVIRONMENT VARIABLE',
-  envNameHint: 'Set in every command of your chats. Basic auth gets _USERNAME and _PASSWORD.',
-  sshHint:
-    'The agent’s commands on your Whombat get the key and an SSH configuration with your servers’ names during your chats.',
-  loginHint: 'It signs in for you in its browser. It never sees the password.',
-  mcpHint: 'Its tools that are on can be used in your chats.',
-} as const;
+export const VAULT_KEYS_COPY = vaultKeysCopy('en');
+
+/** `VAULT_KEYS_COPY` in a locale. */
+export function vaultKeysCopy(
+  locale?: string | null,
+): Readonly<Record<'envName' | 'envNameHint' | 'sshHint' | 'loginHint' | 'mcpHint', string>> {
+  return coreWords(locale, 'vaultKeys.copy', ['envName', 'envNameHint', 'sshHint', 'loginHint', 'mcpHint']);
+}
 
 /**
  * Taking a key back (AC-34): the agent may have kept a copy. “Banjo had “Cloudflare API token” in its commands and may
  * have kept a copy. Change the token where it was made to be sure.” For an SSH key: generate a new one.
  */
-export function vaultRotateNotice(facts: { agentName: string; entryName: string; kind: VaultEntryKind }): {
+export function vaultRotateNotice(
+  facts: { agentName: string; entryName: string; kind: VaultEntryKind },
+  locale?: string | null,
+): {
   text: string;
   action: string | null;
 } {
-  const had = `${facts.agentName} had “${facts.entryName}” in its commands and may have kept a copy.`;
+  const tr = coreTranslator(locale);
+  const had = tr.t('vaultKeys.rotate.had', { agent: facts.agentName, entry: facts.entryName });
   if (facts.kind === 'ssh')
-    return {
-      text: `${had} Generate a new key and put its public key on the servers below to be sure.`,
-      action: VAULT_SSH_COPY.generateNew,
-    };
-  if (facts.kind === 'login')
-    return { text: `${had} Change the password on the website to be sure.`, action: null };
-  return { text: `${had} Change the secret where it was made to be sure.`, action: null };
+    return { text: tr.t('vaultKeys.rotate.ssh', { had }), action: tr.t('vaultSsh.copy.generateNew') };
+  if (facts.kind === 'login') return { text: tr.t('vaultKeys.rotate.login', { had }), action: null };
+  return { text: tr.t('vaultKeys.rotate.other', { had }), action: null };
 }
 
 /** The Production switch of an SSH server (AC-11). */
-export const VAULT_SSH_PRODUCTION_COPY = {
-  label: 'Production',
-  hint: 'The agent’s commands can’t reach this server until you say yes to one.',
-  badge: 'PRODUCTION',
-} as const;
+export const VAULT_SSH_PRODUCTION_COPY = vaultSshProductionCopy('en');
+
+/** `VAULT_SSH_PRODUCTION_COPY` in a locale. */
+export function vaultSshProductionCopy(
+  locale?: string | null,
+): Readonly<Record<'label' | 'hint' | 'badge', string>> {
+  return coreWords(locale, 'vaultSsh.production', ['label', 'hint', 'badge']);
+}

@@ -10,6 +10,7 @@ import type { ConnectionView } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import { useEffect, useRef } from 'react';
 import { type PendingLogin, waitEnds, waitStep, waitWords } from '../../data/connectForm';
+import { useI18n } from '../../i18n';
 
 export interface LoginWaitHandlers {
   onConnected: (connection: ConnectionView) => void | Promise<void>;
@@ -18,6 +19,7 @@ export interface LoginWaitHandlers {
 }
 
 export function useLoginWait(slug: string, login: PendingLogin | null, handlers: LoginWaitHandlers) {
+  const { rawLocale } = useI18n();
   const nextcloud = useConnectionWrite(api.connections.pollNextcloud, slug);
   const service = useConnectionWrite(api.connections.pollServiceLogin, slug);
   const latest = useRef({ handlers, nextcloud: nextcloud.mutateAsync, service: service.mutateAsync });
@@ -31,16 +33,20 @@ export function useLoginWait(slug: string, login: PendingLogin | null, handlers:
     const tick = async () => {
       if (stopped) return;
       const now = latest.current;
-      if (Date.now() >= ends) return now.handlers.onFailed(waitWords(login).tooLong);
+      if (Date.now() >= ends) return now.handlers.onFailed(waitWords(login, rawLocale).tooLong);
       try {
         const params = { params: { flowId: login.flow.flowId } };
         const result = await (login.kind === 'nextcloud' ? now.nextcloud(params) : now.service(params));
         if (stopped || result.status !== 'ok') return;
-        const step = waitStep(login, result.data);
+        const step = waitStep(login, result.data, rawLocale);
         if (step.kind === 'connected') return void (await now.handlers.onConnected(step.connection));
         if (step.kind === 'failed') return now.handlers.onFailed(step.message);
       } catch (err) {
-        if (!stopped) now.handlers.onFailed(connectProblem(err).message ?? waitWords(login).failed);
+        if (!stopped)
+          now.handlers.onFailed(
+            connectProblem(err, undefined, undefined, rawLocale).message ??
+              waitWords(login, rawLocale).failed,
+          );
         return;
       }
       timer = setTimeout(() => void tick(), login.flow.pollEveryMs);
@@ -50,5 +56,5 @@ export function useLoginWait(slug: string, login: PendingLogin | null, handlers:
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [login]);
+  }, [login, rawLocale]);
 }

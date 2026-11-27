@@ -8,12 +8,12 @@
 import { CommonActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { usePins } from '@whombat/client/react';
-import { formatRecent, MESSAGE_DELETED_TEXT, type Message } from '@whombat/core';
+import { formatRecent, type Message, messageDeletedText } from '@whombat/core';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { PrincipalAvatar } from '../avatars/Avatars';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { pinnedMessageOpen } from '../data/chatScroll';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { useTheme } from '../theme/theme';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
@@ -24,11 +24,14 @@ import { useBottomRoom } from '../ui/screenBottom';
 type Props = NativeStackScreenProps<RootStackParamList, 'Pins'>;
 
 /** The first lines of a pinned message: its text, else what it carries. */
-function pinnedText(m: Message): string {
-  if (m.deletedAt) return MESSAGE_DELETED_TEXT;
+function pinnedText(m: Message, locale?: string | null): string {
+  const tr = mobileTranslator(locale);
+  if (m.deletedAt) return messageDeletedText(locale);
   if (m.text.trim()) return m.text.trim();
-  if (m.card) return 'A card';
-  return m.attachments.length ? `${m.attachments.length} file${m.attachments.length === 1 ? '' : 's'}` : '';
+  if (m.card) return tr.t('screens2.pins.aCard');
+  return m.attachments.length
+    ? tr.tp('screens2.pins.files', m.attachments.length, { count: m.attachments.length })
+    : '';
 }
 
 export function PinsScreen({ route, navigation }: Props) {
@@ -48,7 +51,11 @@ export function PinsScreen({ route, navigation }: Props) {
     const below = state.routes[state.index - 1];
     const to = pinnedMessageOpen(m, conversationId, below?.name);
     if (to.kind === 'thread')
-      navigation.navigate('Thread', { messageId: to.messageId, back: 'Pinned', anchor: to.anchor });
+      navigation.navigate('Thread', {
+        messageId: to.messageId,
+        back: tMobile('screens2.pins.pinned'),
+        anchor: to.anchor,
+      });
     else if (to.kind === 'conversation')
       navigation.navigate('Conversation', { conversationId: to.conversationId, anchor: to.anchor });
     else if (below) {
@@ -87,10 +94,12 @@ export function PinsScreen({ route, navigation }: Props) {
           <Section title={`PINNED · ${messages.length}`}>
             {messages.map((m) => {
               const name = people.name(m.authorId);
-              const text = pinnedText(m);
+              const text = pinnedText(m, rawLocale);
               const pinnedBy = m.pinnedById ? people.name(m.pinnedById) : null;
               const when = m.pinnedAt ? formatRecent(m.pinnedAt, ctx.now, ctx.timeZone, rawLocale) : null;
-              const meta = [pinnedBy ? `pinned by ${pinnedBy}` : null, when].filter(Boolean).join(' · ');
+              const meta = [pinnedBy ? tMobile('screens2.pins.pinnedBy', { name: pinnedBy }) : null, when]
+                .filter(Boolean)
+                .join(' · ');
               return (
                 <ListRow
                   key={m.id}

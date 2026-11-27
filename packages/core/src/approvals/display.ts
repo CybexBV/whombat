@@ -22,7 +22,7 @@ import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
 import { formatLocaleNumber } from '../i18n/format.js';
 import { alwaysAllowRow } from '../keys/actions.js';
 import { joinWithAnd, keyLabel } from '../keys/catalog.js';
-import { alwaysAllowLabel, type KeyTierRow, keyRiskRow } from '../keys/grants.js';
+import { alwaysAllowLabel, KEY_RISK_ROWS, type KeyTierRow, keyRiskRow } from '../keys/grants.js';
 import { requestedTier } from '../keys/requests.js';
 import { shortSha, stepNumber } from '../text/format.js';
 import {
@@ -401,10 +401,6 @@ export function isEverydayAsk(approval: Pick<Approval, 'action'>): boolean {
   return EVERYDAY_ASKS.includes(approval.action.type);
 }
 
-/** What the lasting yes means, before where it changes back. */
-const LASTING_NEXT = 'Next time it does it and tells you after.';
-const LASTING_BODY = `${LASTING_NEXT} You can change this in Settings.`;
-
 /**
  * The lasting yes's confirmation naming the real place it changes back where that isn't Settings (“on pve-02’s page in
  * Overview”, “on the web”): `where` follows “You can change it back”.
@@ -438,14 +434,25 @@ export function stopAskingConfirm(
   };
 }
 
-/** The lasting yes on a risk row's action (“Always allow Neo to send messages outside”), behind its confirmation. */
-export function alwaysAllowConfirm(agent: string, verb: string, label: string): ApprovalLastingWords {
+/**
+ * The lasting yes on a risk row's action (“Always allow Neo to send messages outside”), behind its confirmation. `verb`
+ * and `label` come in the reader's language; a risk row's English verb gets that row's own sentence in another one.
+ */
+export function alwaysAllowConfirm(
+  agent: string,
+  verb: string,
+  label: string,
+  locale?: string | null,
+): ApprovalLastingWords {
+  const tr = coreTranslator(locale);
+  // Dutch word order puts the verb last, so a known row reads its whole sentence rather than a verb slotted in.
+  const row = tr.language === 'en' ? undefined : KEY_RISK_ROWS.find((r) => r.verb === verb)?.row;
   return {
     link: `${label}…`,
-    title: `Let ${agent} ${verb} without asking?`,
-    body: LASTING_BODY,
-    confirm: `Let ${agent} do it`,
-    keep: 'Keep asking',
+    title: row ? tr.t(`key.risk.${row}.letTitle`, { agent }) : tr.t('alwaysAllow.title', { agent, verb }),
+    body: lastingBody(tr),
+    confirm: tr.t('approval.lasting.confirm', { agent }),
+    keep: tr.t('approval.lasting.keep'),
   };
 }
 

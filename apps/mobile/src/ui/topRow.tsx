@@ -7,7 +7,7 @@
 import { type ReactNode, useContext } from 'react';
 import { View } from 'react-native';
 import { placeOfScreen } from '../data/places';
-import { TAB_WORDS, tabWords } from '../data/shell';
+import { tabWords } from '../data/shell';
 import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
@@ -37,7 +37,6 @@ export function TabTop({
   const { rawLocale } = useI18n();
   const { t } = useMobileT();
   const here = tab ? tabWords(rawLocale)[tab] : title;
-  const heading = tab && title === TAB_WORDS[tab] ? here : title;
   return (
     <View
       style={{
@@ -60,7 +59,7 @@ export function TabTop({
         accessibilityRole="header"
         style={{ flex: 1, minWidth: 56, marginLeft: 2 }}
       >
-        {heading}
+        {title}
       </Text>
       {right}
       {tab ? (

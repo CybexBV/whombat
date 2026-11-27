@@ -68,4 +68,4 @@ export function systemTabLabel(label: string, badge: TabBadge | undefined, local
 }
 
 /** What VoiceOver hears after the Inbox's name while something there isn't working. */
-export const BROKEN_WORDS = 'something isn’t working';
+export const BROKEN_WORDS = mobileTranslator().t('places.broken');

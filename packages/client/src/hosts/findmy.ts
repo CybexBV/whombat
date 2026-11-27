@@ -9,55 +9,83 @@ import { thingHref } from '@whombat/core';
 import {
   type ConnectionView,
   findMyPlaceKey,
-  findMyProblemText,
   HOST_FIND_MY_FRESH_MS,
   HOST_SCREEN_LIMITS,
   type HostFindMy,
+  type HostFindMyCode,
   type HostFindMyMap,
   type HostFindMyPerson,
+  hostScreenProblemText,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_FIND_MY_WORDS } from '../i18n/messages/connectionsHosts/findMy';
 import { formatAgoIso } from './format';
 import type { MacMay } from './macos';
 import type { HostTone } from './thresholds';
 
 /** The words of the Find My tab that aren't built from what was read. */
-export const FIND_MY_WORDS = {
-  title: 'Find My',
-  people: 'People',
-  readAgain: 'Read again',
-  reading: (server: string) => `Reading Find My on ${server}…`,
-  read: (ago: string) => `Read ${ago}`,
-  note: 'Spots are where Find My’s address is, about 100 m. Show exactly takes Find My’s own map.',
-  showExactly: 'Show exactly',
-  /** The button's spoken name beside the others on the list. */
-  showExactlyLabel: (name: string) => `Show exactly where ${name} is`,
-  taking: (server: string) => `Taking the picture on ${server}…`,
-  exactTitle: (name: string) => `Exactly where ${name} is`,
-  exactLine: (server: string, when: string) => `Find My on ${server} · ${when}`,
-  exactAlt: (name: string, server: string) => `Find My’s map of ${name} on ${server}`,
-  noPlace: 'No location found',
-  nearby: 'Nearby',
-  nobody: (server: string) => `Nobody shares their location with Find My on ${server}.`,
-  zoomIn: 'Zoom in',
-  zoomOut: 'Zoom out',
-  fit: 'Fit everyone',
-  mapAlt: (server: string) => `Map of everyone Find My shows on ${server}`,
-  drawing: 'Drawing the map…',
-  close: 'Close',
-  /** Under the map, when the box reads only for whoever has the page open. */
-  readsWhileLooking: 'Reads only while someone looks',
-  /** The Mac's page: its one link to the Find My connection that reads it. */
-  linkTitle: 'Find My',
-  linkHint: 'Opens Find My',
-} as const;
+export function findMyWords(locale?: string | null) {
+  const w = clientTree(locale, HOSTS_FIND_MY_WORDS);
+  return {
+    title: w.title,
+    people: w.people,
+    readAgain: w.readAgain,
+    reading: (server: string) => interpolate(w.reading, { server }),
+    read: (ago: string) => interpolate(w.read, { ago }),
+    note: w.note,
+    showExactly: w.showExactly,
+    /** The button's spoken name beside the others on the list. */
+    showExactlyLabel: (name: string) => interpolate(w.showExactlyLabel, { name }),
+    taking: (server: string) => interpolate(w.taking, { server }),
+    exactTitle: (name: string) => interpolate(w.exactTitle, { name }),
+    exactLine: (server: string, when: string) => interpolate(w.exactLine, { server, when }),
+    exactAlt: (name: string, server: string) => interpolate(w.exactAlt, { name, server }),
+    noPlace: w.noPlace,
+    nearby: w.nearby,
+    nobody: (server: string) => interpolate(w.nobody, { server }),
+    zoomIn: w.zoomIn,
+    zoomOut: w.zoomOut,
+    fit: w.fit,
+    mapAlt: (server: string) => interpolate(w.mapAlt, { server }),
+    drawing: w.drawing,
+    close: w.close,
+    /** Under the map, when the box reads only for whoever has the page open. */
+    readsWhileLooking: w.readsWhileLooking,
+    /** The Mac's page: its one link to the Find My connection that reads it. */
+    linkTitle: w.linkTitle,
+    linkHint: w.linkHint,
+  };
+}
+
+export const FIND_MY_WORDS = findMyWords('en');
+
+/** Why Find My couldn't be read on `server`, in a sentence a person reads (the screen's codes as a screen step's). */
+export function findMyProblem(
+  code: HostFindMyCode,
+  server: string,
+  message?: string | null,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_WORDS).problems;
+  switch (code) {
+    case 'in_use':
+    case 'no_find_my':
+    case 'helper_old':
+      return interpolate(w[code], { server });
+    default:
+      return hostScreenProblemText(code, server, message, locale);
+  }
+}
 
 /* Reading in the background ---------------------------------------------------------------------------- */
 
 /** “every 15 minutes”, “every hour”, “every 2 hours”, “every minute”. */
-export function findMyEvery(minutes: number): string {
+export function findMyEvery(minutes: number, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_WORDS).every;
   if (minutes >= 60 && minutes % 60 === 0)
-    return minutes === 60 ? 'every hour' : `every ${minutes / 60} hours`;
-  return minutes === 1 ? 'every minute' : `every ${minutes} minutes`;
+    return minutes === 60 ? w.hour : interpolate(w.hours, { count: minutes / 60 });
+  return minutes === 1 ? w.minute : interpolate(w.minutes, { count: minutes });
 }
 
 /**
@@ -66,13 +94,15 @@ export function findMyEvery(minutes: number): string {
  * “Tell me when Mara gets home””, when a one-time watch is, “Reads every 5 minutes while watching Noor Visser”, and when
  * the timeline is, “Reads every 15 minutes for the timeline”.
  */
-export function findMyBackgroundLine(background: HostFindMy['background']): string {
-  if (!background) return FIND_MY_WORDS.readsWhileLooking;
-  const every = `Reads ${findMyEvery(background.everyMinutes)}`;
-  if (background.automation) return `${every} for “${background.automation}”`;
+export function findMyBackgroundLine(background: HostFindMy['background'], locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_WORDS);
+  if (!background) return w.readsWhileLooking;
+  const every = findMyEvery(background.everyMinutes, locale);
+  const b = w.background;
+  if (background.automation) return interpolate(b.automation, { every, automation: background.automation });
   // A watch reads more often than the timeline, so it is the reason the person sees.
-  if (background.watching) return `${every} while watching ${background.watching}`;
-  return background.timeline ? `${every} for the timeline` : every;
+  if (background.watching) return interpolate(b.watching, { every, name: background.watching });
+  return interpolate(background.timeline ? b.timeline : b.every, { every });
 }
 
 /* The connection a Mac reads for -------------------------------------------------------------------------- */
@@ -116,8 +146,10 @@ export function findMyAtHome(person: Pick<HostFindMyPerson, 'place'>): boolean {
 }
 
 /** “just now” under a minute, else “5 min ago”. */
-export function findMyAgo(iso: string, now: number): string {
-  return now - Date.parse(iso) < 60_000 ? 'just now' : formatAgoIso(iso, now);
+export function findMyAgo(iso: string, now: number, locale?: string | null): string {
+  return now - Date.parse(iso) < 60_000
+    ? clientTree(locale, HOSTS_FIND_MY_WORDS).justNow
+    : formatAgoIso(iso, now, locale);
 }
 
 /* When to read ------------------------------------------------------------------------------------- */
@@ -174,6 +206,8 @@ export interface FindMyViewInput {
   now: number;
   /** Whether the Mac's screen can be used now (`macScreenView(…).screen`): its reason comes first. */
   screen: MacMay;
+  /** The language the words are in (English when none is given). */
+  locale?: string | null;
 }
 
 /** The first word of a name, for the map's small labels. */
@@ -200,8 +234,11 @@ export function findMyTones(ids: readonly string[]): number[] {
 }
 
 /** A person's line: their place and when in Find My's own words, or that Find My has no place for them. */
-export function findMyPersonLine(p: Pick<HostFindMyPerson, 'place' | 'when'>): string {
-  if (!p.place) return FIND_MY_WORDS.noPlace;
+export function findMyPersonLine(
+  p: Pick<HostFindMyPerson, 'place' | 'when'>,
+  locale?: string | null,
+): string {
+  if (!p.place) return clientTree(locale, HOSTS_FIND_MY_WORDS).noPlace;
   return p.when ? `${p.place} · ${p.when}` : p.place;
 }
 
@@ -210,13 +247,14 @@ export function findMyPersonLine(p: Pick<HostFindMyPerson, 'place' | 'when'>): s
  * in, the shell switch, Screen Sharing, its password) comes first, as the Screen tab says it, and stops a read.
  */
 export function findMyView(state: HostFindMy | undefined, input: FindMyViewInput): FindMyView {
-  const { name, now, screen } = input;
+  const { name, now, screen, locale } = input;
+  const words = findMyWords(locale);
   const tones = findMyTones((state?.people ?? []).map((p) => p.id));
   const people: FindMyPersonRow[] = (state?.people ?? []).map((p, i) => ({
     id: p.id,
     name: p.name,
     firstName: findMyFirstName(p.name),
-    line: findMyPersonLine(p),
+    line: findMyPersonLine(p, locale),
     nearby: p.nearby,
     placed: !!p.place,
     located: !!p.location,
@@ -229,17 +267,17 @@ export function findMyView(state: HostFindMy | undefined, input: FindMyViewInput
   const status: FindMyView['status'] = !screen.can
     ? { tone: 'warn', text: screen.why }
     : reading
-      ? { tone: 'mut', text: FIND_MY_WORDS.reading(name) }
+      ? { tone: 'mut', text: words.reading(name) }
       : state?.problem
-        ? { tone: 'warn', text: findMyProblemText(state.problem.code, name, state.problem.message) }
+        ? { tone: 'warn', text: findMyProblem(state.problem.code, name, state.problem.message, locale) }
         : null;
   return {
     status,
     reading,
     canRead: screen.can && !state?.reading,
-    readLine: readAt ? FIND_MY_WORDS.read(findMyAgo(readAt, now)) : null,
+    readLine: readAt ? words.read(findMyAgo(readAt, now, locale)) : null,
     people,
-    empty: readAt && people.length === 0 && !state?.problem ? FIND_MY_WORDS.nobody(name) : null,
+    empty: readAt && people.length === 0 && !state?.problem ? words.nobody(name) : null,
     anyLocated: people.some((p) => p.located),
   };
 }
@@ -260,18 +298,20 @@ export function findMyExactView(
   person: string,
   server: string,
   now: number,
+  locale?: string | null,
 ): FindMyExactView {
+  const words = findMyWords(locale);
   const e = state?.exact;
   if (!e || e.person !== person || e.state === 'taking')
-    return { kind: 'taking', text: FIND_MY_WORDS.taking(server) };
+    return { kind: 'taking', text: words.taking(server) };
   if (e.state === 'failed' || !e.takenAt)
     return {
       kind: 'failed',
-      text: findMyProblemText(e.problem?.code ?? 'failed', server, e.problem?.message),
+      text: findMyProblem(e.problem?.code ?? 'failed', server, e.problem?.message, locale),
     };
   return {
     kind: 'ready',
-    text: FIND_MY_WORDS.exactLine(server, findMyAgo(e.takenAt, now)),
+    text: words.exactLine(server, findMyAgo(e.takenAt, now, locale)),
     takenAt: e.takenAt,
   };
 }

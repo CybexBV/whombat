@@ -78,7 +78,13 @@ describe('runLineControls (AP-699)', () => {
   });
 
   it('offers Try again on a failed run only', () => {
-    expect(runLineControls({ status: 'failed' })).toEqual({ link: 'Open run', retry: true });
+    expect(runLineControls({ status: 'failed' })).toEqual({
+      link: 'Open run',
+      linkText: 'Open run',
+      retry: true,
+    });
+    expect(runLineControls({ status: 'live' }, 'nl').link).toBe('Watch run');
+    expect(runLineControls({ status: 'live' }, 'nl').linkText).not.toBe('Watch run');
     for (const status of ['live', 'paused', 'done', 'taken_over'] as const) {
       expect(runLineControls({ status }).retry).toBe(false);
     }

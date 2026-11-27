@@ -12,9 +12,8 @@ import {
   createClient,
   itemsNeedNewerApp,
   leftOut,
-  PART_NEEDS_NEWER_APP,
   type Realtime,
-  TAILSCALE_TEXT,
+  tailscaleText,
   type WhombatClient,
 } from '@whombat/client';
 import {
@@ -29,9 +28,9 @@ import {
   linkBannerView,
   type ManagedWhombats,
   ownAddressToKeep,
-  PASSKEY_COPY,
+  passkeyCopy,
   passkeyName,
-  REACH_TEXT,
+  reachText,
   readOwnAddress,
   readReach,
 } from '@whombat/client/managed';
@@ -74,7 +73,7 @@ import { wipeShares } from '../data/shareInbox';
 import { SYNC_LOG_NAME, type SyncEntry, syncLog, watchReads } from '../data/syncLog';
 import { createNoteSender, noteLine } from '../errors/errorNotes';
 import { errorNotes, noteListenerError } from '../errors/nativeErrorNotes';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { readBoxLocale } from '../i18n/locale';
 import { BoxI18nProvider, MobileI18nProvider } from '../i18n/provider';
 import { sharedFiles } from '../lib/sharedCache';
@@ -771,16 +770,18 @@ function FirstBurrow({ suggestedName, onCreated }: { suggestedName: string | nul
       onCreated();
     } catch (e) {
       const status = (e as { status?: number }).status;
-      setError(status === 409 ? 'That name is already taken.' : 'That didn’t work. Try again.');
+      setError(
+        status === 409 ? tMobile('managed2.onboarding.nameTaken') : tMobile('managed2.onboarding.failed'),
+      );
       setBusy(false);
     }
   };
   return (
     <Frame
-      kicker={`STEP 1 OF ${ONBOARDING_STEP_COUNT}`}
+      kicker={tMobile('managed2.onboarding.step', { n: 1, total: ONBOARDING_STEP_COUNT })}
       title={tMobile('managed.name-your-whombat')}
-      sub="This is where you and your assistant work. It shows at the top of the sidebar."
-      tip={`Hi, I’m ${DEFAULT_AGENT_NAME}. I’ll stick around in case you get stuck.`}
+      sub={tMobile('managed2.onboarding.sub')}
+      tip={tMobile('managed2.onboarding.tip', { name: DEFAULT_AGENT_NAME })}
     >
       <Field
         label={tMobile('managed.its-name')}
@@ -845,7 +846,7 @@ function usePasskeyNudge({
           platform: PASSKEYS,
           appliance: appliance.peerId,
           me,
-          name: passkeyName(phoneLabel()),
+          name: passkeyName(phoneLabel(rawLocale)),
           whombats,
         }
       : null,
@@ -895,6 +896,8 @@ function usePasskeyNudge({
 }
 
 function PasskeyNudgeView({ nudge }: { nudge: PasskeyNudgeState }) {
+  const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const theme = useTheme();
   const { busy, said } = nudge;
   return (
@@ -913,7 +916,7 @@ function PasskeyNudgeView({ nudge }: { nudge: PasskeyNudgeState }) {
       }}
     >
       <Text size={13.5} lh={1.35} color={theme.colors.ink2} style={{ paddingVertical: 8 }}>
-        {said ?? PASSKEY_COPY.nudge}
+        {said ?? passkeyCopyHere.nudge}
       </Text>
       <View style={{ flexDirection: 'row', gap: 4, justifyContent: 'flex-end' }}>
         <Button
@@ -923,7 +926,7 @@ function PasskeyNudgeView({ nudge }: { nudge: PasskeyNudgeState }) {
           disabled={nudge.disabled}
           onPress={nudge.add}
         />
-        <Button label={PASSKEY_COPY.nudgeLater} variant="quiet" disabled={busy} onPress={nudge.later} />
+        <Button label={passkeyCopyHere.nudgeLater} variant="quiet" disabled={busy} onPress={nudge.later} />
       </View>
     </View>
   );
@@ -960,6 +963,7 @@ function useStrip({
   note: string | null;
 }): Strip | null {
   const { rawLocale } = useI18n();
+  const partNeedsNewerAppTextHere = mobileTranslator(rawLocale).t('managed2.partNeedsNewerApp');
   const managedCopyHere = managedCopy(rawLocale);
 
   const [shown, setShown] = useState(false);
@@ -1004,7 +1008,7 @@ function useStrip({
     state.status !== 'open'
       ? null
       : left.needsNewer
-        ? PART_NEEDS_NEWER_APP
+        ? partNeedsNewerAppTextHere
         : left.items > 0
           ? itemsNeedNewerApp(left.items, rawLocale)
           : null;
@@ -1050,6 +1054,8 @@ function useStrip({
 
 function StripLine({ line, onRetry }: { line: Strip; onRetry: () => void }) {
   const { rawLocale } = useI18n();
+  const tailscaleTextHere = tailscaleText(rawLocale);
+  const reachTextHere = reachText(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   const theme = useTheme();
@@ -1095,14 +1101,14 @@ function StripLine({ line, onRetry }: { line: Strip; onRetry: () => void }) {
       ) : line.action === 'tailscale' ? (
         // Link's actions are the one way in from away once it ends: a normal button, not the quiet one that looks off.
         <Button
-          label={REACH_TEXT.tailscale.turnOn}
+          label={reachTextHere.tailscale.turnOn}
           variant="secondary"
           busy={line.tailscale.busy}
           onPress={line.tailscale.turnOn}
         />
       ) : line.action === 'tailscaleSignIn' ? (
         <Button
-          label={TAILSCALE_TEXT.openSignIn}
+          label={tailscaleTextHere.openSignIn}
           variant="secondary"
           onPress={() => void Linking.openURL(line.tailscale.signInUrl ?? '')}
         />

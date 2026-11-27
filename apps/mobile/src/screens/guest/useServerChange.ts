@@ -15,6 +15,7 @@ import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { followHostTask } from '../../data/hostTasks';
+import { mobileTranslator, useI18n } from '../../i18n';
 import { showNotice } from '../feedback';
 
 export interface ManageSend {
@@ -44,19 +45,20 @@ export type ChangeOutcome =
   | { ok: false; waiting: true }
   | { ok: false; waiting?: false; message: string; conflict: boolean; fields: Record<string, string> };
 
-function refusal(error: unknown): Extract<ChangeOutcome, { message: string }> {
-  const info = hostErrorInfo(error);
+function refusal(error: unknown, locale?: string | null): Extract<ChangeOutcome, { message: string }> {
+  const info = hostErrorInfo(error, locale);
   return { ok: false, message: info.message, conflict: info.conflict, fields: info.fields };
 }
 
-function waiting(result: Parameters<typeof commitOutcomeText>[0]): ChangeOutcome {
-  const text = commitOutcomeText(result);
-  if (text) Alert.alert('Not yet', text);
+function waiting(result: Parameters<typeof commitOutcomeText>[0], locale?: string | null): ChangeOutcome {
+  const text = commitOutcomeText(result, locale);
+  if (text) Alert.alert(mobileTranslator(locale).t('screens2.common.notYet'), text);
   return { ok: false, waiting: true };
 }
 
 /** `hosts.manage` on one server. */
 export function useManageChange(serverId: string) {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrowBase();
   const change = useHostsChange(api.hosts.manage);
   const qc = useQueryClient();
@@ -77,13 +79,14 @@ export function useManageChange(serverId: string) {
             ...(s.confirmName ? { confirmName: s.confirmName } : {}),
           },
         });
-        if (result.status !== 'ok') return waiting(result);
+        if (result.status !== 'ok') return waiting(result, rawLocale);
         const data = result.data;
         if (data.task?.id) {
           const words = followWords(
             s.follow ? s.follow.kind : s.op,
             s.name,
             s.follow ? s.follow.extra : undefined,
+            rawLocale,
           );
           if (s.follow !== false)
             followHostTask({
@@ -96,19 +99,19 @@ export function useManageChange(serverId: string) {
         } else
           showNotice(
             s.op === 'config.set' && data.changes?.some((c) => c.pending)
-              ? `Saved. ${s.name} takes it at its next restart.`
-              : (s.done ?? manageDoneText(s.op, s.name, false)),
+              ? mobileTranslator(rawLocale).t('screens2.guest.savedNextRestart', { name: s.name })
+              : (s.done ?? manageDoneText(s.op, s.name, false, rawLocale)),
           );
         return { ok: true, result: data };
       } catch (error) {
-        const out = refusal(error);
+        const out = refusal(error, rawLocale);
         if (out.conflict) void qc.invalidateQueries({ queryKey: queryKeys.scope('hosts.manageRead') });
         return out;
       } finally {
         setBusy(false);
       }
     },
-    [change, slug, serverId, qc],
+    [change, slug, serverId, qc, rawLocale],
   );
   return { send, busy };
 }
@@ -126,6 +129,7 @@ export interface ActionSend {
  * (“The snapshot of web started.”, then how it ended).
  */
 export function useGuestAction(serverId: string, guest: { id: string; name: string }) {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrowBase();
   const change = useHostsChange(api.hosts.guestAction);
   const [busy, setBusy] = useState<string | null>(null);
@@ -143,9 +147,9 @@ export function useGuestAction(serverId: string, guest: { id: string; name: stri
             ...(a.memory ? { memory: true } : {}),
           },
         });
-        if (result.status !== 'ok') return waiting(result);
+        if (result.status !== 'ok') return waiting(result, rawLocale);
         const snapshot = a.action.startsWith('snapshot_');
-        const words = followWords(snapshot ? a.action : 'power', guest.name, a.snapshot);
+        const words = followWords(snapshot ? a.action : 'power', guest.name, a.snapshot, rawLocale);
         if (!result.data.noop)
           followHostTask({
             serverId,
@@ -154,23 +158,25 @@ export function useGuestAction(serverId: string, guest: { id: string; name: stri
               ? words
               : {
                   ...words,
-                  failed: `${actionAcceptedText(a.action, guest.name).replace(/\.$/, '')} didn’t work.`,
+                  failed: mobileTranslator(rawLocale).t('screens2.guest.actionFailed', {
+                    what: actionAcceptedText(a.action, guest.name, undefined, rawLocale).replace(/\.$/, ''),
+                  }),
                 },
             quiet: !snapshot,
           });
         showNotice(
           snapshot && !result.data.noop
             ? words.started
-            : actionAcceptedText(a.action, guest.name, result.data.noop),
+            : actionAcceptedText(a.action, guest.name, result.data.noop, rawLocale),
         );
         return { ok: true };
       } catch (error) {
-        return refusal(error);
+        return refusal(error, rawLocale);
       } finally {
         setBusy(null);
       }
     },
-    [change, slug, serverId, guest.id, guest.name],
+    [change, slug, serverId, guest.id, guest.name, rawLocale],
   );
   return { send, busy };
 }

@@ -4,50 +4,55 @@
  * long ago it ran there.
  */
 import type { Prompt, PromptProject } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from './i18n/catalog';
+import { ASKS_AREA_WORDS } from './i18n/messages/chatWork/asks';
 
-export const PROMPT_WORDS = {
-  /** The group's label in the `/` menu, above the skills. */
-  group: 'PROMPTS',
-  title: 'Prompts',
-  intro: 'Words you use again and again. Type / in Chat to use one.',
-  add: 'New prompt',
-  edit: 'Edit prompt',
-  fieldTitle: 'Title',
-  fieldText: 'Prompt',
-  onRepository: 'For a repository',
-  onRepositoryHint: 'Asks which repository, then starts the work there in T3 Code.',
-  ownIt: 'Let it reshape the code',
-  ownItHint:
-    'Tells the AI the code is its own to restructure. It merges duplicates more often, uses more of your plan and sometimes changes behaviour you didn’t ask about.',
-  merge: 'Merge into main when it’s done',
-  mergeHint:
-    'Opens a pull request and merges it into the main branch once its checks pass. If they fail, it leaves it for you.',
-  ai: 'AI',
-  aiDefault: 'T3 Code’s default',
-  save: 'Save',
-  cancel: 'Cancel',
-  remove: 'Remove',
-  removeAsk: (title: string) => `Remove “${title}”?`,
-  restore: 'Bring back Whombat’s prompts',
-  restoreHint: 'The ones you removed come back and the ones you changed get their words back. Your own stay.',
-  empty: 'No prompts yet.',
-  saveFromMessage: 'Save as prompt',
-  saved: 'Saved to your prompts',
-  failed: 'Couldn’t save it. Try again.',
-  /** The picker after a repository prompt was chosen. */
-  pickTitle: 'Which repository?',
-  pickSearch: 'Find a repository',
-  pickEmpty: 'T3 Code has no projects yet.',
-  pickNone: 'No repository by that name.',
-  pickLoading: 'Asking T3 Code for its projects…',
-  /** When the projects can't be listed: the prompt's words go into the message instead. */
-  pickInstead: 'Put its words in the message',
-  t3: {
-    not_connected: 'Connect T3 Code with Manage to run a prompt on a repository.',
-    unreachable: 'T3 Code can’t be reached now.',
-  },
-  useFailed: 'Couldn’t start it. Try again.',
-} as const;
+/** The prompts' words, in a locale (English when none). */
+export function promptWords(locale?: string | null) {
+  const w = clientTree(locale, ASKS_AREA_WORDS).prompts;
+  return {
+    /** The group's label in the `/` menu, above the skills. */
+    group: w.group,
+    title: w.title,
+    intro: w.intro,
+    add: w.add,
+    edit: w.edit,
+    fieldTitle: w.fieldTitle,
+    fieldText: w.fieldText,
+    onRepository: w.onRepository,
+    onRepositoryHint: w.onRepositoryHint,
+    ownIt: w.ownIt,
+    ownItHint: w.ownItHint,
+    merge: w.merge,
+    mergeHint: w.mergeHint,
+    ai: w.ai,
+    aiDefault: w.aiDefault,
+    save: w.save,
+    cancel: w.cancel,
+    remove: w.remove,
+    removeAsk: (title: string) => interpolate(w.removeAsk, { title }),
+    restore: w.restore,
+    restoreHint: w.restoreHint,
+    empty: w.empty,
+    saveFromMessage: w.saveFromMessage,
+    saved: w.saved,
+    failed: w.failed,
+    /** The picker after a repository prompt was chosen. */
+    pickTitle: w.pickTitle,
+    pickSearch: w.pickSearch,
+    pickEmpty: w.pickEmpty,
+    pickNone: w.pickNone,
+    pickLoading: w.pickLoading,
+    /** When the projects can't be listed: the prompt's words go into the message instead. */
+    pickInstead: w.pickInstead,
+    t3: { not_connected: w.t3.not_connected, unreachable: w.t3.unreachable },
+    useFailed: w.useFailed,
+  };
+}
+
+/** The prompts' words, in English. */
+export const PROMPT_WORDS = promptWords();
 
 /** A title as `/` matches it: lower case, words joined by dashes (“Find what’s broken” → `find-whats-broken`). */
 export function promptSlug(title: string): string {
@@ -104,16 +109,16 @@ export function promptProjectRows(
     });
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
-
 /** “Ran today”, “Ran yesterday”, “Ran 3 days ago”, then “Ran on 10 Nov” (by the viewer's own days). */
-export function promptRanWord(at: string, now: Date = new Date()): string {
+export function promptRanWord(at: string, now: Date = new Date(), locale?: string | null): string {
+  const w = clientTree(locale, ASKS_AREA_WORDS).prompts;
+  const months = Object.values(w.months);
   const then = new Date(at);
   const dayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((dayOf(now) - dayOf(then)) / 86_400_000);
-  if (days <= 0) return 'Ran today';
-  if (days === 1) return 'Ran yesterday';
-  if (days < 14) return `Ran ${days} days ago`;
+  if (days <= 0) return w.ranToday;
+  if (days === 1) return w.ranYesterday;
+  if (days < 14) return interpolate(w.ranDaysAgo, { days });
   const year = then.getFullYear() === now.getFullYear() ? '' : ` ${then.getFullYear()}`;
-  return `Ran on ${then.getDate()} ${MONTHS[then.getMonth()]}${year}`;
+  return interpolate(w.ranOn, { date: `${then.getDate()} ${months[then.getMonth()] ?? ''}${year}` });
 }

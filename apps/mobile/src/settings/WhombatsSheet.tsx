@@ -4,9 +4,10 @@
  * sheet's rows are (44dp minimum); then All Whombats (the list) and Claim a Whombat. A tap opens
  * one as the list's Open does (AP-64). While the directory loads or can't be read, the rows wait and All Whombats stays.
  */
-import { type ManagedWhombats, SWITCHER_COPY, type SwitcherRow, switcherRows } from '@whombat/client/managed';
+import { type ManagedWhombats, type SwitcherRow, switcherCopy, switcherRows } from '@whombat/client/managed';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Check, LayoutGrid, Plus } from '../ui/icons';
@@ -29,6 +30,8 @@ export function WhombatsSheet({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = switcherCopy(rawLocale);
   const [rows, setRows] = useState<SwitcherRow[] | null>(null);
   useEffect(() => {
     if (!visible) return;
@@ -41,6 +44,7 @@ export function WhombatsSheet({
             current,
             known: (d) => whombats.known(d),
             ...(whombats.local && { local: true }),
+            locale: rawLocale,
           }),
         ),
       () => live && setRows((r) => r ?? []),
@@ -48,7 +52,7 @@ export function WhombatsSheet({
     return () => {
       live = false;
     };
-  }, [visible, current, whombats]);
+  }, [visible, current, whombats, rawLocale]);
 
   const go = (then: () => void) => {
     onClose();
@@ -65,13 +69,7 @@ export function WhombatsSheet({
     borderTopColor: theme.colors.line,
   } as const;
   return (
-    <Sheet
-      visible={visible}
-      onClose={onClose}
-      title={SWITCHER_COPY.kicker}
-      label={SWITCHER_COPY.kicker}
-      maxHeight="80%"
-    >
+    <Sheet visible={visible} onClose={onClose} title={copy.kicker} label={copy.kicker} maxHeight="80%">
       <ScrollView>
         {rows === null ? (
           <View style={{ ...row, justifyContent: 'center' }}>
@@ -123,13 +121,13 @@ export function WhombatsSheet({
         <Touchable onPress={() => go(onAll)} feedback="wash" accessibilityRole="button" style={row}>
           <LayoutGrid size={18} color={theme.colors.mut} />
           <Text size={15.5} color={theme.colors.ink2}>
-            {SWITCHER_COPY.all}
+            {copy.all}
           </Text>
         </Touchable>
         <Touchable onPress={() => go(whombats.claim)} feedback="wash" accessibilityRole="button" style={row}>
           <Plus size={18} color={theme.colors.mut} />
           <Text size={15.5} color={theme.colors.ink2}>
-            {SWITCHER_COPY.claim}
+            {copy.claim}
           </Text>
         </Touchable>
         <View style={{ height: 1, backgroundColor: theme.colors.line }} />

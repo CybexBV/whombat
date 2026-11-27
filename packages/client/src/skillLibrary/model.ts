@@ -10,6 +10,8 @@
  * then those only learned ones are in (HSK-12); added skills without a category and learned ones without one each have
  * a group after them. Inside a group by name. Off and Removed fold at the end; Removed only when it can be restored.
  */
+
+import { interpolate } from '@whombat/core/i18n';
 import {
   SCAN_VERDICT_TEXT,
   type ScanVerdict,
@@ -23,6 +25,8 @@ import {
   skillPolicyReasonText,
 } from '@whombat/core/skills';
 import { daysAgo, formatDate, formatWeekday } from '@whombat/core/text';
+import { clientTree } from '../i18n/catalog';
+import { SKILLS_AREA_WORDS } from '../i18n/messages/chatWork/skills';
 import type {
   SkillCategoryInfo,
   SkillFileChange,
@@ -90,6 +94,8 @@ export interface SkillViewOptions {
   timeZone: string;
   /** Hub skills Hermes's last update check found a newer version of (`skills.hubUpdates`), beside the rows' own mark. */
   updates?: ReadonlySet<string>;
+  /** The words' language (English when none). */
+  locale?: string | null;
 }
 
 /** A hub source by a short name (Add skills' filter, a row's “Added from …”). */
@@ -99,79 +105,82 @@ export const SKILL_HUB_SOURCE_NAME: Readonly<Record<SkillHubSource, string>> = {
   'skills-sh': 'skills.sh',
 };
 
-/** Words of Settings → Skills shared by the web and the phone, the agent's name given. */
-export const SKILL_LIBRARY_TEXT = {
-  title: (count: number) => `Skills · ${count}`,
-  help: (agent: string) => `${agent} uses a skill when a task matches it.`,
-  search: 'Search skills',
-  add: 'Add skills',
-  /** The groups after Hermes's categories (HSK-12). */
-  addedGroup: 'Added by you',
-  learnedGroup: (agent: string) => `Learned by ${agent}`,
-  otherGroup: 'Other',
-  /** Where a skill came from, when it isn't one of Hermes's own. */
-  addedFrom: (source: SkillHubSource) => `Added from ${SKILL_HUB_SOURCE_NAME[source]}`,
-  learnedBy: (agent: string) => `Learned by ${agent}`,
-  /** A built-in you changed. */
-  changed: 'Changed',
-  originalChanged: 'Hermes’s version changed since this one was made.',
-  learned: (day: string) => `Learned ${day}`,
-  changedOn: (day: string) => `Changed ${day}`,
-  addedOn: (day: string) => `Added ${day}`,
-  on: 'On',
-  off: 'Off',
-  removedStatus: 'Removed',
-  updateAvailable: 'Update available',
-  updateLine: 'A newer version is available.',
-  folds: {
-    off: 'Off',
-    removed: 'Removed',
-  } satisfies Record<SkillFoldId, string>,
-  empty: (agent: string) => `${agent} has no skills yet.`,
-  noMatch: (query: string) => `No skill matches “${query}”.`,
+const words = (locale?: string | null) => clientTree(locale, SKILLS_AREA_WORDS);
 
-  /* The open skill's actions. */
-  uses: (agent: string) => `${agent} uses it`,
-  restore: 'Restore Hermes’s',
-  restoreAsk: (skill: string) => `Use Hermes’s ${skill} again? The changes to it go.`,
-  restoreRemovedAsk: (skill: string, agent: string) => `Bring back ${skill}? ${agent} uses it again.`,
-  restored: (skill: string) => `Back to Hermes’s ${skill}.`,
-  update: 'Update',
-  updateAsk: (skill: string) => `Update ${skill} to its newer version? Hermes checks it again first.`,
-  updated: (skill: string) => `Updated ${skill}.`,
-  remove: 'Remove',
-  removeAskBuiltin: (skill: string, agent: string) =>
-    `Remove ${skill}? ${agent} stops using it until you restore it.`,
-  removeAskHub: (skill: string, agent: string) =>
-    `Remove ${skill}? ${agent} stops using it. You can add it again from Add skills.`,
-  removeAskLearned: (skill: string, agent: string) => `Remove ${skill}? ${agent} forgets it.`,
-  removed: (skill: string) => `Removed ${skill}.`,
-  compare: 'Compare with original',
-} as const;
+/** Words of Settings → Skills shared by the web and the phone, the agent's name given, in a locale (English when none). */
+export function skillLibraryText(locale?: string | null) {
+  const w = words(locale).library;
+  return {
+    title: (count: number) => interpolate(w.title, { count }),
+    help: (agent: string) => interpolate(w.help, { agent }),
+    search: w.search,
+    add: w.add,
+    /** The groups after Hermes's categories. */
+    addedGroup: w.addedGroup,
+    learnedGroup: (agent: string) => interpolate(w.learnedGroup, { agent }),
+    otherGroup: w.otherGroup,
+    /** Where a skill came from, when it isn't one of Hermes's own. */
+    addedFrom: (source: SkillHubSource) =>
+      interpolate(w.addedFrom, { source: SKILL_HUB_SOURCE_NAME[source] }),
+    learnedBy: (agent: string) => interpolate(w.learnedBy, { agent }),
+    /** A built-in you changed. */
+    changed: w.changed,
+    originalChanged: w.originalChanged,
+    learned: (day: string) => interpolate(w.learned, { day }),
+    changedOn: (day: string) => interpolate(w.changedOn, { day }),
+    addedOn: (day: string) => interpolate(w.addedOn, { day }),
+    on: w.on,
+    off: w.off,
+    removedStatus: w.removedStatus,
+    updateAvailable: w.updateAvailable,
+    updateLine: w.updateLine,
+    folds: { off: w.folds.off, removed: w.folds.removed } satisfies Record<SkillFoldId, string>,
+    empty: (agent: string) => interpolate(w.empty, { agent }),
+    noMatch: (query: string) => interpolate(w.noMatch, { query }),
 
-/** How a file of a changed built-in differs from Hermes's (Compare's list, CT-1412). */
-export const SKILL_FILE_CHANGE_TEXT: Readonly<Record<SkillFileChange['status'], string>> = {
-  modified: 'Changed',
-  added: 'Only in this one',
-  removed: 'Only in Hermes’s',
-  binary: 'Changed (not text)',
-};
+    /* The open skill's actions. */
+    uses: (agent: string) => interpolate(w.uses, { agent }),
+    restore: w.restore,
+    restoreAsk: (skill: string) => interpolate(w.restoreAsk, { skill }),
+    restoreRemovedAsk: (skill: string, agent: string) => interpolate(w.restoreRemovedAsk, { skill, agent }),
+    restored: (skill: string) => interpolate(w.restored, { skill }),
+    update: w.update,
+    updateAsk: (skill: string) => interpolate(w.updateAsk, { skill }),
+    updated: (skill: string) => interpolate(w.updated, { skill }),
+    remove: w.remove,
+    removeAskBuiltin: (skill: string, agent: string) => interpolate(w.removeAskBuiltin, { skill, agent }),
+    removeAskHub: (skill: string, agent: string) => interpolate(w.removeAskHub, { skill, agent }),
+    removeAskLearned: (skill: string, agent: string) => interpolate(w.removeAskLearned, { skill, agent }),
+    removed: (skill: string) => interpolate(w.removed, { skill }),
+    compare: w.compare,
+  };
+}
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+export const SKILL_LIBRARY_TEXT = skillLibraryText();
+
+/** How a file of a changed built-in differs from Hermes's (Compare's list), in a locale (English when none). */
+export function skillFileChangeText(
+  locale?: string | null,
+): Readonly<Record<SkillFileChange['status'], string>> {
+  return { ...words(locale).fileChange };
+}
+
+export const SKILL_FILE_CHANGE_TEXT = skillFileChangeText();
 
 /** “a”, “a and b”, “a, b and c”. */
-function and(items: readonly string[]): string {
+function and(items: readonly string[], locale?: string | null): string {
   if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+  return interpolate(words(locale).and, { first: items.slice(0, -1).join(', '), last: items.at(-1) ?? '' });
 }
 
 /** When something happened, after “Learned” or “Changed”: “today”, “yesterday”, “on Thursday”, “on 3 Oct”. */
-export function dayWords(at: string, now: Date | number, timeZone: string): string {
+export function dayWords(at: string, now: Date | number, timeZone: string, locale?: string | null): string {
+  const w = words(locale).day;
   const days = daysAgo(at, now, timeZone);
-  if (days <= 0) return 'today';
-  if (days === 1) return 'yesterday';
-  if (days < 7) return `on ${formatWeekday(at, timeZone)}`;
-  return `on ${formatDate(at, timeZone, { now: new Date(now) })}`;
+  if (days <= 0) return w.today;
+  if (days === 1) return w.yesterday;
+  if (days < 7) return interpolate(w.on, { day: formatWeekday(at, timeZone, locale) });
+  return interpolate(w.on, { day: formatDate(at, timeZone, { now: new Date(now) }, locale) });
 }
 
 interface Ctx {
@@ -179,6 +188,7 @@ interface Ctx {
   timeZone: string;
   agent: string;
   updates?: ReadonlySet<string> | undefined;
+  locale?: string | null | undefined;
 }
 
 /** A hub skill with a newer version: its row says so, or Hermes's last update check does (HSK-09). */
@@ -194,9 +204,11 @@ export function skillHasUpdate(
 export function skillOriginWords(
   item: Pick<SkillLibraryItem, 'origin' | 'hub'>,
   agent: string,
+  locale?: string | null,
 ): string | null {
-  if (item.origin === 'hub' && item.hub) return SKILL_LIBRARY_TEXT.addedFrom(item.hub.source);
-  if (item.origin === 'learned') return SKILL_LIBRARY_TEXT.learnedBy(agent);
+  const T = skillLibraryText(locale);
+  if (item.origin === 'hub' && item.hub) return T.addedFrom(item.hub.source);
+  if (item.origin === 'learned') return T.learnedBy(agent);
   return null;
 }
 
@@ -206,15 +218,16 @@ export function skillOriginWords(
  * whether a need is met shows when the skill runs), else “On”.
  */
 export function skillStatus(item: SkillLibraryItem, ctx: Ctx): { text: string; tone: SkillTone } {
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryText(ctx.locale);
   if (item.status === 'off') return { text: T.off, tone: 'mut' };
   if (item.status === 'removed') return { text: T.removedStatus, tone: 'mut' };
   if (item.origin === 'learned')
     return item.updatedAt
-      ? { text: T.learned(dayWords(item.updatedAt, ctx.now, ctx.timeZone)), tone: 'ok' }
+      ? { text: T.learned(dayWords(item.updatedAt, ctx.now, ctx.timeZone, ctx.locale)), tone: 'ok' }
       : { text: T.on, tone: 'ok' };
   if (skillHasUpdate(item, ctx.updates)) return { text: T.updateAvailable, tone: 'warn' };
-  if (item.changed && item.originalChanged) return { text: `${T.changed} · original changed`, tone: 'warn' };
+  if (item.changed && item.originalChanged)
+    return { text: `${T.changed} · ${words(ctx.locale).library.originalChangedShort}`, tone: 'warn' };
   if (item.changed) return { text: T.changed, tone: 'ok' };
   const needs = skillNeedsText(item.needs)[0];
   if (needs) return { text: needs, tone: 'mut' };
@@ -228,7 +241,7 @@ function row(item: SkillLibraryItem, ctx: Ctx): SkillRow {
     key: item.name,
     status: text,
     tone,
-    origin: skillOriginWords(item, ctx.agent),
+    origin: skillOriginWords(item, ctx.agent, ctx.locale),
     on: item.status === 'on',
     canSwitch: item.can.switch && item.status !== 'removed',
   };
@@ -277,8 +290,9 @@ function groupOf(
   item: SkillLibraryItem,
   categories: readonly SkillCategoryInfo[],
   agent: string,
+  locale?: string | null,
 ): { id: string; label: string; description: string | null; rank: number; uncategorized: boolean } {
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryText(locale);
   const rank = ORIGIN_RANK[item.origin];
   if (item.category) {
     const { title, description } = skillCategoryInfo(categories, item.category);
@@ -298,9 +312,15 @@ function shownItems(library: SkillLibrary): SkillLibraryItem[] {
 
 /** The tab's list (HSK-12): count, the groups and folds, for this search. */
 export function skillLibraryView(library: SkillLibrary, options: SkillViewOptions): SkillLibraryView {
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryText(options.locale);
   const agent = library.agentName;
-  const ctx: Ctx = { now: options.now, timeZone: options.timeZone, agent, updates: options.updates };
+  const ctx: Ctx = {
+    now: options.now,
+    timeZone: options.timeZone,
+    agent,
+    updates: options.updates,
+    locale: options.locale,
+  };
   const query = (options.query ?? '').trim();
   const items = shownItems(library);
   const live = items.filter((i) => i.status !== 'removed');
@@ -316,7 +336,7 @@ export function skillLibraryView(library: SkillLibrary, options: SkillViewOption
       folded[fold].push(item);
       continue;
     }
-    const where = groupOf(item, library.categories, agent);
+    const where = groupOf(item, library.categories, agent, options.locale);
     const group = groups.get(where.id) ?? { ...where, rows: [], items: [] };
     group.rank = Math.min(group.rank, where.rank);
     group.items.push(item);
@@ -414,13 +434,20 @@ export interface SkillPanelContext {
   updates?: ReadonlySet<string>;
   /** The agent's name (“Learned by Dusty”). */
   agent: string;
+  /** The words' language (English when none). */
+  locale?: string | null;
 }
 
 /** “Learned on Thursday”, “Changed today”, “Added on 3 Oct”; null when nothing says when. */
-function whenLine(item: SkillLibraryItem, now: Date | number, timeZone: string): string | null {
-  const T = SKILL_LIBRARY_TEXT;
+function whenLine(
+  item: SkillLibraryItem,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string | null {
+  const T = skillLibraryText(locale);
   if (!item.updatedAt) return null;
-  const day = dayWords(item.updatedAt, now, timeZone);
+  const day = dayWords(item.updatedAt, now, timeZone, locale);
   if (item.origin === 'learned') return T.learned(day);
   if (item.changed) return T.changedOn(day);
   if (item.origin === 'hub') return T.addedOn(day);
@@ -429,15 +456,15 @@ function whenLine(item: SkillLibraryItem, now: Date | number, timeZone: string):
 
 /** The open skill's head, lines, body and what can be done with it. */
 export function skillPanel(detail: SkillLibrarySkill, ctx: SkillPanelContext): SkillPanelModel {
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryText(ctx.locale);
   const { item } = detail;
   const category = item.category ? skillCategoryInfo(ctx.categories ?? [], item.category).title : null;
   const tag =
-    [category, skillOriginWords(item, ctx.agent), item.changed ? T.changed : null]
+    [category, skillOriginWords(item, ctx.agent, ctx.locale), item.changed ? T.changed : null]
       .filter(Boolean)
       .join(' · ') || T.otherGroup;
   const { body } = splitSkillText(detail.text);
-  const when = whenLine(item, ctx.now, ctx.timeZone);
+  const when = whenLine(item, ctx.now, ctx.timeZone, ctx.locale);
   const update = skillHasUpdate(item, ctx.updates);
   const removed = item.status === 'removed';
   const lines = [
@@ -458,7 +485,7 @@ export function skillPanel(detail: SkillLibrarySkill, ctx: SkillPanelContext): S
     compareLabel: T.compare,
     fileChanges: (detail.original?.changes ?? [])
       .filter((c) => c.path !== 'SKILL.md')
-      .map((c) => ({ path: c.path, change: SKILL_FILE_CHANGE_TEXT[c.status] })),
+      .map((c) => ({ path: c.path, change: skillFileChangeText(ctx.locale)[c.status] })),
     canEdit: item.can.edit && !removed,
     canSwitch: item.can.switch && !removed,
     canRestore: item.can.restore,
@@ -469,8 +496,13 @@ export function skillPanel(detail: SkillLibrarySkill, ctx: SkillPanelContext): S
 }
 
 /** What Remove asks first. */
-export function removeAsk(kind: SkillRemoveKind, skill: string, agent: string): string {
-  const T = SKILL_LIBRARY_TEXT;
+export function removeAsk(
+  kind: SkillRemoveKind,
+  skill: string,
+  agent: string,
+  locale?: string | null,
+): string {
+  const T = skillLibraryText(locale);
   if (kind === 'learned') return T.removeAskLearned(skill, agent);
   if (kind === 'builtin') return T.removeAskBuiltin(skill, agent);
   return T.removeAskHub(skill, agent);
@@ -485,67 +517,90 @@ export function fileBytes(bytes: number): string {
 
 /* Add skills: Hermes's hub (HSK-06…HSK-09, CT-1413…CT-1415) ------------------------------------------------------- */
 
-/** Add skills' words, shared by the web and the phone. */
-export const SKILL_HUB_TEXT = {
-  title: 'Add skills',
-  help: (agent: string) => `Hermes checks every skill before it’s added. Once added, ${agent} can use it.`,
-  search: 'Search for skills',
-  searchPlaceholder: 'Search Hermes, GitHub and skills.sh',
-  sources: 'Where from',
-  all: 'All',
-  browsing: 'A few to start with',
-  results: 'Skills found',
-  nothingFound: 'Nothing found. Try other words.',
-  installed: 'Installed',
-  install: 'Add',
-  installing: 'Adding…',
-  back: 'Back',
-  close: 'Close',
-  findings: 'WHAT HERMES FOUND',
-  needs: 'WHAT IT NEEDS',
-  files: 'FILES',
-  nameTaken: (skill: string) => `There’s already a skill called ${skill} here, so this one can’t be added.`,
-  alreadyInstalled: 'This one is added already.',
-  added: (skill: string) => `Added ${skill}.`,
-  unavailable: 'Hermes’s hub didn’t answer. Try again in a moment.',
-  notRead: 'Couldn’t open this skill. Try again in a moment.',
-  notAdded: 'The skill wasn’t added. Try again in a moment.',
-  more: (n: number) => `And ${plural(n, 'more thing', 'more things')}.`,
-} as const;
+/** Add skills' words, shared by the web and the phone, in a locale (English when none). */
+export function skillHubText(locale?: string | null) {
+  const w = words(locale).hub;
+  return {
+    title: w.title,
+    help: (agent: string) => interpolate(w.help, { agent }),
+    search: w.search,
+    searchPlaceholder: w.searchPlaceholder,
+    sources: w.sources,
+    all: w.all,
+    browsing: w.browsing,
+    results: w.results,
+    nothingFound: w.nothingFound,
+    installed: w.installed,
+    install: w.install,
+    installing: w.installing,
+    back: w.back,
+    close: w.close,
+    findings: w.findings,
+    needs: w.needs,
+    files: w.files,
+    nameTaken: (skill: string) => interpolate(w.nameTaken, { skill }),
+    alreadyInstalled: w.alreadyInstalled,
+    added: (skill: string) => interpolate(w.added, { skill }),
+    unavailable: w.unavailable,
+    notRead: w.notRead,
+    notAdded: w.notAdded,
+    more: (n: number) => w.more(n),
+  };
+}
+
+export const SKILL_HUB_TEXT = skillHubText();
 
 /** Add skills' source filter: every source, or one (`undefined` asks all three). */
 export type SkillHubFilter = 'all' | SkillHubSource;
 
-/** The filter's choices: All, Hermes, GitHub, skills.sh. */
-export const SKILL_HUB_FILTERS: readonly { value: SkillHubFilter; label: string }[] = [
-  { value: 'all', label: SKILL_HUB_TEXT.all },
-  ...SKILL_HUB_SOURCES.map((source) => ({ value: source, label: SKILL_HUB_SOURCE_NAME[source] })),
-];
+/** The filter's choices: All, Hermes, GitHub, skills.sh, in a locale (English when none). */
+export function skillHubFilters(locale?: string | null): readonly { value: SkillHubFilter; label: string }[] {
+  return [
+    { value: 'all', label: words(locale).hub.all },
+    ...SKILL_HUB_SOURCES.map((source) => ({ value: source, label: SKILL_HUB_SOURCE_NAME[source] })),
+  ];
+}
+
+export const SKILL_HUB_FILTERS = skillHubFilters();
 
 /** “1,240 installs”, “12.4k installs”; null when the source doesn't count them. */
-export function hubInstallsWords(installs: number | null): string | null {
+export function hubInstallsWords(installs: number | null, locale?: string | null): string | null {
   if (installs === null) return null;
-  if (installs >= 1000) return `${(installs / 1000).toFixed(1).replace(/\.0$/, '')}k installs`;
-  return plural(installs, 'install');
+  const w = words(locale).hub;
+  if (installs >= 1000) {
+    const k = (installs / 1000).toFixed(1).replace(/\.0$/, '');
+    return interpolate(w.installsK, { k: locale?.toLowerCase().startsWith('nl') ? k.replace('.', ',') : k });
+  }
+  return w.installs(installs);
 }
 
 /**
  * A hub result's source and trust in words (HSK-06, CT-1406): “From Hermes” (its own optional skills), “GitHub ·
  * Trusted”, “skills.sh · Community · 412 installs”.
  */
-export function hubResultMeta(result: Pick<SkillHubResult, 'source' | 'trust' | 'installs'>): string {
+export function hubResultMeta(
+  result: Pick<SkillHubResult, 'source' | 'trust' | 'installs'>,
+  locale?: string | null,
+): string {
   const where =
     result.trust === 'builtin'
       ? SKILL_TRUST_TEXT.builtin
       : `${SKILL_HUB_SOURCE_NAME[result.source]} · ${SKILL_TRUST_TEXT[result.trust]}`;
-  return [where, hubInstallsWords(result.installs)].filter(Boolean).join(' · ');
+  return [where, hubInstallsWords(result.installs, locale)].filter(Boolean).join(' · ');
 }
 
 /** “skills.sh didn’t answer, so its skills are missing.”, or null when every source answered. */
-export function hubUnreachableWords(sources: readonly SkillHubSource[]): string | null {
+export function hubUnreachableWords(
+  sources: readonly SkillHubSource[],
+  locale?: string | null,
+): string | null {
   if (!sources.length) return null;
-  const names = and(sources.map((s) => SKILL_HUB_SOURCE_NAME[s]));
-  return `${names} didn’t answer, so ${sources.length === 1 ? 'its' : 'their'} skills are missing.`;
+  const w = words(locale).hub;
+  const names = and(
+    sources.map((s) => SKILL_HUB_SOURCE_NAME[s]),
+    locale,
+  );
+  return interpolate(sources.length === 1 ? w.unreachableOne : w.unreachableMany, { names });
 }
 
 const PLATFORM_NAMES: Readonly<Record<string, string>> = {
@@ -608,8 +663,9 @@ const VERDICT_TONE: Readonly<Record<ScanVerdict, ScanTone>> = {
  * findings, and the policy's decision in plain words. A blocked skill has no Install (there is no force); one installed
  * already or whose name a skill here has says so instead.
  */
-export function hubPreviewModel(preview: SkillHubPreview): HubPreviewModel {
-  const T = SKILL_HUB_TEXT;
+export function hubPreviewModel(preview: SkillHubPreview, locale?: string | null): HubPreviewModel {
+  const T = skillHubText(locale);
+  const w = words(locale).hub;
   const { result, scan, policy } = preview;
   const blocked = policy.decision === 'block';
   const platforms = [...new Set(preview.platforms.map((p) => PLATFORM_NAMES[p.toLowerCase()] ?? p))];
@@ -623,16 +679,16 @@ export function hubPreviewModel(preview: SkillHubPreview): HubPreviewModel {
   return {
     name: result.name,
     description: result.description,
-    meta: hubResultMeta(result),
+    meta: hubResultMeta(result, locale),
     body: withoutNameHeading(splitSkillText(skillBody(preview.text)).body, result.name),
     needs: skillNeedsText(preview.needs),
-    platforms: platforms.length ? `Runs on ${and(platforms)}` : null,
+    platforms: platforms.length ? interpolate(w.runsOn, { platforms: and(platforms, locale) }) : null,
     verdict: SCAN_VERDICT_TEXT[scan.verdict],
     verdictTone: VERDICT_TONE[scan.verdict],
     findings: scan.findings.map((f) => ({
       kind: scanCategoryText(f.category),
       description: f.description.charAt(0).toUpperCase() + f.description.slice(1),
-      where: f.line > 0 ? `${f.file}, line ${f.line}` : f.file || 'the folder',
+      where: f.line > 0 ? interpolate(w.line, { file: f.file, line: f.line }) : f.file || w.folder,
       match: f.match || null,
       tone: f.severity === 'critical' ? 'bad' : f.severity === 'high' ? 'warn' : 'mut',
     })),
@@ -662,10 +718,11 @@ export function skillErrorCode(
  * What a refused install or update says (HSK-07): blocked by Hermes's policy (the plain reason from its verdict), the name
  * taken, the hub away; null for any other refusal (the server's own words then).
  */
-export function hubRefusalWords(error: unknown, skill: string): string | null {
+export function hubRefusalWords(error: unknown, skill: string, locale?: string | null): string | null {
   const code = skillErrorCode(error);
-  if (code === 'skill_exists') return SKILL_HUB_TEXT.nameTaken(skill);
-  if (code === 'skill_hub_unavailable') return SKILL_HUB_TEXT.unavailable;
+  const T = skillHubText(locale);
+  if (code === 'skill_exists') return T.nameTaken(skill);
+  if (code === 'skill_hub_unavailable') return T.unavailable;
   if (code === 'skill_blocked') {
     const details = (error as { details?: { verdict?: unknown } } | null)?.details;
     return details?.verdict === 'dangerous'

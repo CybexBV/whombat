@@ -10,7 +10,6 @@ import {
   allFolders,
   childFolder,
   existingFolderSpelling,
-  FILES_COPY,
   type FilesConversationRow,
   type FilesPlace,
   filesConversationId,
@@ -59,16 +58,19 @@ export function filesRowFor(
 }
 
 /** The row's title: “Chat”, “Feedback”, a branch's name. */
-export function filesRowTitle(row: Pick<FilesConversationRow, 'label'>): string {
-  return row.label || 'A conversation';
+export function filesRowTitle(row: Pick<FilesConversationRow, 'label'>, locale?: string): string {
+  return row.label || mobileTranslator(locale).t('data.files.aConversation');
 }
 
 /**
  * Where a file is, in a sentence (the shared `filesWhereText`): “your Chat”, “your Feedback”, a branch's name; “this
  * conversation” while it isn't named yet.
  */
-export function filesWhere(row: Pick<FilesConversationRow, 'kind' | 'label'> | null | undefined): string {
-  return row?.label ? filesWhereText(row) : 'this conversation';
+export function filesWhere(
+  row: Pick<FilesConversationRow, 'kind' | 'label'> | null | undefined,
+  locale?: string,
+): string {
+  return row?.label ? filesWhereText(row, locale) : mobileTranslator(locale).t('data.files.thisConversation');
 }
 
 /** The kicker over a conversation's Files: “Chat”, “Feedback”, a branch's name. */
@@ -91,11 +93,11 @@ export function filesListRow(
   row: FilesConversationRow,
   ctx: Pick<ViewContext, 'now' | 'timeZone' | 'locale'>,
 ): FilesListRow {
-  const title = filesRowTitle(row);
+  const title = filesRowTitle(row, ctx.locale);
   const { t } = mobileTranslator(ctx.locale);
   const meta =
     resolveDisplayLanguage(ctx.locale) === 'en'
-      ? filesSpaceLine(row, ctx.timeZone)
+      ? filesSpaceLine(row, ctx.timeZone, ctx.locale)
       : [
           t('files.count', { count: row.count }),
           formatLocaleBytes(row.bytes, ctx.locale),
@@ -108,7 +110,7 @@ export function filesListRow(
           .filter(Boolean)
           .join(' · ');
   const time = row.lastAddedAt ? formatRecent(row.lastAddedAt, ctx.now, ctx.timeZone, ctx.locale) : '';
-  const kind = row.kind === 'branch' ? 'branch room' : null;
+  const kind = row.kind === 'branch' ? t('data.files.branchRoom') : null;
   return {
     row,
     title,
@@ -159,8 +161,13 @@ export function fileRowView(
 }
 
 /** A folder's row: “Drawings, folder, 3 files · 2.1 MB”; a new, empty place says it holds nothing yet. */
-export function folderRowMeta(row: { count: number; bytes: number; empty: boolean }): string {
-  return row.empty ? '0 files' : filesSizeLine(row.count, row.bytes);
+export function folderRowMeta(
+  row: { count: number; bytes: number; empty: boolean },
+  locale?: string,
+): string {
+  return row.empty
+    ? mobileTranslator(locale).t('files.count', { count: 0 })
+    : filesSizeLine(row.count, row.bytes, locale);
 }
 
 export type FileActionKind = 'download' | 'open_message' | 'rename' | 'move' | 'remove';
@@ -228,21 +235,23 @@ export function fileActions(entry: Pick<FileEntry, 'messageId'>, locale?: string
 export function removeConfirm(
   entry: Pick<FileEntry, 'messageId' | 'attachment'>,
   where: string,
+  locale?: string,
 ): { title: string; body: string; cta: string } {
+  const { t } = mobileTranslator(locale);
+  const name = entry.attachment.name;
   return {
-    title: entry.messageId
-      ? `Remove “${entry.attachment.name}” from Files?`
-      : `Delete “${entry.attachment.name}”?`,
-    body: removeFileText(entry, where),
-    cta: entry.messageId ? 'Remove' : 'Delete',
+    title: entry.messageId ? t('data.files.removeTitle', { name }) : t('data.files.deleteTitle', { name }),
+    body: removeFileText(entry, where, locale),
+    cta: entry.messageId ? t('data.files.remove') : t('data.files.delete'),
   };
 }
 
 /** Why a typed name can't be a file's (null when it can); the Whombat checks the rest and says so. */
-export function renameProblem(draft: string): string | null {
+export function renameProblem(draft: string, locale?: string): string | null {
+  const { t } = mobileTranslator(locale);
   const name = draft.trim();
-  if (!name) return 'Give the file a name.';
-  if (/[/\\]/.test(name)) return 'A file name can’t hold a / or a \\.';
+  if (!name) return t('data.files.nameMissing');
+  if (/[/\\]/.test(name)) return t('data.files.nameSlash');
   return null;
 }
 
@@ -269,10 +278,11 @@ export function moveChoices(
   entries: readonly Pick<FileEntry, 'folder' | 'addedAt'>[],
   places: readonly string[],
   current: string,
+  locale?: string,
 ): MoveChoice[] {
   const key = filesFolderKey(current);
   return [
-    { path: '', label: FILES_COPY.top, depth: 0, current: current === '' },
+    { path: '', label: filesCopy(locale).top, depth: 0, current: current === '' },
     ...allFolders(entries, places).map((path) => {
       const parts = path.split('/');
       return {
@@ -293,9 +303,11 @@ export function typedFolder(
   raw: string,
   entries: readonly Pick<FileEntry, 'folder' | 'addedAt'>[],
   places: readonly string[],
+  locale?: string,
 ): { folder: string } | { problem: string } {
   const folder = normalizeFilesFolder(raw);
-  if (folder === null) return { problem: folderPathProblem(raw) ?? 'That can’t be a folder.' };
+  if (folder === null)
+    return { problem: folderPathProblem(raw, locale) ?? mobileTranslator(locale).t('data.files.notAFolder') };
   return { folder: existingFolderSpelling(folder, allFolders(entries, places)) };
 }
 
@@ -308,11 +320,12 @@ export function newFolder(
   parent: string,
   entries: readonly Pick<FileEntry, 'folder' | 'addedAt'>[],
   places: readonly string[],
+  locale?: string,
 ): { folder: string } | { problem: string } {
-  const problem = folderNameProblem(raw, parent);
+  const problem = folderNameProblem(raw, parent, locale);
   if (problem) return { problem };
   const path = childFolder(parent, raw);
-  if (path === null) return { problem: 'That can’t be a folder name.' };
+  if (path === null) return { problem: mobileTranslator(locale).t('data.files.notAFolderName') };
   return { folder: existingFolderSpelling(path, allFolders(entries, places)) };
 }
 

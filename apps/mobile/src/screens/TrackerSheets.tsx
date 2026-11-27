@@ -16,14 +16,15 @@ import {
   statusChoices,
   statusDoneText,
   statusProblem,
-  TRACKER_REPLY_TEXT,
-  TRACKER_STATUS_TEXT,
   type TrackerItemModel,
   type TrackerProblem,
   type TrackerSend,
   type TrackerStatusChoice,
+  trackerReplyText,
   trackerSend,
+  trackerStatusSheetText,
 } from '../data/trackerItem';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField } from '../ui/formField';
@@ -43,12 +44,14 @@ interface SheetProps {
 }
 
 export function TrackerReplySheet(props: SheetProps) {
+  const { rawLocale } = useI18n();
+  const replyText = trackerReplyText(rawLocale);
   return (
     <Sheet
       visible={props.visible}
       onClose={props.onClose}
-      label={TRACKER_REPLY_TEXT.title}
-      closeLabel={TRACKER_REPLY_TEXT.cancel}
+      label={replyText.title}
+      closeLabel={replyText.cancel}
       maxHeight="90%"
     >
       {props.visible ? <ReplyForm {...props} /> : null}
@@ -57,12 +60,14 @@ export function TrackerReplySheet(props: SheetProps) {
 }
 
 export function TrackerStatusSheet(props: SheetProps) {
+  const { rawLocale } = useI18n();
+  const statusText = trackerStatusSheetText(rawLocale);
   return (
     <Sheet
       visible={props.visible}
       onClose={props.onClose}
-      label={TRACKER_STATUS_TEXT.title}
-      closeLabel={TRACKER_STATUS_TEXT.cancel}
+      label={statusText.title}
+      closeLabel={statusText.cancel}
       maxHeight="90%"
     >
       {props.visible ? <StatusForm {...props} /> : null}
@@ -71,6 +76,8 @@ export function TrackerStatusSheet(props: SheetProps) {
 }
 
 function ReplyForm({ model, busy, onSend, onClose }: SheetProps) {
+  const { rawLocale } = useI18n();
+  const replyText = trackerReplyText(rawLocale);
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<TrackerUpdateStatus | null>(null);
   const [problem, setProblem] = useState<TrackerProblem | null>(null);
@@ -78,21 +85,21 @@ function ReplyForm({ model, busy, onSend, onClose }: SheetProps) {
 
   const submit = async () => {
     if (busy) return;
-    const p = replyProblem(message);
+    const p = replyProblem(message, rawLocale);
     setProblem(p);
     setError(null);
     if (p) return;
     const send = trackerSend(message, status);
-    setError(await onSend(send, replyDoneText(send)));
+    setError(await onSend(send, replyDoneText(send, rawLocale)));
   };
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 4 }}>
-      <Heading title={TRACKER_REPLY_TEXT.title} context={model.context} />
+      <Heading title={replyText.title} context={model.context} />
       <View style={{ paddingHorizontal: 22, paddingBottom: 14 }}>
         <FormField
           kicker
-          label={TRACKER_REPLY_TEXT.reply}
+          label={replyText.reply}
           value={message}
           onChangeText={(v) => {
             setMessage(v);
@@ -100,15 +107,15 @@ function ReplyForm({ model, busy, onSend, onClose }: SheetProps) {
             setError(null);
           }}
           error={problem?.field === 'message' ? problem.text : null}
-          placeholder={TRACKER_REPLY_TEXT.placeholder}
+          placeholder={replyText.placeholder}
           multiline
           autoFocus
           maxLength={TRACKER_REPLY_MAX}
         />
       </View>
       <StatusChoices
-        label={TRACKER_REPLY_TEXT.alsoStatus}
-        choices={replyStatusChoices(model.status)}
+        label={replyText.alsoStatus}
+        choices={replyStatusChoices(model.status, rawLocale)}
         value={status}
         busy={busy}
         onChange={(v) => {
@@ -119,8 +126,8 @@ function ReplyForm({ model, busy, onSend, onClose }: SheetProps) {
       <Footer
         note={model.replyNote}
         message={error}
-        cancel={TRACKER_REPLY_TEXT.cancel}
-        submit={TRACKER_REPLY_TEXT.send}
+        cancel={replyText.cancel}
+        submit={replyText.send}
         busy={busy}
         onCancel={onClose}
         onSubmit={() => void submit()}
@@ -130,6 +137,9 @@ function ReplyForm({ model, busy, onSend, onClose }: SheetProps) {
 }
 
 function StatusForm({ model, busy, onSend, onClose }: SheetProps) {
+  const { rawLocale } = useI18n();
+  const replyText = trackerReplyText(rawLocale);
+  const statusText = trackerStatusSheetText(rawLocale);
   const [status, setStatus] = useState<TrackerUpdateStatus | null>(() => initialStatus(model.status));
   const [message, setMessage] = useState('');
   const [problem, setProblem] = useState<TrackerProblem | null>(null);
@@ -137,20 +147,20 @@ function StatusForm({ model, busy, onSend, onClose }: SheetProps) {
 
   const submit = async () => {
     if (busy) return;
-    const p = statusProblem(model.status, status, message);
+    const p = statusProblem(model.status, status, message, rawLocale);
     setProblem(p);
     setError(null);
     if (p) return;
     const send = trackerSend(message, status);
-    setError(await onSend(send, statusDoneText(send)));
+    setError(await onSend(send, statusDoneText(send, rawLocale)));
   };
 
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 4 }}>
-      <Heading title={TRACKER_STATUS_TEXT.title} context={model.context} />
+      <Heading title={statusText.title} context={model.context} />
       <StatusChoices
-        label={TRACKER_STATUS_TEXT.status}
-        choices={statusChoices()}
+        label={statusText.status}
+        choices={statusChoices(rawLocale)}
         value={status}
         busy={busy}
         onChange={(v) => {
@@ -167,7 +177,7 @@ function StatusForm({ model, busy, onSend, onClose }: SheetProps) {
       <View style={{ paddingHorizontal: 22, paddingTop: 14 }}>
         <FormField
           kicker
-          label={TRACKER_STATUS_TEXT.reply}
+          label={statusText.reply}
           value={message}
           onChangeText={(v) => {
             setMessage(v);
@@ -175,8 +185,8 @@ function StatusForm({ model, busy, onSend, onClose }: SheetProps) {
             setError(null);
           }}
           error={problem?.field === 'message' ? problem.text : null}
-          hint={TRACKER_STATUS_TEXT.hint}
-          placeholder={TRACKER_REPLY_TEXT.placeholder}
+          hint={statusText.hint}
+          placeholder={replyText.placeholder}
           multiline
           maxLength={TRACKER_REPLY_MAX}
         />
@@ -184,8 +194,8 @@ function StatusForm({ model, busy, onSend, onClose }: SheetProps) {
       <Footer
         note={model.statusNote}
         message={error}
-        cancel={TRACKER_STATUS_TEXT.cancel}
-        submit={TRACKER_STATUS_TEXT.set}
+        cancel={statusText.cancel}
+        submit={statusText.set}
         busy={busy}
         onCancel={onClose}
         onSubmit={() => void submit()}

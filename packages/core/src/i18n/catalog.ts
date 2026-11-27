@@ -23,8 +23,11 @@ import { CONNECTION_MESSAGES } from './messages/connections.js';
 import { DESK_MESSAGES } from './messages/desk.js';
 import { DOMAIN_MESSAGES } from './messages/domain.js';
 import { GATEWAY } from './messages/gateway.js';
+import { GRANTS_MESSAGES } from './messages/grants.js';
 import { HOST_WATCH } from './messages/host-watch.js';
 import { KEYS } from './messages/keys.js';
+import { LABELS_MESSAGES } from './messages/labels.js';
+import { LIVE_MESSAGES } from './messages/live.js';
 import { NEWS_MESSAGES } from './messages/news.js';
 import { ONEPASSWORD } from './messages/onepassword.js';
 import { PROTOCOL } from './messages/protocol.js';
@@ -35,6 +38,7 @@ import { STATUS } from './messages/status.js';
 import { TEXT } from './messages/text.js';
 import { TIME_EN, TIME_NL } from './messages/time.js';
 import { VAULT } from './messages/vault.js';
+import { VAULT_MORE_MESSAGES } from './messages/vault-more.js';
 import { VOICE_MESSAGES } from './messages/voice.js';
 import { WEATHER } from './messages/weather.js';
 
@@ -66,6 +70,10 @@ export const EN = {
   ...GATEWAY.en,
   ...AI.en,
   ...PROTOCOL.en,
+  ...LABELS_MESSAGES.en,
+  ...LIVE_MESSAGES.en,
+  ...GRANTS_MESSAGES.en,
+  ...VAULT_MORE_MESSAGES.en,
 } satisfies Catalog;
 
 export type CoreMessageKey = keyof typeof EN;
@@ -95,6 +103,10 @@ export const NL: { [K in CoreMessageKey]: MessageValue } = {
   ...GATEWAY.nl,
   ...AI.nl,
   ...PROTOCOL.nl,
+  ...LABELS_MESSAGES.nl,
+  ...LIVE_MESSAGES.nl,
+  ...GRANTS_MESSAGES.nl,
+  ...VAULT_MORE_MESSAGES.nl,
 };
 
 export type CoreTranslator = Translator<typeof EN>;

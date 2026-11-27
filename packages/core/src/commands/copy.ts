@@ -3,25 +3,25 @@
  * since 3.0 without the computer, CT-1530). Shared by web, Android, the runner (what an agent reads when a command is
  * refused) and the server.
  */
-import { coreTranslator } from '../i18n/catalog.js';
-import { KEY_CATALOG } from '../keys/catalog.js';
+import { coreTranslator, coreWords } from '../i18n/catalog.js';
+import { KEY_CATALOG, keyLabel } from '../keys/catalog.js';
 import { BLOCKED_GUIDANCE } from '../text/outcomes.js';
-import { type CommandCategory, type CommandScope, commandCategoryKey } from './commands.js';
+import {
+  COMMAND_CATEGORIES,
+  type CommandCategory,
+  type CommandScope,
+  commandCategoryKey,
+} from './commands.js';
 import type { CommandAllowance } from './schemas.js';
 
 /* Commands (AC-41, AC-42) ------------------------------------------------------------------------------------- */
 
-/** What each category is called on a card and in Access settings. */
-export const COMMAND_CATEGORY_LABELS: Readonly<Record<CommandCategory, string>> = {
-  deploy: 'Deploy',
-  deploy_production: 'Deploy to production',
-  merge: 'Merge into main',
-  push_main: 'Push to main',
-  destructive: 'Destructive command on another machine',
-  message_external: 'Message outside your Whombat',
-  web: 'Look something up on the web',
-  browser: 'Use the browser',
-};
+/** What each category is called on a card and in Access settings, in a locale. */
+export function commandCategoryLabels(locale?: string | null): Readonly<Record<CommandCategory, string>> {
+  return coreWords(locale, 'commandCategory', COMMAND_CATEGORIES);
+}
+
+export const COMMAND_CATEGORY_LABELS: Readonly<Record<CommandCategory, string>> = commandCategoryLabels('en');
 
 /** The two categories that aren't shell commands but a Hermes tool call at Ask (CT-1236): their words say “this”. */
 export function isToolCategory(category: CommandCategory): boolean {
@@ -108,16 +108,20 @@ export function commandAllowedText(scope: CommandScope, personName: string): str
   return `Allowed once by ${personName}.`;
 }
 
-/** The agent's Access settings: commands always allowed (AC-42). */
-export const COMMAND_ALLOWANCES_COPY = {
-  title: 'ALWAYS ALLOWED COMMANDS',
-  empty: 'No commands are always allowed. “Always allow” on a command card adds one here.',
-  remove: 'Remove',
-  removed: 'Removed. The command asks again next time.',
-} as const;
+/** The agent's Access settings: commands always allowed, in a locale. */
+export function commandAllowancesCopy(
+  locale?: string | null,
+): Readonly<Record<'title' | 'empty' | 'remove' | 'removed', string>> {
+  return coreWords(locale, 'commandAllowances', ['title', 'empty', 'remove', 'removed'] as const);
+}
+
+export const COMMAND_ALLOWANCES_COPY = commandAllowancesCopy('en');
 
 /** One allowance's second line: “web-1 · Deploy to production”, or just the key. */
-export function commandAllowanceLine(allowance: Pick<CommandAllowance, 'keyId' | 'target'>): string {
-  const label = KEY_CATALOG[allowance.keyId].label;
+export function commandAllowanceLine(
+  allowance: Pick<CommandAllowance, 'keyId' | 'target'>,
+  locale?: string | null,
+): string {
+  const label = keyLabel(allowance.keyId, typeof locale === 'string' ? locale : null);
   return allowance.target ? `${allowance.target} · ${label}` : label;
 }

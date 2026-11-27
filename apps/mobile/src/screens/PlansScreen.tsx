@@ -14,14 +14,14 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { whereOf } from '../data/people';
 import {
-  PLAN_FILTERS,
-  PLANS_EMPTY_TEXT,
-  PLANS_HERE_EMPTY_TEXT,
   type PlanListFilter,
+  planFilters,
   planListRows,
+  plansEmptyText,
+  plansHereEmptyText,
 } from '../data/planList';
-import { OVERVIEW_TITLE } from '../data/shell';
-import { useMobileT } from '../i18n';
+import { overviewTitle } from '../data/shell';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -34,11 +34,12 @@ import { PlanMarkerView, stateColor } from './PlanScreen';
 type Props = NativeStackScreenProps<RootStackParamList, 'Plans'>;
 
 export function PlansScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
-  const back = route.params?.back ?? OVERVIEW_TITLE;
+  const back = route.params?.back ?? overviewTitle(rawLocale);
   const conversationId = route.params?.conversationId;
   const [filter, setFilter] = useState<PlanListFilter>('open');
   const query = usePlans({
@@ -47,8 +48,12 @@ export function PlansScreen({ route, navigation }: Props) {
   });
   const rows = useMemo(
     () =>
-      planListRows(query.data?.plans ?? [], (id) => (conversationId ? undefined : whereOf(bootstrap, id))),
-    [query.data, bootstrap, conversationId],
+      planListRows(
+        query.data?.plans ?? [],
+        (id) => (conversationId ? undefined : whereOf(bootstrap, id)),
+        rawLocale,
+      ),
+    [query.data, bootstrap, conversationId, rawLocale],
   );
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
@@ -74,7 +79,7 @@ export function PlansScreen({ route, navigation }: Props) {
           style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 22, paddingTop: 6, paddingBottom: 14 }}
           accessibilityRole="tablist"
         >
-          {PLAN_FILTERS.map((f) => (
+          {planFilters(rawLocale).map((f) => (
             <Chip
               key={f.value}
               label={f.label}
@@ -88,7 +93,9 @@ export function PlansScreen({ route, navigation }: Props) {
         ) : !query.data ? (
           <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-plans')} />
         ) : rows.length === 0 ? (
-          <QuietText>{(conversationId ? PLANS_HERE_EMPTY_TEXT : PLANS_EMPTY_TEXT)[filter]}</QuietText>
+          <QuietText>
+            {(conversationId ? plansHereEmptyText(rawLocale) : plansEmptyText(rawLocale))[filter]}
+          </QuietText>
         ) : (
           <Section title={`PLANS · ${rows.length}`}>
             {rows.map((r) => (
@@ -97,7 +104,7 @@ export function PlansScreen({ route, navigation }: Props) {
                 title={r.title}
                 meta={r.where}
                 trailing="›"
-                onPress={() => navigation.navigate('Plan', { planId: r.id, back: 'Plans' })}
+                onPress={() => navigation.navigate('Plan', { planId: r.id, back: tMobile('screens.plans') })}
                 accessibilityLabel={r.accessibilityLabel}
               >
                 <Text size={12.5} weight={500} mono color={theme.colors.ink2}>

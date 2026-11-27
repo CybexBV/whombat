@@ -40,7 +40,7 @@ export function GuestSnapshots({
   schedule?: { text: string; onChange: (() => void) | null };
   onTake: () => void;
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     {
@@ -54,7 +54,7 @@ export function GuestSnapshots({
     { retry: false },
   );
   const [ask, setAsk] = useState<Ask | null>(null);
-  const rows = q.data?.op === 'snapshot.list' ? snapshotRows(q.data.items, now, timeZone) : [];
+  const rows = q.data?.op === 'snapshot.list' ? snapshotRows(q.data.items, now, timeZone, rawLocale) : [];
   return (
     <>
       {schedule ? (
@@ -67,7 +67,7 @@ export function GuestSnapshots({
               schedule.onChange ? (
                 <RowAction
                   label={tMobile('screens.change')}
-                  spoken="Change the snapshot schedule"
+                  spoken={tMobile('screens2.guest.changeSchedule')}
                   onPress={schedule.onChange}
                 />
               ) : null
@@ -96,7 +96,9 @@ export function GuestSnapshots({
                 label={r.label}
                 {...(canChange
                   ? {
-                      hint: canRestore ? 'Go back to it or remove it' : 'Remove it',
+                      hint: tMobile(
+                        canRestore ? 'screens2.guest.goBackOrRemove' : 'screens2.common.removeIt',
+                      ),
                       onPress: () => setAsk({ name: r.name, step: 'choose' }),
                     }
                   : {})}
@@ -151,7 +153,7 @@ function SnapshotAsk({
             ? [
                 {
                   id: 'restore',
-                  label: 'Go back to it',
+                  label: tMobile('screens2.guest.goBackToIt'),
                   variant: 'secondary' as const,
                   onPress: () => onAsk({ ...ask, step: 'snapshot_restore' }),
                 },
@@ -159,11 +161,11 @@ function SnapshotAsk({
             : []),
           {
             id: 'delete',
-            label: 'Remove it',
+            label: tMobile('screens2.common.removeIt'),
             variant: 'secondary',
             onPress: () => onAsk({ ...ask, step: 'snapshot_delete' }),
           },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+          { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
         ]}
       />
     );
@@ -174,17 +176,21 @@ function SnapshotAsk({
       onClose={() => !busy && onClose()}
       badge={guest.name}
       tone="bad"
-      title={restore ? `Take ${guest.name} back to “${ask.name}”?` : `Remove “${ask.name}”?`}
+      title={
+        restore
+          ? tMobile('screens2.guest.takeBackAsk', { name: guest.name, snapshot: ask.name })
+          : tMobile('screens2.guest.removeSnapshotAsk', { snapshot: ask.name })
+      }
       body={
         restore
-          ? `Everything that changed on ${guest.name} since then is lost.`
+          ? tMobile('screens2.guest.changesLost', { name: guest.name })
           : tMobile('screens.the-snapshot-goes-the-guest-stays-as-it')
       }
       busy={busy}
       buttons={[
         {
           id: ask.step,
-          label: restore ? 'Go back' : 'Remove',
+          label: tMobile(restore ? 'screens2.common.goBack' : 'screens2.common.remove'),
           variant: 'primary',
           onPress: () =>
             void send({
@@ -196,7 +202,7 @@ function SnapshotAsk({
               else setError(o.message);
             }),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />

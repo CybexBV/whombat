@@ -8,8 +8,6 @@
  */
 import {
   BACKUP_CATEGORY_IDS,
-  BACKUP_CATEGORY_LABELS,
-  BACKUP_COPY,
   BACKUP_DEFAULT_CATEGORIES,
   BACKUP_FILE_MAX_BYTES,
   BACKUP_SERVERS_STATE_LABELS,
@@ -20,7 +18,9 @@ import {
   type BackupRestorePreview,
   type BackupServersPreview,
   type BackupServerToPoint,
+  backupCategoryLabels,
   backupCategoryMeta,
+  backupCopy,
   backupDownloadLabel,
   backupFileErrorOf,
   backupFileErrorText,
@@ -48,37 +48,48 @@ import type {
   BackupRestoreView,
   BackupUploadView,
 } from '@whombat/core/contracts';
+import { interpolate } from '@whombat/core/i18n';
 import { DOT, formatDate } from '@whombat/core/text';
 import { ApiError, NetworkError } from '../http/errors';
+import { clientTree } from '../i18n/catalog';
+import { BACKUP_FILE_WORDS } from '../i18n/messages/hostManaged/backupFile';
 import { OutcomeRedactedError, OutcomeUnknownError, StreamError } from '../session/types';
 
 /**
- * Words the contracts leave to the app (AP-1186): the section's label, transfer progress, the ready file's expiry, a
- * stopped upload, the summary's links and the generic failures. Plain English, curly quotes, the middle dot.
+ * Words the contracts leave to the app (AP-1186), in a locale (English when none is given): the section's label,
+ * transfer progress, the ready file's expiry, a stopped upload, the summary's links and the generic failures.
  */
-export const BACKUP_FILE_TEXT = {
-  /** The section in Settings → This Whombat (SectionLabel shows it as it is): the backup file is for moving. */
-  section: 'MOVE TO ANOTHER WHOMBAT',
-  /** When to use it, under the section's name: the backups keep this Whombat safe already. */
-  when: 'Make a file of what you choose and open it on another Whombat. Your backups already keep this one safe.',
-  downloading: (pct: number) => `Downloading ${DOT} ${pct} %`,
-  uploading: (pct: number) => `Uploading ${DOT} ${pct} %`,
-  uploaded: (size: number) => `Uploaded ${DOT} ${formatBackupSize(size)}`,
-  /** “Expires in 23 hours”, after the file's name and size. */
-  expires: (left: string) => `expires in ${left}`,
-  expired: 'expired',
-  saved: 'Saved to your device.',
-  /** An upload that stopped (the page closed, the network went): choosing the same file goes on from there. */
-  stopped: (pct: number) => `Uploading stopped at ${pct} %. Choose the same file to go on.`,
-  restoreAnother: 'Restore another file',
-  done: 'Done',
-  tryAgain: 'Try again',
-  openConnections: 'Open Connections',
-  openAutomations: 'Open Automations',
-  connection: 'Couldn’t reach your Whombat. Check your connection and try again.',
-  noAnswer: 'Your Whombat didn’t answer in time. Look again in a moment: it may still be working on it.',
-  failed: 'Something went wrong. Try again.',
-} as const;
+export function backupFileText(locale?: string | null) {
+  const w = clientTree(locale, BACKUP_FILE_WORDS);
+  return {
+    /** The section in Settings → This Whombat (SectionLabel shows it as it is): the backup file is for moving. */
+    section: w.section,
+    /** When to use it, under the section's name: the backups keep this Whombat safe already. */
+    when: w.when,
+    downloading: (pct: number) => interpolate(w.downloading, { dot: DOT, pct }),
+    uploading: (pct: number) => interpolate(w.uploading, { dot: DOT, pct }),
+    uploaded: (size: number) => interpolate(w.uploaded, { dot: DOT, size: formatBackupSize(size, locale) }),
+    /** “Expires in 23 hours”, after the file's name and size. */
+    expires: (left: string) => interpolate(w.expires, { left }),
+    expired: w.expired,
+    saved: w.saved,
+    /** An upload that stopped (the page closed, the network went): choosing the same file goes on from there. */
+    stopped: (pct: number) => interpolate(w.stopped, { pct }),
+    restoreAnother: w.restoreAnother,
+    done: w.done,
+    tryAgain: w.tryAgain,
+    openConnections: w.openConnections,
+    openAutomations: w.openAutomations,
+    connection: w.connection,
+    noAnswer: w.noAnswer,
+    failed: w.failed,
+  } as const;
+}
+
+export type BackupFileText = ReturnType<typeof backupFileText>;
+
+/** The backup file's own words in English. */
+export const BACKUP_FILE_TEXT: BackupFileText = backupFileText('en');
 
 /* Download a backup ------------------------------------------------------------------------------------------------ */
 
@@ -164,7 +175,9 @@ export interface BackupDownloadRow {
 export function backupDownloadRows(
   estimate: Pick<BackupEstimate, 'categories'> | null | undefined,
   ticked: readonly BackupCategoryId[],
+  locale?: string | null,
 ): BackupDownloadRow[] {
+  const labels = backupCategoryLabels(locale);
   const byId = new Map<BackupCategoryId, BackupCategoryEstimate>(
     (estimate?.categories ?? []).map((c) => [c.id, c]),
   );
@@ -172,10 +185,10 @@ export function backupDownloadRows(
     const e = byId.get(id);
     return {
       id,
-      label: BACKUP_CATEGORY_LABELS[id],
-      meta: e ? backupCategoryMeta(e) : null,
+      label: labels[id],
+      meta: e ? backupCategoryMeta(e, locale) : null,
       // Nothing to put in: its line says so, no “0 KB”.
-      size: e && (e.count > 0 || e.bytes > 0) ? formatBackupSize(e.bytes) : null,
+      size: e && (e.count > 0 || e.bytes > 0) ? formatBackupSize(e.bytes, locale) : null,
       bytes: e ? e.bytes : null,
       ticked: ticked.includes(id),
     };
@@ -195,14 +208,15 @@ export function backupChosenBytes(
 export function backupMakeLabel(
   estimate: Pick<BackupEstimate, 'categories'> | null | undefined,
   ticked: readonly BackupCategoryId[],
+  locale?: string | null,
 ): string {
   const bytes = backupChosenBytes(estimate, ticked);
-  return bytes === null ? 'Download' : backupDownloadLabel(bytes);
+  return bytes === null ? clientTree(locale, BACKUP_FILE_WORDS).download : backupDownloadLabel(bytes, locale);
 }
 
 /** “Use at least 10 characters.” for a password that is too short (or too long); null when it will do. */
-export function backupPasswordProblem(password: string): string | null {
-  return backupPasswordOk(password) ? null : BACKUP_COPY.download.passwordShort;
+export function backupPasswordProblem(password: string, locale?: string | null): string | null {
+  return backupPasswordOk(password) ? null : backupCopy(locale).download.passwordShort;
 }
 
 /**
@@ -213,16 +227,18 @@ export function backupMakeProblem(input: {
   estimate: Pick<BackupEstimate, 'categories' | 'freeBytes' | 'maxBytes'> | null | undefined;
   ticked: readonly BackupCategoryId[];
   password: string;
+  locale?: string | null;
 }): string | null {
-  if (input.ticked.length === 0) return backupFileErrorText('nothing_chosen');
-  const password = backupPasswordProblem(input.password);
+  const { locale } = input;
+  if (input.ticked.length === 0) return backupFileErrorText('nothing_chosen', locale);
+  const password = backupPasswordProblem(input.password, locale);
   if (password) return password;
   const bytes = backupChosenBytes(input.estimate, input.ticked);
   if (bytes !== null && input.estimate) {
     if (bytes > Math.min(input.estimate.maxBytes, BACKUP_FILE_MAX_BYTES))
-      return backupFileErrorText('too_large');
+      return backupFileErrorText('too_large', locale);
     if (input.estimate.freeBytes !== null && bytes > input.estimate.freeBytes)
-      return backupFileErrorText('no_room');
+      return backupFileErrorText('no_room', locale);
   }
   return null;
 }
@@ -263,32 +279,35 @@ export interface BackupProgressView {
 }
 
 /** “Making the file · Messages · 42 %”. */
-export function backupFileProgress(file: Pick<BackupFileView, 'progress' | 'status'>): BackupProgressView {
+export function backupFileProgress(
+  file: Pick<BackupFileView, 'progress' | 'status'>,
+  locale?: string | null,
+): BackupProgressView {
   const p = file.progress ?? { done: 0, total: 0, step: null };
-  return { pct: backupProgressPct(p, file.status === 'ready'), text: backupMakingText(p) };
+  return { pct: backupProgressPct(p, file.status === 'ready'), text: backupMakingText(p, locale) };
 }
 
 /** “23 hours”, “1 hour”, “40 minutes”, “1 minute”: how long until `until` (rounded down; at least a minute). */
-export function backupTimeLeft(until: string, now: number): string {
+export function backupTimeLeft(until: string, now: number, locale?: string | null): string {
+  const w = clientTree(locale, BACKUP_FILE_WORDS);
   const ms = Date.parse(until) - now;
   const minutes = Math.max(1, Math.floor(ms / 60_000));
-  if (minutes < 60) return minutes === 1 ? '1 minute' : `${minutes} minutes`;
-  const hours = Math.floor(minutes / 60);
-  return hours === 1 ? '1 hour' : `${hours} hours`;
+  if (minutes < 60) return w.minutes(minutes);
+  return w.hours(Math.floor(minutes / 60));
 }
 
 /** “1.8 MB · expires in 23 hours”: the ready file's line under its name. */
 export function backupFileReadyLine(
   file: Pick<BackupFileView, 'size' | 'expiresAt' | 'status'>,
   now: number,
+  locale?: string | null,
 ): string {
+  const T = backupFileText(locale);
   const parts: string[] = [];
-  if (file.size !== null) parts.push(formatBackupSize(file.size));
+  if (file.size !== null) parts.push(formatBackupSize(file.size, locale));
   if (file.expiresAt)
     parts.push(
-      backupFileExpired(file, now)
-        ? BACKUP_FILE_TEXT.expired
-        : BACKUP_FILE_TEXT.expires(backupTimeLeft(file.expiresAt, now)),
+      backupFileExpired(file, now) ? T.expired : T.expires(backupTimeLeft(file.expiresAt, now, locale)),
     );
   return parts.join(` ${DOT} `);
 }
@@ -296,10 +315,12 @@ export function backupFileReadyLine(
 /** Why the newest file failed: “The file couldn’t be made.” and the reason, or null. */
 export function backupFileFailure(
   file: Pick<BackupFileView, 'status' | 'error'> | null | undefined,
+  locale?: string | null,
 ): string | null {
   if (file?.status !== 'failed') return null;
+  const failed = backupCopy(locale).download.failed;
   const reason = file.error?.message;
-  return reason ? `${BACKUP_COPY.download.failed} ${reason}` : BACKUP_COPY.download.failed;
+  return reason ? `${failed} ${reason}` : failed;
 }
 
 /** A transfer's percentage, whole, 100 only when every byte is there. */
@@ -449,7 +470,9 @@ function serversRowParts(
 export function backupRestoreRows(
   preview: PreviewParts,
   ticked: readonly BackupCategoryId[],
+  locale?: string | null,
 ): BackupRestoreRow[] {
+  const labels = backupCategoryLabels(locale);
   const servers = preview.servers ?? null;
   return [...preview.categories]
     .sort((a, b) => BACKUP_CATEGORY_IDS.indexOf(a.id) - BACKUP_CATEGORY_IDS.indexOf(b.id))
@@ -457,13 +480,13 @@ export function backupRestoreRows(
       const disabled = backupRestoreBlocked(preview, c.id);
       return {
         id: c.id,
-        label: BACKUP_CATEGORY_LABELS[c.id],
+        label: labels[c.id],
         ticked: !disabled && ticked.includes(c.id),
         disabled,
         ...(c.id === 'servers' && servers
           ? serversRowParts(c, servers)
           : { chips: backupRestoreChips(c), hint: backupRestoreHint(c.id) }),
-        notes: (c.notes ?? []).map((n) => backupNoteText(n)),
+        notes: (c.notes ?? []).map((n) => backupNoteText(n, locale)),
       };
     });
 }
@@ -488,8 +511,11 @@ export function backupRestoreMadeLine(preview: Pick<BackupRestorePreview, 'manif
 }
 
 /** Notes about the whole file, one sentence each. */
-export function backupRestoreFileNotes(preview: Pick<BackupRestorePreview, 'notes'>): string[] {
-  return (preview.notes ?? []).map((n) => backupNoteText(n));
+export function backupRestoreFileNotes(
+  preview: Pick<BackupRestorePreview, 'notes'>,
+  locale?: string | null,
+): string[] {
+  return (preview.notes ?? []).map((n) => backupNoteText(n, locale));
 }
 
 /** Whether “When something is different” matters: a ticked category has something here that differs. */
@@ -507,16 +533,21 @@ export function backupRestoreHasDifferent(
 export function backupRestoreFileLine(
   restore: Pick<BackupRestoreView, 'madeAt' | 'sourceName'>,
   timeZone: string,
+  locale?: string | null,
 ): string {
-  return `Made ${formatDate(restore.madeAt, timeZone, { year: 'always' })} on ${restore.sourceName}`;
+  return interpolate(clientTree(locale, BACKUP_FILE_WORDS).madeOn, {
+    date: formatDate(restore.madeAt, timeZone, { year: 'always' }, locale),
+    name: restore.sourceName,
+  });
 }
 
 /** “Restoring · Automations · 42 %”. */
 export function backupRestoreProgress(
   restore: Pick<BackupRestoreView, 'progress' | 'status'>,
+  locale?: string | null,
 ): BackupProgressView {
   const p = restore.progress ?? { done: 0, total: 0, step: null };
-  return { pct: backupProgressPct(p, restore.status === 'done'), text: backupRestoringText(p) };
+  return { pct: backupProgressPct(p, restore.status === 'done'), text: backupRestoringText(p, locale) };
 }
 
 /** Where a finished restore points the person: Connections → Needs you, Automations. */
@@ -542,6 +573,7 @@ export interface BackupRestoreOutcome {
 
 export function backupRestoreOutcome(
   restore: Pick<BackupRestoreView, 'status' | 'summary' | 'error'>,
+  locale?: string | null,
 ): BackupRestoreOutcome {
   const summary = restore.summary;
   const lines = summary ? backupRestoreSummaryLines(summary) : [];
@@ -551,8 +583,8 @@ export function backupRestoreOutcome(
   const failed = restore.status === 'failed';
   return {
     title: failed
-      ? (restore.error?.message ?? backupFileErrorText('restore_failed'))
-      : BACKUP_COPY.restore.done,
+      ? (restore.error?.message ?? backupFileErrorText('restore_failed', locale))
+      : backupCopy(locale).restore.done,
     lines,
     links,
     toPoint: [...(summary?.servers?.toPoint ?? [])],
@@ -575,7 +607,6 @@ const problem = (code: BackupFileErrorCode | null, message: string, cancelled = 
   message,
   cancelled,
 });
-const known = (code: BackupFileErrorCode) => problem(code, backupFileErrorText(code));
 
 /**
  * What went wrong, for people (AP-1199): a backup-file code (from the server's `details.code`, a stream's refusal, or
@@ -585,14 +616,17 @@ const known = (code: BackupFileErrorCode) => problem(code, backupFileErrorText(c
 export function backupProblem(
   error: unknown,
   during: 'download' | 'upload' | 'other' = 'other',
+  locale?: string | null,
 ): BackupProblem {
+  const T = backupFileText(locale);
+  const known = (code: BackupFileErrorCode) => problem(code, backupFileErrorText(code, locale));
   if (isBackupFileError(error)) return known(error.code);
   if (error instanceof ApiError) {
     const code = backupFileErrorOf(error.details);
     if (code) return known(code);
     if (error.status === 403) return known('people_only');
     if (error.status === 410) return known(during === 'upload' ? 'upload_expired' : 'expired');
-    return problem(null, error.status < 500 && error.message ? error.message : BACKUP_FILE_TEXT.failed);
+    return problem(null, error.status < 500 && error.message ? error.message : T.failed);
   }
   if (error instanceof StreamError) {
     if (error.code === 'cancelled') return problem(null, '', true);
@@ -602,12 +636,12 @@ export function backupProblem(
       return known(during === 'upload' ? 'upload_expired' : 'expired');
     if (error.code === 'integrity') return known(during === 'upload' ? 'upload_mismatch' : 'damaged');
     if (error.code === 'tooLarge' || error.code === 'too_large') return known('too_large');
-    if (error.code === 'lost') return problem(null, BACKUP_FILE_TEXT.connection);
-    return problem(null, BACKUP_FILE_TEXT.failed);
+    if (error.code === 'lost') return problem(null, T.connection);
+    return problem(null, T.failed);
   }
   if (error instanceof Error && error.name === 'AbortError') return problem(null, '', true);
-  if (error instanceof NetworkError) return problem(null, BACKUP_FILE_TEXT.connection);
+  if (error instanceof NetworkError) return problem(null, T.connection);
   if (error instanceof OutcomeUnknownError || error instanceof OutcomeRedactedError)
-    return problem(null, BACKUP_FILE_TEXT.noAnswer);
-  return problem(null, BACKUP_FILE_TEXT.failed);
+    return problem(null, T.noAnswer);
+  return problem(null, T.failed);
 }

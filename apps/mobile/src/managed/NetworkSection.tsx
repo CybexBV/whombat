@@ -13,36 +13,35 @@
  *   again** across the bottom above Join, asked in an alert; the cable change's line, the servers finding the box's new
  *   address with **Point them here** (`onRepoint`) for those that don't, and how to keep the old address.
  *
- * The rows and every word are the shared `networkSectionView` and `NETWORK_TEXT`; the poller follows a change every 2 s
+ * The rows and every word are the shared `networkSectionView` and `networkTextHere`; the poller follows a change every 2 s
  * while it runs (`useNetwork`). Every target 44dp.
  */
 import {
   type CableUse,
   type HostNetwork,
-  NETWORK_TEXT,
   type NetworkApi,
   type NetworkChangeView,
   type NetworkPoller,
   type NetworkRowView,
   networkErrorText,
   networkSectionView,
+  networkText,
   type SavedNetworkView,
   type ServerMove,
   type ServerMoveView,
 } from '@whombat/client';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Lock } from '../ui/icons';
 import { Button, SkeletonRows } from '../ui/primitives';
 import { ChangeMark, SignalBars } from './MachineParts';
-import { cableConfirm, MACHINE_TEXT, networkCardKind } from './machine';
+import { cableConfirm, machineText, networkCardKind } from './machine';
 import { Card, Row } from './ui';
 import { type MachineHere, useNetwork } from './useMachine';
 import { WifiSheet } from './WifiSheet';
-
-const T = NETWORK_TEXT;
 
 /** NETWORK, or nothing (no manager here). `onHardware` opens the Hardware screen, `onRepoint` Point them here. */
 export function NetworkSection({
@@ -54,6 +53,8 @@ export function NetworkSection({
   onHardware?: () => void;
   onRepoint?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
   const { state, poller } = useNetwork(machine.network, machine.onReset);
   const kind = networkCardKind(machine.network, state);
   if (kind === 'none' || !machine.network) return null;
@@ -113,11 +114,13 @@ function NetworkRows({
   onHardware: (() => void) | undefined;
   onRepoint: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
   const theme = useTheme();
   const [joining, setJoining] = useState(false);
-  const v = networkSectionView(network, { name, seenRunning, cableSeenRunning, move });
+  const v = networkSectionView(network, { name, seenRunning, cableSeenRunning, move, locale: rawLocale });
   const switchTo = (use: CableUse) => {
-    const c = cableConfirm(network, use, name);
+    const c = cableConfirm(network, use, name, rawLocale);
     Alert.alert(c.title, c.message, [
       { text: T.dialog.cancel, style: 'cancel' },
       {
@@ -126,7 +129,7 @@ function NetworkRows({
           api.setCable(use).then(
             (change) => poller.cableStarted(change),
             (error) => {
-              Alert.alert(MACHINE_TEXT.switchFailed(use), networkErrorText(error, name));
+              Alert.alert(machineText(rawLocale).switchFailed(use), networkErrorText(error, name, rawLocale));
               poller.refresh();
             },
           ),
@@ -145,7 +148,10 @@ function NetworkRows({
           api.forget(saved.ssid).then(
             (change) => poller.started(change),
             (error) => {
-              Alert.alert(MACHINE_TEXT.forgetFailed(saved.ssid), networkErrorText(error, name));
+              Alert.alert(
+                machineText(rawLocale).forgetFailed(saved.ssid),
+                networkErrorText(error, name, rawLocale),
+              );
               poller.refresh();
             },
           ),
@@ -216,6 +222,8 @@ function ConnectionRow({
   first: boolean;
   onHardware: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
   return (
     <Row
       first={first}
@@ -274,6 +282,8 @@ function ChangeRow({ change, first }: { change: NetworkChangeView; first: boolea
 
 /** The servers finding the box's new address: a spinner while they come, Point them here for those that don't. */
 function MoveRow({ move, onRepoint }: { move: ServerMoveView; onRepoint: (() => void) | undefined }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -328,6 +338,8 @@ function SavedRow({
   busy: boolean;
   onForget: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = networkText(rawLocale);
   const theme = useTheme();
   return (
     <View

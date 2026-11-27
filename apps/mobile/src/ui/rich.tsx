@@ -61,6 +61,8 @@ interface Palette {
   T: ComponentType<SelectableTextProps>;
   /** What a paragraph or heading adds to be iOS's selectable text view; empty otherwise. */
   select: Pick<SelectableTextProps, 'onSelectionChange'> & { selectable?: true; uiTextView?: true };
+  /** What an image without a description and a task without words are called, in the person's language. */
+  words: { image: string; task: string };
 }
 
 function inlines(nodes: readonly Inline[], p: Palette, key = ''): ReactNode[] {
@@ -116,7 +118,7 @@ function inlineNode(node: Inline, p: Palette, k: string): ReactNode {
       );
     case 'image':
       // Inside a run (a link, bold): its description; a paragraph's own images are rows (`paragraphRuns`).
-      return node.alt || 'Image';
+      return node.alt || p.words.image;
   }
 }
 
@@ -148,12 +150,10 @@ function trimBreaks(nodes: Inline[]): Inline[] {
 }
 
 /** A task item's text, for its checkbox's label. */
-function taskLabel(item: readonly Block[]): string {
+function taskLabel(item: readonly Block[], task: string): string {
   const first = item[0];
-  if (first?.type !== 'paragraph') return 'Task';
-  return (
-    first.children.map((n) => ('text' in n ? n.text : n.type === 'image' ? n.alt : '')).join('') || 'Task'
-  );
+  if (first?.type !== 'paragraph') return task;
+  return first.children.map((n) => ('text' in n ? n.text : n.type === 'image' ? n.alt : '')).join('') || task;
 }
 
 /** A column's width: its longest cell's text at about 0.55 em a character, plus padding; 72…240 dp. */
@@ -316,7 +316,7 @@ function BlockView({ block, p: palette }: { block: Block; p: Palette }) {
                   accessible
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: block.checked[n] === true, disabled: true }}
-                  accessibilityLabel={taskLabel(item)}
+                  accessibilityLabel={taskLabel(item, p.words.task)}
                   style={{ paddingTop: 2 }}
                 >
                   {block.checked[n] ? (
@@ -373,6 +373,7 @@ export const RichText = memo(function RichText({
   lh = 1.45,
   selectable = false,
 }: RichTextProps) {
+  const { t: tMobile } = useMobileT();
   const blocks = useMemo(() => parseMessage(text), [text]);
   const open = useOpenUrl();
   const base: TextStyle = { ...textMetrics({ size, lineHeight: lh }), color, includeFontPadding: false };
@@ -387,6 +388,7 @@ export const RichText = memo(function RichText({
     accent: accentColor,
     size,
     open,
+    words: { image: tMobile('screens2.rich.image'), task: tMobile('screens2.rich.task') },
     ...(selectable && Platform.OS === 'ios'
       ? {
           T: UITextView as ComponentType<SelectableTextProps>,

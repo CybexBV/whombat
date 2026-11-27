@@ -7,18 +7,19 @@
  * own rows, notes and buttons (each at least 44dp).
  */
 import {
-  ONEPASSWORD_APP_TEXT,
   onePasswordAnsweredText,
+  onePasswordAppText,
   onePasswordPage,
   onePasswordSetChanged,
 } from '@whombat/client';
 import { connectProblem } from '@whombat/client/connections';
 import { useOnePassword, useOnePasswordWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
-import { ONEPASSWORD_WORDS, type OnePasswordRemovalAnswer } from '@whombat/core/vault';
+import { type OnePasswordRemovalAnswer, onePasswordWords } from '@whombat/core/vault';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useViewContext } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { FormMessage } from '../../ui/formField';
@@ -31,6 +32,9 @@ import { Note } from './parts';
 const SYNCING_POLL_MS = 3000;
 
 export function OnePasswordSections({ slug, connectionId }: { slug: string; connectionId: string }) {
+  const { rawLocale } = useI18n();
+  const onepasswordAppTextHere = onePasswordAppText(rawLocale);
+  const onepasswordWordsHere = onePasswordWords(rawLocale);
   const theme = useTheme();
   const { now, timeZone } = useViewContext();
   const params = { burrow: slug, connectionId };
@@ -44,22 +48,22 @@ export function OnePasswordSections({ slug, connectionId }: { slug: string; conn
 
   if (!query.data)
     return (
-      <Section title={ONEPASSWORD_APP_TEXT.section}>
+      <Section title={onepasswordAppTextHere.section}>
         {query.error ? (
-          <ErrorState text={ONEPASSWORD_APP_TEXT.failed} onRetry={() => void query.refetch()} />
+          <ErrorState text={onepasswordAppTextHere.failed} onRetry={() => void query.refetch()} />
         ) : (
-          <SkeletonRows count={2} lines={2} label={ONEPASSWORD_APP_TEXT.section} />
+          <SkeletonRows count={2} lines={2} label={onepasswordAppTextHere.section} />
         )}
       </Section>
     );
-  const page = onePasswordPage(query.data, now, timeZone);
+  const page = onePasswordPage(query.data, now, timeZone, rawLocale);
 
   async function syncNow() {
     setProblem(null);
     try {
       await sync.mutateAsync({ params, body: {} });
     } catch (err) {
-      setProblem(connectProblem(err).message);
+      setProblem(connectProblem(err, undefined, undefined, rawLocale).message);
     }
   }
 
@@ -67,20 +71,24 @@ export function OnePasswordSections({ slug, connectionId }: { slug: string; conn
     setProblem(null);
     try {
       const result = await answer.mutateAsync({ params, body: { answer: choice, token } });
-      if (result.status === 'ok') showNotice(onePasswordAnsweredText(choice));
+      if (result.status === 'ok') showNotice(onePasswordAnsweredText(choice, rawLocale));
       else if (result.status === 'blocked') setProblem(result.message);
     } catch (err) {
       // The set changed since it was shown: the screen reads it again, nothing was removed.
-      setProblem(onePasswordSetChanged(err) ? ONEPASSWORD_APP_TEXT.changed : connectProblem(err).message);
+      setProblem(
+        onePasswordSetChanged(err)
+          ? onepasswordAppTextHere.changed
+          : connectProblem(err, undefined, undefined, rawLocale).message,
+      );
     }
   }
 
   return (
     <>
-      <Section title={ONEPASSWORD_APP_TEXT.section}>
+      <Section title={onepasswordAppTextHere.section}>
         <ListRow
           title={page.vault}
-          meta={ONEPASSWORD_APP_TEXT.vaultLabel}
+          meta={onepasswordAppTextHere.vaultLabel}
           body={page.kept}
           accessibilityLabel={[page.vault, page.kept, ...page.status.map((l) => l.text)].join('. ')}
         >
@@ -105,14 +113,14 @@ export function OnePasswordSections({ slug, connectionId }: { slug: string; conn
             </View>
             {/* Stacked: neither answer fits half a card at large text. */}
             <Button
-              label={ONEPASSWORD_WORDS.removeHere}
+              label={onepasswordWordsHere.removeHere}
               variant="secondary"
               busy={answer.isPending && answer.variables?.body.answer === 'remove'}
               disabled={answer.isPending}
               onPress={() => page.removals && void answerRemovals('remove', page.removals.token)}
             />
             <Button
-              label={ONEPASSWORD_WORDS.keepHere}
+              label={onepasswordWordsHere.keepHere}
               variant="secondary"
               busy={answer.isPending && answer.variables?.body.answer === 'keep'}
               disabled={answer.isPending}
@@ -126,7 +134,7 @@ export function OnePasswordSections({ slug, connectionId }: { slug: string; conn
               {page.checked}
             </Text>
             <Button
-              label={ONEPASSWORD_WORDS.syncNow}
+              label={onepasswordWordsHere.syncNow}
               variant="secondary"
               disabled={page.syncing || sync.isPending}
               onPress={() => void syncNow()}
@@ -136,7 +144,7 @@ export function OnePasswordSections({ slug, connectionId }: { slug: string; conn
         </View>
       </Section>
       {page.notInVault.length > 0 ? (
-        <Section title={ONEPASSWORD_WORDS.notInVault.toUpperCase()}>
+        <Section title={onepasswordWordsHere.notInVault.toUpperCase()}>
           {page.notInVault.map((item) => (
             <ListRow
               key={item.id}

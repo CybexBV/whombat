@@ -6,22 +6,23 @@
  * Inbox's (`data/needsYou.ts`). Pure; the screen is `screens/HomeScreen.tsx` (the `Dashboard` route).
  */
 
-import { type AgentWords, CONNECTIONS_TAB_WORDS, type OverviewSectionView } from '@whombat/client';
+import { type AgentWords, connectionsTabWords, type OverviewSectionView } from '@whombat/client';
 import { catalogEntry, type ThingSummary } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
-import { OVERVIEW_TITLE } from './shell';
+import { overviewTitle } from './shell';
 
 /* Words ------------------------------------------------------------------------------------------------------------- */
 
 /** Overview's words (CN-01…CN-03; AP-2553; sidebar-tabs.md). */
 export function connectionsCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
+  const title = overviewTitle(locale);
   return {
-    title: OVERVIEW_TITLE,
+    title,
     needsYou: t('home.connectionsCopy.needsYou'),
     /** Everything connected that isn't a server (sidebar-tabs.md; the web's tab). */
-    services: CONNECTIONS_TAB_WORDS.services,
-    failed: `${OVERVIEW_TITLE} didn’t load.`,
+    services: connectionsTabWords(locale).services,
+    failed: t('data.home.failed', { title }),
     loading: t('home.connectionsCopy.loading'),
     opensSheet: t('home.connectionsCopy.opensSheet'),
     opens: t('home.connectionsCopy.opens'),
@@ -31,8 +32,7 @@ export function connectionsCopy(locale?: string) {
     needsYouGone: t('home.connectionsCopy.needsYouGone'),
     addConnection: t('home.connectionsCopy.addConnection'),
     addConnectionLine: t('home.connectionsCopy.addConnectionLine'),
-    empty: (w: Pick<AgentWords, 'name'>) =>
-      `Nothing here yet. Ask ${w.name} to add a server, a connection or a device.`,
+    empty: (w: Pick<AgentWords, 'name'>) => t('data.home.empty', { name: w.name }),
   } as const;
 }
 export const CONNECTIONS_COPY = connectionsCopy();

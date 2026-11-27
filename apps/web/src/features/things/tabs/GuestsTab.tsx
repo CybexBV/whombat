@@ -36,6 +36,7 @@ import { type ReactNode, useEffect, useState } from 'react';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
+import { useWebI18n } from '../../../i18n/provider';
 import wi from '../incus/Incus.module.css';
 import { BulkBar } from '../manage/BulkBar';
 import type { CreateKind } from '../manage/CreateGuestDialog';
@@ -95,7 +96,11 @@ export function GuestsTab({
   const kept = splitTemporary(every).kept;
   const { shown: all, hidden } = shownGuests(every, showTemporary);
   const temporary = every.length - kept.length;
-  const word = guestsWord(serverDashboardKind(detail));
+  const { tag: locale } = useWebI18n();
+  const kind = serverDashboardKind(detail);
+  const word = guestsWord(kind, locale);
+  // The search box's label is still an English sentence, so its word stays English with it.
+  const findWord = guestsWord(kind).toLowerCase();
   const state = (FILTERS.some((f) => f.value === search.state) ? search.state : 'all') as GuestFilter;
   const [sort, setSort] = useState<GuestSort>(GUEST_SORT_DEFAULT);
   const list = sortGuests(filterGuests(all, state, search.q ?? ''), sort);
@@ -168,7 +173,7 @@ export function GuestsTab({
             className={gs.search}
             type="search"
             placeholder="Find by name…"
-            aria-label={`Find ${word.toLowerCase()} by name`}
+            aria-label={`Find ${findWord} by name`}
             value={search.q ?? ''}
             onChange={(e) => set({ q: e.target.value }, { replace: true })}
           />

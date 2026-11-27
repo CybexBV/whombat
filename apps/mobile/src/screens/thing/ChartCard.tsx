@@ -15,6 +15,7 @@ import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { type ChartCardView, chartCard, lineWords } from '../../data/dashboard';
 import type { HostReadout } from '../../data/hostStatus';
+import { useI18n } from '../../i18n';
 import { ColumnChart, LineChart, swatchColor } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -34,7 +35,11 @@ export function ChartCard({
   inline?: { title: boolean; figure: boolean } | null;
 }) {
   const { timeZone } = useBurrowBase();
-  const chart = useMemo(() => chartCard(panel, range, timeZone), [panel, range, timeZone]);
+  const { rawLocale } = useI18n();
+  const chart = useMemo(
+    () => chartCard(panel, range, timeZone, rawLocale),
+    [panel, range, timeZone, rawLocale],
+  );
   const [selected, setSelected] = useState<number | null>(null);
   if (!chart) return null;
   // A new range or a refresh may have fewer points than the moment picked.

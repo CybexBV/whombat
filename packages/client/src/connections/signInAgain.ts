@@ -12,7 +12,10 @@ import {
   type ConnectionView,
   catalogSignIn,
 } from '@whombat/core/domain';
-import { CONNECT_FORM_TEXT } from './draft';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CONN_SIGN_IN_AGAIN_WORDS } from '../i18n/messages/connectionsHosts/connections';
+import { connectFormText } from './draft';
 import { reauthText, sessionSecret } from './form';
 
 type PasswordSignIn = Extract<CatalogSignIn, { kind: 'password' }>;
@@ -26,29 +29,35 @@ export interface SecretWords {
 }
 
 /** The secret's own words (T3 Code's “Pairing code”), else the form's “Password”. */
-export function secretWords(method: PasswordSignIn): SecretWords {
+export function secretWords(method: PasswordSignIn, locale?: string | null): SecretWords {
   const s = method.secret;
+  const form = connectFormText(locale);
   return {
-    label: s?.label ?? CONNECT_FORM_TEXT.password,
+    label: s?.label ?? form.password,
     placeholder: s?.placeholder ?? '',
-    help: s?.help ?? CONNECT_FORM_TEXT.passwordHelp,
+    help: s?.help ?? form.passwordHelp,
     steps: s?.steps ?? [],
   };
 }
 
 /** The secret in a sentence: “pairing code”, “password”. */
-export function secretWord(method: PasswordSignIn): string {
-  return lowerFirst(secretWords(method).label);
+export function secretWord(method: PasswordSignIn, locale?: string | null): string {
+  return lowerFirst(secretWords(method, locale).label);
 }
 
 /**
  * What the connect form says while sign in once runs: “Signing in to Proxmox VE and making Whombat’s key…”, or for a
  * secret with its own name “Signing in to T3 Code with the pairing code…”.
  */
-export function signingInText(entry: Pick<CatalogEntry, 'name'>, method: CatalogSignIn): string {
+export function signingInText(
+  entry: Pick<CatalogEntry, 'name'>,
+  method: CatalogSignIn,
+  locale?: string | null,
+): string {
+  const form = connectFormText(locale);
   return method.kind === 'password' && method.secret
-    ? CONNECT_FORM_TEXT.signingInWith(entry.name, secretWord(method))
-    : CONNECT_FORM_TEXT.signingIn(entry.name);
+    ? form.signingInWith(entry.name, secretWord(method, locale))
+    : form.signingIn(entry.name);
 }
 
 /** The entry's sign-in with no account whose result its kept token is (T3 Code's pairing code), or null. */
@@ -60,18 +69,22 @@ export function codeSignInOf(entry: CatalogEntry): PasswordSignIn | null {
 }
 
 /** The page's words for signing in again with a new code. */
-export const SIGN_IN_AGAIN_TEXT = {
-  button: 'Sign in again',
-  submit: 'Sign in',
-  /** “Whombat’s own sign-in is kept sealed on this Whombat. When it ends, sign in again with a new pairing code.” */
-  kept: (secret: string) =>
-    `Whombat’s own sign-in is kept sealed on this Whombat. When it ends, sign in again with a new ${secret}.`,
-  /** “T3 Code needs a new pairing code before Whombat can use it again.” */
-  needs: (name: string, secret: string) => `${name} needs a new ${secret} before Whombat can use it again.`,
-  signingIn: (name: string) => `Signing in to ${name}…`,
-  /** The toast once it worked. */
-  done: (name: string) => `Signed in to ${name} again.`,
-} as const;
+export function signInAgainText(locale?: string | null) {
+  const w = clientTree(locale, CONN_SIGN_IN_AGAIN_WORDS);
+  return {
+    button: w.button,
+    submit: w.submit,
+    /** “Whombat’s own sign-in is kept sealed on this Whombat. When it ends, sign in again with a new pairing code.” */
+    kept: (secret: string) => interpolate(w.kept, { secret }),
+    /** “T3 Code needs a new pairing code before Whombat can use it again.” */
+    needs: (name: string, secret: string) => interpolate(w.needs, { name, secret }),
+    signingIn: (name: string) => interpolate(w.signingIn, { name }),
+    /** The toast once it worked. */
+    done: (name: string) => interpolate(w.done, { name }),
+  };
+}
+
+export const SIGN_IN_AGAIN_TEXT = signInAgainText('en');
 
 /** What a connection's SIGN-IN shows when it signs in again with a new code. */
 export interface CodeSignInAgain {
@@ -94,16 +107,18 @@ export interface CodeSignInAgain {
 export function codeSignInAgain(
   entry: CatalogEntry,
   conn: Pick<ConnectionView, 'signIn' | 'status'>,
+  locale?: string | null,
 ): CodeSignInAgain | null {
   if (conn.signIn !== 'token') return null;
   const method = codeSignInOf(entry);
   if (!method) return null;
-  const words = secretWords(method);
-  const secret = secretWord(method);
+  const words = secretWords(method, locale);
+  const secret = secretWord(method, locale);
   const needs = conn.status !== 'active';
+  const t = signInAgainText(locale);
   return {
     title: method.label,
-    line: needs ? SIGN_IN_AGAIN_TEXT.needs(entry.name, secret) : SIGN_IN_AGAIN_TEXT.kept(secret),
+    line: needs ? t.needs(entry.name, secret) : t.kept(secret),
     needs,
     words,
     method,
@@ -111,8 +126,14 @@ export function codeSignInAgain(
 }
 
 /** The code's own problem before it is sent: “Pairing code is needed.” */
-export function codeProblemText(again: Pick<CodeSignInAgain, 'words'>, code: string): string | null {
-  return code.trim() ? null : `${again.words.label} is needed.`;
+export function codeProblemText(
+  again: Pick<CodeSignInAgain, 'words'>,
+  code: string,
+  locale?: string | null,
+): string | null {
+  return code.trim()
+    ? null
+    : interpolate(clientTree(locale, CONN_SIGN_IN_AGAIN_WORDS).codeNeeded, { label: again.words.label });
 }
 
 /**
@@ -122,12 +143,13 @@ export function codeProblemText(again: Pick<CodeSignInAgain, 'words'>, code: str
 export function connectionReason(
   entry: CatalogEntry | null,
   conn: Pick<ConnectionView, 'status' | 'reauthReason' | 'signIn' | 'label'>,
+  locale?: string | null,
 ): string | null {
   if (conn.status === 'active') return null;
-  const replaces = conn.signIn === 'token' && !(entry && codeSignInAgain(entry, conn));
+  const replaces = conn.signIn === 'token' && !(entry && codeSignInAgain(entry, conn, locale));
   // An entry only automations use (a report tracker) has one name for every tracker: its connection names this one.
   const name = entry && entry.use !== 'automations' ? entry.name : conn.label;
-  return reauthText(conn.reauthReason, name, replaces, sessionSecret(entry) ?? 'token');
+  return reauthText(conn.reauthReason, name, replaces, sessionSecret(entry) ?? 'token', locale);
 }
 
 /** “Pairing code” → “pairing code”; an initialism stays (“API key”). */

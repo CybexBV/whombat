@@ -16,14 +16,13 @@
  * `useMessageFiles`: “Save to Files” on a message's files (contracts 0.59 CT-312, files-space.md AP-840), as on the web.
  */
 import {
-  FILES_COPY,
   type FilesUpload,
   filesErrorText,
   filesUploading,
   filesUploadsReducer,
-  SAVE_TO_FILES_FAILED,
   type SaveToFilesAction,
   saveActionOf,
+  saveToFilesFailed,
   tooLargeText,
   UploadError,
   uploadErrorText,
@@ -32,10 +31,12 @@ import {
 import { useInvalidateFiles, useSaveMessageFile, useWhombat } from '@whombat/client/react';
 import type { Attachment } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useI18n } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { fileChunkSource } from '../managed/files';
 import type { PickedFile } from './attachments';
 import { useBurrowBase } from './BurrowProvider';
+import { filesCopy } from './filesCopy';
 
 /** Files is on this Whombat for this app (`files.space`; never in the demo world). */
 export function useFilesSpace(): boolean {
@@ -64,11 +65,12 @@ export function useMessageFiles(
   { onOpen, notice }: { onOpen: (conversationId: string) => void; notice: (text: string) => void },
 ): MessageFileActions | null {
   const { slug, mode } = useBurrowBase();
+  const { rawLocale } = useI18n();
   const saves = mode !== 'fixtures' && !!conversationId;
   const { mutateAsync } = useSaveMessageFile(slug);
   const [busy, setBusy] = useState<ReadonlySet<string>>(() => new Set());
-  const latest = useRef({ onOpen, notice });
-  latest.current = { onOpen, notice };
+  const latest = useRef({ onOpen, notice, locale: rawLocale });
+  latest.current = { onOpen, notice, locale: rawLocale };
   const save = useCallback(
     (attachment: Attachment) => {
       const id = attachment.id;
@@ -76,8 +78,9 @@ export function useMessageFiles(
       // One promise per tap (`mutate`'s own callbacks hear only the latest of two saves at once).
       void mutateAsync({ attachmentId: id })
         .then(
-          () => latest.current.notice(FILES_COPY.savedNote),
-          (error: unknown) => latest.current.notice(filesErrorText(error, SAVE_TO_FILES_FAILED)),
+          () => latest.current.notice(filesCopy(latest.current.locale).savedNote),
+          (error: unknown) =>
+            latest.current.notice(filesErrorText(error, saveToFilesFailed(latest.current.locale))),
         )
         .finally(() =>
           setBusy((b) => {
@@ -111,6 +114,9 @@ const SAVED_LINGER_MS = 4000;
 
 export function useFilesUploads(burrow: string, conversationId: string | null) {
   const { client } = useWhombat();
+  const { rawLocale } = useI18n();
+  const locale = useRef(rawLocale);
+  locale.current = rawLocale;
   const invalidate = useInvalidateFiles();
   const [items, dispatch] = useReducer(filesUploadsReducer, []);
   const files = useRef(new Map<string, PickedFile>());
@@ -139,7 +145,7 @@ export function useFilesUploads(burrow: string, conversationId: string | null) {
       aborts.current.set(id, controller);
       void (async () => {
         // Chunks read by offset through the session (AP-13).
-        const source = fileChunkSource(expoFileApi, file);
+        const source = fileChunkSource(expoFileApi, file, locale.current);
         try {
           await uploadToFiles(client, {
             burrow,
@@ -162,7 +168,7 @@ export function useFilesUploads(burrow: string, conversationId: string | null) {
           invalidate(conversationId);
         } catch (err) {
           if (err instanceof UploadError && err.cancelled) return;
-          dispatch({ type: 'failed', localId: id, error: uploadErrorText(err) });
+          dispatch({ type: 'failed', localId: id, error: uploadErrorText(err, locale.current) });
         } finally {
           source?.close();
           if (aborts.current.get(id) === controller) aborts.current.delete(id);
@@ -181,7 +187,7 @@ export function useFilesUploads(burrow: string, conversationId: string | null) {
         const item = { localId: id, name: file.name, size: file.size, folder };
         const limit = maxBytes.current;
         if (limit !== null && file.size > limit) {
-          dispatch({ type: 'refuse', item, error: tooLargeText(file.name, limit) });
+          dispatch({ type: 'refuse', item, error: tooLargeText(file.name, limit, locale.current) });
           continue;
         }
         files.current.set(id, file);

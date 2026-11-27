@@ -8,7 +8,7 @@ import type { AgentProfile } from '@whombat/core';
 import { type ReactNode, type Ref, useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useI18n, useMobileT } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -16,29 +16,35 @@ import { bottomPadding } from '../../ui/insets';
 import { Button } from '../../ui/primitives';
 
 /** Leaving a part with unsaved changes (the web's save bar). */
-export const LEAVE_TEXT = {
-  title: 'Leave without saving?',
-  text: (name: string, part: string) => `Your changes to ${name}’s ${part.toLowerCase()} aren’t saved yet.`,
-  stay: 'Stay',
-  discard: 'Discard changes',
-} as const;
+export function leaveText(locale?: string | null) {
+  const tr = mobileTranslator(locale);
+  return {
+    title: tr.t('screens2.agent.leaveTitle'),
+    text: (name: string, part: string) =>
+      tr.t('screens2.agent.leaveText', { name, part: part.toLowerCase() }),
+    stay: tr.t('screens2.agent.stay'),
+    discard: tr.t('screens2.agent.discard'),
+  };
+}
 
 /**
  * Unsaved changes in the open part: leaving the screen asks first, and `confirm` asks before something else replaces
  * the part. `name` and `part` say whose changes and to what.
  */
 export function useUnsavedGuard(name: string, part: string) {
+  const { rawLocale } = useI18n();
+  const leaveTextHere = leaveText(rawLocale);
   const navigation = useAppNavigation();
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const ask = useCallback(
     (onDiscard: () => void) =>
-      Alert.alert(LEAVE_TEXT.title, LEAVE_TEXT.text(name, part), [
-        { text: LEAVE_TEXT.stay, style: 'cancel' },
-        { text: LEAVE_TEXT.discard, style: 'destructive', onPress: onDiscard },
+      Alert.alert(leaveTextHere.title, leaveTextHere.text(name, part), [
+        { text: leaveTextHere.stay, style: 'cancel' },
+        { text: leaveTextHere.discard, style: 'destructive', onPress: onDiscard },
       ]),
-    [name, part],
+    [name, part, leaveTextHere.title, leaveTextHere.text, leaveTextHere.stay, leaveTextHere.discard],
   );
   useEffect(
     () =>

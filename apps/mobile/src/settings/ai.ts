@@ -12,8 +12,8 @@ import {
   clientOf,
   clientReady,
   needsClient,
-  SIGNIN_STATES,
-  SIGNIN_TEXT,
+  signinStates,
+  signinText,
 } from '@whombat/client/signins';
 import {
   type ClientStatus,
@@ -25,22 +25,28 @@ import {
   type UsageWindow,
   windowLevel,
 } from '@whombat/core/domain';
-import { formatAsOf, formatResetsIn, formatUsagePct, USAGE_PAY_AS_YOU_GO } from '@whombat/core/text';
+import { formatAsOf, formatResetsIn, formatUsagePct, usagePayAsYouGo } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 
 export type AiTone = 'ok' | 'warn' | 'bad' | 'mut';
 
-export const AI_TEXT = {
-  /** The group's one sentence (AP-1815): the assistant by its name. */
-  help: (assistant: string) => `${assistant} works on your own Claude and ChatGPT sign-ins. Sign in here.`,
-  details: 'Details',
-  apiKey: 'API key',
-  subscription: 'Subscription',
-  /** Under Details. */
-  client: (name: string, version: string) => `${name} ${version} on this Whombat`,
-  noClient: (name: string) => `${name} isn’t installed on this Whombat.`,
-  /** The managed Whombat's own providers (AP-1816), under the cards. */
-  whombatAi: 'AI on this Whombat',
-} as const;
+export function aiText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The group's one sentence (AP-1815): the assistant by its name. */
+    help: (assistant: string) => t('settings2.ai.help', { assistant }),
+    details: t('settings2.ai.details'),
+    apiKey: t('settings2.ai.apiKey'),
+    subscription: t('settings2.ai.subscription'),
+    /** Under Details. */
+    client: (name: string, version: string) => t('settings2.ai.client', { name, version }),
+    noClient: (name: string) => t('settings2.ai.noClient', { name }),
+    /** The managed Whombat's own providers (AP-1816), under the cards. */
+    whombatAi: t('settings2.ai.whombatAi'),
+  } as const;
+}
+
+export const AI_TEXT = aiText();
 
 export interface AiMeterView {
   key: string;
@@ -91,33 +97,42 @@ function signInTone(state: ProviderSignIn['state'] | undefined): AiTone {
 }
 
 /** “Max plan”, “Subscription”, “API key”. */
-export function planText(sub: Pick<SubscriptionUsage, 'kind' | 'plan'>): string {
-  if (sub.kind === 'api_key') return AI_TEXT.apiKey;
+export function planText(sub: Pick<SubscriptionUsage, 'kind' | 'plan'>, locale?: string | null): string {
+  const text = aiText(locale);
+  if (sub.kind === 'api_key') return text.apiKey;
   const words = sub.plan?.replace(/[_-]+/g, ' ').trim();
-  return words ? `${words.charAt(0).toUpperCase()}${words.slice(1)} plan` : AI_TEXT.subscription;
+  return words
+    ? mobileTranslator(locale).t('settings2.ai.plan', {
+        plan: `${words.charAt(0).toUpperCase()}${words.slice(1)}`,
+      })
+    : text.subscription;
 }
 
 const LEVEL_TONE = { ok: 'ok', warning: 'warn', critical: 'bad' } as const;
 
-function meterOf(w: UsageWindow, now: number): AiMeterView {
+function meterOf(w: UsageWindow, now: number, locale?: string | null): AiMeterView {
+  const { t } = mobileTranslator(locale);
   const level = windowLevel(w);
   const word =
     w.status === 'limited'
-      ? 'Limit reached'
+      ? t('settings2.ai.limitReached')
       : level === 'critical'
-        ? 'Near the limit'
+        ? t('settings2.ai.nearLimit')
         : level === 'warning'
-          ? 'High'
+          ? t('settings2.ai.high')
           : null;
   const pct = w.usedPct !== null ? Math.min(100, Math.max(0, w.usedPct)) : w.status === 'limited' ? 100 : 0;
   return {
     key: `${w.kind}:${w.label}`,
     label: w.label,
     pct,
-    pctText: w.usedPct === null && w.status === 'limited' ? 'limit reached' : formatUsagePct(w.usedPct),
+    pctText:
+      w.usedPct === null && w.status === 'limited'
+        ? t('settings2.ai.limitReachedPct')
+        : formatUsagePct(w.usedPct),
     tone: w.status === 'limited' ? 'bad' : level ? LEVEL_TONE[level] : w.usedPct === null ? 'mut' : 'ok',
     word,
-    resets: word ? formatResetsIn(w.resetsAt, now) || null : null,
+    resets: word ? formatResetsIn(w.resetsAt, now, locale) || null : null,
   };
 }
 
@@ -144,7 +159,12 @@ export function aiProviderCards(input: {
   usage: readonly SubscriptionUsage[] | undefined;
   now: number;
   timeZone: string;
+  locale?: string | null;
 }): AiProviderCardView[] {
+  const { locale } = input;
+  const text = aiText(locale);
+  const signin = signinText(locale);
+  const states = signinStates(locale);
   const clientsList = input.clients ? { clients: [...input.clients], checkedAt: null } : undefined;
   // Only the providers this Whombat has: Claude Code once installed, ChatGPT always (all while that isn't known).
   const available = LIVE_PROVIDERS.filter((p) => !clientsList || clientReady(p, clientsList));
@@ -155,35 +175,39 @@ export function aiProviderCards(input: {
     const mine = own.find((s) => s.state === 'ready') ?? own[0] ?? null;
     const usage = (input.usage ?? []).find((u) => u.provider === provider && u.connected) ?? null;
     const ready = mine?.state === 'ready';
-    const plan = usage ? planText(usage) : mine?.authMode === 'api_key' ? AI_TEXT.apiKey : null;
+    const plan = usage ? planText(usage, locale) : mine?.authMode === 'api_key' ? text.apiKey : null;
     const status = ready
-      ? [SIGNIN_TEXT.signedInOther, plan].filter(Boolean).join(' · ')
+      ? [signin.signedInOther, plan].filter(Boolean).join(' · ')
       : mine
-        ? (SIGNIN_STATES[mine.state] ?? mine.state)
-        : SIGNIN_TEXT.notSignedIn;
+        ? (states[mine.state] ?? mine.state)
+        : signin.notSignedIn;
     const trouble = !!mine && TROUBLE_STATES.has(mine.state);
     const meters =
       ready && usage && usage.kind !== 'api_key'
-        ? shownWindows(usage.windows).map((w) => meterOf(w, input.now))
+        ? shownWindows(usage.windows).map((w) => meterOf(w, input.now, locale))
         : [];
     const client = clientsList ? clientOf(clientsList, provider) : null;
     const details = [
-      ready ? (SIGNIN_TEXT.signedIn[mine?.authMode ?? ''] ?? null) : null,
+      ready ? (signin.signedIn[mine?.authMode ?? ''] ?? null) : null,
       !needsClient(provider)
         ? null
         : client?.installed
-          ? AI_TEXT.client(name, client.installed.version)
+          ? text.client(name, client.installed.version)
           : clientsList
-            ? AI_TEXT.noClient(name)
+            ? text.noClient(name)
             : null,
-      usage?.observedAt ? `Usage ${formatAsOf(usage.observedAt, input.now, input.timeZone)}` : null,
+      usage?.observedAt
+        ? mobileTranslator(locale).t('settings2.ai.usage', {
+            asOf: formatAsOf(usage.observedAt, input.now, input.timeZone, locale),
+          })
+        : null,
       usage?.error ?? null,
       !trouble ? (mine?.explanation ?? null) : null,
     ].filter((d): d is string => !!d);
     const note = trouble
       ? (mine?.explanation ?? null)
       : ready && usage?.kind === 'api_key'
-        ? USAGE_PAY_AS_YOU_GO
+        ? usagePayAsYouGo(locale)
         : null;
     const highest = meters.find((m) => m.word);
     return {
@@ -204,6 +228,7 @@ export function aiProviderCards(input: {
 }
 
 /** What TalkBack reads for a meter: “5-hour, 62 % used”, “7-day, 96 % used, Near the limit, resets in 2 h”. */
-export function meterLabel(m: AiMeterView): string {
-  return [`${m.label}, ${m.pctText} used`, m.word, m.resets].filter(Boolean).join(', ');
+export function meterLabel(m: AiMeterView, locale?: string | null): string {
+  const used = mobileTranslator(locale).t('settings2.ai.meterUsed', { label: m.label, pct: m.pctText });
+  return [used, m.word, m.resets].filter(Boolean).join(', ');
 }

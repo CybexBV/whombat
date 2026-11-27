@@ -10,16 +10,16 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CHAT_WORDS, SETTLE_WORDS, SETTLED_PAGE, threadIconFields, threadRows } from '@whombat/client';
+import { chatWords, SETTLED_PAGE, settleWords, threadIconFields, threadRows } from '@whombat/client';
 import { useChatRooms, useChatThreads } from '@whombat/client/react';
 import type { ChatThread, ConversationLink } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrow, useNow } from '../data/BurrowProvider';
 import { chatCopy, phoneThreadRows } from '../data/chatRoom';
-import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
+import { copiedText, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, parseSettledPick, settledThreadMenu } from '../data/nativeMenu';
-import { chatPreferencesOf, SETTLE_COPY, settledRowLine, settledShelf } from '../data/threadSettle';
+import { chatPreferencesOf, settleCopy, settledRowLine, settledShelf } from '../data/threadSettle';
 import { useAgentWords } from '../data/useAgent';
 import { useSettleThread } from '../data/useThreadSettle';
 import { useWebUrl } from '../data/useWebUrl';
@@ -49,7 +49,10 @@ interface ListRow {
 
 export function SettledScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
+  const settleWordsHere = settleWords(rawLocale);
   const chatCopyHere = chatCopy(rawLocale);
+  const settleCopyHere = settleCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
@@ -67,10 +70,10 @@ export function SettledScreen({ route, navigation }: Props) {
 
   const rows = useMemo((): ListRow[] => {
     const threads = settledShelf(shelf.threads);
-    const base = phoneThreadRows(threadRows(threads, now, timeZone), people, words);
+    const base = phoneThreadRows(threadRows(threads, now, timeZone), people, words, rawLocale);
     return threads.map((thread, i) => {
       const title = base[i]?.title ?? '…';
-      const meta = settledRowLine(thread.settled, now, timeZone, quietDays);
+      const meta = settledRowLine(thread.settled, now, timeZone, quietDays, rawLocale);
       const about = thread.subject ? `about ${thread.subject.name}` : null;
       // The icon shows the repository; a screen reader hears its name unless the title says it.
       const repo =
@@ -79,15 +82,15 @@ export function SettledScreen({ route, navigation }: Props) {
           : null;
       return { thread, title, meta, label: [title, repo, about, meta].filter(Boolean).join(', ') };
     });
-  }, [shelf.threads, now, timeZone, people, words, quietDays]);
+  }, [shelf.threads, now, timeZone, people, words, quietDays, rawLocale]);
 
-  const back = room === 'chat' ? CHAT_WORDS.chat : CHAT_WORDS.feedback;
+  const back = room === 'chat' ? chatWordsHere.chat : chatWordsHere.feedback;
   const goBack = () =>
     navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs', { screen: 'ChatRoom' });
   const openThread = (rootId: string) =>
-    navigation.navigate('Thread', { messageId: rootId, back: SETTLE_WORDS.settled });
+    navigation.navigate('Thread', { messageId: rootId, back: settleWordsHere.settled });
   const openAgain = (t: ChatThread): SwipeAction => ({
-    label: SETTLE_COPY.openAgain,
+    label: settleCopyHere.openAgain,
     icon: Undo2,
     leaves: true,
     run: () => settle({ rootId: t.rootId, room }, false),
@@ -97,7 +100,7 @@ export function SettledScreen({ route, navigation }: Props) {
   const where: ConversationLink = room === 'feedback' ? { type: 'dm', room: 'feedback' } : { type: 'dm' };
   const linkOf = (t: ChatThread) =>
     webUrl(messageLinkPath({ id: t.rootId, threadRootId: null }, where, slug));
-  const menu = settledThreadMenu(mode !== 'fixtures' && webUrl('/') !== null);
+  const menu = settledThreadMenu(mode !== 'fixtures' && webUrl('/') !== null, rawLocale);
   const pick = (t: ChatThread, id: string) => {
     switch (parseSettledPick(id)) {
       case 'open_again':
@@ -106,7 +109,7 @@ export function SettledScreen({ route, navigation }: Props) {
         return openThread(t.rootId);
       case 'copy_link': {
         const url = linkOf(t);
-        if (url) void copyToClipboard(url, COPIED_TEXT.link);
+        if (url) void copyToClipboard(url, copiedText(rawLocale).link, rawLocale);
         return;
       }
     }
@@ -115,7 +118,7 @@ export function SettledScreen({ route, navigation }: Props) {
   const [menuFor, setMenuFor] = useState<ChatThread | null>(null);
   const [quietProblem, setQuietProblem] = useState<string | null>(null);
   const more = (t: ChatThread): SwipeAction => ({
-    label: SETTLE_COPY.more,
+    label: settleCopyHere.more,
     icon: Ellipsis,
     tone: 'neutral',
     run: () => setMenuFor(t),
@@ -124,7 +127,7 @@ export function SettledScreen({ route, navigation }: Props) {
 
   return (
     <Screen>
-      <ChatHeader onBack={goBack} backLabel={back} title={SETTLE_WORDS.settled} subtitle={back} />
+      <ChatHeader onBack={goBack} backLabel={back} title={settleWordsHere.settled} subtitle={back} />
       <ScrollView
         onScrollBeginDrag={closeSwipeRows}
         contentContainerStyle={{ paddingTop: 2, paddingBottom: 24 + bottomRoom }}
@@ -147,7 +150,7 @@ export function SettledScreen({ route, navigation }: Props) {
           <ErrorState text={chatCopyHere.settledFailed} onRetry={shelf.refetch} />
         ) : rows.length === 0 ? (
           <View style={{ paddingHorizontal: 18, paddingTop: 14 }}>
-            <QuietText>{SETTLE_WORDS.noneSettled}</QuietText>
+            <QuietText>{settleWordsHere.noneSettled}</QuietText>
           </View>
         ) : (
           <>
@@ -163,7 +166,7 @@ export function SettledScreen({ route, navigation }: Props) {
               />
             ))}
             {shelf.hasMore ? (
-              <MoreButton label={SETTLE_COPY.showMore} busy={shelf.loadingMore} onPress={shelf.loadMore} />
+              <MoreButton label={settleCopyHere.showMore} busy={shelf.loadingMore} onPress={shelf.loadMore} />
             ) : null}
           </>
         )}
@@ -187,7 +190,7 @@ export function SettledScreen({ route, navigation }: Props) {
         <MenuSheet
           spec={menuFor ? menu : null}
           visible={menuFor !== null}
-          label={MENU_LABEL}
+          label={tMobile('screens2.chat.threadActions')}
           onClose={() => setMenuFor(null)}
           onPick={(id) => menuFor && pick(menuFor, id)}
         />
@@ -214,9 +217,6 @@ function MoreButton({ label, busy, onPress }: { label: string; busy: boolean; on
     </Touchable>
   );
 }
-
-/** What TalkBack calls the menu's sheet. */
-const MENU_LABEL = 'Thread actions';
 
 /**
  * A settled thread's row (the mock's `.trow`): its icon as Chat's list draws it (32: the repository's, the thing's or

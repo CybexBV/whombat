@@ -591,7 +591,7 @@ function ByHandSheet({
                 label={W.copy}
                 variant="quiet"
                 accessibilityLabel={`${W.copy}: ${W.compose}`}
-                onPress={() => void copyToClipboard(sheet.compose, W.copied)}
+                onPress={() => void copyToClipboard(sheet.compose, W.copied, rawLocale)}
               />
             </View>
             <Text size={11.5} mono lh={1.45} selectable>

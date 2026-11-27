@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 import { coreTranslator, coreTree, coreWords, type WordTree } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
@@ -1878,43 +1879,44 @@ export function hostInstallErrorText(
     installed?: boolean;
     mac?: { version: string | null };
   },
+  locale?: string | null,
 ): string {
-  const server = ctx.name || ctx.address;
+  const tr = coreTranslator(locale);
+  const address = ctx.address;
+  const server = ctx.name || address;
+  const min = HOST_MACOS_MIN_MAJOR;
   switch (code) {
     case 'not_allowed':
-      return `Whombat doesn’t sign in to ${ctx.address}.`;
     case 'unreachable':
-      return `Nothing answers at ${ctx.address}. Is the address right, and is the server on?`;
-    case 'host_key_changed':
-      return `${server} showed a different key than the one your Vault trusts, so Whombat sent nothing. If the server was reinstalled, trust its new key in the Vault first.`;
-    case 'sign_in_failed':
-      return `Couldn’t sign in to ${ctx.address}: the user name or ${ctx.withKey ? 'key' : 'password'} isn’t right.`;
-    case 'sudo_password_needed':
-      return `Signed in, but sudo on ${ctx.address} asks for a password. Add it under “Password for sudo”.`;
-    case 'sudo_refused':
-      return ctx.mac
-        ? `Signed in, but this user may not use sudo on ${ctx.address}. Sign in as an administrator of the Mac.`
-        : `Signed in, but this user may not use sudo on ${ctx.address}. Use root or a user that may.`;
     case 'no_downloader':
-      return `${ctx.address} has neither curl nor wget. Install one of them and try again.`;
+    case 'failed':
+      return tr.t(`hostInstall.${code}`, { address });
+    case 'host_key_changed':
+      return tr.t('hostInstall.host_key_changed', { server });
+    case 'sign_in_failed':
+      return tr.t(ctx.withKey ? 'hostInstall.sign_in_failed.key' : 'hostInstall.sign_in_failed.password', {
+        address,
+      });
+    case 'sudo_password_needed':
+      return tr.t('hostInstall.sudo_password_needed', { address });
+    case 'sudo_refused':
+      return tr.t(ctx.mac ? 'hostInstall.sudo_refused.mac' : 'hostInstall.sudo_refused', { address });
     case 'cant_reach_whombat':
       return ctx.whombat
-        ? `${server} can’t reach this Whombat at ${ctx.whombat}. Is it on another network?`
-        : `${server} can’t reach this Whombat. Is it on another network?`;
+        ? tr.t('hostInstall.cant_reach_whombat.at', { server, whombat: ctx.whombat })
+        : tr.t('hostInstall.cant_reach_whombat', { server });
     case 'unsupported':
       if (ctx.mac)
         return ctx.mac.version
-          ? `Whombat’s helper needs macOS ${HOST_MACOS_MIN_MAJOR} or later, and ${ctx.address} has macOS ${ctx.mac.version}. Update the Mac first.`
-          : `Whombat’s helper needs macOS ${HOST_MACOS_MIN_MAJOR} or later, and Whombat couldn’t tell which macOS ${ctx.address} has.`;
-      return `Whombat’s helper can’t run on ${ctx.address}: it needs Linux or macOS ${HOST_MACOS_MIN_MAJOR} or later on a 64-bit Intel, AMD or ARM processor. “More detail” says what was missing.`;
+          ? tr.t('hostInstall.unsupported.macOld', { min, address, version: ctx.mac.version })
+          : tr.t('hostInstall.unsupported.macUnknown', { min, address });
+      return tr.t('hostInstall.unsupported', { address, min });
     case 'other_whombat':
-      return 'This server reports to another Whombat. Remove Whombat’s helper there first.';
+      return tr.t('hostInstall.other_whombat');
     case 'timed_out':
       return ctx.installed
-        ? 'It’s installed, but its first report hasn’t come in yet. It shows up once it does.'
-        : `${ctx.address} took too long to answer, so Whombat stopped.`;
-    case 'failed':
-      return `Putting Whombat’s helper on ${ctx.address} didn’t work. “More detail” shows what the installer said.`;
+        ? tr.t('hostInstall.timed_out.installed')
+        : tr.t('hostInstall.timed_out', { address });
   }
 }
 
@@ -1964,17 +1966,23 @@ export type HostAddressChange = z.infer<typeof HostAddressChange>;
  * BF-16's sentence (the Needs you item, the Servers page): “Your Whombat’s address changed from 10.100.1.160 to
  * 10.100.1.158, and 5 servers haven’t found it yet.” One server is named.
  */
-export function hostsAddressChangeText(c: {
-  from: string;
-  to: string;
-  waiting: readonly { name: string }[];
-}): string {
+export function hostsAddressChangeText(
+  c: {
+    from: string;
+    to: string;
+    waiting: readonly { name: string }[];
+  },
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   const n = c.waiting.length;
   const who =
     n === 1
-      ? `${c.waiting[0]?.name} hasn’t found it yet`
-      : `${n.toLocaleString('en-US')} servers haven’t found it yet`;
-  return `Your Whombat’s address changed from ${c.from} to ${c.to}, and ${who}.`;
+      ? tr.t('hostAddressChange.one', { name: `${c.waiting[0]?.name}` })
+      : tr.t('hostAddressChange.many', {
+          n: tr.language === 'en' ? n.toLocaleString('en-US') : formatLocaleNumber(n, locale),
+        });
+  return tr.t('hostAddressChange.text', { from: c.from, to: c.to, who });
 }
 
 /** The most servers one `hosts.repoint` takes. */
@@ -2541,7 +2549,13 @@ export function screenMessageText(message: string | null | undefined): string | 
  * failed (“The password prompt is still there after typing the password: the Mac may have refused it.”), its own
  * words come through; `not_found` adds the Mac's own list of close names when there is one.
  */
-export function hostScreenProblemText(code: HostScreenCode, server: string, message?: string | null): string {
+export function hostScreenProblemText(
+  code: HostScreenCode,
+  server: string,
+  message?: string | null,
+  locale?: string | null,
+): string {
+  const tr = coreTranslator(locale);
   const said = screenMessageText(message);
   switch (code) {
     // The Mac's own words first where it gave some (“something else answered on Screen Sharing's port”, “nobody is
@@ -2549,38 +2563,25 @@ export function hostScreenProblemText(code: HostScreenCode, server: string, mess
     case 'no_screen':
       // The Mac's own words may already say how to switch it on: then they're enough.
       if (said && /System Settings/.test(said)) return said;
-      return `${said ?? `Screen Sharing is off on ${server}.`} Switch it on in System Settings → General → Sharing.`;
+      return tr.t('hostScreen.no_screen', { said: said ?? tr.t('hostScreen.no_screen.off', { server }) });
     case 'no_account':
-      return `Whombat doesn’t have ${server}’s password for the screen yet. Set it on the Mac’s page.`;
     case 'sign_in_failed':
-      return `${server} didn’t take the password Whombat has for its screen. Set it again on the Mac’s page.`;
-    case 'no_helper':
-      return said ?? `Whombat Helper isn’t running on ${server}.`;
-    case 'no_access':
-      return (
-        said ??
-        `Whombat Helper on ${server} needs Accessibility. Switch it on in Privacy & Security → Accessibility.`
-      );
     case 'not_admin':
-      return `Whombat signs in to ${server}’s screen as a user who isn’t an administrator, so it can’t answer this password prompt. Open the screen and switch on Whombat Helper in Privacy & Security → Accessibility yourself.`;
-    case 'not_found':
-      return said
-        ? `Nothing on ${server}’s screen has that name. ${said}`
-        : `Nothing on ${server}’s screen has that name.`;
+      return tr.t(`hostScreen.${code}`, { server });
+    case 'not_found': {
+      const none = tr.t('hostScreen.not_found', { server });
+      return said ? `${none} ${said}` : none;
+    }
+    case 'no_helper':
+    case 'no_access':
     case 'locked':
-      return said ?? `${server}’s screen is locked.`;
     case 'no_prompt':
-      return said ?? `Nothing on ${server}’s screen is asking for its password right now.`;
     case 'busy':
-      return said ?? `${server} is busy with another screen step. Try again in a moment.`;
     case 'timeout':
-      return said ?? `${server}’s screen didn’t answer in time.`;
     case 'unsupported':
-      return said ?? `${server} can’t do that: it isn’t a Mac, or its Whombat helper needs an update.`;
     case 'invalid_request':
-      return said ?? `${server} couldn’t do that on its screen.`;
     case 'failed':
-      return said ?? `That didn’t work on ${server}’s screen.`;
+      return said ?? tr.t(`hostScreen.${code}`, { server });
   }
 }
 
@@ -3093,6 +3094,12 @@ export const HOST_ERROR_WORDS = hostErrorWords('en');
 export const HOST_SELF_GUEST_LABEL = 'This Whombat';
 /** Said in the question before restarting or shutting down the server this Whombat runs on (IU-02). */
 export const HOST_SELF_SERVER_POWER_TEXT = 'This Whombat goes down too.';
+
+/** `HOST_SELF_GUEST_LABEL` and `HOST_SELF_SERVER_POWER_TEXT` in a locale. */
+export function hostSelfWords(locale?: string | null): { guestLabel: string; serverPower: string } {
+  const tr = coreTranslator(locale);
+  return { guestLabel: tr.t('hostSelf.guestLabel'), serverPower: tr.t('hostSelf.serverPower') };
+}
 
 /**
  * `hosts.manage`: one change. `params` are the route's body fields in camelCase (`set`, `delete`, `revert`, `size`,

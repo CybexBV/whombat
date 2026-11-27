@@ -16,10 +16,8 @@ import {
   type NoticeRef,
   type NoticeSubject,
   noticeNature,
-  QUIET_WORDS,
-  quietLine,
+  quietWords,
   quietWordsOf,
-  stopWatchingLabel,
   type ThingPage,
   type ThingPageLink,
   type ThingPageNotice,
@@ -28,8 +26,10 @@ import {
   type ThingWatchCheck,
   type ThingWatchException,
 } from '@whombat/core';
+import { joinAnd } from '@whombat/core/backup';
 import { formatDate, toDate } from '@whombat/core/text';
-import { LOOK_PLAN_WORDS } from './lookPlan';
+import { clientTranslator } from '../i18n/catalog';
+import { lookPlanWords } from './lookPlan';
 import { tomorrowMorning, untilText } from './time';
 
 /** What a line needs for its menu, its link and its quiet words (a page's line, a server's line). */
@@ -89,24 +89,43 @@ export interface QuietMenuView {
   stop: { label: string; words: string; subject?: NoticeSubject };
 }
 
-/** The line under Stop watching in the ⋯ menu (the quiet mock's words). */
-export const STOP_WATCHING_WORDS = 'Whombat won’t warn about it until you turn this back on.';
+/** The line under Stop watching in the ⋯ menu (the quiet mock's words), in a locale (English when none). */
+export function stopWatchingWords(locale?: string | null): string {
+  return clientTranslator(locale).raw('quiet.stopWords');
+}
+
+export const STOP_WATCHING_WORDS = stopWatchingWords();
+
+/** The ⋯ menu's last line: “Stop watching Hallway AP”, or “Stop watching this” for a line about the whole thing. */
+function stopWatchingLabel(subject: { name: string } | undefined, locale?: string | null): string {
+  const w = quietWords(locale);
+  return subject ? fillQuietWords(w.stop, { name: subject.name }) : w.stopThis;
+}
+
+/** A quiet line's grey words: “Ignored by John until it’s back online”, “Snoozed until tomorrow 09:00”. */
+function quietLine(q: Pick<NoticeQuiet, 'state' | 'words' | 'by'>, locale?: string | null): string {
+  const w = quietWords(locale);
+  if (q.by)
+    return fillQuietWords(q.state === 'ignored' ? w.ignored : w.snoozed, { name: q.by.name, words: q.words });
+  return fillQuietWords(q.state === 'ignored' ? w.ignoredBare : w.snoozedBare, { words: q.words });
+}
 
 /**
  * The ⋯ menu of a line (QN-10), for people who may quiet it: only a line with `ignore` (the server sends it to them
  * alone) that isn't quiet already. Null: no menu (Look only, guests, an older server, a line without a check).
  */
-export function quietMenu(n: QuietLine): QuietMenuView | null {
+export function quietMenu(n: QuietLine, locale?: string | null): QuietMenuView | null {
   const ref = noticeRef(n);
   if (!ref || !n.ignore || n.quiet) return null;
+  const w = quietWords(locale);
   return {
     ref,
-    label: fillQuietWords(QUIET_WORDS.menu, { title: n.title }),
-    ignore: { label: QUIET_WORDS.ignore, words: n.ignore.words },
-    snooze: { label: QUIET_WORDS.snooze },
+    label: fillQuietWords(w.menu, { title: n.title }),
+    ignore: { label: w.ignore, words: n.ignore.words },
+    snooze: { label: w.snooze },
     stop: {
-      label: stopWatchingLabel(n.subject),
-      words: STOP_WATCHING_WORDS,
+      label: stopWatchingLabel(n.subject, locale),
+      words: stopWatchingWords(locale),
       ...(n.subject ? { subject: n.subject } : {}),
     },
   };
@@ -117,12 +136,16 @@ export function quietMenu(n: QuietLine): QuietMenuView | null {
  * why: “Kept quiet by Mara until 23:00” for a window someone kept, “On hold while
  * homeassistant is stopped” for a cause, which nobody kept quiet. Null when the line isn't quiet.
  */
-export function quietLineText(n: Pick<ThingPageNotice, 'quiet'>): string | null {
+export function quietLineText(n: Pick<ThingPageNotice, 'quiet'>, locale?: string | null): string | null {
   const q = n.quiet;
   if (!q) return null;
-  if (q.held === 'window') return q.by ? `Kept quiet by ${q.by.name} ${q.words}` : `Kept quiet ${q.words}`;
-  if (q.held === 'cause') return `On hold ${q.words}`;
-  return quietLine(q);
+  const tr = clientTranslator(locale);
+  if (q.held === 'window')
+    return q.by
+      ? tr.t('quiet.keptBy', { name: q.by.name, words: q.words })
+      : tr.t('quiet.kept', { words: q.words });
+  if (q.held === 'cause') return tr.t('quiet.onHold', { words: q.words });
+  return quietLine(q, locale);
 }
 
 /** Whether a quiet line offers Undo: to who may quiet it (the line carries `ignore` for them). */
@@ -137,13 +160,19 @@ export function stopName(n: Pick<ThingPageNotice, 'title' | 'subject'>): string 
 
 /* The toasts (QN-10…QN-13, QN-21) ---------------------------------------------------------------------------------- */
 
-export const QUIET_TOASTS = {
-  ignored: QUIET_WORDS.toastIgnored,
-  snoozed: QUIET_WORDS.toastSnoozed,
-  stopped: (name: string) => fillQuietWords(QUIET_WORDS.toastStopped, { name }),
-  watched: (name: string) => fillQuietWords(QUIET_WORDS.toastWatched, { name }),
-  undo: QUIET_WORDS.undo,
-} as const;
+/** The toasts after a line was quieted or watched again, in a locale (English when none). */
+export function quietToasts(locale?: string | null) {
+  const w = quietWords(locale);
+  return {
+    ignored: w.toastIgnored,
+    snoozed: w.toastSnoozed,
+    stopped: (name: string) => fillQuietWords(w.toastStopped, { name }),
+    watched: (name: string) => fillQuietWords(w.toastWatched, { name }),
+    undo: w.undo,
+  };
+}
+
+export const QUIET_TOASTS = quietToasts();
 
 /* The page the moment it changes (optimistic; the server's answer takes over) ----------------------------------------- */
 
@@ -157,17 +186,19 @@ export function expectedQuiet(
   now: number,
   timeZone: string,
   until?: string,
+  locale?: string | null,
 ): NoticeQuiet {
   const at = new Date(now).toISOString();
+  const untilChanges = clientTranslator(locale).raw('quiet.untilChanges');
   if (how === 'ignore')
     return {
       state: 'ignored',
-      words: quietWordsOf(ignore?.words ?? 'Until it changes.') || 'until it changes',
+      words: quietWordsOf(ignore?.words ?? untilChanges) || quietWordsOf(untilChanges),
       ...(ignore?.until ? { until: ignore.until } : {}),
       at,
     };
   const end = until ?? tomorrowMorning(now, timeZone);
-  return { state: 'snoozed', words: untilText(end, now, timeZone), until: end, at };
+  return { state: 'snoozed', words: untilText(end, now, timeZone, locale), until: end, at };
 }
 
 /** Active lines first in their order, then the quiet ones (QN-14: greyed at the bottom). */
@@ -244,7 +275,8 @@ export interface NoticeGroups<T> {
 
 export function noticeGroups<
   T extends Pick<ThingPageNotice, 'quiet' | 'nature' | 'tone' | 'link' | 'action'>,
->(items: readonly T[]): NoticeGroups<T> {
+>(items: readonly T[], locale?: string | null): NoticeGroups<T> {
+  const tr = clientTranslator(locale);
   const shown: T[] = [];
   const asking: T[] = [];
   const fyi: T[] = [];
@@ -261,21 +293,29 @@ export function noticeGroups<
   const held = quiet.filter((n) => n.quiet?.held).length;
   const own = quiet.filter((n) => !n.quiet?.held);
   const snoozed = own.filter((n) => n.quiet?.state === 'snoozed').length;
-  const quietWords = !own.length
+  const count = own.length;
+  const ownWords = !count
     ? null
-    : snoozed === own.length
-      ? `${own.length} snoozed`
+    : snoozed === count
+      ? tr.t('quiet.group.snoozed', { count })
       : snoozed
-        ? `${own.length} ignored or snoozed`
-        : `${own.length} ignored`;
+        ? tr.t('quiet.group.ignoredOrSnoozed', { count })
+        : tr.t('quiet.group.ignored', { count });
   const parts = [
-    fyi.length ? `${fyi.length} heads-up${fyi.length === 1 ? '' : 's'}` : null,
-    quietWords,
-    held ? `${held} on hold` : null,
+    fyi.length ? tr.tp('quiet.group.headsUp', fyi.length) : null,
+    ownWords,
+    held ? tr.t('quiet.group.held', { count: held }) : null,
   ];
-  const said = parts.filter((p): p is string => !!p);
-  const words = said.length > 2 ? `${said.slice(0, -1).join(', ')} and ${said.at(-1)}` : said.join(' and ');
-  return { shown, asking, folded: [...fyi, ...quiet], foldLabel: words ? `Show ${words}` : null };
+  const words = joinAnd(
+    parts.filter((p): p is string => !!p),
+    locale,
+  );
+  return {
+    shown,
+    asking,
+    folded: [...fyi, ...quiet],
+    foldLabel: words ? tr.t('quiet.group.show', { words }) : null,
+  };
 }
 
 /** The ask link's limits (contracts' `ThingPageLink` `ask`). */
@@ -290,12 +330,14 @@ export function handleTheseLink(
   asking: readonly Pick<ThingPageNotice, 'title' | 'detail' | 'quiet'>[],
   thing: string,
   assistant: string,
+  locale?: string | null,
 ): Extract<ThingPageLink, { kind: 'ask' }> | null {
   const lines = asking.filter((n) => !n.quiet);
   if (lines.length < 2) return null;
-  const named = `Ask ${assistant} to handle these`;
-  const ask = `Please sort out what you safely can and tell me what needs me.`;
-  const head = `These need a look on ${thing}:`;
+  const tr = clientTranslator(locale);
+  const named = tr.t('quiet.handleLabel', { assistant });
+  const ask = tr.raw('quiet.handleAsk');
+  const head = tr.t('quiet.handleHead', { thing });
   let list = '';
   for (const n of lines) {
     const detail = n.detail ? ` (${n.detail.split(' · ')[0]})` : '';
@@ -305,7 +347,7 @@ export function handleTheseLink(
   }
   return {
     kind: 'ask',
-    label: named.length <= ASK_LABEL_MAX ? named : 'Ask for help with these',
+    label: named.length <= ASK_LABEL_MAX ? named : tr.raw('quiet.handleLabelShort'),
     question: `${head}${list}\n${ask}`.slice(0, ASK_QUESTION_MAX),
   };
 }
@@ -331,13 +373,15 @@ export function handleTheseView(
   research: Pick<LookResearch, 'state' | 'fix' | 'plan'> | null | undefined,
   thing: string,
   assistant: string,
+  locale?: string | null,
 ): HandleTheseView | null {
-  const fallback = handleTheseLink(asking, thing, assistant);
+  const fallback = handleTheseLink(asking, thing, assistant, locale);
   if (!fallback) return null;
+  const plan = lookPlanWords(locale);
   if (research?.state === 'looking')
-    return { label: null, busy: fillDeskWords(LOOK_PLAN_WORDS.looking, { assistant }), fallback };
+    return { label: null, busy: fillDeskWords(plan.looking, { assistant }), fallback };
   if (research?.state === 'fixing')
-    return { label: null, busy: fillDeskWords(LOOK_PLAN_WORDS.onIt, { assistant }), fallback };
+    return { label: null, busy: fillDeskWords(plan.onIt, { assistant }), fallback };
   if (research?.state === 'found' && (research.fix || research.plan?.length)) return null;
   return { label: fallback.label, busy: null, fallback };
 }
@@ -379,8 +423,14 @@ export interface ThingWatchView {
   empty: string | null;
 }
 
-function whoWhen(by: { name: string } | undefined, at: string, timeZone: string, now: number): string {
-  const day = formatDate(at, timeZone, { now: toDate(now) });
+function whoWhen(
+  by: { name: string } | undefined,
+  at: string,
+  timeZone: string,
+  now: number,
+  locale?: string | null,
+): string {
+  const day = formatDate(at, timeZone, { now: toDate(now) }, locale);
   return by ? `${by.name}, ${day}` : day;
 }
 
@@ -389,19 +439,22 @@ function exceptionView(
   e: ThingWatchException,
   timeZone: string,
   now: number,
+  locale?: string | null,
 ): WatchExceptionView {
-  const name = e.subject?.name ?? (e.state === 'snoozed' ? 'Snoozed' : 'Ignored');
-  const words = e.words ?? (e.state === 'stopped' ? QUIET_WORDS.always : '');
+  const tr = clientTranslator(locale);
+  const w = quietWords(locale);
+  const name = e.subject?.name ?? tr.raw(e.state === 'snoozed' ? 'quiet.snoozed' : 'quiet.ignored');
+  const words = e.words ?? (e.state === 'stopped' ? w.always : '');
   return {
     key: `${e.state}|${e.subject?.id ?? ''}`,
     name,
     words,
-    who: whoWhen(e.by, e.at, timeZone, now),
+    who: whoWhen(e.by, e.at, timeZone, now, locale),
     undo:
       e.state === 'stopped'
         ? { kind: 'watch', check: c.check, ...(e.subject ? { subject: e.subject } : {}) }
         : { kind: 'quiet', ref: e.subject ? { check: c.check, subject: e.subject.id } : { check: c.check } },
-    undoLabel: `${QUIET_WORDS.undo}: ${[name, words].filter(Boolean).join(' ')}`,
+    undoLabel: `${w.undo}: ${[name, words].filter(Boolean).join(' ')}`,
   };
 }
 
@@ -410,7 +463,13 @@ function exceptionView(
  * one switched off, and under each what is excepted (“Not for: Garage AP until it’s back · Attic AP always”), each with
  * Undo. Look only and guests get the same rows without switches (`mayChange` false).
  */
-export function thingWatchView(watch: ThingWatch, timeZone: string, now: number): ThingWatchView {
+export function thingWatchView(
+  watch: ThingWatch,
+  timeZone: string,
+  now: number,
+  locale?: string | null,
+): ThingWatchView {
+  const tr = clientTranslator(locale);
   const rows = watch.checks.map(
     (c): WatchCheckView => ({
       check: c.check,
@@ -420,13 +479,13 @@ export function thingWatchView(watch: ThingWatch, timeZone: string, now: number)
       offLine: c.on
         ? null
         : c.off
-          ? `Off since ${formatDate(c.off.at, timeZone, { now: toDate(now) })}${c.off.by ? ` (${c.off.by.name})` : ''}`
-          : 'Off',
-      exceptions: c.exceptions.map((e) => exceptionView(c, e, timeZone, now)),
-      switchLabel: `Watch: ${c.name}`,
+          ? `${tr.t('quiet.offSince', { date: formatDate(c.off.at, timeZone, { now: toDate(now) }, locale) })}${c.off.by ? ` (${c.off.by.name})` : ''}`
+          : tr.raw('quiet.off'),
+      exceptions: c.exceptions.map((e) => exceptionView(c, e, timeZone, now, locale)),
+      switchLabel: tr.t('quiet.watchSwitch', { name: c.name }),
     }),
   );
-  return { rows, mayChange: watch.mayChange, empty: rows.length ? null : QUIET_WORDS.watchEmpty };
+  return { rows, mayChange: watch.mayChange, empty: rows.length ? null : quietWords(locale).watchEmpty };
 }
 
 /** The watch list as it looks once a check is switched (QN-13), before the server's answer. */
@@ -436,6 +495,7 @@ export function withWatched(
   subject: NoticeSubject | undefined,
   watched: boolean,
   now: number,
+  locale?: string | null,
 ): ThingWatch {
   const at = new Date(now).toISOString();
   return {
@@ -454,7 +514,7 @@ export function withWatched(
         ...c,
         exceptions: watched
           ? others
-          : [...others, { subject, state: 'stopped' as const, words: QUIET_WORDS.always, at }],
+          : [...others, { subject, state: 'stopped' as const, words: quietWords(locale).always, at }],
       };
     }),
   };

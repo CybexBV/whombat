@@ -30,7 +30,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { useViewContext } from '../../data/BurrowProvider';
 import { connectionLogo } from '../../data/connections';
-import { useI18n } from '../../i18n';
+import { mobileTranslator, useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ConnectionLogo } from '../../ui/ConnectionLogo';
@@ -38,27 +38,32 @@ import { FormField } from '../../ui/formField';
 import { Button, Section } from '../../ui/primitives';
 import { Busy, Note, PLAIN_INPUT, TextLink } from './parts';
 
-export const FOUND_TEXT = {
-  title: 'ON YOUR NETWORK',
-  scanAgain: 'Scan again',
-  lookElsewhere: 'Look in another network',
-  network: 'Network',
-  lookThere: 'Look there',
-  networkHint: `A network on your side of the router, of at most ${groupDigits(1024)} addresses.`,
-  looking: 'Looking around your network…',
-  idle: 'Whombat hasn’t looked yet. Scan to find what runs on your network.',
-  trouble: 'Couldn’t look at your network just now. Scan again in a moment.',
-  connect: 'Connect',
-  addServer: 'Add as a server',
-  hide: 'Hide',
-  unhide: 'Unhide',
-  writeLike: 'Write it like 192.168.2.0/24.',
-} as const;
+export function foundText(locale?: string | null) {
+  const tr = mobileTranslator(locale);
+  return {
+    title: tr.t('screens2.found.title'),
+    scanAgain: tr.t('screens2.found.scanAgain'),
+    lookElsewhere: tr.t('screens2.found.lookElsewhere'),
+    network: tr.t('screens2.found.network'),
+    lookThere: tr.t('screens2.found.lookThere'),
+    networkHint: tr.t('screens2.found.networkHint', { count: groupDigits(1024) }),
+    looking: tr.t('screens2.found.looking'),
+    idle: tr.t('screens2.found.idle'),
+    trouble: tr.t('screens2.found.trouble'),
+    connect: tr.t('screens2.found.connect'),
+    addServer: tr.t('screens2.found.addServer'),
+    hide: tr.t('screens2.found.hide'),
+    unhide: tr.t('screens2.found.unhide'),
+    writeLike: tr.t('screens2.found.writeLike'),
+  };
+}
 
 type AskResult = { ok: true } | { ok: false; invalid: string | null };
 
 /** The scan, asked for on opening and followed every 1.5 s while it looks; an older answer never replaces a newer one. */
 function useFoundScan(burrow: string | null) {
+  const { rawLocale } = useI18n();
+  const foundTextHere = foundText(rawLocale);
   const discover = useConnectionWrite(api.connections.discover, burrow ?? '');
   const [scan, setScan] = useState<ConnectionDiscovery | null>(null);
   const [refused, setRefused] = useState(false);
@@ -82,13 +87,13 @@ function useFoundScan(burrow: string | null) {
       } catch (err) {
         if (mine !== latest.current) return { ok: false, invalid: null };
         if (body.networks?.length && (err instanceof InvalidRequestError || isValidation(err)))
-          return { ok: false, invalid: validationText(err) ?? FOUND_TEXT.writeLike };
+          return { ok: false, invalid: validationText(err) ?? foundTextHere.writeLike };
         if (err instanceof ApiError && err.status >= 400 && err.status < 500) setRefused(true);
-        else setTrouble(FOUND_TEXT.trouble);
+        else setTrouble(foundTextHere.trouble);
         return { ok: false, invalid: null };
       }
     },
-    [burrow],
+    [burrow, foundTextHere.writeLike, foundTextHere.trouble],
   );
 
   useEffect(() => {
@@ -125,6 +130,7 @@ export function FoundOnNetwork({
   onConnect: (row: FoundRow) => void;
 }) {
   const { rawLocale } = useI18n();
+  const foundTextHere = foundText(rawLocale);
 
   const theme = useTheme();
   const { now, timeZone } = useViewContext();
@@ -137,7 +143,7 @@ export function FoundOnNetwork({
   const [cidr, setCidr] = useState('');
   const [cidrError, setCidrError] = useState<string | null>(null);
   const { scan, trouble } = found;
-  const list = scan ? foundList(scan) : null;
+  const list = scan ? foundList(scan, rawLocale) : null;
   const hiddenCount = list?.hidden.length ?? 0;
 
   useEffect(() => {
@@ -159,17 +165,17 @@ export function FoundOnNetwork({
         params: { burrow },
         body: { catalogId: row.catalogId, url: row.url, hidden },
       });
-      if (result.status !== 'ok') return setHideTrouble(hideTroubleText(hidden));
+      if (result.status !== 'ok') return setHideTrouble(hideTroubleText(hidden, rawLocale));
       found.accept(mine, result.data);
     } catch {
-      setHideTrouble(hideTroubleText(hidden));
+      setHideTrouble(hideTroubleText(hidden, rawLocale));
     } finally {
       setBusy(done);
     }
   }
 
   async function lookIn() {
-    const problem = cidrProblem(cidr);
+    const problem = cidrProblem(cidr, rawLocale);
     if (problem) return setCidrError(problem);
     setCidrError(null);
     const answer = await found.ask({ networks: [cidr.trim()], rescan: true });
@@ -188,18 +194,18 @@ export function FoundOnNetwork({
   const all = list ? (open ? [...list.rows, ...list.hidden] : list.rows) : [];
   const rows = searching ? all.filter(named) : all;
   if (searching && rows.length === 0) return null;
-  const empty = scan?.state === 'done' && list && !searching ? foundEmptyText(list) : null;
-  const looked = scan?.state === 'done' ? networksText(scan.networks) : null;
+  const empty = scan?.state === 'done' && list && !searching ? foundEmptyText(list, rawLocale) : null;
+  const looked = scan?.state === 'done' ? networksText(scan.networks, rawLocale) : null;
 
   return (
-    <Section title={FOUND_TEXT.title}>
+    <Section title={foundTextHere.title}>
       <View style={{ padding: 14, gap: 12 }}>
-        {!scan && !trouble ? <Busy text={FOUND_TEXT.looking} /> : null}
-        {scanning && scan ? <Busy text={discoveryProgressText(scan)} /> : null}
+        {!scan && !trouble ? <Busy text={foundTextHere.looking} /> : null}
+        {scanning && scan ? <Busy text={discoveryProgressText(scan, rawLocale)} /> : null}
         {trouble ? <Note>{trouble}</Note> : null}
         {hideTrouble ? <Note tone="bad">{hideTrouble}</Note> : null}
         {empty ? <Note>{empty}</Note> : null}
-        {scan?.state === 'idle' && !trouble ? <Note>{FOUND_TEXT.idle}</Note> : null}
+        {scan?.state === 'idle' && !trouble ? <Note>{foundTextHere.idle}</Note> : null}
         {rows.map((row) => (
           <View key={row.key} style={{ gap: 10, opacity: row.hidden ? 0.6 : 1 }} accessible={false}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -226,7 +232,7 @@ export function FoundOnNetwork({
             <View style={{ flexDirection: 'row', gap: 8 }}>
               {row.hidden ? (
                 <Button
-                  label={FOUND_TEXT.unhide}
+                  label={foundTextHere.unhide}
                   variant="secondary"
                   disabled={busy.has(row.key)}
                   accessibilityHint={`${row.name} at ${row.url}`}
@@ -236,7 +242,7 @@ export function FoundOnNetwork({
               ) : (
                 <>
                   <Button
-                    label={FOUND_TEXT.hide}
+                    label={foundTextHere.hide}
                     variant="secondary"
                     disabled={busy.has(row.key)}
                     accessibilityHint={`${row.name} at ${row.url}`}
@@ -244,7 +250,7 @@ export function FoundOnNetwork({
                     style={{ flex: 1 }}
                   />
                   <Button
-                    label={row.action === 'server' ? FOUND_TEXT.addServer : FOUND_TEXT.connect}
+                    label={row.action === 'server' ? foundTextHere.addServer : foundTextHere.connect}
                     accessibilityHint={`${row.name} at ${row.where}`}
                     onPress={() => onConnect(row)}
                     style={{ flex: 2 }}
@@ -263,20 +269,20 @@ export function FoundOnNetwork({
             ) : null}
             {hiddenCount > 0 ? (
               <TextLink
-                label={hiddenToggleText(hiddenCount, open)}
+                label={hiddenToggleText(hiddenCount, open, rawLocale)}
                 onPress={() => setShowHidden((v) => !v)}
               />
             ) : null}
           </View>
         ) : null}
         <Button
-          label={FOUND_TEXT.scanAgain}
+          label={foundTextHere.scanAgain}
           variant="secondary"
           disabled={scanning || found.pending}
           onPress={() => void found.ask({ rescan: true })}
         />
         <TextLink
-          label={FOUND_TEXT.lookElsewhere}
+          label={foundTextHere.lookElsewhere}
           onPress={() => {
             setOther((o) => !o);
             setCidrError(null);
@@ -285,14 +291,14 @@ export function FoundOnNetwork({
         {other ? (
           <View style={{ gap: 8 }}>
             <FormField
-              label={FOUND_TEXT.network}
+              label={foundTextHere.network}
               value={cidr}
               onChangeText={(v) => {
                 setCidr(v);
                 setCidrError(null);
               }}
               placeholder="192.168.2.0/24"
-              hint={cidrError ? null : FOUND_TEXT.networkHint}
+              hint={cidrError ? null : foundTextHere.networkHint}
               error={cidrError}
               mono
               keyboardType="numbers-and-punctuation"
@@ -300,7 +306,7 @@ export function FoundOnNetwork({
               onSubmitEditing={() => void lookIn()}
               {...PLAIN_INPUT}
             />
-            <Button label={FOUND_TEXT.lookThere} disabled={found.pending} onPress={() => void lookIn()} />
+            <Button label={foundTextHere.lookThere} disabled={found.pending} onPress={() => void lookIn()} />
           </View>
         ) : null}
       </View>

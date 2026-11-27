@@ -10,6 +10,7 @@ import { useFixLook } from '@whombat/client/react';
 import type { LookResearch } from '@whombat/core';
 import { View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { openHref } from '../navigation/hooks';
 import { showLookFix } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -36,12 +37,13 @@ export function LookPlanCard({
   /** Change something: the thread, to reply. */
   onChange: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   // On a page Go ahead opens the thread, where the steps are taken (backup-places.md BPL-15); in the thread it stays.
   const { mutate: goAhead, isPending } = useFixLook(slug, (outcome, thread) => {
     const text = lookFixOutcomeText(outcome);
-    if (text) showLookFix(outcome, text);
+    if (text) showLookFix(outcome, text, rawLocale);
     const open = variant === 'page' ? threadToOpen(thread) : null;
     if (open) openHref(open);
   });

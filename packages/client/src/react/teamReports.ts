@@ -23,7 +23,7 @@ import { ApiError } from '../http/errors';
 import type { CommitResult } from '../http/types';
 import { endpointKey, endpointScope } from '../query/keys';
 import { newRequestId } from '../session/ids';
-import { TEAM_REPORT_WORDS, teamReportsShown } from '../teamReports';
+import { teamReportsShown, teamReportWords } from '../teamReports';
 import { useSessionProtocol, useWhombat } from './context';
 import { queryHook } from './queries';
 
@@ -127,10 +127,13 @@ function dropReport(qc: QueryClient, burrow: string, reportId: string) {
 }
 
 /** What a refusal or failure says in the person's words. */
-export function teamReportErrorText(error: unknown): string {
-  if (error instanceof ApiError && error.status === 404) return TEAM_REPORT_WORDS.notFound;
-  const message = hostErrorInfo(error).message;
-  return message && message !== 'That didn’t work.' ? message : TEAM_REPORT_WORDS.failed;
+export function teamReportErrorText(error: unknown, locale?: string | null): string {
+  const words = teamReportWords(locale);
+  if (error instanceof ApiError && error.status === 404) return words.notFound;
+  const message = hostErrorInfo(error, locale).message;
+  // The hosts' bare “That didn’t work.” says less than this page's own sentence.
+  const bare = hostErrorInfo(null, locale).message;
+  return message && message !== bare ? message : words.failed;
 }
 
 /** Whether a report's read failed because it isn't there (withdrawn, or gone 90 days after closing). */
@@ -172,7 +175,7 @@ export function useTeamReportDraft(burrow: string, draftId: string | null | unde
 /** The data of an answer, or an error in the person's words. */
 function okOrThrow<T>(result: CommitResult<T>): T {
   if (result.status === 'ok') return result.data;
-  throw new Error(commitOutcomeText(result) ?? TEAM_REPORT_WORDS.failed);
+  throw new Error(commitOutcomeText(result) ?? teamReportWords().failed);
 }
 
 /**

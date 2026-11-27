@@ -4,12 +4,12 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { SHARE_TEXT, shareLinkLine } from '@whombat/client';
+import { shareLinkLine, shareText } from '@whombat/client';
 import { shareErrorText, useShares, useStopAllShares, useStopShare } from '@whombat/client/react';
 import type { SharedLink } from '@whombat/core';
 import { Alert, ScrollView, Share, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Card, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { copyToClipboard } from '../ui/clipboard';
@@ -21,6 +21,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'SharedLinks'>;
 
 export function SharedLinksScreen({ navigation }: Props) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const SHARE_TEXT = shareText(rawLocale);
   const { slug, timeZone } = useBurrowBase();
   const bottomRoom = useBottomRoom();
   const list = useShares({ params: { burrow: slug } });
@@ -48,9 +50,12 @@ export function SharedLinksScreen({ navigation }: Props) {
   const links = list.data.shares;
   const live = links.filter((l) => l.state === 'live');
   const menu = (l: SharedLink) =>
-    Alert.alert(l.title, shareLinkLine(l, timeZone), [
-      { text: 'Share link', onPress: () => void Share.share({ message: l.url, url: l.url }) },
-      { text: SHARE_TEXT.copy, onPress: () => void copyToClipboard(l.url, SHARE_TEXT.copied) },
+    Alert.alert(l.title, shareLinkLine(l, timeZone, rawLocale), [
+      {
+        text: tMobile('settings2.share.shareLink'),
+        onPress: () => void Share.share({ message: l.url, url: l.url }),
+      },
+      { text: SHARE_TEXT.copy, onPress: () => void copyToClipboard(l.url, SHARE_TEXT.copied, rawLocale) },
       { text: SHARE_TEXT.stop, style: 'destructive', onPress: () => stop.mutate(l.id, { onError: failed }) },
       { text: SHARE_TEXT.cancel, style: 'cancel' },
     ]);
@@ -70,14 +75,14 @@ export function SharedLinksScreen({ navigation }: Props) {
                   key={l.id}
                   first={i === 0}
                   title={l.title}
-                  body={shareLinkLine(l, timeZone)}
+                  body={shareLinkLine(l, timeZone, rawLocale)}
                   muted={l.state !== 'live'}
                   action={
                     l.state === 'live' ? (
                       <Button
                         label={tMobile('settings.manage')}
                         variant="secondary"
-                        accessibilityLabel={`Manage the link to ${l.title}`}
+                        accessibilityLabel={tMobile('settings2.share.manage', { title: l.title })}
                         onPress={() => menu(l)}
                       />
                     ) : null
@@ -93,7 +98,7 @@ export function SharedLinksScreen({ navigation }: Props) {
               disabled={stopAll.isPending}
               onPress={() =>
                 Alert.alert(
-                  `Stop all ${live.length} links?`,
+                  tMobile('settings2.share.stopAllAsk', { count: live.length }),
                   tMobile('settings.nobody-can-open-them-any-more'),
                   [
                     { text: SHARE_TEXT.cancel, style: 'cancel' },

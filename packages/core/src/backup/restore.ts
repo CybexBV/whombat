@@ -9,23 +9,33 @@
  */
 import { z } from 'zod';
 import { Count, Timestamp } from '../domain/common.js';
+import { coreWords, isEnglishLocale, tCore, tpCore } from '../i18n/catalog.js';
+import { formatLocaleNumber } from '../i18n/format.js';
 import { ConnectionId } from '../ids.js';
 import { formatDate } from '../text/time.js';
 import { BACKUP_CATEGORY_IDS, BackupCategoryId } from './categories.js';
 import { BackupFileManifest } from './manifest.js';
 import { BackupNote, backupNoteText, joinAnd } from './notes.js';
 
-const num = (v: number) => v.toLocaleString('en-US');
-const things = (n: number, one: string, many: string) => `${num(n)} ${n === 1 ? one : many}`;
+/** A count as the restore says it: English keeps its thousands commas, other languages their own separators. */
+function num(v: number, locale?: string | null): string {
+  return isEnglishLocale(locale) ? v.toLocaleString('en-US') : formatLocaleNumber(v, locale);
+}
+
+/** A formatter passed straight to `Array.map` receives an index as its locale; anything but a tag means English. */
+const tagOf = (locale: unknown): string | null => (typeof locale === 'string' ? locale : null);
 
 /** “When something is different”: keep what's here (default) or use the backup. */
 export const BACKUP_ON_DIFFERENT = ['keep', 'replace'] as const;
 export const BackupOnDifferent = z.enum(BACKUP_ON_DIFFERENT);
 export type BackupOnDifferent = z.infer<typeof BackupOnDifferent>;
-export const BACKUP_ON_DIFFERENT_LABELS: Readonly<Record<BackupOnDifferent, string>> = {
-  keep: 'Keep what’s here',
-  replace: 'Use the backup',
-};
+/** `BACKUP_ON_DIFFERENT_LABELS` in a locale. */
+export function backupOnDifferentLabels(locale?: string | null): Readonly<Record<BackupOnDifferent, string>> {
+  return coreWords(locale, 'restore.onDifferent', BACKUP_ON_DIFFERENT);
+}
+
+export const BACKUP_ON_DIFFERENT_LABELS: Readonly<Record<BackupOnDifferent, string>> =
+  backupOnDifferentLabels('en');
 
 /**
  * One category of the file in the restore preview. `count`: things in the file (`BACKUP_COUNTED_TYPES`); `new`, `here`
@@ -52,19 +62,29 @@ export interface BackupRestoreChip {
  * The chips under a category: “130 new”, “12 already here”, “3 different” (zeros left out). Nothing at all: “Nothing to
  * bring back”.
  */
-export function backupRestoreChips(p: BackupRestoreCategoryPreviewInput): BackupRestoreChip[] {
+export function backupRestoreChips(
+  p: BackupRestoreCategoryPreviewInput,
+  locale?: string | null,
+): BackupRestoreChip[] {
+  const tag = tagOf(locale);
   const chips: BackupRestoreChip[] = [];
-  if (p.new > 0) chips.push({ label: `${num(p.new)} new`, tone: 'neutral' });
-  if (p.here > 0) chips.push({ label: `${num(p.here)} already here`, tone: 'neutral' });
-  if (p.different > 0) chips.push({ label: `${num(p.different)} different`, tone: 'warn' });
-  if (chips.length === 0) chips.push({ label: 'Nothing to bring back', tone: 'neutral' });
+  if (p.new > 0)
+    chips.push({ label: tCore(tag, 'restore.chip.new', { count: num(p.new, tag) }), tone: 'neutral' });
+  if (p.here > 0)
+    chips.push({ label: tCore(tag, 'restore.chip.here', { count: num(p.here, tag) }), tone: 'neutral' });
+  if (p.different > 0)
+    chips.push({
+      label: tCore(tag, 'restore.chip.different', { count: num(p.different, tag) }),
+      tone: 'warn',
+    });
+  if (chips.length === 0) chips.push({ label: tCore(tag, 'restore.chip.nothing'), tone: 'neutral' });
   return chips;
 }
 
 /** The fixed line under a category in the restore panel (BF-06, BF-07), or null. */
-export function backupRestoreHint(id: BackupCategoryId): string | null {
-  if (id === 'automations') return 'They start switched off, so they don’t run twice.';
-  if (id === 'connections') return 'Checked after restoring. Any that need you show in Connections.';
+export function backupRestoreHint(id: BackupCategoryId, locale?: string | null): string | null {
+  if (id === 'automations') return tCore(tagOf(locale), 'restore.hint.automations');
+  if (id === 'connections') return tCore(tagOf(locale), 'restore.hint.connections');
   return null;
 }
 
@@ -110,37 +130,39 @@ export type BackupServersPreview = z.infer<typeof BackupServersPreview>;
 export type BackupServersPreviewInput = z.input<typeof BackupServersPreview>;
 
 /** The servers row's label by state (the restore panel's chip). */
-export const BACKUP_SERVERS_STATE_LABELS: Readonly<Record<BackupServersState, string>> = {
-  new: 'New',
-  here: 'Already here',
-  blocked: 'Can’t come back',
-  unavailable: 'Can’t come back',
-};
+export function backupServersStateLabels(
+  locale?: string | null,
+): Readonly<Record<BackupServersState, string>> {
+  return coreWords(locale, 'restore.servers.state', BACKUP_SERVERS_STATES);
+}
+
+export const BACKUP_SERVERS_STATE_LABELS: Readonly<Record<BackupServersState, string>> =
+  backupServersStateLabels('en');
 
 /**
  * The sentence under the servers row (BF-14), or null: “This Whombat already watches 3 servers, so the 5 in the file
  * stay with the Whombat they report to.”
  */
-export function backupServersStateText(p: BackupServersPreviewInput): string | null {
-  const stay =
-    p.count === 1
-      ? 'the server in the file stays with the Whombat it reports to'
-      : `the ${num(p.count)} in the file stay with the Whombat they report to`;
+export function backupServersStateText(p: BackupServersPreviewInput, locale?: string | null): string | null {
+  const tag = tagOf(locale);
+  const stay = tpCore(tag, 'restore.servers.stay', p.count, { count: num(p.count, tag) });
   switch (p.state) {
     case 'new':
       return null;
     case 'here':
-      return p.count === 1 ? 'It already reports to this Whombat.' : 'They already report to this Whombat.';
-    case 'blocked':
-      return `This Whombat already watches ${things(p.blockedBy ?? 0, 'server', 'servers')}, so ${stay}.`;
+      return tpCore(tag, 'restore.servers.here', p.count);
+    case 'blocked': {
+      const n = p.blockedBy ?? 0;
+      return tpCore(tag, 'restore.servers.blocked', n, { count: num(n, tag), stay });
+    }
     case 'unavailable':
-      return `This Whombat doesn’t watch servers, so ${stay}.`;
+      return tCore(tag, 'restore.servers.unavailable', { stay });
   }
 }
 
 /** The address question (BF-15): “Your servers look for your Whombat at 10.100.1.160. This Whombat is at 10.100.1.158.” */
-export function backupServersAddressText(a: BackupServersAddress): string {
-  return `Your servers look for your Whombat at ${a.from}. This Whombat is at ${a.to}.`;
+export function backupServersAddressText(a: BackupServersAddress, locale?: string | null): string {
+  return tCore(tagOf(locale), 'restore.servers.address', { from: a.from, to: a.to });
 }
 
 /** The restore body's answer to the address question (BF-15). Absent: point them here when there is a question. */
@@ -168,21 +190,24 @@ export type BackupServersSummary = z.infer<typeof BackupServersSummary>;
 export type BackupServersSummaryInput = z.input<typeof BackupServersSummary>;
 
 /** The servers' lines of a finished restore: “Pointed 3 servers here.”, “blackbox still looks for your old Whombat. …” */
-export function backupServersSummaryLines(s: BackupServersSummaryInput): string[] {
+export function backupServersSummaryLines(s: BackupServersSummaryInput, locale?: string | null): string[] {
+  const tag = tagOf(locale);
   const lines: string[] = [];
   const pointed = s.pointed ?? 0;
-  if (pointed > 0) lines.push(`Pointed ${things(pointed, 'server', 'servers')} here.`);
+  if (pointed > 0) lines.push(tpCore(tag, 'restore.servers.pointed', pointed, { count: num(pointed, tag) }));
   const left = s.toPoint ?? [];
-  if (left.length === 1)
-    lines.push(`${left[0]?.name} still looks for your old Whombat. Point it here from the Inbox.`);
+  if (left.length === 1) lines.push(tCore(tag, 'restore.servers.leftOne', { name: `${left[0]?.name}` }));
   else if (left.length > 1 && left.length <= 3)
     lines.push(
-      `${joinAnd(left.map((x) => x.name))} still look for your old Whombat. Point them here from the Inbox.`,
+      tCore(tag, 'restore.servers.leftFew', {
+        names: joinAnd(
+          left.map((x) => x.name),
+          tag,
+        ),
+      }),
     );
   else if (left.length > 3)
-    lines.push(
-      `${num(left.length)} servers still look for your old Whombat. Point them here from the Inbox.`,
-    );
+    lines.push(tCore(tag, 'restore.servers.leftMany', { count: num(left.length, tag) }));
   return lines;
 }
 
@@ -240,24 +265,10 @@ export const BackupRestoreSummary = z.object({
 export type BackupRestoreSummary = z.infer<typeof BackupRestoreSummary>;
 export type BackupRestoreSummaryInput = z.input<typeof BackupRestoreSummary>;
 
-const NOUNS: Readonly<Record<BackupCategoryId, [string, string]>> = {
-  agents: ['agent', 'agents'],
-  memories: ['memory', 'memories'],
-  automations: ['automation', 'automations'],
-  connections: ['connection', 'connections'],
-  skills: ['skill', 'skills'],
-  settings: ['setting', 'settings'],
-  vault: ['Vault entry', 'Vault entries'],
-  messages: ['message', 'messages'],
-  servers: ['server', 'servers'],
-  files: ['file', 'files'],
-  repositories: ['repository', 'repositories'],
-};
-
-/** “9 automations”, “1 Vault entry”. */
-export function backupCountText(id: BackupCategoryId, n: number): string {
-  const [one, many] = NOUNS[id];
-  return things(n, one, many);
+/** “9 automations”, “1 Vault entry”. English by default: the signed restore event uses it too. */
+export function backupCountText(id: BackupCategoryId, n: number, locale?: string | null): string {
+  const tag = tagOf(locale);
+  return tpCore(tag, `restore.count.${id}`, n, { count: num(n, tag) });
 }
 
 function cameBack(summary: Pick<BackupRestoreSummaryInput, 'categories'>) {
@@ -271,26 +282,35 @@ function cameBack(summary: Pick<BackupRestoreSummaryInput, 'categories'>) {
  * The finished restore in a few plain lines (the restore panel and the restorer's notice): what came back, then what
  * needs them.
  */
-export function backupRestoreSummaryLines(summary: BackupRestoreSummaryInput): string[] {
+export function backupRestoreSummaryLines(
+  summary: BackupRestoreSummaryInput,
+  locale?: string | null,
+): string[] {
+  const tag = tagOf(locale);
   const lines: string[] = [];
   const back = cameBack(summary);
   lines.push(
     back.length === 0
-      ? 'Everything in the file was already here.'
-      : `Brought back ${joinAnd(back.map((c) => backupCountText(c.id, c.n)))}.`,
+      ? tCore(tag, 'restore.summary.allHere')
+      : tCore(tag, 'restore.summary.back', {
+          items: joinAnd(
+            back.map((c) => backupCountText(c.id, c.n, tag)),
+            tag,
+          ),
+        }),
   );
   const signIn = summary.connectionsToSignIn ?? [];
-  if (signIn.length === 1) lines.push(`${signIn[0]?.label} needs you to sign in again. It’s in the Inbox.`);
+  if (signIn.length === 1)
+    lines.push(tCore(tag, 'restore.summary.signInOne', { name: `${signIn[0]?.label}` }));
   else if (signIn.length > 1)
-    lines.push(`${num(signIn.length)} connections need you to sign in again. They’re in the Inbox.`);
+    lines.push(tCore(tag, 'restore.summary.signInMany', { count: num(signIn.length, tag) }));
   const off = summary.automationsOff ?? 0;
-  if (off === 1) lines.push('1 automation is switched off. Switch it on when you’re ready.');
-  else if (off > 1) lines.push(`${num(off)} automations are switched off. Switch them on when you’re ready.`);
+  if (off > 0) lines.push(tpCore(tag, 'restore.summary.automationsOff', off, { count: num(off, tag) }));
   const paused = summary.schedulesPaused ?? 0;
-  if (paused === 1) lines.push('1 schedule is paused.');
-  else if (paused > 1) lines.push(`${num(paused)} schedules are paused.`);
-  if (summary.servers) lines.push(...backupServersSummaryLines(summary.servers));
-  for (const note of summary.notes ?? []) lines.push(backupNoteText(note));
+  if (paused > 0)
+    lines.push(tpCore(tag, 'restore.summary.schedulesPaused', paused, { count: num(paused, tag) }));
+  if (summary.servers) lines.push(...backupServersSummaryLines(summary.servers, tag));
+  for (const note of summary.notes ?? []) lines.push(backupNoteText(note, tag));
   return lines;
 }
 

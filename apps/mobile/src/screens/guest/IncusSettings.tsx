@@ -7,10 +7,9 @@
  * moving stay on the web, and the screen says so with a link.
  */
 
-import { CHANGED_MEANWHILE, isEmptyDraft } from '@whombat/client/hosts';
+import { isEmptyDraft } from '@whombat/client/hosts';
 import {
   expiryChoices,
-  INCUS_WEB_ONLY,
   type IncusEditKind,
   incusEditDraft,
   incusEditSpec,
@@ -18,12 +17,13 @@ import {
   incusReviewLines,
   incusReviewNote,
   incusSettingGroups,
+  incusWebOnly,
   scheduleChoices,
 } from '@whombat/client/hosts/mobile';
 import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
-import { useMobileT } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -45,10 +45,11 @@ export function IncusSettings({
   webUrl: string | null;
   onEdit: (kind: IncusEditKind) => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   return (
     <>
-      {incusSettingGroups(config).map((group) => (
+      {incusSettingGroups(config, rawLocale).map((group) => (
         <OneCard key={group.id} label={group.title}>
           {group.rows.map((r, i) => {
             const edit = r.edit;
@@ -64,7 +65,7 @@ export function IncusSettings({
                   canChange && edit ? (
                     <RowAction
                       label={tMobile('screens.change')}
-                      spoken={`Change ${r.label.toLowerCase()}`}
+                      spoken={tMobile('screens2.guest.changeX', { what: r.label.toLowerCase() })}
                       onPress={() => onEdit(edit)}
                     />
                   ) : null
@@ -74,7 +75,7 @@ export function IncusSettings({
           })}
         </OneCard>
       ))}
-      <WebLine text={INCUS_WEB_ONLY} url={webUrl} />
+      <WebLine text={incusWebOnly(rawLocale)} url={webUrl} />
     </>
   );
 }
@@ -119,8 +120,9 @@ export function IncusEditSheet({
   kind: IncusEditKind;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
-  const spec = incusEditSpec(kind, guest.name);
+  const spec = incusEditSpec(kind, guest.name, rawLocale);
   const [input, setInput] = useState(() => incusEditStart(config, kind));
   const [step, setStep] = useState<'edit' | 'review'>('edit');
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -128,9 +130,9 @@ export function IncusEditSheet({
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
   // Against the configuration as it is now: after “Changed meanwhile” the review shows the new old values.
-  const { draft, error: checkError } = incusEditDraft(config, kind, input);
+  const { draft, error: checkError } = incusEditDraft(config, kind, input, rawLocale);
   const empty = !draft || isEmptyDraft(draft);
-  const lines = draft ? incusReviewLines(config, draft) : [];
+  const lines = draft ? incusReviewLines(config, draft, rawLocale) : [];
   const fromProfile = kind === 'schedule' && !!config.inherited?.includes('snapshots.schedule');
 
   const apply = async () => {
@@ -146,7 +148,7 @@ export function IncusEditSheet({
       name: guest.name,
     });
     if (out.ok || out.waiting) return onClose();
-    if (out.conflict) setNotice(CHANGED_MEANWHILE);
+    if (out.conflict) setNotice(mobileTranslator(rawLocale).t('screens2.guest.changedMeanwhile'));
     else if (Object.keys(out.fields).length) {
       setFieldError(Object.values(out.fields).join(' '));
       setStep('edit');
@@ -161,8 +163,19 @@ export function IncusEditSheet({
         title={spec.title}
         busy={busy ? 'apply' : null}
         buttons={[
-          { id: 'apply', label: 'Apply', variant: 'primary', disabled: empty, onPress: () => void apply() },
-          { id: 'back', label: 'Back', variant: 'quiet', onPress: () => setStep('edit') },
+          {
+            id: 'apply',
+            label: tMobile('screens2.common.apply'),
+            variant: 'primary',
+            disabled: empty,
+            onPress: () => void apply(),
+          },
+          {
+            id: 'back',
+            label: tMobile('screens2.common.back'),
+            variant: 'quiet',
+            onPress: () => setStep('edit'),
+          },
         ]}
         note={error}
       >
@@ -171,7 +184,7 @@ export function IncusEditSheet({
             <FormMessage text={notice} />
           </View>
         ) : null}
-        <ReviewList lines={lines} note={draft ? incusReviewNote(config, draft) : null} />
+        <ReviewList lines={lines} note={draft ? incusReviewNote(config, draft, rawLocale) : null} />
       </OneSheet>
     );
 
@@ -180,15 +193,11 @@ export function IncusEditSheet({
       visible
       onClose={onClose}
       title={spec.title}
-      body={
-        fromProfile
-          ? `The schedule now comes from a profile; what you pick here is for ${guest.name} alone.`
-          : null
-      }
+      body={fromProfile ? tMobile('screens2.guest.fromProfile', { name: guest.name }) : null}
       buttons={[
         {
           id: 'review',
-          label: 'Review',
+          label: tMobile('screens2.common.review'),
           variant: 'primary',
           disabled: empty,
           onPress: () => {
@@ -196,9 +205,9 @@ export function IncusEditSheet({
             setStep('review');
           },
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
-      note={draft && empty ? 'Nothing changed yet.' : null}
+      note={draft && empty ? tMobile('screens2.guest.nothingChanged') : null}
     >
       <View style={{ marginTop: 16, gap: 16 }}>
         {spec.kind === 'switch' ? (
@@ -207,14 +216,14 @@ export function IncusEditSheet({
           <>
             <Choices
               label={spec.field}
-              options={scheduleChoices(config)}
+              options={scheduleChoices(config, rawLocale)}
               value={input.schedule}
               onChange={(schedule) => setInput({ ...input, schedule })}
             />
             {input.schedule ? (
               <Choices
                 label={tMobile('screens.keep-them')}
-                options={expiryChoices(config)}
+                options={expiryChoices(config, rawLocale)}
                 value={input.expiry}
                 onChange={(expiry) => setInput({ ...input, expiry })}
               />

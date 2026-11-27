@@ -154,7 +154,9 @@ export function phoneSheet(
       button: b,
     })),
     linksInRow: approval,
-    approval: when ? needsYouApprovalCard(row, { timeZone: when.timeZone, assistant: words.Name }) : null,
+    approval: when
+      ? needsYouApprovalCard(row, { timeZone: when.timeZone, assistant: words.Name, locale: when.locale })
+      : null,
   };
 }
 

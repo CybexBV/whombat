@@ -236,7 +236,7 @@ export function overviewServerRow(
   const notWorking = s.status === 'bad';
   const words = !notWorking && !offline;
   const f = serverFigures(s, locale);
-  const [cpuTile, memTile, diskTile, tempTile] = serverTiles(s);
+  const [cpuTile, memTile, diskTile, tempTile] = serverTiles(s, locale);
   const home = serverHref(s.id);
   const col = overview.columns;
 

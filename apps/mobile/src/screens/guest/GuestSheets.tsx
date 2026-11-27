@@ -9,9 +9,9 @@
 import { isDestructiveAction, type PowerActionView, storagesFor } from '@whombat/client/hosts';
 import {
   addToJobParams,
-  BACKUP_MODES,
   type BackupMode,
   backupJobRows,
+  backupModes,
   backupStorages,
   cloneNameError,
   defaultSnapshotName,
@@ -25,7 +25,7 @@ import type { HostBackupJob, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { useMobileT } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
@@ -39,8 +39,6 @@ export interface SheetBase {
   guest: HostGuestDetail;
   onClose: () => void;
 }
-
-const CANCEL = 'Cancel';
 
 /** What a sheet does with a change's outcome: close when it went (or waits for someone), else show why. */
 function settle(out: ChangeOutcome, onClose: () => void, setError: (s: string) => void) {
@@ -56,13 +54,14 @@ export function PowerSheet({
   action,
   onClose,
 }: SheetBase & { action: PowerActionView }) {
+  const { t: tMobile } = useMobileT();
   const { send, busy } = useGuestAction(serverId, guest);
   const [error, setError] = useState<string | null>(null);
   const question =
     action.question ??
     (action.action === 'pause'
-      ? `Pause ${guest.name}? It stops where it is until you resume it.`
-      : `${action.label} ${guest.name}?`);
+      ? tMobile('screens2.guest.pauseAsk', { name: guest.name })
+      : tMobile('screens2.guest.actionAsk', { action: action.label, name: guest.name }));
   return (
     <OneSheet
       visible
@@ -82,7 +81,7 @@ export function PowerSheet({
               ...(isDestructiveAction(action.action) ? { confirm: true } : {}),
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -91,13 +90,16 @@ export function PowerSheet({
 
 export type MoreChoice = 'backup' | 'snapshot' | 'clone' | 'rename' | 'delete';
 
-const MORE_WORDS: Record<MoreChoice, string> = {
-  backup: 'Back up now',
-  snapshot: 'Take a snapshot',
-  clone: 'Clone',
-  rename: 'Rename',
-  delete: 'Delete',
-};
+function moreWords(locale?: string | null): Record<MoreChoice, string> {
+  const tr = mobileTranslator(locale);
+  return {
+    backup: tr.t('screens2.common.backUpNow'),
+    snapshot: tr.t('screens2.guest.takeSnapshot'),
+    clone: tr.t('screens2.common.clone'),
+    rename: tr.t('screens2.common.rename'),
+    delete: tr.t('screens2.common.delete'),
+  };
+}
 
 /**
  * More: what changes the guest as a whole, in this order — Proxmox: Back up now, Take a snapshot, Clone, Delete;
@@ -107,7 +109,7 @@ const MORE_WORDS: Record<MoreChoice, string> = {
 export function MoreSheet({
   guest,
   choices,
-  cloneWord = 'Clone',
+  cloneWord: givenCloneWord,
   onPick,
   onClose,
 }: {
@@ -118,6 +120,9 @@ export function MoreSheet({
   onPick: (c: MoreChoice) => void;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const { t: tMobile } = useMobileT();
+  const cloneWord = givenCloneWord ?? tMobile('screens2.common.clone');
   return (
     <OneSheet
       visible
@@ -126,11 +131,11 @@ export function MoreSheet({
       buttons={[
         ...choices.map((c) => ({
           id: c,
-          label: c === 'clone' ? cloneWord : MORE_WORDS[c],
+          label: c === 'clone' ? cloneWord : moreWords(rawLocale)[c],
           variant: 'secondary' as const,
           onPress: () => onPick(c),
         })),
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
     />
   );
@@ -147,6 +152,8 @@ function useChoices(serverId: string) {
 
 /** Back up now: on which storage, and how (while it runs, paused, stopped). */
 export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
+  const backupModesHere = backupModes(rawLocale);
   const { t: tMobile } = useMobileT();
   const { choices, loading } = useChoices(serverId);
   const stores = backupStorages(storagesFor(choices, 'backup'));
@@ -160,13 +167,13 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Back up ${guest.name} now`}
+      title={tMobile('screens2.guest.backUpNowName', { name: guest.name })}
       body={tMobile('screens.the-backup-runs-on-the-server-you-can')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Back up',
+          label: tMobile('screens2.common.backUp'),
           variant: 'primary',
           disabled: !target,
           onPress: () =>
@@ -177,9 +184,9 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
               name: guest.name,
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
-      note={error ?? (none ? 'This server has no storage for backups.' : null)}
+      note={error ?? (none ? tMobile('screens2.guest.noBackupStorage') : null)}
     >
       <View style={{ gap: 16, marginTop: 16 }}>
         {stores.ids.length ? (
@@ -190,7 +197,7 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
             onChange={setStorage}
           />
         ) : null}
-        <Choices label={tMobile('screens.how')} options={BACKUP_MODES} value={mode} onChange={setMode} />
+        <Choices label={tMobile('screens.how')} options={backupModesHere} value={mode} onChange={setMode} />
       </View>
     </OneSheet>
   );
@@ -198,6 +205,7 @@ export function BackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Take a snapshot: a name, a note, and for a running VM whether what's in memory comes too. */
 export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { clock } = useBurrowBase();
   const [name, setName] = useState(() => defaultSnapshotName(clock().getTime()));
@@ -205,20 +213,20 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
   const [memory, setMemory] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useGuestAction(serverId, guest);
-  const bad = snapshotNameError(name.trim());
+  const bad = snapshotNameError(name.trim(), rawLocale);
   // Memory in a snapshot is Proxmox's; Incus needs stateful snapshots set up (the web's).
   const vmOn = guest.platform === 'pve' && guest.kind === 'vm' && guest.state === 'running';
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Take a snapshot of ${guest.name}`}
+      title={tMobile('screens2.guest.snapshotOf', { name: guest.name })}
       body={tMobile('screens.you-can-go-back-to-it-later-it')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Take it',
+          label: tMobile('screens2.common.takeIt'),
           variant: 'primary',
           disabled: !!bad,
           onPress: () =>
@@ -229,7 +237,7 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
               ...(memory && vmOn ? { memory: true } : {}),
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
@@ -263,25 +271,26 @@ export function SnapshotSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Clone: a full copy with its own disks, under a new name and id; it starts switched off. */
 export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { choices } = useChoices(serverId);
   const [name, setName] = useState(`${guest.name}-copy`);
   const [id, setId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const nameError = cloneNameError(name);
-  const idCheck = newIdCheck(id, choices?.nextId);
+  const nameError = cloneNameError(name, rawLocale);
+  const idCheck = newIdCheck(id, choices?.nextId, rawLocale);
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Clone ${guest.name}`}
+      title={tMobile('screens2.guest.cloneName', { name: guest.name })}
       body={tMobile('screens.a-full-copy-with-its-own-disks-the')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Clone',
+          label: tMobile('screens2.common.clone'),
           variant: 'primary',
           disabled: !!nameError || idCheck.id == null,
           onPress: () =>
@@ -292,7 +301,7 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
               name: guest.name,
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
@@ -311,7 +320,7 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
           value={id}
           onChangeText={setId}
           placeholder={choices?.nextId ? String(choices.nextId) : undefined}
-          hint={choices?.nextId ? `Empty: ${choices.nextId}, the next free one.` : null}
+          hint={choices?.nextId ? tMobile('screens2.guest.nextFree', { id: choices.nextId }) : null}
           error={id.trim() ? idCheck.error : null}
           mono
           keyboardType="number-pad"
@@ -326,11 +335,12 @@ export function CloneSheet({ serverId, guest, onClose }: SheetBase) {
  * stay. Incus: its snapshots and backups go with it (they live with the instance).
  */
 export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase & { onDeleted: () => void }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const [typed, setTyped] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const check = deleteCheck(guest, typed);
+  const check = deleteCheck(guest, typed, rawLocale);
   const incus = guest.platform === 'incus';
   // A libvirt VM (IU-13): its disks and NVRAM only when asked; its backups stay.
   const libvirt = guest.platform === 'libvirt';
@@ -341,21 +351,21 @@ export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase &
       onClose={() => !busy && onClose()}
       badge={guest.name}
       tone="bad"
-      title={`Delete ${guest.name}?`}
+      title={tMobile('screens2.guest.deleteAsk', { name: guest.name })}
       body={
         incus
-          ? `${guest.name} is removed for good, with its snapshots and backups.`
+          ? tMobile('screens2.guest.deleteIncus', { name: guest.name })
           : libvirt
             ? purge
-              ? `${guest.name} and its disks are removed for good. Its backups stay.`
-              : `${guest.name} is removed; its disks stay on the server, and so do its backups.`
-            : `${guest.name} and its disks are removed for good. Its backups stay.`
+              ? tMobile('screens2.guest.deleteWithDisks', { name: guest.name })
+              : tMobile('screens2.guest.deleteKeepDisks', { name: guest.name })
+            : tMobile('screens2.guest.deleteWithDisks', { name: guest.name })
       }
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Delete',
+          label: tMobile('screens2.common.delete'),
           variant: 'primary',
           disabled: !check.ok,
           onPress: () =>
@@ -372,7 +382,7 @@ export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase &
               else settle(o, onClose, setError);
             }),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error ?? check.reason}
     >
@@ -385,7 +395,7 @@ export function DeleteSheet({ serverId, guest, onClose, onDeleted }: SheetBase &
           />
         ) : null}
         <FormField
-          label={`Type ${guest.name} to confirm`}
+          label={tMobile('screens2.guest.typeToConfirm', { name: guest.name })}
           value={typed}
           onChangeText={setTyped}
           mono
@@ -409,18 +419,18 @@ export function RestartSheet({ serverId, serverName, guest, onClose }: SheetBase
       onClose={() => !busy && onClose()}
       badge={`${guest.name} · ${serverName}`}
       tone="warn"
-      title={`Restart ${guest.name} now?`}
+      title={tMobile('screens2.guest.restartAsk', { name: guest.name })}
       body={tMobile('screens.its-down-for-a-moment-while-it-restarts')}
       busy={busy}
       buttons={[
         {
           id: 'reboot',
-          label: 'Restart now',
+          label: tMobile('screens2.common.restartNow'),
           variant: 'primary',
           onPress: () =>
             void send({ action: 'reboot', confirm: true }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -429,6 +439,7 @@ export function RestartSheet({ serverId, serverName, guest, onClose }: SheetBase
 
 /** Add to a backup job (PX-03, PX-07): the server's jobs; picking one adds the guest to it (its digest sent along). */
 export function AddToJobSheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { slug, clock, timeZone } = useBurrowBase();
   const q = useHostManageRead(
@@ -443,32 +454,36 @@ export function AddToJobSheet({ serverId, guest, onClose }: SheetBase) {
     { params: { burrow: slug }, query: { server: serverId, limit: 200 } },
     { retry: false },
   );
-  const rows = backupJobRows(jobs, all.data?.guests ?? [guest], clock().getTime(), timeZone).filter(
-    (r) => !jobCovers(r.job, guest.id),
-  );
+  const rows = backupJobRows(
+    jobs,
+    all.data?.guests ?? [guest],
+    clock().getTime(),
+    timeZone,
+    rawLocale,
+  ).filter((r) => !jobCovers(r.job, guest.id));
   const add = (job: HostBackupJob) => {
     if (busy) return;
     const params = addToJobParams(job, guest.id);
     if (!params)
-      return setError(
-        `That job backs up the pool ${job.pool ?? ''}. Add ${guest.name} to the pool in Proxmox.`,
-      );
+      return setError(tMobile('screens2.guest.poolJob', { pool: job.pool ?? '', name: guest.name }));
     void send({
       op: 'backupjob.update',
       params,
       ...(job.digest ? { digest: job.digest } : {}),
       name: guest.name,
-      done: `${guest.name} is in the backup plan now.`,
+      done: tMobile('screens2.guest.inPlan', { name: guest.name }),
     }).then((o) => settle(o, onClose, setError));
   };
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Add ${guest.name} to a backup plan`}
+      title={tMobile('screens2.guest.addToPlan', { name: guest.name })}
       body={tMobile('screens.its-backed-up-with-the-others-at-the')}
       busy={null}
-      buttons={[{ id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose }]}
+      buttons={[
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
+      ]}
       note={error}
     >
       <View style={{ marginTop: 16 }}>
@@ -494,7 +509,7 @@ export function AddToJobSheet({ serverId, guest, onClose }: SheetBase) {
                 meta={r.next}
                 chevron
                 label={r.label}
-                hint={`Adds ${guest.name} to it`}
+                hint={tMobile('screens2.guest.addsToIt', { name: guest.name })}
                 onPress={() => add(r.job)}
               />
             ))}

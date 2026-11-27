@@ -14,6 +14,7 @@ import type {
 } from '@whombat/client/desk';
 import { catalogName, isAccountGroup, sameWidget } from '@whombat/client/desk';
 import { DESK_ACCOUNT_GITHUB } from '@whombat/core';
+import { mobileTranslator } from '../../i18n/translate';
 import type { KnownWidget } from './tiles';
 
 /**
@@ -23,6 +24,7 @@ import type { KnownWidget } from './tiles';
 export function fromCatalog(
   item: DeskCatalogItem,
   group: Pick<DeskCatalogGroup, 'key' | 'label' | 'thing'> & { mark?: string | null | undefined },
+  locale?: string | null,
 ): { widget: NewWidget; known: KnownWidget } {
   const account = isAccountGroup(group);
   const mark = item.mark ?? (account ? group.mark : undefined);
@@ -32,7 +34,7 @@ export function fromCatalog(
       name: item.type === 'server' ? catalogName(group, item) : item.name,
       ...(mark ? { mark } : {}),
       ...(item.view ? { view: item.view } : {}),
-      ...(account ? { of: accountName(group) } : group.thing ? { of: group.label } : {}),
+      ...(account ? { of: accountName(group, locale) } : group.thing ? { of: group.label } : {}),
     },
   };
 }
@@ -41,8 +43,6 @@ export function fromCatalog(
 const ACCOUNT_PROVIDERS: Readonly<Record<string, string>> = {
   google: 'Google',
   microsoft: 'Microsoft 365',
-  mail: 'Email',
-  imap: 'Email',
   github: 'GitHub',
 };
 
@@ -50,8 +50,16 @@ const ACCOUNT_PROVIDERS: Readonly<Record<string, string>> = {
  * An account by who holds it and its address, “Google · anna@example.com”: the runtime's label with the provider in
  * front where the label doesn't say it already (“GitHub” stays “GitHub”).
  */
-export function accountName(group: { label: string; mark?: string | null | undefined }): string {
-  const provider = group.mark ? ACCOUNT_PROVIDERS[group.mark] : undefined;
+export function accountName(
+  group: { label: string; mark?: string | null | undefined },
+  locale?: string | null,
+): string {
+  const email = mobileTranslator(locale).t('settings2.catalog.email');
+  const provider = group.mark
+    ? group.mark === 'mail' || group.mark === 'imap'
+      ? email
+      : ACCOUNT_PROVIDERS[group.mark]
+    : undefined;
   if (!provider || group.label.toLowerCase().startsWith(provider.toLowerCase())) return group.label;
   return `${provider} · ${group.label}`;
 }

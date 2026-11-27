@@ -4,12 +4,17 @@
  * conversation, the track, the words people read — is `@whombat/client`'s, the same as the web's. Pure.
  */
 import type { TeamReportStatus, Tone } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /** What the phone's report screens say that the web's don't need. */
-export const TEAM_REPORTS_PHONE_WORDS = {
-  /** The ⋯ button's name for screen readers. */
-  more: (title: string) => `More for ${title}`,
-} as const;
+export function teamReportsPhoneWords(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The ⋯ button's name for screen readers. */
+    more: (title: string) => t('data.teamReports.more', { title }),
+  } as const;
+}
+export const TEAM_REPORTS_PHONE_WORDS = teamReportsPhoneWords();
 
 /**
  * The device and its system in a few words (“Pixel 9 · Android 16”, “iPhone 16 Pro · iOS 26.1”), from what the phone

@@ -16,7 +16,14 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { machineVerdict, type PowerActionView, powerActions, type Verdict } from '@whombat/client/hosts';
+import {
+  machineVerdict,
+  type PowerActionView,
+  powerActions,
+  selfGuestChip,
+  selfGuestLine,
+  type Verdict,
+} from '@whombat/client/hosts';
 import {
   type GuestEditKind,
   type GuestWayOut,
@@ -28,15 +35,13 @@ import {
   type LibvirtEditKind,
   libvirtHeadLine,
   manageOffText,
-  PHONE_GUEST_TAB_WORDS,
   type PhoneGuestTab,
   phoneGuestTabs,
+  phoneGuestTabWords,
   phoneIncusTabs,
   phoneLibvirtTabs,
-  SELF_LINE,
   selfAllowsAction,
   selfAllowsOp,
-  THIS_WHOMBAT,
 } from '@whombat/client/hosts/mobile';
 import {
   SERVER_DASHBOARD_DETAIL_RANGE,
@@ -117,7 +122,8 @@ const MORE_OPS = {
 const RENAME_WAIT_MS = 30_000;
 
 export function GuestScreen({ route, navigation }: Props) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
+  const phoneGuestTabWordsHere = phoneGuestTabWords(rawLocale);
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const { serverId, guestId, title } = route.params;
@@ -188,15 +194,15 @@ export function GuestScreen({ route, navigation }: Props) {
       </Screen>
     );
 
-  const head = guestHead(g);
+  const head = guestHead(g, rawLocale);
   const self = isSelfGuest(g);
-  const line = incus ? incusHeadLine(g) : libvirt ? libvirtHeadLine(g) : head.line;
-  const power = canPower(g.remoteControl, g.serverOnline !== false);
+  const line = incus ? incusHeadLine(g, rawLocale) : libvirt ? libvirtHeadLine(g) : head.line;
+  const power = canPower(g.remoteControl, g.serverOnline !== false, rawLocale);
   // Incus changes need this Whombat's runtime to know them (`hosts.incus`, as `hosts.backup_jobs`).
   const canChange = g.manageable;
   const tabs = incus ? phoneIncusTabs(g) : libvirt ? phoneLibvirtTabs(g) : phoneGuestTabs(g);
   const shown = tabs.includes(tab) ? tab : 'summary';
-  const actions = power.ok ? powerActions(g).filter((a) => selfAllowsAction(g, a.action)) : [];
+  const actions = power.ok ? powerActions(g, rawLocale).filter((a) => selfAllowsAction(g, a.action)) : [];
   const onUnraid = server.data?.server.platform === 'unraid' || !!server.data?.unraid;
   const containerChange = g.remoteControl.manage === true;
   const more: MoreChoice[] = canChange
@@ -244,7 +250,7 @@ export function GuestScreen({ route, navigation }: Props) {
           style={{ gap: 8 }}
           accessible
           accessibilityRole="header"
-          accessibilityLabel={self ? `${head.label}, ${THIS_WHOMBAT}` : head.label}
+          accessibilityLabel={self ? `${head.label}, ${selfGuestChip(rawLocale)}` : head.label}
         >
           {/* The kind as a mark before the name (less-is-more.md AP-1810); Proxmox's number leads the line. */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -259,11 +265,11 @@ export function GuestScreen({ route, navigation }: Props) {
               {[head.stateText, head.kind.id, line].filter(Boolean).join(' · ')}
             </Text>
           </View>
-          {self ? <ToneBadge text={THIS_WHOMBAT} tone="brand" /> : null}
+          {self ? <ToneBadge text={selfGuestChip(rawLocale)} tone="brand" /> : null}
           <Tags tags={head.tags} />
         </View>
         {/* The verdict, as on the web: its state in words, then what needs the person there. */}
-        <GuestVerdict verdict={machineVerdict(g, server.data?.hints ?? [], now)} />
+        <GuestVerdict verdict={machineVerdict(g, server.data?.hints ?? [], now, rawLocale)} />
         {actions.length || more.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {actions.map((a, i) => (
@@ -291,26 +297,26 @@ export function GuestScreen({ route, navigation }: Props) {
                 style={{ flexGrow: 1, flexBasis: '30%' }}
                 accessibilityHint={
                   self
-                    ? `Back up, snapshot or copy ${g.name}`
+                    ? tMobile('screens2.guest.moreSelf', { name: g.name })
                     : incus
-                      ? `Back up, snapshot, copy, rename or delete ${g.name}`
-                      : `Back up, snapshot, clone or delete ${g.name}`
+                      ? tMobile('screens2.guest.moreIncus', { name: g.name })
+                      : tMobile('screens2.guest.moreOther', { name: g.name })
                 }
               />
             ) : null}
           </View>
         ) : null}
         {self ? (
-          <QuietText style={{ paddingVertical: 4 }}>{SELF_LINE}</QuietText>
+          <QuietText style={{ paddingVertical: 4 }}>{selfGuestLine(rawLocale)}</QuietText>
         ) : !power.ok ? (
           <QuietText>{power.reason}</QuietText>
         ) : null}
         {tabs.length > 1 ? (
           <UnderlineTabs<PhoneGuestTab>
-            label={`${g.name}: what to show`}
+            label={tMobile('screens2.common.whatToShow', { name: g.name })}
             value={shown}
             onChange={setTab}
-            tabs={tabs.map((t) => ({ key: t, label: PHONE_GUEST_TAB_WORDS[t] }))}
+            tabs={tabs.map((t) => ({ key: t, label: phoneGuestTabWordsHere[t] }))}
             bleed={INSET}
           />
         ) : null}
@@ -325,7 +331,7 @@ export function GuestScreen({ route, navigation }: Props) {
             timeZone={timeZone}
             canChange={canChange && pve}
             jobs={true}
-            manageOff={manageOffText(g, serverName)}
+            manageOff={manageOffText(g, serverName, rawLocale)}
             onWayOut={wayOut}
             lead={
               // A libvirt VM with its full screen has autostart in its Settings.
@@ -407,7 +413,7 @@ export function GuestScreen({ route, navigation }: Props) {
             {...(incus && config
               ? {
                   schedule: {
-                    text: incusScheduleLine(config).text,
+                    text: incusScheduleLine(config, rawLocale).text,
                     onChange: settingsChange ? () => setOpen({ kind: 'incus_edit', edit: 'schedule' }) : null,
                   },
                 }
@@ -453,7 +459,7 @@ export function GuestScreen({ route, navigation }: Props) {
         <MoreSheet
           guest={g}
           choices={more}
-          cloneWord={incus ? 'Copy' : 'Clone'}
+          cloneWord={tMobile(incus ? 'screens2.common.copy' : 'screens2.common.clone')}
           onPick={(c) => setOpen({ kind: c })}
           onClose={close}
         />

@@ -6,25 +6,30 @@
  */
 import { customerReads, type FeatureReadView, featureValueLabel } from '@whombat/client';
 import {
-  FEATURE_REQUEST_WORDS,
   type FeatureRequestView,
   featureRequestFrom,
   featureRequestOutcome,
+  featureRequestWords,
   featureValueText,
   type MessageCard,
   shortNameOf,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { People } from './people';
 
 /** What TalkBack and VoiceOver say a button does, after its label. */
-export const FEATURE_CARD_HINTS = {
-  approve: (agent: string) => `${agent} tells the customer it’s planned`,
-  build: (agent: string) => `${agent} tells the customer it’s being built, then the automation builds it`,
-  decline: (agent: string) => `${agent} tells the customer it won’t be built, and why`,
-  ask: (agent: string) => `${agent} asks the customer your question`,
-  opensDecline: 'Asks why not first',
-  opensAsk: 'Asks what you want to know first',
-} as const;
+export function featureCardHints(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    approve: (agent: string) => t('data.featureRequest.hint.approve', { agent }),
+    build: (agent: string) => t('data.featureRequest.hint.build', { agent }),
+    decline: (agent: string) => t('data.featureRequest.hint.decline', { agent }),
+    ask: (agent: string) => t('data.featureRequest.hint.ask', { agent }),
+    opensDecline: t('data.featureRequest.hint.opensDecline'),
+    opensAsk: t('data.featureRequest.hint.opensAsk'),
+  } as const;
+}
+export const FEATURE_CARD_HINTS = featureCardHints();
 
 /** What the card shows: the same card waiting and opened from its line, with the outcome in place of the buttons. */
 export interface FeatureRequestCardView {
@@ -70,22 +75,23 @@ export function featureDeciderName(
 export function featureRequestCardView(
   request: FeatureRequestView,
   people: Pick<People, 'get' | 'name'>,
+  locale?: string,
 ): FeatureRequestCardView {
   return {
     requestId: request.id,
     waiting: request.state === 'waiting',
-    label: FEATURE_REQUEST_WORDS.label,
-    value: featureValueText(request.value),
-    valueLabel: featureValueLabel(request.value),
+    label: featureRequestWords(locale).label,
+    value: featureValueText(request.value, locale),
+    valueLabel: featureValueLabel(request.value, locale),
     title: request.title,
-    from: featureRequestFrom(request),
+    from: featureRequestFrom(request, locale),
     summary: request.summary.trim(),
     valueWhy: request.valueWhy.trim(),
     agent: request.agent,
-    reads: customerReads(request),
+    reads: customerReads(request, locale),
     canBuild: request.canBuild,
     declineReason: request.declineReason.trim(),
-    outcome: featureRequestOutcome(request, featureDeciderName(request, people)),
+    outcome: featureRequestOutcome(request, featureDeciderName(request, people), locale),
   };
 }
 
@@ -93,8 +99,9 @@ export function featureRequestCardView(
 export function featureRequestItem(
   card: MessageCard | null | undefined,
   people: Pick<People, 'get' | 'name'>,
+  locale?: string,
 ): FeatureRequestCardView | null {
   return card?.kind === 'feature_request' && card.request
-    ? featureRequestCardView(card.request, people)
+    ? featureRequestCardView(card.request, people, locale)
     : null;
 }

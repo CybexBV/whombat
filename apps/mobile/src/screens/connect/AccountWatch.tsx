@@ -7,8 +7,9 @@
 import { useQuietActions, useThingWatch } from '@whombat/client/react';
 import { View } from 'react-native';
 import { useBurrow, useViewContext } from '../../data/BurrowProvider';
-import { QUIET_COPY, quietNote } from '../../data/quiet';
+import { quietCopy, quietNote } from '../../data/quiet';
 import { showToast } from '../../data/toast';
+import { useI18n } from '../../i18n';
 import { Section } from '../../ui/primitives';
 import { WhatWhombatWatches } from '../thing/WhatWhombatWatches';
 
@@ -19,6 +20,7 @@ export function AccountWatch({
   thingId: string;
   title: (text: string) => React.ReactNode;
 }) {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrow();
   const { now, timeZone } = useViewContext();
   const watch = useThingWatch({ params: { burrow: slug, thing: thingId } }, { retry: false });
@@ -27,7 +29,7 @@ export function AccountWatch({
   if (gone) return null;
   return (
     <View style={{ gap: 12 }}>
-      {title(QUIET_COPY.watchTitle.toUpperCase())}
+      {title(quietCopy(rawLocale).watchTitle.toUpperCase())}
       <Section>
         <WhatWhombatWatches
           watch={watch.data}

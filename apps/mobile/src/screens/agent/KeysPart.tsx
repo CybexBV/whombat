@@ -15,19 +15,19 @@ import {
   useRemoveCommandAllowance,
   useSetAgentKeys,
 } from '@whombat/client/react';
-import { COMMAND_ALLOWANCES_COPY } from '@whombat/core';
+import { commandAllowancesCopy } from '@whombat/core';
 import type { KeyId, Tier } from '@whombat/core/keys';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type ScrollView, View } from 'react-native';
 import { allowanceRows } from '../../data/agentParity';
 import {
   type AccessDraft,
-  ALL_KEYS_LABEL,
   accessChanges,
   accessDraft,
   accessOptions,
   accessView,
   allKeysHint,
+  allKeysLabel,
   isTierSwitch,
   keyTarget,
   sameAccess,
@@ -35,7 +35,7 @@ import {
   settingsSavedText,
 } from '../../data/agentSettings';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { useI18n } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { CardLine, RowButtons } from '../../ui/facts';
@@ -45,9 +45,6 @@ import { ListRow } from '../../ui/ListRow';
 import { Button, Section } from '../../ui/primitives';
 import { errorText, showNotice } from '../feedback';
 import { Note, type PartProps, PartScroll, SaveBar } from './parts';
-
-/** A refusal without the server's sentence. */
-const KEYS_FAILED = 'That didn’t work. Try again in a moment.';
 
 /** How long a row a link pointed at stays marked. */
 const MARK_MS = 2400;
@@ -83,7 +80,10 @@ export function KeysPart({
   onDirtyChange,
   showKey,
 }: PartProps & { showKey?: string | undefined }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale, tClient } = useI18n();
+  const commandAllowancesCopyHere = commandAllowancesCopy(rawLocale);
+  const allKeys = allKeysLabel(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -122,7 +122,7 @@ export function KeysPart({
     if (target?.place === 'all') setAllOpen(true);
   }, [target?.place]);
 
-  const commands = allowances.data ? allowanceRows(allowances.data.allowances) : null;
+  const commands = allowances.data ? allowanceRows(allowances.data.allowances, rawLocale) : null;
   const removeRow = (allowanceId: string) => {
     setAllowanceProblem(null);
     removeAllowance.mutate(
@@ -130,10 +130,14 @@ export function KeysPart({
       {
         onSuccess: (result) =>
           result.status === 'ok'
-            ? showNotice(COMMAND_ALLOWANCES_COPY.removed)
-            : setAllowanceProblem(result.status === 'blocked' ? result.message : KEYS_FAILED),
+            ? showNotice(commandAllowancesCopyHere.removed)
+            : setAllowanceProblem(
+                result.status === 'blocked' ? result.message : tMobile('screens2.agent.keysFailed'),
+              ),
         onError: (error) =>
-          setAllowanceProblem(error instanceof ApiError && error.message ? error.message : KEYS_FAILED),
+          setAllowanceProblem(
+            error instanceof ApiError && error.message ? error.message : tMobile('screens2.agent.keysFailed'),
+          ),
       },
     );
   };
@@ -153,7 +157,7 @@ export function KeysPart({
     <>
       <CardLine text={allowanceProblem} tone="bad" />
       {commands.length === 0 ? (
-        <Note>{COMMAND_ALLOWANCES_COPY.empty}</Note>
+        <Note>{commandAllowancesCopyHere.empty}</Note>
       ) : (
         commands.map((row) => (
           <View
@@ -176,7 +180,7 @@ export function KeysPart({
             </View>
             <RowButtons>
               <Button
-                label={COMMAND_ALLOWANCES_COPY.remove}
+                label={commandAllowancesCopyHere.remove}
                 variant="secondary"
                 disabled={removeAllowance.isPending}
                 accessibilityHint={row.removeLabel}
@@ -195,7 +199,7 @@ export function KeysPart({
   };
 
   if (!draft || !base) return null;
-  const view = accessView(draft, opts, { deployWorkflow: host.data?.deployWorkflow });
+  const view = accessView(draft, opts, { deployWorkflow: host.data?.deployWorkflow, locale: rawLocale });
   const edit = (next: (d: AccessDraft) => AccessDraft) => setDraft((d) => (d ? next(d) : d));
   const setTier = (keyId: KeyId, tier: Tier) => edit((d) => ({ ...d, tiers: { ...d.tiers, [keyId]: tier } }));
   const setKey = (keyId: KeyId, on: boolean) => edit((d) => ({ ...d, keys: { ...d.keys, [keyId]: on } }));
@@ -213,12 +217,12 @@ export function KeysPart({
     setSaving(true);
     try {
       const result = await setKeys.mutateAsync({ params: { burrow: slug }, body: { grants } });
-      const refused = settingsRefusal(result);
+      const refused = settingsRefusal(result, rawLocale);
       if (refused) return setNotice(refused);
       setBase(draft);
-      showNotice(settingsSavedText(agent.name, 'keys'));
+      showNotice(settingsSavedText(agent.name, 'keys', rawLocale));
     } catch (error) {
-      setNotice(errorText(error));
+      setNotice(errorText(error, rawLocale));
     } finally {
       setSaving(false);
     }
@@ -245,15 +249,15 @@ export function KeysPart({
               </View>
             ))}
             <ListRow
-              title={ALL_KEYS_LABEL}
+              title={allKeys}
               meta={view.allCount}
               trailing={allOpen ? '⌃' : '⌄'}
               onPress={() => setAllOpen((o) => !o)}
-              accessibilityLabel={`${ALL_KEYS_LABEL}, ${view.allCount}, ${allOpen ? 'shown' : 'hidden'}`}
+              accessibilityLabel={`${allKeys}, ${view.allCount}, ${allOpen ? 'shown' : 'hidden'}`}
             />
             {allOpen ? (
               <>
-                <Note>{allKeysHint(agent.name)}</Note>
+                <Note>{allKeysHint(agent.name, rawLocale)}</Note>
                 {view.all.map((r) => (
                   <View
                     key={r.keyId}

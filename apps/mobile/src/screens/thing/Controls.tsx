@@ -21,7 +21,8 @@ import { type ThingButtons, useStepperDraft } from '@whombat/client/react';
 import type { ThingControl, ThingControlIcon, ThingControlStepper, ThingPageButton } from '@whombat/core';
 import { type ReactNode, useMemo } from 'react';
 import { Switch, View } from 'react-native';
-import { type ControlTileView, controlTile, rowsOf, SERVICE_COPY } from '../../data/servicePanels';
+import { type ControlTileView, controlTile, rowsOf, serviceCopy } from '../../data/servicePanels';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { MonoLabel, OneCard, toneOf } from '../../ui/assistant';
@@ -321,6 +322,8 @@ function StepperTile({
   tile: ControlTileView;
   act: ControlActions;
 }) {
+  const { rawLocale } = useI18n();
+  const SERVICE_COPY = serviceCopy(rawLocale);
   const theme = useTheme();
   const style = useTileStyle(tile.lit);
   const allowed = stepper.button.allowed;

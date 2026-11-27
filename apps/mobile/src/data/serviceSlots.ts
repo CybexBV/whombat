@@ -8,16 +8,21 @@
  */
 import { noticeGroups, placePanels, thingImageInitial } from '@whombat/client';
 import type { ThingNoticeIcon, ThingPageButton, ThingPageItem, ThingPagePanel } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { type GalleryItemView, galleryItems } from './servicePanels';
 
 type NoticesPanel = Extract<ThingPagePanel, { kind: 'notices' }>;
 type GalleryPanel = Extract<ThingPagePanel, { kind: 'gallery' }>;
 type ListPanel = Extract<ThingPagePanel, { kind: 'list' }>;
 
-export const SLOT_COPY = {
-  /** The page dots under the Live cards, for VoiceOver and TalkBack. */
-  pageOf: (n: number, of: number) => `${n} of ${of}`,
-} as const;
+export function slotCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The page dots under the Live cards, for VoiceOver and TalkBack. */
+    pageOf: (n: number, of: number) => t('data.serviceSlots.pageOf', { n, of }),
+  } as const;
+}
+export const SLOT_COPY = slotCopy();
 
 /* Whether a page is in slots ------------------------------------------------------------------------------------- */
 
@@ -44,8 +49,11 @@ export const STRIP_FIRST = 3;
  * then the quiet ones (so Undo stays reachable). Every line has its place in the strip; none hides behind a fold of its
  * own.
  */
-export function stripOrder<T extends NoticesPanel['items'][number]>(items: readonly T[]): T[] {
-  const groups = noticeGroups(items);
+export function stripOrder<T extends NoticesPanel['items'][number]>(
+  items: readonly T[],
+  locale?: string,
+): T[] {
+  const groups = noticeGroups(items, locale);
   return [...groups.shown, ...groups.folded];
 }
 
@@ -109,8 +117,9 @@ export function liveRows(
   panel: Pick<GalleryPanel, 'items'>,
   now: Date | number,
   timeZone: string,
+  locale?: string,
 ): LiveRowView[] {
-  const views = galleryItems(panel, now, timeZone);
+  const views = galleryItems(panel, now, timeZone, locale);
   return panel.items.map((item, i) => {
     const view = views[i] as GalleryItemView;
     const person = item.person

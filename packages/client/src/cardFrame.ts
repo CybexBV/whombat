@@ -13,9 +13,13 @@ import type {
   PlanStep,
   Run,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { runNowText } from '@whombat/core/text';
-import { COUNCIL_WORDS, councilStageLine } from './council';
-import { DELEGATION_WORDS } from './delegation';
+import { COUNCIL_WORDS, councilStageLine, councilWords } from './council';
+import { DELEGATION_WORDS, delegationWords } from './delegation';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
+import type { ReadTree } from './i18n/tree';
 
 /**
  * The status line's mark: a dot waiting for the person, an open ring at work, the branch arrow when handed over, a
@@ -23,53 +27,67 @@ import { DELEGATION_WORDS } from './delegation';
  */
 export type CardMark = 'waiting' | 'working' | 'handedOver' | 'done' | 'stopped' | 'failed' | 'queued';
 
-export const CARD_FRAME_WORDS = {
-  details: 'Details',
-  showMore: 'Show more',
-  showLess: 'Show less',
-  /** A plan's step the card names (the plan's own words for the step under it). */
-  currentStep: 'Current step',
-  blockedStep: 'Blocked step',
-  /** What kind of card it is, after the status word: “Done · Council”. */
-  kinds: { plan: 'Plan', council: 'Council', delegation: 'Tasks', run: 'Run' },
-  marks: {
-    waiting: 'Waiting for you',
-    working: 'Working',
-    handedOver: 'Handed over',
-    done: 'Done',
-    stopped: 'Stopped',
-    failed: 'Didn’t finish',
-    queued: 'Not started yet',
-  } satisfies Record<CardMark, string>,
-  /** A plan's status while the assistant carries it out. */
-  planWorking: (assistant: string) => `${assistant} is working`,
-  planBlocked: 'Blocked',
-  /** A plan's sentence: “Now: build the export endpoint.” */
-  planNow: (step: string) => `Now: ${lowerFirst(step)}.`,
-  planNext: (step: string) => `Next: ${lowerFirst(step)}.`,
-  planGate: (step: string) => `Waiting for your go on “${step}”.`,
-  planStuck: (step: string) => `Stuck on “${step}”.`,
-  /** The council's final card: the button that opens its answers. */
-  readAnswers: 'Read the answers',
-  hideAnswers: 'Hide the answers',
-  answers: 'The answers',
-  /** A delegation's button that opens its tasks' records. */
-  openTasks: 'Open tasks',
-  tasks: 'Task records and pull requests',
-  /** The AI each task takes, under the checklist's Details. */
-  aiPerTask: 'Which AI does each task',
-  /** A handed-over checklist's headline: “2 finished · 6 still in progress”. */
-  tasksProgress: (finished: number, open: number) =>
-    [finished ? `${finished} finished` : null, open ? `${open} still in progress` : null]
-      .filter(Boolean)
-      .join(' · ') || 'Nothing handed over',
-  /** An offered list's last change, under its title. */
-  changed: (said: readonly string[]) => `Changed: ${said.map(lowerFirst).join(' · ')}.`,
-  /** A run's facts under Details. */
-  run: (n: number) => `Run #${n}`,
-  runTerm: 'Run',
-  branch: 'Branch',
-} as const;
+/** The card head's words, in a locale (English when none). */
+export function cardFrameWords(locale?: string | null) {
+  const w = clientTree(locale, CARDS_AREA_WORDS).frame;
+  return {
+    details: w.details,
+    showMore: w.showMore,
+    showLess: w.showLess,
+    /** A plan's step the card names (the plan's own words for the step under it). */
+    currentStep: w.currentStep,
+    blockedStep: w.blockedStep,
+    /** What kind of card it is, after the status word: “Done · Council”. */
+    kinds: { plan: w.kinds.plan, council: w.kinds.council, delegation: w.kinds.delegation, run: w.kinds.run },
+    marks: {
+      waiting: w.marks.waiting,
+      working: w.marks.working,
+      handedOver: w.marks.handedOver,
+      done: w.marks.done,
+      stopped: w.marks.stopped,
+      failed: w.marks.failed,
+      queued: w.marks.queued,
+    } satisfies Record<CardMark, string>,
+    /** A plan's status while the assistant carries it out. */
+    planWorking: (assistant: string) => interpolate(w.planWorking, { assistant }),
+    planBlocked: w.planBlocked,
+    /** A plan's sentence: “Now: build the export endpoint.” */
+    planNow: (step: string) => interpolate(w.planNow, { step: lowerFirst(step) }),
+    planNext: (step: string) => interpolate(w.planNext, { step: lowerFirst(step) }),
+    planGate: (step: string) => interpolate(w.planGate, { step }),
+    planStuck: (step: string) => interpolate(w.planStuck, { step }),
+    /** The council's final card: the button that opens its answers. */
+    readAnswers: w.readAnswers,
+    hideAnswers: w.hideAnswers,
+    answers: w.answers,
+    /** A delegation's button that opens its tasks' records. */
+    openTasks: w.openTasks,
+    tasks: w.tasks,
+    /** The AI each task takes, under the checklist's Details. */
+    aiPerTask: w.aiPerTask,
+    /** A handed-over checklist's headline: “2 finished · 6 still in progress”. */
+    tasksProgress: (finished: number, open: number) =>
+      [
+        finished ? interpolate(w.finished, { n: finished }) : null,
+        open ? interpolate(w.inProgress, { n: open }) : null,
+      ]
+        .filter(Boolean)
+        .join(' · ') || w.nothingHanded,
+    /** An offered list's last change, under its title. */
+    changed: (said: readonly string[]) => interpolate(w.changed, { said: said.map(lowerFirst).join(' · ') }),
+    /** A run's facts under Details. */
+    run: (n: number) => interpolate(w.run, { n }),
+    runTerm: w.runTerm,
+    branch: w.branch,
+  };
+}
+
+/** The card head's words, in English. */
+export const CARD_FRAME_WORDS = cardFrameWords();
+
+const frameWords = (locale?: string | null) => (locale ? cardFrameWords(locale) : CARD_FRAME_WORDS);
+const councilText = (locale?: string | null) => (locale ? councilWords(locale) : COUNCIL_WORDS);
+const delegationText = (locale?: string | null) => (locale ? delegationWords(locale) : DELEGATION_WORDS);
 
 /** What a card's head says. */
 export interface CardFrame {
@@ -119,7 +137,8 @@ export interface PlanFocus {
   kind: 'gate' | 'blocked' | 'active';
 }
 
-export function planFocus(plan: Pick<Plan, 'steps'>): PlanFocus | null {
+export function planFocus(plan: Pick<Plan, 'steps'>, locale?: string | null): PlanFocus | null {
+  const CARD_FRAME_WORDS = frameWords(locale);
   const gate = plan.steps.find((s) => s.state === 'gate');
   if (gate) return { step: gate, label: CARD_FRAME_WORDS.blockedStep, kind: 'gate' };
   const blocked = plan.steps.find((s) => s.state === 'blocked');
@@ -129,8 +148,13 @@ export function planFocus(plan: Pick<Plan, 'steps'>): PlanFocus | null {
   return null;
 }
 
-export function planFrame(plan: Pick<Plan, 'title' | 'steps' | 'updatedAt'>, assistant: string): CardFrame {
-  const focus = planFocus(plan);
+export function planFrame(
+  plan: Pick<Plan, 'title' | 'steps' | 'updatedAt'>,
+  assistant: string,
+  locale?: string | null,
+): CardFrame {
+  const CARD_FRAME_WORDS = frameWords(locale);
+  const focus = planFocus(plan, locale);
   const base = { kind: CARD_FRAME_WORDS.kinds.plan, at: plan.updatedAt, title: plan.title, headline: null };
   if (focus?.kind === 'gate')
     return frame({
@@ -166,31 +190,44 @@ export function planFrame(plan: Pick<Plan, 'title' | 'steps' | 'updatedAt'>, ass
 
 /* Councils ---------------------------------------------------------------------------------------------------- */
 
-const NUMBER_WORDS = ['none', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
+type FrameTree = ReadTree<typeof CARDS_AREA_WORDS.tree>['frame'];
+
+function numberWord(w: FrameTree, n: number): string {
+  const words: readonly string[] = [
+    w.numbers.n0,
+    w.numbers.n1,
+    w.numbers.n2,
+    w.numbers.n3,
+    w.numbers.n4,
+    w.numbers.n5,
+    w.numbers.n6,
+    w.numbers.n7,
+    w.numbers.n8,
+    w.numbers.n9,
+    w.numbers.n10,
+  ];
+  return words[n] ?? String(n);
+}
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** “All three agree.”, “Both agree.”, “Two of three agree.”, “None of the three agree yet.” */
-function agreeWords(agree: number, of: number): string {
-  if (of === 1) return agree ? 'It agrees.' : 'It wants changes.';
-  if (agree === of) return of === 2 ? 'Both agree.' : `All ${numberWord(of)} agree.`;
-  if (agree === 0) return `None of the ${numberWord(of)} agree yet.`;
-  return `${capital(numberWord(agree))} of ${numberWord(of)} agree.`;
+function agreeWords(w: FrameTree, agree: number, of: number): string {
+  if (of === 1) return agree ? w.itAgrees : w.itWantsChanges;
+  if (agree === of) return of === 2 ? w.bothAgree : interpolate(w.allAgree, { of: numberWord(w, of) });
+  if (agree === 0) return interpolate(w.noneAgree, { of: numberWord(w, of) });
+  return capital(interpolate(w.someAgree, { agree: numberWord(w, agree), of: numberWord(w, of) }));
 }
 
 /** “All three give it 8 out of 10.”, “Both give it 7 out of 10.”, “They give it 6 to 7 out of 10.” */
-function scoreWords(scores: readonly number[]): string {
+function scoreWords(w: FrameTree, scores: readonly number[]): string {
   const say = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
   const low = Math.min(...scores);
   const high = Math.max(...scores);
-  if (low !== high) return `They give it ${say(low)} to ${say(high)} out of 10.`;
-  const who =
-    scores.length === 1
-      ? 'It gives'
-      : scores.length === 2
-        ? 'Both give'
-        : `All ${numberWord(scores.length)} give`;
-  return `${who} it ${say(low)} out of 10.`;
+  if (low !== high) return interpolate(w.scoreRange, { low: say(low), high: say(high) });
+  const score = say(low);
+  if (scores.length === 1) return interpolate(w.itGives, { score });
+  if (scores.length === 2) return interpolate(w.bothGive, { score });
+  return interpolate(w.allGive, { of: numberWord(w, scores.length), score });
 }
 
 /**
@@ -200,37 +237,46 @@ function scoreWords(scores: readonly number[]): string {
 export function councilResultWords(
   card: Pick<CouncilCard, 'history' | 'target'>,
   rounds: readonly CouncilRoundResult[] = card.history,
+  locale?: string | null,
 ): string | null {
+  const w = clientTree(locale, CARDS_AREA_WORDS).frame;
   for (const r of [...rounds].reverse()) {
     const judged = r.members.filter((m) => m.verdict);
-    if (judged.length) return agreeWords(judged.filter((m) => m.verdict === 'agree').length, judged.length);
+    if (judged.length)
+      return agreeWords(w, judged.filter((m) => m.verdict === 'agree').length, judged.length);
     const scored = r.members.filter((m) => m.score !== null);
     // A review without an aim says what they gave it.
-    if (scored.length && card.target === null) return scoreWords(scored.map((m) => m.score ?? 0));
+    if (scored.length && card.target === null)
+      return scoreWords(
+        w,
+        scored.map((m) => m.score ?? 0),
+      );
     if (scored.length && card.target !== null) {
       const reached = scored.filter((m) => (m.score ?? 0) >= (card.target ?? 0)).length;
       const of = scored.length;
-      const who =
-        reached === of
-          ? of === 2
-            ? 'Both'
-            : of === 1
-              ? 'It'
-              : `All ${numberWord(of)}`
-          : `${capital(numberWord(reached))} of ${numberWord(of)}`;
-      return `${who} reached the ${card.target} out of 10 they aimed for.`;
+      const target = card.target;
+      if (reached !== of)
+        return capital(
+          interpolate(w.reachedSome, { reached: numberWord(w, reached), of: numberWord(w, of), target }),
+        );
+      if (of === 2) return interpolate(w.reachedBoth, { target });
+      if (of === 1) return interpolate(w.reachedOne, { target });
+      return interpolate(w.reachedAll, { of: numberWord(w, of), target });
     }
   }
   return null;
 }
 
-export function councilFrame(card: CouncilCard): CardFrame {
+export function councilFrame(card: CouncilCard, locale?: string | null): CardFrame {
+  const CARD_FRAME_WORDS = frameWords(locale);
+  const COUNCIL_WORDS = councilText(locale);
+  const w = clientTree(locale, CARDS_AREA_WORDS).frame;
   const base = { kind: CARD_FRAME_WORDS.kinds.council, title: card.title };
   if (card.live) {
     const round = card.members.filter((m) => m.role === 'member');
     const answered = round.filter((m) => m.state === 'done').length;
     const working = round.some((m) => m.state === 'working');
-    const progress = round.length && working ? `${answered} of ${round.length} answered` : null;
+    const progress = round.length && working ? interpolate(w.answered, { answered, of: round.length }) : null;
     // Its plan waits for the Tasks card's Hand over: that card asks, this one says its own part is done.
     const agreed = card.stage === 'approve';
     return frame({
@@ -239,7 +285,7 @@ export function councilFrame(card: CouncilCard): CardFrame {
       word: agreed ? COUNCIL_WORDS.planAgreed : CARD_FRAME_WORDS.marks.working,
       at: card.startedAt,
       headline: null,
-      sentence: `${[councilStageLine(card), progress].filter(Boolean).join(' · ')}.`,
+      sentence: `${[councilStageLine(card, locale), progress].filter(Boolean).join(' · ')}.`,
     });
   }
   const stopped = card.outcome === 'stopped';
@@ -249,8 +295,8 @@ export function councilFrame(card: CouncilCard): CardFrame {
     mark: stopped ? 'stopped' : 'done',
     word: stopped ? COUNCIL_WORDS.stages.stopped : COUNCIL_WORDS.stages.done,
     at: card.endedAt ?? card.startedAt,
-    headline: councilResultWords(card),
-    sentence: noAnswer ? `${capital(numberWord(noAnswer))} didn’t answer in time.` : null,
+    headline: councilResultWords(card, card.history, locale),
+    sentence: noAnswer ? capital(w.noAnswer(noAnswer, { n: numberWord(w, noAnswer) })) : null,
   });
 }
 
@@ -261,7 +307,9 @@ function finished(t: DelegationCardTask): boolean {
 }
 
 /** `still`: a copy of the card as it was, which asks nothing: its sentence says what was ticked, not what to do. */
-export function delegationFrame(card: DelegationCard, still = false): CardFrame {
+export function delegationFrame(card: DelegationCard, still = false, locale?: string | null): CardFrame {
+  const CARD_FRAME_WORDS = frameWords(locale);
+  const DELEGATION_WORDS = delegationText(locale);
   const base = { kind: CARD_FRAME_WORDS.kinds.delegation, title: card.title };
   const offered = card.tasks.filter((t) => t.state === 'offered');
   if (card.live && card.stage === 'offer') {
@@ -331,22 +379,28 @@ const RUN_MARK: Record<Run['status'], CardMark> = {
   taken_over: 'stopped',
 };
 
-const RUN_WORD: Record<Run['status'], string> = {
-  live: CARD_FRAME_WORDS.marks.working,
-  paused: 'Paused',
-  done: CARD_FRAME_WORDS.marks.done,
-  failed: CARD_FRAME_WORDS.marks.failed,
-  taken_over: 'Taken over',
-};
+function runWord(status: Run['status'], locale?: string | null): string {
+  const words = frameWords(locale);
+  const w = clientTree(locale, CARDS_AREA_WORDS).frame;
+  const byStatus: Record<Run['status'], string> = {
+    live: words.marks.working,
+    paused: w.paused,
+    done: words.marks.done,
+    failed: words.marks.failed,
+    taken_over: w.takenOver,
+  };
+  return byStatus[status];
+}
 
 export function runFrame(
   run: Pick<Run, 'status' | 'title' | 'activity' | 'summary' | 'startedAt' | 'finishedAt'>,
+  locale?: string | null,
 ): CardFrame {
   const sentence = runNowText(run);
   return frame({
     mark: RUN_MARK[run.status],
-    word: RUN_WORD[run.status],
-    kind: CARD_FRAME_WORDS.kinds.run,
+    word: runWord(run.status, locale),
+    kind: frameWords(locale).kinds.run,
     at: run.finishedAt ?? run.startedAt,
     title: run.title,
     headline: null,

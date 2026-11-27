@@ -50,13 +50,14 @@ export function jobToasts(
   handoffs: readonly Handoff[],
   onScreen: string | null,
   first: boolean,
+  locale?: string,
 ): { kind: JobNoticeKind; text: string; rootId: string | null }[] {
   const out: { kind: JobNoticeKind; text: string; rootId: string | null }[] = [];
   for (const h of handoffs) {
     const before = seen.get(h.id);
     seen.set(h.id, h);
     if (first || !before || h.rootId === onScreen) continue;
-    const notice = jobNotice(before, h);
+    const notice = jobNotice(before, h, locale);
     if (notice) out.push({ ...notice, rootId: h.rootId });
   }
   return out;

@@ -14,29 +14,29 @@
  */
 
 import { type RouteProp, useRoute } from '@react-navigation/native';
-import { TEAM_REPORT_WORDS } from '@whombat/client';
+import { teamReportWords } from '@whombat/client';
 import {
   accountsText,
   ago,
   type CheckedPreview,
-  DIAGNOSTIC_SCOPE_LIST,
   type DiagnosticScope,
   DiagnosticsIntegrityError,
+  diagnosticScopeList,
   downloadDiagnostics,
   hasUpdateCheck,
-  OWN_ADDRESS_TEXT,
   ownAddressCloudflareLine,
   ownAddressLeavingView,
   ownAddressRenameErrorText,
   ownAddressView,
+  ownAddressWords,
   ownNameChosen,
   ownNameLine,
   ownNameText,
   ownNameZoneOf,
   previewDiagnostics,
   thisWhombatText,
-  UPDATE_TEXT,
   updateCheckNotice,
+  updateText,
   updateView,
 } from '@whombat/client/managed';
 import { useOwnNameCheck } from '@whombat/client/managed/react';
@@ -53,14 +53,14 @@ import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { SYNC_LOG_TEXT, syncLog, syncLogFile } from '../data/syncLog';
-import { useI18n, useMobileT } from '../i18n';
+import { syncLog, syncLogFile } from '../data/syncLog';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { showNotice } from '../screens/feedback';
 import { AgentUpdatesSwitchRow } from '../settings/AgentUpdatesSwitch';
 import { VersionCard } from '../settings/VersionCard';
-import { VERSION_TEXT } from '../settings/version';
+import { versionText } from '../settings/version';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from '../ui/clipboard';
@@ -82,10 +82,12 @@ import { useApplianceStatus, useReleaseSummary } from './useApplianceStatus';
 import { useMachineHere, useScrollToCard } from './useMachine';
 import { usePhoneReach } from './useReach';
 import { useRemoteHelpHere } from './useRemoteHelpHere';
-import { WHATS_NEW_ROW, WHATS_NEW_URL } from './whatsNew';
+import { WHATS_NEW_URL, whatsNewRow } from './whatsNew';
 
 export function WhombatAboutScreen() {
   const { rawLocale } = useI18n();
+  const updateTextHere = updateText(rawLocale);
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
   const managedTextHere = managedText(rawLocale);
 
@@ -98,7 +100,9 @@ export function WhombatAboutScreen() {
   const { timeZone, slug } = useBurrowBase();
   // Reports to the Whombat Team (team-reports.md): only where one can be sent or the person has some.
   const reports = useTeamReportsEntry(slug);
-  const updates = status ? updateView(status, { timeZone }) : { rows: [], summaryOf: null, pollMs: null };
+  const updates = status
+    ? updateView(status, { timeZone, locale: rawLocale })
+    : { rows: [], summaryOf: null, pollMs: null };
   const summary = useReleaseSummary(updates.summaryOf);
   // The owner's yes to the update waiting for them (ask-before-updating.md ABU-03).
   const [installing, setInstalling] = useState<string | null>(null);
@@ -106,14 +110,14 @@ export function WhombatAboutScreen() {
     setInstalling(release);
     sessionOps.applianceUpdateInstall(managed.session, release).then(
       () => {
-        showNotice(UPDATE_TEXT.installing);
+        showNotice(updateTextHere.installing);
         reload();
       },
       (e) => {
         setInstalling(null);
         Alert.alert(
           tMobile('managed.that-didnt-go-through'),
-          e instanceof OperationError ? e.message : UPDATE_TEXT.failed,
+          e instanceof OperationError ? e.message : updateTextHere.failed,
         );
         reload();
       },
@@ -127,8 +131,8 @@ export function WhombatAboutScreen() {
     sessionOps
       .applianceUpdateCheck(managed.session)
       .then(
-        ({ outcome }) => showNotice(updateCheckNotice(outcome, status?.update?.askFirst)),
-        (e) => showNotice(e instanceof OperationError ? e.message : UPDATE_TEXT.failed),
+        ({ outcome }) => showNotice(updateCheckNotice(outcome, status?.update?.askFirst, rawLocale)),
+        (e) => showNotice(e instanceof OperationError ? e.message : updateTextHere.failed),
       )
       .finally(() => {
         setChecking(false);
@@ -191,7 +195,7 @@ export function WhombatAboutScreen() {
           <VersionCard
             runtime={status.appliance.runtimeVersion}
             hermes={status.appliance.hermes ?? null}
-            label={VERSION_TEXT.labelWithUpdates}
+            label={versionText(rawLocale).labelWithUpdates}
           >
             {status.update
               ? updates.rows.map((row, i) => (
@@ -205,14 +209,14 @@ export function WhombatAboutScreen() {
                     action={
                       row.action === 'install' && row.release ? (
                         <Button
-                          label={UPDATE_TEXT.install}
+                          label={updateTextHere.install}
                           busy={installing === row.release}
                           onPress={() => row.release && install(row.release)}
                         />
                       ) : i === 0 && canCheck ? (
                         <Button
-                          label={VERSION_TEXT.check}
-                          accessibilityLabel={UPDATE_TEXT.check}
+                          label={versionText(rawLocale).check}
+                          accessibilityLabel={updateTextHere.check}
                           variant="secondary"
                           // Not `busy`: a spinner for the label would narrow the button under the finger.
                           disabled={checking}
@@ -227,9 +231,9 @@ export function WhombatAboutScreen() {
               <>
                 {/* What changed lately, on the web app's page (public, so the browser opens it). */}
                 <LinkRow
-                  title={WHATS_NEW_ROW.title}
-                  body={WHATS_NEW_ROW.body}
-                  label={WHATS_NEW_ROW.label}
+                  title={whatsNewRow(rawLocale).title}
+                  body={whatsNewRow(rawLocale).body}
+                  label={whatsNewRow(rawLocale).label}
                   onPress={() => void openSignInPage(WHATS_NEW_URL)}
                 />
                 {/* “Ask before updating” (ask-before-updating.md ABU-01). */}
@@ -256,7 +260,7 @@ export function WhombatAboutScreen() {
             reach={reach}
             connection={{
               ok: managed.connection.status === 'open',
-              title: managed.applianceName ?? 'Your Whombat',
+              title: managed.applianceName ?? mobileTranslator(rawLocale).t('managed2.about.yourWhombat'),
               meta: `${managedTextHere.connected} · ${managedTextHere.fingerprint(managed.applianceFingerprint)}`,
             }}
             {...(target === 'reach' ? { onLayout: place.onCard } : {})}
@@ -290,9 +294,9 @@ export function WhombatAboutScreen() {
             <Card>
               <LinkRow
                 first
-                title={TEAM_REPORT_WORDS.entry}
-                body={TEAM_REPORT_WORDS.intro}
-                label={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
+                title={teamReportWordsHere.entry}
+                body={teamReportWordsHere.intro}
+                label={`${teamReportWordsHere.entry}. ${teamReportWordsHere.intro}`}
                 onPress={() =>
                   navigation.navigate('TeamReports', { back: thisWhombatText(rawLocale).parts.about })
                 }
@@ -302,7 +306,9 @@ export function WhombatAboutScreen() {
           <Diagnostics />
 
           <Text size={12} mono color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-            {`This phone · ${managedTextHere.fingerprint(managed.deviceFingerprint)}`}
+            {mobileTranslator(rawLocale).t('managed2.about.thisPhone', {
+              fingerprint: managedTextHere.fingerprint(managed.deviceFingerprint),
+            })}
           </Text>
         </View>
       </ScrollView>
@@ -323,11 +329,12 @@ function OwnAddressCard({
   onChanged: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const ownAddressWordsHere = ownAddressWords(rawLocale);
 
   const managed = useManagedOrThrow();
   const theme = useTheme();
   const v = ownAddressView(own, undefined, rawLocale);
-  const t = OWN_ADDRESS_TEXT.settings;
+  const t = ownAddressWordsHere.settings;
   const leaving = ownAddressLeavingView(own, undefined, undefined, rawLocale);
   const cloudflare = ownAddressCloudflareLine(own.host, undefined, rawLocale);
   const [changing, setChanging] = useState(false);
@@ -344,7 +351,11 @@ function OwnAddressCard({
         body={v.state}
         meta={[v.certificate, v.lastCheck, ...v.missed].filter(Boolean).join('\n')}
         action={
-          <Button variant="secondary" label={t.copy} onPress={() => void copyToClipboard(v.url, t.copied)} />
+          <Button
+            variant="secondary"
+            label={t.copy}
+            onPress={() => void copyToClipboard(v.url, t.copied, rawLocale)}
+          />
         }
       >
         {cloudflare ? (
@@ -489,6 +500,7 @@ function floors(status: ApplianceStatus): { platform: string; minBuild: number }
  */
 function Diagnostics() {
   const { rawLocale } = useI18n();
+  const diagnosticScopeListHere = diagnosticScopeList(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   const { session, applianceName } = useManagedOrThrow();
@@ -536,10 +548,13 @@ function Diagnostics() {
         syncLogFile({
           entries: syncLog.entries(),
           app: phoneClient(APP_BUILD).build,
-          whombat: applianceName ?? 'Your Whombat',
+          whombat: applianceName ?? mobileTranslator(rawLocale).t('managed2.about.yourWhombat'),
         }),
       );
-      await Sharing.shareAsync(file.uri, { mimeType: 'text/plain', dialogTitle: SYNC_LOG_TEXT.dialogTitle });
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'text/plain',
+        dialogTitle: mobileTranslator(rawLocale).t('managed2.syncLog.dialogTitle'),
+      });
     } finally {
       try {
         file.delete();
@@ -574,7 +589,7 @@ function Diagnostics() {
             <Text size={13} weight={600}>
               {t.choose}
             </Text>
-            {DIAGNOSTIC_SCOPE_LIST.map(({ scope, description }) => (
+            {diagnosticScopeListHere.map(({ scope, description }) => (
               <Pressable
                 key={scope}
                 accessibilityRole="checkbox"
@@ -610,7 +625,7 @@ function Diagnostics() {
               disabled={chosen.size === 0}
               onPress={() =>
                 void act(async () => {
-                  const order = DIAGNOSTIC_SCOPE_LIST.map((x) => x.scope).filter((x) => chosen.has(x));
+                  const order = diagnosticScopeListHere.map((x) => x.scope).filter((x) => chosen.has(x));
                   await sessionOps.diagnosticsCreate(session, { scopes: order });
                   setMaking(false);
                 })
@@ -634,9 +649,9 @@ function Diagnostics() {
           />
         )}
         <Note text={note} />
-        <Note text={SYNC_LOG_TEXT.intro} />
+        <Note text={mobileTranslator(rawLocale).t('managed2.syncLog.intro')} />
         <Button
-          label={SYNC_LOG_TEXT.share}
+          label={mobileTranslator(rawLocale).t('managed2.syncLog.share')}
           variant="secondary"
           disabled={busy}
           onPress={() => void act(shareSyncLog)}

@@ -21,6 +21,8 @@ import {
   normalizeClaimSecret,
   protocolAtLeast,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { COMMUNITY_WORDS } from '../i18n/messages/hostManaged/community';
 import { type EnrolledOutput, OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import {
@@ -31,7 +33,7 @@ import {
   devicesAllowedOf,
   type NearbyAppliance,
 } from './control';
-import { COPY } from './copy';
+import { COPY, managedCopyText } from './copy';
 
 /* The card ---------------------------------------------------------------------------------------------- */
 
@@ -127,8 +129,8 @@ export function lettersRequestOf(
 }
 
 /** `wb-mini-1` as people read it; a self-installed box (the ISO, CC-10) says so. */
-export function modelLabel(model: string): string {
-  return model === 'self-installed' ? 'Self-installed Whombat' : model;
+export function modelLabel(model: string, locale?: string | null): string {
+  return model === 'self-installed' ? clientTree(locale, COMMUNITY_WORDS).selfInstalled : model;
 }
 
 /* Finding the box (CC-09, AP-75) ------------------------------------------------------------------------------ */
@@ -328,8 +330,13 @@ export function claimBackoffMinutes(error: unknown, now: number = Date.now()): n
  * What to tell the person (CC-09). `device_not_nearby` has no words of its own: the screen says it couldn't find the
  * Whombat and offers to look again (CC-13).
  */
-export function claimErrorText(error: unknown, method: 'code' | 'card', now: number = Date.now()): string {
-  const e = COPY.claim.errors;
+export function claimErrorText(
+  error: unknown,
+  method: 'code' | 'card',
+  now: number = Date.now(),
+  locale?: string | null,
+): string {
+  const e = managedCopyText(locale).claim.errors;
   const key = claimErrorKey(error);
   switch (key) {
     case 'claim_backoff':

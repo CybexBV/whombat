@@ -6,21 +6,29 @@
  */
 import { useState } from 'react';
 import { View } from 'react-native';
-import { COPY } from '../managed/copy';
+import { mobileTranslator, useI18n } from '../i18n';
+import { managedCopy } from '../managed/copy';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ScreenStripContext } from '../ui/headers';
 import { Button } from '../ui/primitives';
 
 /** The web's words (`COPY.lookAround`), with a shorter button for the phone's strip. */
-export const LOOK_AROUND_TEXT = {
-  strip: COPY.lookAround.notice,
-  leave: 'Leave',
-  leaveLabel: COPY.lookAround.leave,
-} as const;
+export function lookAroundText(locale?: string) {
+  const look = managedCopy(locale).lookAround;
+  return {
+    strip: look.notice,
+    leave: mobileTranslator(locale).t('demo.leave'),
+    leaveLabel: look.leave,
+  };
+}
+
+export const LOOK_AROUND_TEXT = lookAroundText();
 
 /** The strip every demo screen shows: the strip's look (`ApplianceRoot`'s `StripLine`), with the way back. */
 function DemoStrip({ onLeave }: { onLeave: () => void }) {
+  const { rawLocale } = useI18n();
+  const text = lookAroundText(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -40,14 +48,9 @@ function DemoStrip({ onLeave }: { onLeave: () => void }) {
       }}
     >
       <Text size={13.5} lh={1.35} color={theme.colors.ink2} style={{ flex: 1, paddingVertical: 8 }}>
-        {LOOK_AROUND_TEXT.strip}
+        {text.strip}
       </Text>
-      <Button
-        label={LOOK_AROUND_TEXT.leave}
-        variant="quiet"
-        accessibilityLabel={LOOK_AROUND_TEXT.leaveLabel}
-        onPress={onLeave}
-      />
+      <Button label={text.leave} variant="quiet" accessibilityLabel={text.leaveLabel} onPress={onLeave} />
     </View>
   );
 }

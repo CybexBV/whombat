@@ -3,15 +3,15 @@
  * how. What needs you first, then your accounts (Google, Microsoft 365, Email, GitHub), then everything else. Two
  * connections that show the same name and place are told apart by renaming one; the list says so. Pure.
  */
+import { clientTree } from '../i18n/catalog';
+import { CONN_SETTINGS_WORDS } from '../i18n/messages/connectionsHosts/connections';
 
-export const SETTINGS_CONNECTIONS_TEXT = {
-  intro: 'What this Whombat is signed in to, and how.',
-  needsYou: 'NEEDS YOU',
-  accounts: 'ACCOUNTS',
-  apps: 'APPS AND SERVICES',
-  /** Under a row whose name and place another row has too. */
-  sameName: 'Same name as another connection. Rename one to tell them apart.',
-} as const;
+/** The list's words, in a locale (English when none is given). */
+export function settingsConnectionsText(locale?: string | null) {
+  return { ...clientTree(locale, CONN_SETTINGS_WORDS) };
+}
+
+export const SETTINGS_CONNECTIONS_TEXT = settingsConnectionsText('en');
 
 /** The pages that are someone's account rather than an app or service. */
 const ACCOUNT_PAGES: ReadonlySet<string> = new Set(['google', 'microsoft', 'imap', 'github']);

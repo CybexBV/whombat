@@ -20,7 +20,6 @@ import {
   formatRunLabel,
   formatTestsPassing,
   logLineTone,
-  plural,
   type Run,
   type RunDetail,
   type RunStatus,
@@ -28,6 +27,7 @@ import {
   runNowText,
   shortNameOf,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ViewContext } from './people';
 
 /** The log card shows the last 8 lines (the desktop page shows 12 on a wider screen). */
@@ -83,14 +83,17 @@ export interface RunScreenModel {
   attention: string | null;
 }
 
-const STEP_LABELS: Record<StepMarker, string> = {
-  done: 'Done',
-  active: 'In progress',
-  paused: 'Paused',
-  stopped: 'Stopped',
-  queued: 'Queued',
-  failed: 'Failed',
-};
+function stepLabels(locale?: string): Record<StepMarker, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    done: t('data.run.step.done'),
+    active: t('data.run.step.active'),
+    paused: t('data.run.step.paused'),
+    stopped: t('data.run.step.stopped'),
+    queued: t('data.run.step.queued'),
+    failed: t('data.run.step.failed'),
+  };
+}
 
 function dotFor(status: RunStatus): RunDot {
   switch (status) {
@@ -116,10 +119,14 @@ function markerFor(step: RunStep, status: RunStatus): StepMarker {
 
 export function runScreen(detail: RunDetail, ctx: ViewContext, where?: string): RunScreenModel {
   const { run } = detail;
+  const { locale } = ctx;
+  const { t, tp } = mobileTranslator(locale);
+  const STEP_LABELS = stepLabels(locale);
   const agent = ctx.people.get(run.agentId);
-  const agentName = agent ? shortNameOf(agent) : 'The agent';
+  const agentName = agent ? shortNameOf(agent) : t('data.turns.theAgent');
   const asker = ctx.people.get(run.askedById);
-  const askerName = run.askedById === ctx.viewer.id ? 'you' : asker ? shortNameOf(asker) : 'someone';
+  const askerName =
+    run.askedById === ctx.viewer.id ? t('data.run.you') : asker ? shortNameOf(asker) : t('data.run.someone');
   const place = where ?? conversationLabel(detail.conversation);
   const log = detail.log
     .filter((l) => l.seq < run.logCount)
@@ -133,19 +140,21 @@ export function runScreen(detail: RunDetail, ctx: ViewContext, where?: string): 
     }));
   return {
     number: run.number,
-    label: formatRunLabel(run.status),
+    label: formatRunLabel(run.status, locale),
     dot: dotFor(run.status),
     title: run.title,
     agentName,
     agentFace: agent?.kind === 'agent' ? agentFaceOf(agent) : null,
     context: [agentName, place, formatClock(run.startedAt, ctx.timeZone)].filter(Boolean).join(' · '),
-    askedBy: `Asked by ${askerName}${place ? ` in ${place}` : ''}`,
+    askedBy: place
+      ? t('data.run.askedByIn', { who: askerName, place })
+      : t('data.run.askedBy', { who: askerName }),
     branch: run.branch,
     progress: run.status === 'done' ? 100 : Math.max(0, Math.min(100, run.progress)),
-    now: runNowText(run),
+    now: runNowText(run, locale),
     tests: run.tests
       ? {
-          text: formatTestsPassing(run.tests),
+          text: formatTestsPassing(run.tests, locale),
           tone: run.tests.total > 0 && run.tests.passed === run.tests.total ? 'ok' : 'warn',
         }
       : null,
@@ -154,7 +163,7 @@ export function runScreen(detail: RunDetail, ctx: ViewContext, where?: string): 
         ? {
             add: formatAdditions(run.diff.add),
             del: formatDeletions(run.diff.del),
-            files: `· ${plural(run.diff.files, 'file')}`,
+            files: `· ${tp('data.messages.files', run.diff.files)}`,
           }
         : null,
     steps: run.steps.map((step, i) => {
@@ -193,36 +202,39 @@ export interface RunControlButton {
 export function runControlButtons(
   run: Pick<Run, 'status' | 'branch'>,
   agentName: string,
+  locale?: string,
 ): RunControlButton[] {
+  const { t } = mobileTranslator(locale);
   const c = runControls(run.status);
   const out: RunControlButton[] = [];
   if (c.toggle)
     out.push({
       action: c.toggle,
-      label: c.toggle === 'pause' ? 'Pause' : 'Resume',
+      label: c.toggle === 'pause' ? t('data.run.pause') : t('data.run.resume'),
       variant: 'secondary',
       confirm: null,
     });
-  if (c.retry) out.push({ action: 'retry', label: 'Try again', variant: 'secondary', confirm: null });
+  if (c.retry)
+    out.push({ action: 'retry', label: t('data.run.tryAgain'), variant: 'secondary', confirm: null });
   if (c.takeOver)
     out.push({
       action: 'take_over',
-      label: 'Take over',
+      label: t('data.run.takeOver'),
       variant: 'primary',
       // The web's take-over dialog, in an alert.
       confirm: {
-        title: `Take over ${agentName}’s run?`,
-        body: `${agentName} stops now and hands you ${run.branch}. The steps and log so far stay on this page, and ${agentName} won’t push to the branch again.`,
-        cta: 'Take over',
+        title: t('data.run.takeOverTitle', { agent: agentName }),
+        body: t('data.run.takeOverBody', { agent: agentName, branch: run.branch }),
+        cta: t('data.run.takeOver'),
       },
     });
   return out;
 }
 
 /** A control the keys engine didn't let through: its own sentence (the web's toast), null when it went through. */
-export function runControlRefusal(result: CommitResult<unknown>): string | null {
+export function runControlRefusal(result: CommitResult<unknown>, locale?: string): string | null {
   if (result.status === 'blocked') return result.message;
-  if (result.status === 'pending_approval') return 'That needs a person to approve first.';
+  if (result.status === 'pending_approval') return mobileTranslator(locale).t('data.run.needsApproval');
   return null;
 }
 

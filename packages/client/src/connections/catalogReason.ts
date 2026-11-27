@@ -4,25 +4,15 @@
  * when a sign-in is started anyway. Pure.
  */
 import type { CatalogEntryStatus } from '@whombat/core/domain';
+import { clientTree } from '../i18n/catalog';
+import { CONN_REASON_WORDS } from '../i18n/messages/connectionsHosts/connections';
 
-export const CATALOG_REASON_TEXT = {
-  needsSecureAddress:
-    'This sign-in needs a secure address for your Whombat to come back to. Turn on Whombat Link, or Tailscale with HTTPS, first.',
-  /** Where the app doesn't offer Whombat Link (the iPhone). */
-  needsSecureAddressTailscale:
-    'This sign-in needs a secure address for your Whombat to come back to. Turn on Tailscale with HTTPS first.',
-  hostedOnly:
-    'This sign-in comes back to Whombat on the web, which this Whombat doesn’t use. Set up your own app for it in Settings → Connections.',
-  /** The way forward from that sentence: This Whombat → Reach, where Tailscale and Whombat Link are turned on. */
-  needsSecureAddressAction: 'Get a secure address',
-  /** The short note on the entry's tile or row. */
-  needsSecureAddressNote: 'Needs a secure address',
-  hostedOnlyNote: 'Needs your own app',
-  /** `needs_mac` (Find My): no Mac among the servers yet; its action opens Add a server. */
-  needsMacNote: 'Add a Mac first',
-  needsMac: 'This works through one of your Macs. Add your Mac as a server first, then connect.',
-  needsMacAction: 'Add a server',
-} as const;
+/** The reasons' words, in a locale (English when none is given). */
+export function catalogReasonText(locale?: string | null) {
+  return { ...clientTree(locale, CONN_REASON_WORDS) };
+}
+
+export const CATALOG_REASON_TEXT = catalogReasonText('en');
 
 /**
  * The reasons that say what to do first; the others (`off`, `no_driver`, `app_not_configured`) have their own UI. The
@@ -40,18 +30,19 @@ export function addressReasonOf(status: CatalogEntryStatus | undefined): Address
 }
 
 /** The sentence for an entry's page; `offerLink: false` leaves Whombat Link out (the iPhone). */
-export function addressReasonText(reason: AddressReason, options: { offerLink?: boolean } = {}): string {
-  if (reason === 'hosted_only') return CATALOG_REASON_TEXT.hostedOnly;
-  if (reason === 'needs_mac') return CATALOG_REASON_TEXT.needsMac;
-  return options.offerLink === false
-    ? CATALOG_REASON_TEXT.needsSecureAddressTailscale
-    : CATALOG_REASON_TEXT.needsSecureAddress;
+export function addressReasonText(
+  reason: AddressReason,
+  options: { offerLink?: boolean; locale?: string | null } = {},
+): string {
+  const w = catalogReasonText(options.locale);
+  if (reason === 'hosted_only') return w.hostedOnly;
+  if (reason === 'needs_mac') return w.needsMac;
+  return options.offerLink === false ? w.needsSecureAddressTailscale : w.needsSecureAddress;
 }
 
 /** The short note for an entry's tile or row. */
-export function addressReasonNote(reason: AddressReason): string {
-  if (reason === 'needs_mac') return CATALOG_REASON_TEXT.needsMacNote;
-  return reason === 'hosted_only'
-    ? CATALOG_REASON_TEXT.hostedOnlyNote
-    : CATALOG_REASON_TEXT.needsSecureAddressNote;
+export function addressReasonNote(reason: AddressReason, locale?: string | null): string {
+  const w = catalogReasonText(locale);
+  if (reason === 'needs_mac') return w.needsMacNote;
+  return reason === 'hosted_only' ? w.hostedOnlyNote : w.needsSecureAddressNote;
 }

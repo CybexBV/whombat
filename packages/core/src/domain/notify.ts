@@ -4,6 +4,7 @@
  * and the apps show the same state.
  */
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { type DateInput, toDate, zonedParts } from '../text/time.js';
 import { Timestamp } from './common.js';
 import { type ConversationKind, type NotifyLevel, notifyLevelOf } from './conversation.js';
@@ -156,11 +157,12 @@ export function zonedInstant(
 export const DndPreset = z.enum(['30m', '1h', 'tomorrow']);
 export type DndPreset = z.infer<typeof DndPreset>;
 
-export const DND_PRESET_LABELS: Record<DndPreset, string> = {
-  '30m': '30 minutes',
-  '1h': '1 hour',
-  tomorrow: 'Until tomorrow',
-};
+/** The Do-not-disturb presets' labels, in a locale. */
+export function dndPresetLabels(locale?: string | null): Readonly<Record<DndPreset, string>> {
+  return coreWords(locale, 'dnd.preset', DndPreset.options);
+}
+
+export const DND_PRESET_LABELS: Record<DndPreset, string> = dndPresetLabels('en');
 
 /** When a Do-not-disturb preset ends: now + 30 min, now + 1 h, or 08:00 tomorrow in `timeZone`. */
 export function dndUntilFor(preset: DndPreset, now: DateInput, timeZone: string): string {

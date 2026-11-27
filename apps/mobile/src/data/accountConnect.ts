@@ -5,10 +5,10 @@
  * (`@whombat/client/connections` `ACCOUNT_TEXT`, `REAUTH_TEXT`, `serviceList`; `IMAP_COPY`). Pure.
  */
 import {
-  ACCOUNT_TEXT,
+  accountText,
   checkText,
   connectErrorText,
-  REAUTH_TEXT,
+  reauthReasonText,
   serviceList,
 } from '@whombat/client/connections';
 import {
@@ -21,6 +21,7 @@ import {
   MICROSOFT_SERVICES,
   type Tone,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { AccountPage } from '../navigation/connectionLinks';
 
 /** The two accounts connected through a sign-in elsewhere. */
@@ -63,32 +64,55 @@ export function providerConnection(
 }
 
 /** “Connected as Mara Okafor · Gmail, Google Calendar and Google Drive”, or why it needs connecting again. */
-export function accountLine(connection: Connection, provider: AccountProvider): string {
+export function accountLine(connection: Connection, provider: AccountProvider, locale?: string): string {
+  const text = accountText(locale);
   if (connection.status !== 'active')
     return provider === 'google'
-      ? REAUTH_TEXT[connection.reauthReason ?? 'revoked']
-      : ACCOUNT_TEXT.needsConnecting;
-  const as = connection.name ? ` as ${connection.name}` : '';
-  return `${ACCOUNT_TEXT.connected}${as} · ${serviceList(connection.services, provider)}`;
+      ? reauthReasonText(locale)[connection.reauthReason ?? 'revoked']
+      : text.needsConnecting;
+  const services = serviceList(connection.services, provider, locale);
+  return connection.name
+    ? mobileTranslator(locale).t('data.accountConnect.connectedAs', {
+        connected: text.connected,
+        name: connection.name,
+        services,
+      })
+    : `${text.connected} · ${services}`;
 }
 
 /** What a sign-in's `connect_error=` means on the provider's screen (Microsoft's says Microsoft, as the web's). */
-export function accountErrorText(provider: AccountProvider, code: string | null | undefined): string | null {
+export function accountErrorText(
+  provider: AccountProvider,
+  code: string | null | undefined,
+  locale?: string,
+): string | null {
   if (!code) return null;
-  const text = connectErrorText(code);
+  const text = connectErrorText(code, locale);
   return provider === 'microsoft' ? text.replaceAll('Google', 'Microsoft') : text;
 }
 
 /** What Disconnect asks first. */
-export function disconnectAsk(provider: AccountProvider): string {
-  return provider === 'google' ? ACCOUNT_TEXT.disconnectGoogle : ACCOUNT_TEXT.disconnectMicrosoft;
+export function disconnectAsk(provider: AccountProvider, locale?: string): string {
+  const text = accountText(locale);
+  return provider === 'google' ? text.disconnectGoogle : text.disconnectMicrosoft;
 }
 
 /** A service's check: its tone and words (Google's `checkText`; Microsoft's Ready or why). */
-export function checkLine(check: ConnectionCheck, provider: AccountProvider): { tone: Tone; text: string } {
+export function checkLine(
+  check: ConnectionCheck,
+  provider: AccountProvider,
+  locale?: string,
+): { tone: Tone; text: string } {
   const tone: Tone = check.state === 'ok' ? 'ok' : check.state === 'error' ? 'bad' : 'warn';
-  if (provider === 'google') return { tone, text: checkText(check) };
-  return { tone, text: check.state === 'ok' ? 'Ready' : (check.message ?? 'Needs attention') };
+  if (provider === 'google') return { tone, text: checkText(check, locale) };
+  const { t } = mobileTranslator(locale);
+  return {
+    tone,
+    text:
+      check.state === 'ok'
+        ? t('data.accountConnect.ready')
+        : (check.message ?? t('data.accountConnect.needsAttention')),
+  };
 }
 
 /**
@@ -103,20 +127,24 @@ export function reconnectServices(
 }
 
 /** GitHub's and Website feedback's screens: set up in Whombat on a computer, said once (AP-2910). */
-export const BUILTIN_TEXT = {
-  github: {
-    connected: (login: string | null, repos: number) =>
-      [login ? `@${login}` : null, repos === 1 ? '1 repository' : `${repos} repositories`]
-        .filter(Boolean)
-        .join(' · '),
-    notConnected: 'Not connected',
-    off: 'GitHub is turned off on this Whombat.',
-    // Every repository the account owns comes with it, nothing to pick (Whombat agent-repos.md AGR-12).
-    elsewhere:
-      'GitHub is connected in Whombat on a computer, and every repository the account owns comes with it.',
-  },
-  feedback: {
-    none: 'No websites yet.',
-    elsewhere: 'Websites are added in Whombat on a computer.',
-  },
-} as const;
+export function builtinText(locale?: string) {
+  const { t, tp } = mobileTranslator(locale);
+  return {
+    github: {
+      connected: (login: string | null, repos: number) =>
+        [login ? `@${login}` : null, tp('data.accountConnect.repositories', repos)]
+          .filter(Boolean)
+          .join(' · '),
+      notConnected: t('data.accountConnect.notConnected'),
+      off: t('data.accountConnect.githubOff'),
+      // Every repository the account owns comes with it, nothing to pick.
+      elsewhere: t('data.accountConnect.githubElsewhere'),
+    },
+    feedback: {
+      none: t('data.accountConnect.noWebsites'),
+      elsewhere: t('data.accountConnect.websitesElsewhere'),
+    },
+  };
+}
+
+export const BUILTIN_TEXT = builtinText();

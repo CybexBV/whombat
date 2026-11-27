@@ -58,7 +58,7 @@ describe('About’s “What’s new” row', () => {
   it('is in About, in the updates part', () => {
     const source = readFileSync(new URL('./WhombatAboutScreen.tsx', import.meta.url), 'utf8');
     const card = source.slice(source.indexOf('<VersionCard'), source.indexOf('</VersionCard>'));
-    expect(card).toContain('title={WHATS_NEW_ROW.title}');
+    expect(card).toContain('title={whatsNewRow(rawLocale).title}');
     expect(card).toContain('openSignInPage(WHATS_NEW_URL)');
   });
 });

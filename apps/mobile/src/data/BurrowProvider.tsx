@@ -63,7 +63,11 @@ export function BurrowProvider({ slug, mode, clock, renderState, children }: Bur
 
   // Each from its own part of the bootstrap (the cache keeps unchanged parts the same objects), AP-900.
   const principals = bootstrap?.principals;
-  const people = useMemo(() => (principals ? peopleFrom(principals) : null), [principals]);
+  const { rawLocale } = useI18n();
+  const people = useMemo(
+    () => (principals ? peopleFrom(principals, rawLocale) : null),
+    [principals, rawLocale],
+  );
   const me = bootstrap?.me;
   const viewer = useMemo(() => (me ? viewerOf({ me }) : null), [me]);
   // The device's zone is the last resort: asked (a new `Intl.DateTimeFormat`) only when the others change (AP-913).

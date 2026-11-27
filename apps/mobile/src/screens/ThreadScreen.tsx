@@ -16,7 +16,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { CHAT_WORDS, jobPartsAfter, roomOfConversation, rootTitle } from '@whombat/client';
+import { chatWords, jobPartsAfter, roomOfConversation, rootTitle } from '@whombat/client';
 import { useChatRooms, useChatThreads, useHandoffs, useThread, useTyping } from '@whombat/client/react';
 import type { ChatSubject } from '@whombat/core';
 import { useCallback, useMemo, useState } from 'react';
@@ -25,10 +25,10 @@ import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import { jobParts, threadJob } from '../data/job';
 import { conversationLoadError, threadHeader } from '../data/messages';
 import { threadQuery } from '../data/threadPages';
-import { SETTLE_COPY, settledWhen, settleOffer } from '../data/threadSettle';
+import { settleCopy, settledWhen, settleOffer } from '../data/threadSettle';
 import { useThreadPlaceholder } from '../data/useThreadOpening';
 import { useSettleThread } from '../data/useThreadSettle';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -49,6 +49,8 @@ import { ChatView } from './ChatView';
 type Props = NativeStackScreenProps<RootStackParamList, 'Thread'>;
 
 export function ThreadScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
   const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
@@ -81,7 +83,12 @@ export function ThreadScreen({ route, navigation }: Props) {
       })
     : null;
   const back =
-    route.params.back ?? (room === 'feedback' ? CHAT_WORDS.feedback : room ? CHAT_WORDS.chat : 'Back');
+    route.params.back ??
+    (room === 'feedback'
+      ? chatWordsHere.feedback
+      : room
+        ? chatWordsHere.chat
+        : tMobile('screens2.common.back'));
   const goBack = () =>
     navigation.canGoBack()
       ? navigation.goBack()
@@ -89,7 +96,7 @@ export function ThreadScreen({ route, navigation }: Props) {
         ? navigation.navigate('Feedback')
         : navigation.navigate('Tabs', room ? { screen: 'ChatRoom' } : undefined);
   // Where it is and what about come with the thread itself.
-  const header = threadHeader(query.isPlaceholderData ? undefined : query.data);
+  const header = threadHeader(query.isPlaceholderData ? undefined : query.data, rawLocale);
   // Whether the thread's first message is on screen: once it scrolls away its question becomes the header's title.
   const [rootInView, setRootInView] = useState(true);
   // The job it handed to T3 Code, ended ones too (their receipt): the track under the header, its parts at the end.
@@ -115,7 +122,7 @@ export function ThreadScreen({ route, navigation }: Props) {
   };
 
   if (!query.data) {
-    const failure = query.error ? conversationLoadError(query.error) : null;
+    const failure = query.error ? conversationLoadError(query.error, rawLocale) : null;
     return (
       <Screen>
         <ChatHeader onBack={goBack} backLabel={back} title={header.title} />
@@ -152,7 +159,7 @@ export function ThreadScreen({ route, navigation }: Props) {
       )}
       {room && settled ? (
         <SettledThreadLine
-          when={settledWhen(settled, now, timeZone)}
+          when={settledWhen(settled, now, timeZone, rawLocale)}
           onOpenAgain={() => settle({ rootId: messageId, room }, false)}
         />
       ) : null}
@@ -160,13 +167,13 @@ export function ThreadScreen({ route, navigation }: Props) {
         conversationId={query.data.conversationId}
         threadRootId={messageId}
         authors
-        placeholder={room ? CHAT_WORDS.reply : tMobile('screens.reply-in-thread')}
-        backLabel="Thread"
+        placeholder={room ? chatWordsHere.reply : tMobile('screens.reply-in-thread')}
+        backLabel={tMobile('screens2.thread.thread')}
         ownRoom={!!room}
         chatRoom={room}
         anchor={route.params.anchor ?? null}
         onAnchorDone={() => navigation.setParams({ anchor: undefined })}
-        composerNote={room && settled ? SETTLE_COPY.replyOpens : null}
+        composerNote={room && settled ? settleCopy(rawLocale).replyOpens : null}
         onRootInView={room ? setRootInView : undefined}
         footer={jobPanel}
         footerAfter={jobPanelAfter}
@@ -201,6 +208,7 @@ function RoomThreadHeader({
   /** Share this thread by link (Chat on a box, share-links.md). */
   onShare: (() => void) | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const shown = showQuestion && !!question;
   return (
     <LinedHeader
@@ -219,7 +227,7 @@ function RoomThreadHeader({
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={question || THREAD_WORD}
+        accessibilityLabel={question || tMobile('screens2.thread.thread')}
         style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}
       >
         <Text size={16} weight={600} numberOfLines={1} style={{ opacity: shown ? 1 : 0 }}>
@@ -237,6 +245,3 @@ function RoomThreadHeader({
     </LinedHeader>
   );
 }
-
-/** What the header is called before the thread's question is known. */
-const THREAD_WORD = 'Thread';

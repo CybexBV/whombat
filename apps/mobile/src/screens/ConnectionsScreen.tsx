@@ -40,7 +40,7 @@ export function ConnectionsScreen({ navigation }: Props) {
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { list, rows, refetch } = useConnections();
-  const { needsYou, accounts, apps, accountsTitle, appsTitle, empty } = connectionsOverview(rows);
+  const { needsYou, accounts, apps, accountsTitle, appsTitle, empty } = connectionsOverview(rows, rawLocale);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
   /**

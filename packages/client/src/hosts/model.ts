@@ -24,6 +24,9 @@ import {
   hostStatusLabels,
   thingHref,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_MODEL_WORDS } from '../i18n/messages/connectionsHosts/servers';
 import { lastValue, secondsAbove } from './chart';
 import {
   DASH,
@@ -36,7 +39,6 @@ import {
   formatPct1,
   formatTemp,
   formatUptimeWords,
-  plural,
 } from './format';
 import {
   alertNoticeParts,
@@ -143,7 +145,7 @@ export function serverRow(s: HostServer, locale?: string | null): ServerRowView 
     memoryPct: offline ? null : s.memory.usedPct,
     tempText: offline ? DASH : formatTemp(s.temperature?.maxC),
     tempTone: offline ? 'mut' : hostTone(tempLevel),
-    guestsText: total === 0 ? 'none' : `${running} / ${total}`,
+    guestsText: total === 0 ? clientTree(locale, HOSTS_MODEL_WORDS).none : `${running} / ${total}`,
     guestsRunning: running,
     guestsTotal: total,
     offline,
@@ -155,21 +157,22 @@ function pctOf(pct: number | null, total: number | null): number | null {
 }
 
 /** Rows in the order Home shows them: problems first (bad, warn), then by name. */
-export function serverRows(servers: readonly HostServer[]): ServerRowView[] {
+export function serverRows(servers: readonly HostServer[], locale?: string | null): ServerRowView[] {
   const rank: Record<HostServerStatus, number> = { bad: 0, offline: 1, warn: 2, pending: 3, ok: 4 };
   return [...servers]
     .sort((a, b) => rank[a.status] - rank[b.status] || a.name.localeCompare(b.name))
-    .map((s) => serverRow(s));
+    .map((s) => serverRow(s, locale));
 }
 
 /** “5 online · 66 of 133 running” (Home's Servers card): machines and apps together, so no noun. */
-export function fleetLine(servers: readonly HostServer[]): string {
+export function fleetLine(servers: readonly HostServer[], locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).fleet;
   const online = servers.filter((s) => s.status !== 'offline' && s.status !== 'pending').length;
   const running = servers.reduce((a, s) => a + s.guests.reduce((b, g) => b + g.running, 0), 0);
   const total = servers.reduce((a, s) => a + s.guests.reduce((b, g) => b + g.total, 0), 0);
-  const parts = [`${online} online`];
-  if (online < servers.length) parts.push(`${servers.length - online} offline`);
-  if (total) parts.push(`${running} of ${total} running`);
+  const parts = [interpolate(w.online, { count: online })];
+  if (online < servers.length) parts.push(interpolate(w.offline, { count: servers.length - online }));
+  if (total) parts.push(interpolate(w.running, { running, total }));
   return parts.join(' · ');
 }
 
@@ -189,24 +192,27 @@ export interface ServerHeaderView {
   facts: FactPart[][];
 }
 
-export function serverHeader(d: HostServerDetail, name?: string): ServerHeaderView {
+export function serverHeader(d: HostServerDetail, name?: string, locale?: string | null): ServerHeaderView {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS);
   const s = d.server;
   const facts: FactPart[][] = [];
   if (s.os) facts.push([{ text: `${s.os.name} ` }, { text: s.os.version, strong: true }]);
-  if (s.cpu)
-    facts.push([{ text: `${s.cpu.model} · ` }, { text: plural(s.cpu.threads, 'thread'), strong: true }]);
+  if (s.cpu) facts.push([{ text: `${s.cpu.model} · ` }, { text: w.threads(s.cpu.threads), strong: true }]);
   if (s.uptimeS != null && s.status !== 'offline')
-    facts.push([{ text: 'Up ' }, { text: formatUptimeWords(s.uptimeS), strong: true }]);
+    facts.push([{ text: w.header.up }, { text: formatUptimeWords(s.uptimeS, locale), strong: true }]);
   if (s.status === 'offline' && s.agent.lastSyncSAgo != null)
     facts.push([
-      { text: 'Last heard ' },
-      { text: `${formatDuration(s.agent.lastSyncSAgo)} ago`, strong: true },
+      { text: w.header.lastHeard },
+      {
+        text: interpolate(w.header.ago, { duration: formatDuration(s.agent.lastSyncSAgo, locale) }),
+        strong: true,
+      },
     ]);
   return {
     name: name ?? s.name ?? s.id,
     status: s.status,
     tone: serverTone(s.status),
-    badge: statusText(s.status, s.statusNote),
+    badge: statusText(s.status, s.statusNote, locale),
     facts,
   };
 }
@@ -277,19 +283,24 @@ export interface TemperatureChartView {
   meta: string;
 }
 
-export function temperatureChart(d: HostServerDetail, rangeShort = 'last 24 h'): TemperatureChartView | null {
+export function temperatureChart(
+  d: HostServerDetail,
+  rangeShort?: string,
+  locale?: string | null,
+): TemperatureChartView | null {
   if (!d.sensors.length) return null;
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).chart;
   const sensor = chartSensor(d);
   const isCpu =
     !!sensor &&
     (sensor.group === 'cpu' || /cpu|package|tctl|tdie|core/i.test(`${sensor.id} ${sensor.label}`));
   const warm = warmFrom(sensor?.limitC);
   return {
-    title: isCpu ? 'CPU temperature' : `${sensor?.label ?? 'Hottest sensor'} temperature`,
+    title: isCpu ? w.cpu : interpolate(w.sensor, { sensor: sensor?.label ?? w.hottest }),
     key: sensorSeriesKey(sensor),
     warm,
     limit: sensor?.limitC ?? null,
-    meta: `${rangeShort} · dashed line: warm from ${warm} °C`,
+    meta: interpolate(w.meta, { range: rangeShort ?? w.lastDay, warm }),
   };
 }
 
@@ -299,23 +310,25 @@ export function hottestSensor(d: HostServerDetail): HostSensor | null {
 }
 
 /** The five figures: CPU, Memory, Hottest, Storage, Guests (mock 2). */
-export function serverKpis(d: HostServerDetail, history?: HostSeries): KpiView[] {
+export function serverKpis(d: HostServerDetail, history?: HostSeries, locale?: string | null): KpiView[] {
+  const words = clientTree(locale, HOSTS_MODEL_WORDS);
+  const w = words.kpi;
   const s = d.server;
   const live = d.live;
   const out: KpiView[] = [];
   out.push({
     key: 'cpu',
-    label: 'CPU',
+    label: w.cpu,
     value: formatPct(live?.cpuPct),
-    sub: s.cpu ? plural(s.cpu.threads, 'thread') : DASH,
+    sub: s.cpu ? words.threads(s.cpu.threads) : DASH,
   });
   const total = s.memory?.totalGb ?? null;
   out.push({
     key: 'memory',
-    label: 'Memory',
-    value: formatNum(live?.memUsedGb),
+    label: w.memory,
+    value: formatNum(live?.memUsedGb, locale),
     rest: total != null ? `/ ${formatGb(total)}` : undefined,
-    sub: live?.memPct != null ? `${formatPct(live.memPct)} used` : DASH,
+    sub: live?.memPct != null ? interpolate(w.used, { pct: formatPct(live.memPct) }) : DASH,
   });
   const hot = hottestSensor(d);
   if (hot) {
@@ -324,9 +337,12 @@ export function serverKpis(d: HostServerDetail, history?: HostSeries): KpiView[]
     const warmS = level && level !== 'good' ? secondsAbove(history, key, (hot.limitC ?? 85) * WARM_SHARE) : 0;
     out.push({
       key: 'hottest',
-      label: 'Hottest',
+      label: w.hottest,
       value: formatTemp(hot.nowC),
-      sub: warmS > 0 ? `warm for ${formatDuration(warmS).replace(/ \d+ min$/, '')}` : hot.label,
+      sub:
+        warmS > 0
+          ? interpolate(w.warmFor, { duration: formatDuration(warmS, locale).replace(/ \d+ min$/, '') })
+          : hot.label,
       tone: level === 'good' ? undefined : hostTone(level),
     });
   }
@@ -334,15 +350,23 @@ export function serverKpis(d: HostServerDetail, history?: HostSeries): KpiView[]
   if (storage) {
     out.push({
       key: 'storage',
-      label: 'Storage',
+      label: w.storage,
       value: formatGb(storage.usedGb),
       rest: `/ ${formatGb(storage.totalGb)}`,
-      sub: storage.totalGb ? `${formatPct((storage.usedGb / storage.totalGb) * 100)} used` : DASH,
+      sub: storage.totalGb
+        ? interpolate(w.used, { pct: formatPct((storage.usedGb / storage.totalGb) * 100) })
+        : DASH,
     });
   }
   const g = guestTotals(d);
   if (g.total) {
-    out.push({ key: 'guests', label: 'Guests', value: String(g.running), rest: 'running', sub: guestMix(d) });
+    out.push({
+      key: 'guests',
+      label: w.guests,
+      value: String(g.running),
+      rest: w.running,
+      sub: guestMix(d, locale),
+    });
   }
   return out;
 }
@@ -375,20 +399,20 @@ export function storageTotals(d: HostServerDetail): { usedGb: number; totalGb: n
 }
 
 /** “6 VMs · 13 CTs”, “14 containers · 2 VMs”: the running guests by kind. */
-export function guestMix(d: HostServerDetail): string {
+export function guestMix(d: HostServerDetail, locale?: string | null): string {
+  const words = clientTree(locale, HOSTS_MODEL_WORDS);
+  const m = words.mix;
   const p = d.proxmox?.guests;
   if (p) {
     const parts = [];
-    if (p.vm) parts.push(plural(p.vm.running, 'VM'));
-    if (p.container) parts.push(plural(p.container.running, 'CT'));
+    if (p.vm) parts.push(m.vms(p.vm.running));
+    if (p.container) parts.push(m.cts(p.container.running));
     return parts.join(' · ');
   }
   const running = detailGuests(d).filter((g) => g.state === 'running' || g.state === 'unhealthy');
   const ct = running.filter((g) => g.kind === 'container').length;
   const vm = running.filter((g) => g.kind === 'vm').length;
-  return (
-    [ct ? plural(ct, 'container') : null, vm ? plural(vm, 'VM') : null].filter(Boolean).join(' · ') || 'none'
-  );
+  return [ct ? m.containers(ct) : null, vm ? m.vms(vm) : null].filter(Boolean).join(' · ') || words.none;
 }
 
 /* Guests -------------------------------------------------------------------------------------------- */
@@ -421,19 +445,28 @@ export interface GuestKindView {
   id: string | null;
 }
 
-export function guestKind(g: Pick<HostGuest, 'platform' | 'kind' | 'vmid'>): GuestKindView {
+export function guestKind(
+  g: Pick<HostGuest, 'platform' | 'kind' | 'vmid'>,
+  locale?: string | null,
+): GuestKindView {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).kind;
   const vm = g.kind === 'vm';
   const glyph: GuestKindGlyph = g.platform === 'docker' ? 'docker' : vm ? 'vm' : 'lxc';
   switch (g.platform) {
     case 'docker':
-      return { glyph, label: 'Docker container', id: null };
+      return { glyph, label: w.docker, id: null };
     case 'incus':
-      return { glyph, label: vm ? 'Incus VM' : 'Incus container', id: null };
+      return { glyph, label: vm ? w.incusVm : w.incusContainer, id: null };
     case 'libvirt':
-      return { glyph, label: 'QEMU/KVM VM', id: null };
+      return { glyph, label: w.libvirt, id: null };
     default: {
       const id = g.vmid != null ? String(g.vmid) : null;
-      return { glyph, label: `Proxmox ${vm ? 'VM' : 'container'}${id ? ` ${id}` : ''}`, id };
+      const label = id
+        ? interpolate(vm ? w.proxmoxVmId : w.proxmoxContainerId, { id })
+        : vm
+          ? w.proxmoxVm
+          : w.proxmoxContainer;
+      return { glyph, label, id };
     }
   }
 }
@@ -457,28 +490,30 @@ export function guestKindMatches(g: Pick<HostGuest, 'platform' | 'kind' | 'vmid'
   return asked.every((w) => words.has(w));
 }
 
-export const GUEST_STATE_WORDS: Record<HostGuestState, string> = {
-  running: 'Running',
-  stopped: 'Stopped',
-  unhealthy: 'Unhealthy',
-  paused: 'Paused',
-};
+/** A guest's state in words, in a locale (English when none is given). */
+export function guestStateWords(locale?: string | null): Record<HostGuestState, string> {
+  return { ...clientTree(locale, HOSTS_MODEL_WORDS).states };
+}
+
+export const GUEST_STATE_WORDS: Record<HostGuestState, string> = guestStateWords('en');
 
 export function guestStateTone(state: HostGuestState): HostTone {
   return state === 'running' ? 'ok' : state === 'unhealthy' ? 'bad' : state === 'paused' ? 'warn' : 'mut';
 }
 
 /** What a guest row says after its numbers: a change waiting for a restart (warn), else its tags. */
-export function guestNote(g: HostGuest): { text: string; tone: 'warn' } | { tags: string[] } {
-  if (g.pendingChanges && g.pendingChanges > 0)
+export function guestNote(
+  g: HostGuest,
+  locale?: string | null,
+): { text: string; tone: 'warn' } | { tags: string[] } {
+  if (g.pendingChanges && g.pendingChanges > 0) {
+    const w = clientTree(locale, HOSTS_MODEL_WORDS).pending;
     return {
       // libvirt keeps a running VM as it is until it's started again (incus-unraid-wq.md AP-1652).
-      text:
-        g.platform === 'libvirt'
-          ? `${plural(g.pendingChanges, 'change')} at the next start`
-          : `restart to apply ${plural(g.pendingChanges, 'change')}`,
+      text: g.platform === 'libvirt' ? w.nextStart(g.pendingChanges) : w.restart(g.pendingChanges),
       tone: 'warn',
     };
+  }
   return { tags: g.tags ?? [] };
 }
 
@@ -499,20 +534,25 @@ export interface GuestRowView {
 }
 
 export function guestRow(g: HostGuest): GuestRowView {
+  return guestRowFor(g);
+}
+
+/** {@link guestRow} in a locale (English when none is given); `guestRow` stays one-argument so it can be mapped. */
+export function guestRowFor(g: HostGuest, locale?: string | null): GuestRowView {
   const on = g.state === 'running' || g.state === 'unhealthy';
   return {
     id: g.id,
     name: g.name,
     kindText: guestKindText(g),
-    kind: guestKind(g),
+    kind: guestKind(g, locale),
     state: g.state,
-    stateText: GUEST_STATE_WORDS[g.state],
+    stateText: guestStateWords(locale)[g.state],
     stateTone: guestStateTone(g.state),
     cpuText: on ? formatPct1(g.cpuPct) : DASH,
     cpuPct: on ? g.cpuPct : null,
     memoryText: on ? formatMemPair(g.memoryUsedMb, g.memoryLimitMb) : DASH,
-    uptimeText: on && g.uptimeS != null ? formatDuration(g.uptimeS) : DASH,
-    note: guestNote(g),
+    uptimeText: on && g.uptimeS != null ? formatDuration(g.uptimeS, locale) : DASH,
+    note: guestNote(g, locale),
   };
 }
 
@@ -553,14 +593,12 @@ export function filterGuests(guests: readonly HostGuest[], state: GuestFilter, q
 
 export type ServerTab = 'summary' | 'guests' | 'storage' | 'sensors' | 'backups' | 'system';
 
-export const SERVER_TAB_WORDS: Record<ServerTab, string> = {
-  summary: 'Summary',
-  guests: 'Machines',
-  storage: 'Storage',
-  sensors: 'Sensors',
-  backups: 'Backups',
-  system: 'System',
-};
+/** A server's tabs' names, in a locale (English when none is given). */
+export function serverTabWords(locale?: string | null): Record<ServerTab, string> {
+  return { ...clientTree(locale, HOSTS_MODEL_WORDS).serverTabs };
+}
+
+export const SERVER_TAB_WORDS: Record<ServerTab, string> = serverTabWords('en');
 
 /** A server's tabs (mock 2: Summary · Guests · Storage · Sensors · Backups · System); every server gets all six. */
 export const SERVER_TABS: readonly ServerTab[] = [
@@ -589,21 +627,18 @@ export type GuestTab =
   | 'replication'
   | 'tasks';
 
-export const GUEST_TAB_WORDS: Record<GuestTab, string> = {
-  summary: 'Summary',
-  hardware: 'Hardware',
-  options: 'Options',
-  cloudinit: 'Cloud-Init',
-  snapshots: 'Snapshots',
-  backups: 'Backups',
-  firewall: 'Firewall',
-  replication: 'Replication',
-  tasks: 'Tasks',
-};
+/** A guest's tabs' names, in a locale (English when none is given). */
+export function guestTabWords(locale?: string | null): Record<GuestTab, string> {
+  const { resources: _resources, ...words } = clientTree(locale, HOSTS_MODEL_WORDS).guestTabs;
+  return words;
+}
+
+export const GUEST_TAB_WORDS: Record<GuestTab, string> = guestTabWords('en');
 
 /** A tab's word for this guest: a container's Hardware is its Resources (Proxmox's word, Rackoon's `tabs.ts`). */
-export function guestTabWord(tab: GuestTab, kind: HostGuest['kind']): string {
-  return tab === 'hardware' && kind === 'container' ? 'Resources' : GUEST_TAB_WORDS[tab];
+export function guestTabWord(tab: GuestTab, kind: HostGuest['kind'], locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).guestTabs;
+  return tab === 'hardware' && kind === 'container' ? w.resources : w[tab];
 }
 
 /** Proxmox VE and Incus guests can be changed from Whombat. */
@@ -651,41 +686,47 @@ export interface PowerActionView {
 }
 
 /** What may be done to a guest's power now, in the order the menu lists them. */
-export function powerActions(g: Pick<HostGuest, 'state' | 'platform' | 'kind' | 'name'>): PowerActionView[] {
+export function powerActions(
+  g: Pick<HostGuest, 'state' | 'platform' | 'kind' | 'name'>,
+  locale?: string | null,
+): PowerActionView[] {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).power;
   const on = g.state === 'running' || g.state === 'unhealthy';
-  const n = g.name;
+  const name = g.name;
   if (g.state === 'paused')
     return [
-      { action: 'resume', label: 'Resume', confirm: false },
-      { action: 'stop', label: 'Stop', confirm: true, question: `Stop ${n} now?`, serious: true },
+      { action: 'resume', label: w.resume, confirm: false },
+      {
+        action: 'stop',
+        label: w.stop,
+        confirm: true,
+        question: interpolate(w.stopNow, { name }),
+        serious: true,
+      },
     ];
-  if (!on) return [{ action: 'start', label: 'Start', confirm: false }];
+  if (!on) return [{ action: 'start', label: w.start, confirm: false }];
   if (g.platform === 'docker')
     return [
+      { action: 'restart', label: w.restart, confirm: true, question: interpolate(w.restartAsk, { name }) },
       {
-        action: 'restart',
-        label: 'Restart',
+        action: 'stop',
+        label: w.stop,
         confirm: true,
-        question: `Restart ${n}? It’s down for a moment.`,
+        question: interpolate(w.stopAsk, { name }),
+        serious: true,
       },
-      { action: 'stop', label: 'Stop', confirm: true, question: `Stop ${n}?`, serious: true },
     ];
   const list: PowerActionView[] = [
-    {
-      action: 'shutdown',
-      label: 'Shut down',
-      confirm: true,
-      question: `Shut ${n} down? It closes its programs first.`,
-    },
-    { action: 'reboot', label: 'Restart', confirm: true, question: `Restart ${n}? It’s down for a moment.` },
+    { action: 'shutdown', label: w.shutdown, confirm: true, question: interpolate(w.shutdownAsk, { name }) },
+    { action: 'reboot', label: w.restart, confirm: true, question: interpolate(w.restartAsk, { name }) },
   ];
   if (g.kind === 'vm' && g.platform !== 'incus')
-    list.push({ action: 'pause', label: 'Pause', confirm: false });
+    list.push({ action: 'pause', label: w.pause, confirm: false });
   list.push({
     action: 'force_stop',
-    label: 'Force stop',
+    label: w.forceStop,
     confirm: true,
-    question: `Force ${n} off? Like pulling the plug: anything unsaved is lost.`,
+    question: interpolate(w.forceStopAsk, { name }),
     serious: true,
   });
   return list;
@@ -696,22 +737,28 @@ export function isDestructiveAction(a: HostGuestAction): boolean {
 }
 
 /** The toast after an action was accepted (“Restarting arnica-prod-nest-01.”). */
-export function actionAcceptedText(action: HostGuestAction, name: string, noop?: boolean): string {
-  if (noop) return `${name} already is that way.`;
-  const verb: Partial<Record<HostGuestAction, string>> = {
-    start: 'Starting',
-    shutdown: 'Shutting down',
-    reboot: 'Restarting',
-    restart: 'Restarting',
-    stop: 'Stopping',
-    force_stop: 'Forcing off',
-    pause: 'Pausing',
-    resume: 'Resuming',
-    snapshot_create: 'Taking a snapshot of',
-    snapshot_restore: 'Going back to the snapshot on',
-    snapshot_delete: 'Removing the snapshot of',
+export function actionAcceptedText(
+  action: HostGuestAction,
+  name: string,
+  noop?: boolean,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, HOSTS_MODEL_WORDS).accepted;
+  if (noop) return interpolate(w.noop, { name });
+  const said: Partial<Record<HostGuestAction, string>> = {
+    start: w.start,
+    shutdown: w.shutdown,
+    reboot: w.reboot,
+    restart: w.restart,
+    stop: w.stop,
+    force_stop: w.force_stop,
+    pause: w.pause,
+    resume: w.resume,
+    snapshot_create: w.snapshot_create,
+    snapshot_restore: w.snapshot_restore,
+    snapshot_delete: w.snapshot_delete,
   };
-  return `${verb[action] ?? 'Working on'} ${name}.`;
+  return interpolate(said[action] ?? w.other, { name });
 }
 
 /* Watch --------------------------------------------------------------------------------------------- */

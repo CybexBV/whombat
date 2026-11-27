@@ -8,7 +8,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RUN_ATTENTION_LABEL } from '@whombat/client';
+import { runAttentionLabel } from '@whombat/client';
 import { useRun, useSubscription } from '@whombat/client/react';
 import { topics } from '@whombat/core';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
@@ -27,7 +27,7 @@ import {
   runScreen,
   type StepMarker,
 } from '../data/run';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -141,6 +141,7 @@ function StepRow({ step }: { step: RunStepView }) {
 }
 
 export function RunScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -181,7 +182,7 @@ export function RunScreen({ route, navigation }: Props) {
   const pr = detail.run.prNumber
     ? pullRequestTarget(bootstrap.sidebar.branchRooms, detail.run.prNumber, room?.repo)
     : null;
-  const buttons = runControlButtons(detail.run, model.agentName);
+  const buttons = runControlButtons(detail.run, model.agentName, rawLocale);
   const press = (b: RunControlButton) => {
     const go = () => control.act(b.action, detail.run, model.agentName);
     if (!b.confirm) return go();
@@ -255,7 +256,7 @@ export function RunScreen({ route, navigation }: Props) {
               style={{ textAlign: 'center' }}
             >
               <Text size={14.5} weight={600} color={theme.colors.warn}>
-                {RUN_ATTENTION_LABEL}
+                {runAttentionLabel(rawLocale)}
               </Text>
               {` · ${model.attention}`}
             </Text>
@@ -275,7 +276,7 @@ export function RunScreen({ route, navigation }: Props) {
         >
           <View
             accessibilityRole="progressbar"
-            accessibilityLabel={`Run #${model.number} progress`}
+            accessibilityLabel={tMobile('screens2.run.progress', { number: model.number })}
             accessibilityValue={{ min: 0, max: 100, now: Math.round(model.progress) }}
             style={{ height: 6, borderRadius: 3, backgroundColor: theme.colors.sf2, overflow: 'hidden' }}
           >
@@ -391,7 +392,12 @@ export function RunScreen({ route, navigation }: Props) {
                 label={`PR #${pr.number}`}
                 variant="secondary"
                 size="lg"
-                onPress={() => navigation.navigate('PullRequest', { ...pr, back: `Run #${model.number}` })}
+                onPress={() =>
+                  navigation.navigate('PullRequest', {
+                    ...pr,
+                    back: tMobile('screens2.run.number', { number: model.number }),
+                  })
+                }
                 accessibilityHint={tMobile('screens.opens-the-pull-request-checks-files-changed-and')}
                 style={{ flex: 1 }}
               />

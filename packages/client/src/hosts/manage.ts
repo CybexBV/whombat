@@ -5,6 +5,9 @@
  * into the hosts service's fields (`newId` → `new_id`). Pure, shared by the web and Android.
  */
 import type { HostChoices, HostManageOp, HostManageReadResult } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_ACTIONS_WORDS } from '../i18n/messages/connectionsHosts/actions';
 import { cidr4Error, ip4Error } from './config';
 
 export type FormErrors<F> = Partial<Record<keyof F, string>>;
@@ -690,28 +693,13 @@ export function downloadParams(d: {
 /* Words --------------------------------------------------------------------------------------------- */
 
 /** The words after a change was accepted: done, or started on the host (its result comes as a task). */
-export function manageDoneText(op: HostManageOp, name: string, started: boolean): string {
-  const words: Partial<Record<HostManageOp, [string, string]>> = {
-    'config.set': [`Saved ${name}’s settings.`, `Saving ${name}’s settings.`],
-    'disk.resize': [`Grew ${name}’s disk.`, `Growing ${name}’s disk.`],
-    'disk.move': [`Moved ${name}’s disk.`, `Moving ${name}’s disk.`],
-    'guest.create': [`Created ${name}.`, `Creating ${name}.`],
-    'guest.clone': [`Cloned ${name}.`, `Cloning ${name}.`],
-    'guest.template': [`Made ${name} a template.`, `Making ${name} a template.`],
-    'guest.delete': [`Deleted ${name}.`, `Deleting ${name}.`],
-    'guest.migrate': [`Moved ${name}.`, `Moving ${name}. A live move takes about a minute.`],
-    'backup.create': [`Backed up ${name}.`, `Backing up ${name}.`],
-    'backup.restore': [`Restored ${name}.`, `Restoring ${name}.`],
-    'backup.delete': ['Deleted the backup.', 'Deleting the backup.'],
-    'content.download': [`Downloaded ${name}.`, `Downloading ${name}.`],
-    'content.delete': [`Deleted ${name}.`, `Deleting ${name}.`],
-    'appliance.download': [`Downloaded ${name}.`, `Downloading ${name}.`],
-    'firewall.rule_add': ['Added the rule.', 'Adding the rule.'],
-    'firewall.rule_update': ['Changed the rule.', 'Changing the rule.'],
-    'firewall.rule_delete': ['Removed the rule.', 'Removing the rule.'],
-    'firewall.options': ['Saved the firewall.', 'Saving the firewall.'],
-    'task.stop': ['Stopped the task.', 'Stopping the task.'],
-  };
-  const w = words[op];
-  return w ? w[started ? 1 : 0] : started ? 'Started.' : 'Done.';
+export function manageDoneText(
+  op: HostManageOp,
+  name: string,
+  started: boolean,
+  locale?: string | null,
+): string {
+  const done = clientTree(locale, HOSTS_ACTIONS_WORDS).done;
+  const w = Object.hasOwn(done, op) ? done[op as keyof typeof done] : done.other;
+  return interpolate(started ? w.started : w.done, { name });
 }

@@ -14,7 +14,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { needsYouWords, nextAt, TEAM_REPORT_WORDS } from '@whombat/client';
+import { needsYouWords, nextAt, teamReportWords } from '@whombat/client';
 import {
   useApproval,
   useChangeWindow,
@@ -53,6 +53,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Approval'>;
 
 export function ApprovalScreen({ route, navigation }: Props) {
   const { rawLocale, tClient } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const approvalCopy = approvalCardWords(rawLocale);
   const needsYouWordsHere = needsYouWords(rawLocale);
 
@@ -167,7 +168,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
       {
         onSuccess: (result) => {
           if (result.status === 'ok')
-            showNotice(`Approved. It runs at ${formatClock(executeAt, ctx.timeZone)}.`);
+            showNotice(tMobile('screens2.approval.runsAt', { time: formatClock(executeAt, ctx.timeZone) }));
         },
       },
     );
@@ -332,7 +333,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
               <View
                 key={c.id}
                 accessible
-                accessibilityLabel={`${c.label}: ${c.met ? 'met' : 'not yet'}, ${c.note}`}
+                accessibilityLabel={`${c.label}: ${tMobile(c.met ? 'screens2.approval.met' : 'screens2.approval.notMet')}, ${c.note}`}
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -381,7 +382,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
             {/* The exact command, wrapped (never wider than the screen) and selectable to copy. */}
             <View
               accessible
-              accessibilityLabel={`The command: ${model.content.text}`}
+              accessibilityLabel={tMobile('screens2.approval.command', { text: model.content.text })}
               style={{
                 borderRadius: 14,
                 backgroundColor: theme.colors.code,
@@ -401,7 +402,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
             </Text>
             <View
               accessible
-              accessibilityLabel={`The whole message: ${model.content.text}`}
+              accessibilityLabel={tMobile('screens2.approval.wholeMessage', { text: model.content.text })}
               style={{
                 borderRadius: 18,
                 backgroundColor: theme.colors.sf,
@@ -474,7 +475,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
           {editDraft ? (
             // The assistant's draft report: the form takes the card's place, so back returns where it was opened.
             <Button
-              label={TEAM_REPORT_WORDS.edit}
+              label={teamReportWordsHere.edit}
               variant="secondary"
               size="lg"
               wrap={large}

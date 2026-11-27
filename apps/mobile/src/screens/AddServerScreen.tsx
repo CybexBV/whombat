@@ -12,25 +12,25 @@
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   addServerPrefill,
-  COMMAND_COPY,
+  commandCopy,
   commandOutcome,
   commitOutcomeText,
-  HOST_CONTROL_QUESTION,
+  hostControlQuestion,
   hostErrorInfo,
-  INSTALL_KEY_CHANGED_AGAIN,
   type InstallStep,
   installBody,
   installFailureCard,
   installHostKeyNote,
+  installKeyChangedAgain,
   installOutcome,
   installRunning,
   installSteps,
   installTitle,
   isHostsUnavailable,
   NEW_KEY,
-  SIGN_IN_COPY,
   type SignInErrors,
   type SignInForm,
+  signInCopy,
   signInFormDefaults,
   signInFormErrors,
   signInFormForRetry,
@@ -61,7 +61,7 @@ import { ActivityIndicator, Alert, ScrollView, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ADD_SERVER_COPY,
+  addServerCopy,
   carriesOnText,
   type KeyRow,
   keyRows,
@@ -71,7 +71,7 @@ import {
   stepSpoken,
 } from '../data/addServer';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -91,23 +91,45 @@ type Props = NativeStackScreenProps<RootStackParamList, 'AddServer'>;
 type Way = 'signIn' | 'command';
 
 /** The “‹ …” label: what the screen under this one is (a tab's name, a chat's title), else “Back”. */
-function backLabel(navigation: Props['navigation'], key: string): string {
+function backLabel(navigation: Props['navigation'], key: string, locale?: string | null): string {
+  const tr = mobileTranslator(locale);
+  const back = tr.t('screens2.common.back');
+  // A tab's own name in the person's language; its route name is only an id.
+  const tabWord = (name: string): string => {
+    const place = TAB_PLACES[name];
+    return place ? tr.t(place) : back;
+  };
   const state = navigation.getState();
   const at = state.routes.findIndex((r) => r.key === key);
   const under = state.routes[(at < 0 ? state.routes.length : at) - 1];
-  if (!under) return 'Back';
+  if (!under) return back;
   if (under.name === 'Tabs') {
     const tabs = under.state as { index?: number; routes: { name: string }[] } | undefined;
     const tab = tabs?.routes[tabs.index ?? 0]?.name;
-    if (tab) return tab;
+    if (tab) return tabWord(tab);
     const asked = (under.params as { screen?: unknown } | undefined)?.screen;
-    return typeof asked === 'string' ? asked : 'Back';
+    return typeof asked === 'string' ? tabWord(asked) : back;
   }
   const title = (under.params as { title?: unknown } | undefined)?.title;
-  return typeof title === 'string' && title ? title : 'Back';
+  return typeof title === 'string' && title ? title : back;
 }
 
+const TAB_PLACES: Record<
+  string,
+  'places.chat' | 'places.overview' | 'places.inbox' | 'places.automations' | 'places.settings'
+> = {
+  ChatRoom: 'places.chat',
+  Dashboard: 'places.overview',
+  NeedsYou: 'places.inbox',
+  Automations: 'places.automations',
+  Settings: 'places.settings',
+};
+
 export function AddServerScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
+  const signInCopyHere = signInCopy(rawLocale);
+  const commandCopyHere = commandCopy(rawLocale);
   const { t: tMobile } = useMobileT();
   const insets = useSafeAreaInsets();
   const { slug, currentBootstrap } = useBurrowBase();
@@ -121,7 +143,7 @@ export function AddServerScreen({ route, navigation }: Props) {
       refetchInterval: 10_000,
     },
   );
-  const [back] = useState(() => route.params?.back ?? backLabel(navigation, route.key));
+  const [back] = useState(() => route.params?.back ?? backLabel(navigation, route.key, rawLocale));
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const openServer = (serverId: string, name: string) =>
     navigation.replace('Thing', { thingId: thingId('server', serverId), title: name, back });
@@ -234,8 +256,8 @@ export function AddServerScreen({ route, navigation }: Props) {
           value={way}
           onChange={setWay}
           options={[
-            { value: 'signIn', label: SIGN_IN_COPY.tab },
-            { value: 'command', label: COMMAND_COPY.tab },
+            { value: 'signIn', label: signInCopyHere.tab },
+            { value: 'command', label: commandCopyHere.tab },
           ]}
         />
       </>
@@ -311,11 +333,11 @@ function LevelControl({
   return (
     <View style={{ gap: 8 }}>
       <Text size={13} weight={500} color={theme.colors.ink2}>
-        {HOST_CONTROL_QUESTION}
+        {hostControlQuestion(rawLocale)}
       </Text>
       <View
         accessibilityRole="radiogroup"
-        accessibilityLabel={HOST_CONTROL_QUESTION}
+        accessibilityLabel={hostControlQuestion(rawLocale)}
         style={{
           flexDirection: 'row',
           gap: 2,
@@ -404,6 +426,8 @@ function SignInOnce({
   onStarted: (job: HostInstall) => void;
 }) {
   const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
+  const signInCopyHere = signInCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -425,7 +449,7 @@ function SignInOnce({
 
   const submit = async () => {
     if (busy) return;
-    const errs = signInFormErrors(g);
+    const errs = signInFormErrors(g, rawLocale);
     setErrors(errs);
     setRefusal(null);
     if (Object.values(errs).some(Boolean)) return;
@@ -455,7 +479,7 @@ function SignInOnce({
         <Footer bottomInset={bottomInset}>
           <FormMessage text={refusal} />
           <Button
-            label={busy ? SIGN_IN_COPY.adding : SIGN_IN_COPY.add}
+            label={busy ? signInCopyHere.adding : signInCopyHere.add}
             size="lg"
             busy={busy}
             onPress={() => void submit()}
@@ -468,10 +492,10 @@ function SignInOnce({
         <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
           <View style={{ flex: 1.75, minWidth: 0 }}>
             <FormField
-              label={SIGN_IN_COPY.address}
+              label={signInCopyHere.address}
               value={f.address}
               onChangeText={(v) => set('address', v)}
-              placeholder={SIGN_IN_COPY.addressPlaceholder}
+              placeholder={signInCopyHere.addressPlaceholder}
               error={errors.address}
               mono
               keyboardType="url"
@@ -482,7 +506,7 @@ function SignInOnce({
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <FormField
-              label={SIGN_IN_COPY.username}
+              label={signInCopyHere.username}
               value={f.username}
               onChangeText={(v) => set('username', v)}
               error={errors.username}
@@ -496,11 +520,11 @@ function SignInOnce({
         {f.method === 'password' ? (
           <View style={{ gap: 2 }}>
             <FormField
-              label={SIGN_IN_COPY.password}
+              label={signInCopyHere.password}
               value={f.password}
               onChangeText={(v) => set('password', v)}
               error={errors.password}
-              hint={SIGN_IN_COPY.passwordHint}
+              hint={signInCopyHere.passwordHint}
               secret
               maxLength={1024}
               returnKeyType="go"
@@ -511,24 +535,24 @@ function SignInOnce({
         ) : (
           <View style={{ gap: 8 }}>
             <Text size={13} weight={500} color={theme.colors.ink2}>
-              {SIGN_IN_COPY.key}
+              {signInCopyHere.key}
             </Text>
             {vault.isPending ? (
               <SkeletonRows count={2} lines={1} label={tMobile('screens.loading-your-keys')} />
             ) : keys.length ? (
               <KeyChoices
-                label={SIGN_IN_COPY.key}
+                label={signInCopyHere.key}
                 keys={keys}
                 value={g.entryId}
                 onChange={(id) => set('entryId', id)}
               />
             ) : (
-              <QuietText>{SIGN_IN_COPY.noKeys}</QuietText>
+              <QuietText>{signInCopyHere.noKeys}</QuietText>
             )}
             <FormMessage text={errors.entryId} />
-            <TextLink label={SIGN_IN_COPY.usePassword} onPress={() => set('method', 'password')} />
+            <TextLink label={signInCopyHere.usePassword} onPress={() => set('method', 'password')} />
             <FormField
-              label={SIGN_IN_COPY.sudoPassword}
+              label={signInCopyHere.sudoPassword}
               value={f.sudoPassword}
               onChangeText={(v) => set('sudoPassword', v)}
               secret
@@ -540,7 +564,7 @@ function SignInOnce({
         )}
         {named ? (
           <FormField
-            label={SIGN_IN_COPY.name}
+            label={signInCopyHere.name}
             value={f.name}
             onChangeText={(v) => set('name', v)}
             error={errors.name}
@@ -550,14 +574,14 @@ function SignInOnce({
           />
         ) : null}
         <View style={{ gap: 10 }}>
-          <Tickbox label={SIGN_IN_COPY.keepKey} on={f.keepKey} onPress={() => set('keepKey', !f.keepKey)} />
+          <Tickbox label={signInCopyHere.keepKey} on={f.keepKey} onPress={() => set('keepKey', !f.keepKey)} />
           {f.keepKey ? (
             <View style={{ gap: 8, paddingLeft: 34 }}>
               <Text size={13} weight={500} color={theme.colors.ink2}>
-                {SIGN_IN_COPY.keepKeyWhich}
+                {signInCopyHere.keepKeyWhich}
               </Text>
               <KeyChoices
-                label={SIGN_IN_COPY.keepKeyWhich}
+                label={signInCopyHere.keepKeyWhich}
                 keys={keys}
                 value={g.keepKeyEntry || NEW_KEY}
                 onChange={(id) => set('keepKeyEntry', id)}
@@ -637,6 +661,8 @@ function KeyChoices({
   onChange: (id: string) => void;
   withNew?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const signInCopyHere = signInCopy(rawLocale);
   const theme = useTheme();
   const options = [
     ...keys.map((k) => ({
@@ -650,9 +676,9 @@ function KeyChoices({
       ? [
           {
             id: NEW_KEY,
-            title: SIGN_IN_COPY.newKey,
-            line: SIGN_IN_COPY.newKeyHint,
-            spoken: `${SIGN_IN_COPY.newKey}. ${SIGN_IN_COPY.newKeyHint}`,
+            title: signInCopyHere.newKey,
+            line: signInCopyHere.newKeyHint,
+            spoken: `${signInCopyHere.newKey}. ${signInCopyHere.newKeyHint}`,
             mono: false,
           },
         ]
@@ -727,6 +753,8 @@ function CommandBlock({
   enrollment: HostEnrollment | undefined;
   error: string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const commandCopyHere = commandCopy(rawLocale);
   const theme = useTheme();
   if (enrollment)
     return (
@@ -737,12 +765,12 @@ function CommandBlock({
           </Text>
         </View>
         <Button
-          label={COMMAND_COPY.copy}
+          label={commandCopyHere.copy}
           variant="secondary"
-          onPress={() => void copyToClipboard(enrollment.installCommand, COMMAND_COPY.copied)}
+          onPress={() => void copyToClipboard(enrollment.installCommand, commandCopyHere.copied, rawLocale)}
         />
         <Text size={13} lh={1.45} color={theme.colors.mut}>
-          {COMMAND_COPY.valid}
+          {commandCopyHere.valid}
         </Text>
       </>
     );
@@ -750,11 +778,11 @@ function CommandBlock({
   return (
     <View
       accessible
-      accessibilityLabel={COMMAND_COPY.making}
+      accessibilityLabel={commandCopyHere.making}
       style={{ backgroundColor: theme.colors.code, borderRadius: 10, padding: 12 }}
     >
       <Text size={12.5} mono color={theme.code.command}>
-        {COMMAND_COPY.making}
+        {commandCopyHere.making}
       </Text>
     </View>
   );
@@ -786,7 +814,7 @@ function useCommand(
       .current(control ? { params: { burrow: slug }, body: { control } } : { params: { burrow: slug } })
       .then((r) => {
         if (r.status === 'ok') onMadeRef.current(r.data);
-        else setError(commitOutcomeText(r, rawLocale) ?? ADD_SERVER_COPY.commandFailed);
+        else setError(commitOutcomeText(r, rawLocale) ?? addServerCopy(rawLocale).commandFailed);
       })
       .catch((err: unknown) => {
         asked.current.delete(key);
@@ -819,6 +847,9 @@ function RunCommand({
   onOpen: (serverId: string, name: string) => void;
   onDone: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
+  const commandCopyHere = commandCopy(rawLocale);
   const theme = useTheme();
   const enrollment = commands[control];
   const error = useCommand(slug, control, { control }, enrollment, (e) => onMade(control, e));
@@ -826,7 +857,7 @@ function RunCommand({
   const all = useHostEnrollments(enrollment ? { params: { burrow: slug }, query: { state: 'all' } } : null, {
     refetchInterval: 10_000,
   });
-  const done = commandOutcome(enrollment?.id ?? null, all.data?.items ?? []);
+  const done = commandOutcome(enrollment?.id ?? null, all.data?.items ?? [], rawLocale);
   return (
     <Panel
       footer={
@@ -845,7 +876,7 @@ function RunCommand({
       {header}
       <View style={{ gap: 12 }}>
         <Text size={15} lh={1.5} color={theme.colors.ink2}>
-          {COMMAND_COPY.lead}
+          {commandCopyHere.lead}
         </Text>
         <CommandBlock enrollment={enrollment} error={error} />
         {done ? (
@@ -871,12 +902,15 @@ function WaitingForYou({
   now: number;
   old?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
+  const commandCopyHere = commandCopy(rawLocale);
   const theme = useTheme();
-  const rows = pendingRows(items, now);
+  const rows = pendingRows(items, now, rawLocale);
   return (
     <View style={{ gap: 8 }}>
       <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut} accessibilityRole="header">
-        {COMMAND_COPY.waiting.toUpperCase()}
+        {commandCopyHere.waiting.toUpperCase()}
       </Text>
       {rows.length ? (
         rows.map((row) => <PendingRow key={row.id} slug={slug} row={row} />)
@@ -891,6 +925,7 @@ function WaitingForYou({
 
 function PendingRow({ slug, row }: { slug: string; row: PendingRowView }) {
   const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -898,7 +933,7 @@ function PendingRow({ slug, row }: { slug: string; row: PendingRowView }) {
   const reject = useHostsChange(api.hosts.rejectEnrollment);
   const [name, setName] = useState(row.hostname ?? '');
   const [busy, setBusy] = useState(false);
-  const bad = serverNameProblem(name);
+  const bad = serverNameProblem(name, rawLocale);
   const run = async (go: () => Promise<Parameters<typeof commitOutcomeText>[0]>, done: string) => {
     setBusy(true);
     try {
@@ -1000,6 +1035,7 @@ function JobView({
   onOpen: (serverId: string, name: string) => void;
 }) {
   const { rawLocale } = useI18n();
+  const ADD_SERVER_COPY = addServerCopy(rawLocale);
 
   const theme = useTheme();
   const followed = useHostInstall(slug, initial.id);
@@ -1008,14 +1044,14 @@ function JobView({
   const view = followed.data ?? initial;
   const running = installRunning(view);
   const names = (fleet.data?.servers ?? []).flatMap((x) => [x.id, x.name]);
-  const steps = installSteps(view);
-  const note = installHostKeyNote(view);
-  const outcome = installOutcome(view, names);
+  const steps = installSteps(view, rawLocale);
+  const note = installHostKeyNote(view, rawLocale);
+  const outcome = installOutcome(view, names, rawLocale);
   const lost = followed.error && !followed.data ? hostErrorInfo(followed.error, rawLocale).message : null;
   const failed = lost ? { text: lost, detail: null } : outcome?.kind === 'failed' ? outcome : null;
   const added = outcome && outcome.kind !== 'failed' ? outcome : null;
   // One plain card with the one step that helps (connect-in-chat.md); a lost job only says so.
-  const card = !lost && outcome?.kind === 'failed' ? installFailureCard(view, outcome) : null;
+  const card = !lost && outcome?.kind === 'failed' ? installFailureCard(view, outcome, rawLocale) : null;
   const trust = useVaultWrite(api.vault.trustSshHostKey, slug);
   const [trustProblem, setTrustProblem] = useState<string | null>(null);
   const [detail, setDetail] = useState(false);
@@ -1030,18 +1066,18 @@ function JobView({
         await trust.mutateAsync({ params: { burrow: slug, ...pin }, body: { fingerprint } });
       onRetry();
     } catch {
-      setTrustProblem(INSTALL_KEY_CHANGED_AGAIN);
+      setTrustProblem(installKeyChangedAgain(rawLocale));
     }
   }
   useEffect(() => {
     if (!running) refresh(['hosts.fleet', 'hosts.status', 'home.overview']);
   }, [running, refresh]);
   // Leaving while it runs: Whombat carries on (the web's note on Hide).
-  const leaving = useRef({ running, name: view.serverName });
-  leaving.current = { running, name: view.serverName };
+  const leaving = useRef({ running, name: view.serverName, locale: rawLocale });
+  leaving.current = { running, name: view.serverName, locale: rawLocale };
   useEffect(
     () => () => {
-      if (leaving.current.running) showNotice(carriesOnText(leaving.current.name));
+      if (leaving.current.running) showNotice(carriesOnText(leaving.current.name, leaving.current.locale));
     },
     [],
   );
@@ -1051,7 +1087,7 @@ function JobView({
         contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 24, gap: 16 }}
         showsVerticalScrollIndicator={false}
       >
-        <Title>{installTitle(view)}</Title>
+        <Title>{installTitle(view, rawLocale)}</Title>
         <View accessibilityLiveRegion="polite">
           {steps.map((step, i) => (
             <StepRow key={step.key} step={step} first={i === 0} />
@@ -1162,6 +1198,7 @@ function JobView({
 
 /** A step: its mark (✓ done, a spinner now, an empty ring next or not yet, ✗ where it stopped), words, what it runs. */
 function StepRow({ step, first }: { step: InstallStep; first: boolean }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const mark = (() => {
     switch (step.state) {
@@ -1193,7 +1230,7 @@ function StepRow({ step, first }: { step: InstallStep; first: boolean }) {
   return (
     <View
       accessible
-      accessibilityLabel={stepSpoken(step)}
+      accessibilityLabel={stepSpoken(step, rawLocale)}
       style={{
         flexDirection: 'row',
         alignItems: 'flex-start',

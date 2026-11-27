@@ -20,13 +20,6 @@ export function chatsCopy(locale?: string) {
 export const CHATS_COPY = chatsCopy();
 
 /** Under “Ask about pve-02” (mock 2): what the agent sees about the subject (“Neo sees …”). */
-export function askAboutLine(subject: ChatSubject, w: AgentWords): string {
-  switch (subject.kind) {
-    case 'server':
-      return `${w.Name} sees this server’s sensors, guests and history`;
-    case 'connection':
-      return `${w.Name} sees what this connection shows`;
-    case 'device':
-      return `${w.Name} sees this device’s readings`;
-  }
+export function askAboutLine(subject: ChatSubject, w: AgentWords, locale?: string): string {
+  return mobileTranslator(locale).t(`data.chats.sees.${subject.kind}`, { name: w.Name });
 }

@@ -16,6 +16,7 @@ import { type ApplianceSession, sessionOps } from '@whombat/client/session';
 import type { ReachGetOutput } from '@whombat/protocol/session';
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
+import { useI18n } from '../i18n';
 
 /**
  * The iPhone shows no price, no sign-up and no way to buy (LNK-44): Link's state is said, but turning it on and the
@@ -33,6 +34,7 @@ export interface PhoneReach {
 }
 
 export function usePhoneReach(session: ApplianceSession, options: { pollMs?: number } = {}): PhoneReach {
+  const { rawLocale } = useI18n();
   const [reach, setReach] = useState<ReachGetOutput | null | undefined>(undefined);
   const [asked, setAsked] = useState(0);
   const [busy, setBusy] = useState<'on' | 'off' | null>(null);
@@ -63,12 +65,12 @@ export function usePhoneReach(session: ApplianceSession, options: { pollMs?: num
         const out = on ? await sessionOps.linkOn(session) : await sessionOps.linkOff(session);
         setReach((r) => (r ? { ...r, link: out.link } : r));
       } catch (e) {
-        setError(whombatLinkErrorText(e));
+        setError(whombatLinkErrorText(e, rawLocale));
       } finally {
         setBusy(null);
       }
     },
-    [session],
+    [session, rawLocale],
   );
   return {
     reach,
@@ -124,11 +126,12 @@ function useSharedTailscaleAnswer(
 
 /** Turning Tailscale on from the Link-ended strip or Reach (LNK-06a), followed until Tailscale's sign-in link shows. */
 export function useTailscaleTurnOn(session: ApplianceSession) {
+  const { rawLocale } = useI18n();
   const api = useMemo(() => tailscaleApi(session), [session]);
   const [answer, setAnswer] = useSharedTailscaleAnswer(session);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
-  const v = tailscaleView(answer);
+  const v = tailscaleView(answer, rawLocale);
   // biome-ignore lint/correctness/useExhaustiveDependencies: each answer asks again after its own wait.
   useEffect(() => {
     if (!v.pollMs) return;
@@ -141,7 +144,7 @@ export function useTailscaleTurnOn(session: ApplianceSession) {
     try {
       setAnswer(tailscaleAnswer(await api.on()));
     } catch (error) {
-      setNote(tailscaleErrorText(error));
+      setNote(tailscaleErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }

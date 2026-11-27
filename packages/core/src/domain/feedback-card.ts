@@ -3,16 +3,19 @@
  * Kept apart from `feedback.ts` so `cards.ts` can include the card without importing messages.
  */
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { FeedbackReportId } from '../ids.js';
 import { Timestamp } from './common.js';
 
 export const FeedbackReportType = z.enum(['bug', 'feature']);
 export type FeedbackReportType = z.infer<typeof FeedbackReportType>;
 
-export const FEEDBACK_TYPE_LABELS: Record<FeedbackReportType, string> = {
-  bug: 'Bug report',
-  feature: 'Feature request',
-};
+/** A report's type, in a locale. */
+export function feedbackTypeLabels(locale?: string | null): Readonly<Record<FeedbackReportType, string>> {
+  return coreWords(locale, 'feedbackType', FeedbackReportType.options);
+}
+
+export const FEEDBACK_TYPE_LABELS: Record<FeedbackReportType, string> = feedbackTypeLabels('en');
 
 /** Reference shown to the visitor (`FB-7K3Q-9M2X`). An acknowledgement only; it opens nothing (FB-11). */
 export const FeedbackReference = z.string().regex(/^FB-[0-9A-HJKMNP-TV-Z]{4}-[0-9A-HJKMNP-TV-Z]{4}$/);
@@ -29,15 +32,12 @@ export const FeedbackOutcome = z.enum([
 ]);
 export type FeedbackOutcome = z.infer<typeof FeedbackOutcome>;
 
-export const FEEDBACK_OUTCOME_LABELS: Record<FeedbackOutcome, string> = {
-  confirmed_bug: 'Confirmed bug',
-  likely_bug: 'Likely bug',
-  needs_information: 'Needs information',
-  duplicate: 'Duplicate',
-  configuration_or_support: 'Configuration or support',
-  feature_request: 'Feature request',
-  insufficient_evidence: 'Insufficient evidence',
-};
+/** An assessment's outcome, in a locale. */
+export function feedbackOutcomeLabels(locale?: string | null): Readonly<Record<FeedbackOutcome, string>> {
+  return coreWords(locale, 'feedbackOutcome', FeedbackOutcome.options);
+}
+
+export const FEEDBACK_OUTCOME_LABELS: Record<FeedbackOutcome, string> = feedbackOutcomeLabels('en');
 
 /**
  * Where a report's assessment is. `not_configured`: the integration has no assessment agent. `paused`: its
@@ -55,27 +55,26 @@ export const FeedbackAssessmentState = z.enum([
 ]);
 export type FeedbackAssessmentState = z.infer<typeof FeedbackAssessmentState>;
 
-export const FEEDBACK_ASSESSMENT_STATE_LABELS: Record<FeedbackAssessmentState, string> = {
-  not_configured: 'Not assessed',
-  queued: 'Assessment queued',
-  running: 'Assessing',
-  done: 'Assessed',
-  failed: 'Assessment failed',
-  blocked: 'Assessment blocked',
-  paused: 'Assessment paused',
-};
+/** Where a report's assessment is, in a locale. */
+export function feedbackAssessmentStateLabels(
+  locale?: string | null,
+): Readonly<Record<FeedbackAssessmentState, string>> {
+  return coreWords(locale, 'feedbackState', FeedbackAssessmentState.options);
+}
+
+export const FEEDBACK_ASSESSMENT_STATE_LABELS: Record<FeedbackAssessmentState, string> =
+  feedbackAssessmentStateLabels('en');
 
 /** Internal lifecycle, separate from the assessment's classification. */
 export const FeedbackReportStatus = z.enum(['new', 'triaged', 'in_progress', 'resolved', 'closed']);
 export type FeedbackReportStatus = z.infer<typeof FeedbackReportStatus>;
 
-export const FEEDBACK_STATUS_LABELS: Record<FeedbackReportStatus, string> = {
-  new: 'New',
-  triaged: 'Triaged',
-  in_progress: 'In progress',
-  resolved: 'Resolved',
-  closed: 'Closed',
-};
+/** A report's status, in a locale. */
+export function feedbackStatusLabels(locale?: string | null): Readonly<Record<FeedbackReportStatus, string>> {
+  return coreWords(locale, 'feedbackStatus', FeedbackReportStatus.options);
+}
+
+export const FEEDBACK_STATUS_LABELS: Record<FeedbackReportStatus, string> = feedbackStatusLabels('en');
 
 export const REPORT_CARD_SUMMARY_MAX = 280;
 
@@ -105,15 +104,21 @@ export type ReportCard = z.infer<typeof ReportCard>;
 export const StoredReportCard = z.object({ kind: z.literal('report'), reportId: FeedbackReportId });
 
 /** Card header: `BUG REPORT · FB-7K3Q-9M2X` (web and mobile). */
-export function reportCardLabel(card: Pick<ReportCard, 'type' | 'reference'>): string {
-  return `${FEEDBACK_TYPE_LABELS[card.type].toUpperCase()} · ${card.reference}`;
+export function reportCardLabel(
+  card: Pick<ReportCard, 'type' | 'reference'>,
+  locale?: string | null,
+): string {
+  return `${feedbackTypeLabels(locale)[card.type].toUpperCase()} · ${card.reference}`;
 }
 
 /** Card state line: `Lumio · New · Likely bug` / `Lumio · New · Assessment queued`. */
-export function reportCardState(card: Pick<ReportCard, 'product' | 'status' | 'assessment'>): string {
+export function reportCardState(
+  card: Pick<ReportCard, 'product' | 'status' | 'assessment'>,
+  locale?: string | null,
+): string {
   const assessment =
     card.assessment.state === 'done' && card.assessment.outcome
-      ? FEEDBACK_OUTCOME_LABELS[card.assessment.outcome]
-      : FEEDBACK_ASSESSMENT_STATE_LABELS[card.assessment.state];
-  return `${card.product} · ${FEEDBACK_STATUS_LABELS[card.status]} · ${assessment}`;
+      ? feedbackOutcomeLabels(locale)[card.assessment.outcome]
+      : feedbackAssessmentStateLabels(locale)[card.assessment.state];
+  return `${card.product} · ${feedbackStatusLabels(locale)[card.status]} · ${assessment}`;
 }

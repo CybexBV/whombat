@@ -5,37 +5,51 @@
  * as it was then, folded into one line that opens it read-only. Shared by web and the phone. Pure.
  */
 import type { Message, MovedCard } from '@whombat/core';
-import { CARD_FRAME_WORDS } from './cardFrame';
-import { COUNCIL_WORDS, councilScoreText } from './council';
+import { interpolate } from '@whombat/core/i18n';
+import { CARD_FRAME_WORDS, cardFrameWords } from './cardFrame';
+import { COUNCIL_WORDS, councilScoreText, councilWords } from './council';
 import { delegationTaskView } from './delegation';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
 
-export const MOVED_CARD_WORDS = {
-  link: {
-    council: 'The council’s card is further down',
-    delegation: 'The Tasks card is further down',
-  } satisfies Record<MovedCard['kind'], string>,
-  /** The folded line of the card as it was here: “Tasks · earlier version · 5 tasks”. */
-  earlier: 'earlier version',
-  /** The status word of the card as it was, opened: it no longer does anything. */
-  earlierWord: 'Earlier version',
-  /** The folded line's link to the card as it is now. */
-  newest: 'Newest',
-  show: 'Show the earlier version',
-  hide: 'Hide the earlier version',
-} as const;
+/** Where a moved card went, in a locale (English when none). */
+export function movedCardWords(locale?: string | null) {
+  const w = clientTree(locale, CARDS_AREA_WORDS).moved;
+  return {
+    link: {
+      council: w.link.council,
+      delegation: w.link.delegation,
+    } satisfies Record<MovedCard['kind'], string>,
+    /** The folded line of the card as it was here: “Tasks · earlier version · 5 tasks”. */
+    earlier: w.earlier,
+    /** The status word of the card as it was, opened: it no longer does anything. */
+    earlierWord: w.earlierWord,
+    /** The folded line's link to the card as it is now. */
+    newest: w.newest,
+    show: w.show,
+    hide: w.hide,
+  };
+}
+
+/** Where a moved card went, in English. */
+export const MOVED_CARD_WORDS = movedCardWords();
 
 /** What the card as it was here said, in a few words: “5 tasks”, “2 of 3 answered”. */
-function earlierSummary(card: NonNullable<Message['card']>): string | null {
+function earlierSummary(card: NonNullable<Message['card']>, locale?: string | null): string | null {
+  const w = clientTree(locale, CARDS_AREA_WORDS).moved;
   if (card.kind === 'delegation') {
     const tasks = card.tasks.filter((t) => t.state !== 'skipped');
-    if (card.stage === 'offer') return `${tasks.length} ${tasks.length === 1 ? 'task' : 'tasks'}`;
+    if (card.stage === 'offer') return w.tasks(tasks.length);
     const done = tasks.filter((t) => t.state === 'done').length;
-    return `${done} of ${tasks.length} done`;
+    return interpolate(w.done, { done, of: tasks.length });
   }
   if (card.kind === 'council') {
     const round = card.members.filter((m) => m.role === 'member');
     if (!card.live) return null;
-    return `${round.filter((m) => m.state === 'done').length} of ${round.length} answered`;
+    return interpolate(w.answered, {
+      answered: round.filter((m) => m.state === 'done').length,
+      of: round.length,
+    });
   }
   return null;
 }
@@ -62,17 +76,19 @@ const TITLE_IN_LINE_MAX = 48;
 export function earlierCardLine(
   message: Pick<Message, 'earlierCard'>,
   thread: readonly ThreadRow[] = [],
+  locale?: string | null,
 ): string | null {
   const card = message.earlierCard;
   if (!card || (card.kind !== 'council' && card.kind !== 'delegation')) return null;
-  const kind = CARD_FRAME_WORDS.kinds[card.kind];
+  const kind = (locale ? cardFrameWords(locale) : CARD_FRAME_WORDS).kinds[card.kind];
   const title =
     card.kind === 'council' && councilsIn(thread) > 1
       ? card.title.length > TITLE_IN_LINE_MAX
         ? `${card.title.slice(0, TITLE_IN_LINE_MAX - 1).trimEnd()}…`
         : card.title
       : null;
-  return [kind, title, MOVED_CARD_WORDS.earlier, earlierSummary(card)].filter(Boolean).join(' · ');
+  const words = locale ? movedCardWords(locale) : MOVED_CARD_WORDS;
+  return [kind, title, words.earlier, earlierSummary(card, locale)].filter(Boolean).join(' · ');
 }
 
 /** Whether `card` is the moved one: the same kind of card for the same council or checklist. */
@@ -90,13 +106,14 @@ function holds(card: Message['card'], moved: MovedCard): boolean {
 export function movedCardLink(
   message: Pick<Message, 'id' | 'movedCard'>,
   messages: readonly Pick<Message, 'id' | 'card'>[],
+  locale?: string | null,
 ): { label: string; targetId: string } | null {
   const moved = message.movedCard;
   if (!moved) return null;
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i];
     if (m && m.id !== message.id && holds(m.card, moved))
-      return { label: MOVED_CARD_WORDS.link[moved.kind], targetId: m.id };
+      return { label: (locale ? movedCardWords(locale) : MOVED_CARD_WORDS).link[moved.kind], targetId: m.id };
   }
   return null;
 }
@@ -105,9 +122,13 @@ export function movedCardLink(
  * The card as it was, read out (screen readers get it in words, the drawn copy being inert): its title, then each task
  * by its number, or each member with its score or state. Null when the message keeps none.
  */
-export function earlierCardText(message: Pick<Message, 'earlierCard'>): string | null {
+export function earlierCardText(
+  message: Pick<Message, 'earlierCard'>,
+  locale?: string | null,
+): string | null {
   const card = message.earlierCard;
   if (!card) return null;
+  const w = clientTree(locale, CARDS_AREA_WORDS).moved;
   if (card.kind === 'delegation') {
     const tasks = card.tasks.filter((t) => t.state !== 'skipped');
     const offered = card.stage === 'offer';
@@ -116,17 +137,21 @@ export function earlierCardText(message: Pick<Message, 'earlierCard'>): string |
       offered
         ? t.picked
           ? ''
-          : ', not ticked'
-        : `, ${delegationTaskView(t, card, Date.parse(card.startedAt)).status.toLowerCase()}`;
-    return `${card.title}, as it was: ${tasks.map((t) => `${t.n}, ${t.title}${said(t)}`).join('; ')}.`;
+          : `, ${w.notTicked}`
+        : `, ${delegationTaskView(t, card, Date.parse(card.startedAt), null, locale).status.toLowerCase()}`;
+    return interpolate(w.asItWas, {
+      title: card.title,
+      list: tasks.map((t) => `${t.n}, ${t.title}${said(t)}`).join('; '),
+    });
   }
   if (card.kind === 'council') {
     const members = card.members.filter((m) => m.role === 'member');
+    const states = (locale ? councilWords(locale) : COUNCIL_WORDS).states;
     const said = members.map(
       (m) =>
-        `${m.name}, ${m.state === 'done' && m.score !== null ? councilScoreText(m.score) : COUNCIL_WORDS.states[m.state].toLowerCase()}`,
+        `${m.name}, ${m.state === 'done' && m.score !== null ? councilScoreText(m.score) : states[m.state].toLowerCase()}`,
     );
-    return `${card.title}, as it was: ${said.join('; ')}.`;
+    return interpolate(w.asItWas, { title: card.title, list: said.join('; ') });
   }
   return null;
 }

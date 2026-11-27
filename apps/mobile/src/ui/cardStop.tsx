@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { liveCardMenu, parseLiveCardPick } from '../data/workLine';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { CARD_TARGET } from './cardFrame';
@@ -66,9 +67,6 @@ export function CardStopButton({
   );
 }
 
-/** What VoiceOver and TalkBack call a live card's ⋯. */
-const CARD_MORE_LABEL = 'More for this card';
-
 /** A live card's ⋯ on its status line: iOS's own menu on iPhone, a sheet elsewhere. */
 export function CardCornerMenu({
   title,
@@ -82,10 +80,12 @@ export function CardCornerMenu({
   /** Stop… (asks first); null while it can't stop. */
   onStop: (() => void) | null;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   if (!onChange && !onStop) return null;
-  const menu = { ...liveCardMenu({ change: !!onChange, stop: !!onStop }), title };
+  const menu = { ...liveCardMenu({ change: !!onChange, stop: !!onStop, locale: rawLocale }), title };
   const pick = (id: string) => {
     const what = parseLiveCardPick(id);
     if (what === 'change') onChange?.();
@@ -102,7 +102,7 @@ export function CardCornerMenu({
   } as const;
   const face = <Ellipsis size={18} color={theme.colors.ink2} strokeWidth={1.75} />;
   return hasNativeMenu ? (
-    <NativeMenu spec={menu} onPick={pick} trigger="tap" label={CARD_MORE_LABEL} style={style}>
+    <NativeMenu spec={menu} onPick={pick} trigger="tap" label={tMobile('screens2.ui.cardMore')} style={style}>
       <View style={{ alignItems: 'center', justifyContent: 'center', flexGrow: 1 }}>{face}</View>
     </NativeMenu>
   ) : (
@@ -112,7 +112,7 @@ export function CardCornerMenu({
         feedback="wash"
         ringRadius={CARD_TARGET / 2}
         accessibilityRole="button"
-        accessibilityLabel={CARD_MORE_LABEL}
+        accessibilityLabel={tMobile('screens2.ui.cardMore')}
         style={style}
       >
         {face}
@@ -120,7 +120,7 @@ export function CardCornerMenu({
       <MenuSheet
         spec={menu}
         visible={open}
-        label={CARD_MORE_LABEL}
+        label={tMobile('screens2.ui.cardMore')}
         onClose={() => setOpen(false)}
         onPick={pick}
       />

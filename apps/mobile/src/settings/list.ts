@@ -7,8 +7,9 @@
  */
 
 import { settingsGroupText } from '@whombat/client';
-import { UPDATE_STATE_WORDS } from '@whombat/client/managed';
-import { type AgentProvider, deskWords, newsWords, PROVIDER_LABELS } from '@whombat/core';
+import { updateStateWords } from '@whombat/client/managed';
+import { type AgentProvider, deskWords, newsWords, providerLabels } from '@whombat/core';
+import { formatLocaleList } from '@whombat/core/i18n';
 import type { AppMode } from '../data/config';
 import { mobileTranslator } from '../i18n/translate';
 import type { AiProviderCardView } from './ai';
@@ -101,24 +102,31 @@ export interface ApplianceLine {
  * A sign-in in trouble (expired, revoked, out of quota) by its name and state; none signed in at all says so; else who is
  * signed in (“Claude Code signed in”). A second provider nobody uses isn't a problem.
  */
-export function aiLine(cards: NonNullable<SettingsFacts['ai']>): ApplianceLine | null {
+export function aiLine(
+  cards: NonNullable<SettingsFacts['ai']>,
+  locale?: string | null,
+): ApplianceLine | null {
+  const { t } = mobileTranslator(locale);
   const trouble = cards.find((c) => c.trouble);
   if (trouble)
     return { value: `${trouble.name}: ${trouble.status}`, tone: trouble.tone === 'bad' ? 'bad' : 'warn' };
   const ready = cards.filter((c) => c.tone === 'ok').map((c) => c.name);
-  if (cards.length > 0 && ready.length === 0) return { value: 'Not signed in', tone: 'warn' };
+  if (cards.length > 0 && ready.length === 0) return { value: t('settings2.list.notSignedIn'), tone: 'warn' };
   if (ready.length === 0) return null;
-  return { value: `${ready.join(' and ')} signed in`, tone: null };
+  return { value: t('settings2.list.signedIn', { names: formatLocaleList(ready, locale) }), tone: null };
 }
 
 /**
  * The assistant's line: its AI sign-in in trouble first (its AI sign-in is on its page), else what it runs on
  * (“Claude Code”, “A model on your network”).
  */
-export function assistantLine(f: Pick<SettingsFacts, 'agent' | 'ai'>): ApplianceLine | null {
-  const ai = f.ai ? aiLine(f.ai) : null;
+export function assistantLine(
+  f: Pick<SettingsFacts, 'agent' | 'ai'>,
+  locale?: string | null,
+): ApplianceLine | null {
+  const ai = f.ai ? aiLine(f.ai, locale) : null;
   if (ai?.tone) return ai;
-  return f.agent ? { value: PROVIDER_LABELS[f.agent.provider], tone: null } : null;
+  return f.agent ? { value: providerLabels(locale)[f.agent.provider], tone: null } : null;
 }
 
 /** The list's rows, in order; the box's screen only where it has one. */
@@ -127,7 +135,7 @@ export function settingsRows(f: SettingsFacts, locale?: string): SettingsRowView
   const line = (key: SettingsRowKey): ApplianceLine | null => {
     switch (key) {
       case 'agent':
-        return assistantLine(f);
+        return assistantLine(f, locale);
       case 'connections':
         return f.connections ?? null;
       case 'appliance':
@@ -189,21 +197,25 @@ export function managedApplianceLine(
     glance: readonly { key: string; dot: OverviewDot; title: string; state?: string }[];
   },
   ready: string | null = null,
+  locale?: string | null,
 ): ApplianceLine {
   // The About row's title names the page; its `state` says how the updates stand.
   const said = (g: { title: string; state?: string }) => g.state ?? g.title;
   const broken = [...overview.needsYou, ...overview.glance].some((item) => item.dot === 'bad');
-  if (ready && !broken) return { value: UPDATE_STATE_WORDS.ready, tone: 'warn', opens: 'about' };
+  if (ready && !broken) return { value: updateStateWords(locale).ready, tone: 'warn', opens: 'about' };
   const off = overview.needsYou[0] ?? overview.glance.find((g) => g.dot === 'bad' || g.dot === 'warn');
   if (off) return { value: said(off), tone: off.dot === 'bad' ? 'bad' : 'warn' };
   const parts = ['update', 'backups'].flatMap((key) => {
     const g = overview.glance.find((item) => item.key === key);
     return g ? said(g) : [];
   });
-  return { value: parts.length ? parts.join(' · ') : 'All fine', tone: null };
+  return {
+    value: parts.length ? parts.join(' · ') : mobileTranslator(locale).t('settings2.list.allFine'),
+    tone: null,
+  };
 }
 
 /** The demo world's line (it has no Whombat to ask). */
-export function demoApplianceLine(mode: AppMode): ApplianceLine | null {
-  return mode === 'fixtures' ? { value: SETTINGS_TEXT.demo, tone: null } : null;
+export function demoApplianceLine(mode: AppMode, locale?: string | null): ApplianceLine | null {
+  return mode === 'fixtures' ? { value: settingsText(locale ?? undefined).demo, tone: null } : null;
 }

@@ -13,14 +13,14 @@ import {
   assessmentLine,
   assessmentVerdict,
   attachmentsBesideCard,
-  CARD_FRAME_WORDS,
   type CardDisplay,
   type CardFrame,
   type CardMark,
   cardDisplay,
+  cardFrameWords,
   continuesMessage,
-  DECISION_ACTION_HINTS,
   decidedLine,
+  decisionActionHints,
   deploySettledLine,
   earlierCardLine,
   earlierCardText,
@@ -36,21 +36,21 @@ import {
   planFrame,
   planLine,
   type ReportLine,
-  RUN_ATTENTION_LABEL,
   type RunChips,
   type RunLineText,
   ranOnSwitches,
   reportLine,
   runAttention,
+  runAttentionLabel,
   runChips,
   runFrame,
   runLineControls,
   runLineText,
   runLiveText,
   runShowsAsLine,
-  SCHEDULE_TEXT,
   type SettledLine,
   scheduleLine,
+  scheduleText,
   TASK_TONES,
   taskCardView,
   taskLine,
@@ -69,13 +69,13 @@ import {
   assessmentHeadline,
   type ChatRuntimeView,
   type ChatSubject,
-  DEPLOYMENT_STATUS_PILLS,
   type DeviceSkillCard,
   type DigestCard,
   dayKey,
+  deploymentStatusPills,
   describeScheduleWhen,
   evidenceLine,
-  FEEDBACK_OUTCOME_LABELS,
+  feedbackOutcomeLabels,
   findMyWatchCardLines,
   formatAdditions,
   formatAgo,
@@ -98,22 +98,21 @@ import {
   isEverydayAsk,
   type LookPlanCard,
   type LookResearch,
-  MESSAGE_DELETED_TEXT,
   type Message,
   type MessageCard,
   type MessagePage,
+  messageDeletedText,
   type Plan,
   type Principal,
   planProgress,
-  plural,
   type Receipt,
   type ReportCard,
   type Run,
   reportCardLabel,
   reportCardState,
   runNowText,
-  SCHEDULE_STATUS_LABELS,
   scheduleCardTitle,
+  scheduleStatusLabels,
   type Tone,
   thingWatchCardLines,
 } from '@whombat/core';
@@ -194,9 +193,10 @@ const STEP_MARK: Record<Plan['steps'][number]['state'], CardMark> = {
 
 /** A plan card's head: its focus step called out, every step under Show more (Details: what it counts). */
 export function planHead(plan: Plan, assistant: string, timeZone: string, locale?: string): CardHeadModel {
-  const frame = planFrame(plan, assistant);
-  const focus = planFocus(plan);
+  const frame = planFrame(plan, assistant, locale);
+  const focus = planFocus(plan, locale);
   const { done, total } = planProgress(plan);
+  const { t } = mobileTranslator(locale);
   return {
     ...frame,
     time: frame.at ? formatClock(frame.at, timeZone) : null,
@@ -209,24 +209,25 @@ export function planHead(plan: Plan, assistant: string, timeZone: string, locale
       note: s.note,
     })),
     facts: [
-      `${formatPlanLabel(plan.steps.length, locale)} · ${done} of ${total} done`,
-      ...(plan.due ? [formatDue(plan.due)] : []),
+      `${formatPlanLabel(plan.steps.length, locale)} · ${t('data.messages.doneOf', { done, total })}`,
+      ...(plan.due ? [formatDue(plan.due, locale)] : []),
     ],
   };
 }
 
 /** A run card's head: the run's number, branch, tests and changes under Details. */
 export function runHead(run: Run, timeZone: string, locale?: string): CardHeadModel {
-  const frame = runFrame(run);
+  const frame = runFrame(run, locale);
+  const words = cardFrameWords(locale);
   return {
     ...frame,
     time: frame.at ? formatClock(frame.at, timeZone) : null,
     callout: null,
     steps: [],
     facts: [
-      `${CARD_FRAME_WORDS.run(run.number)} · ${formatRunLabel(run.status, locale)}`,
-      ...(run.branch ? [`${CARD_FRAME_WORDS.branch}: ${run.branch}`] : []),
-      ...(run.tests ? [formatTestsPassing(run.tests)] : []),
+      `${words.run(run.number)} · ${formatRunLabel(run.status, locale)}`,
+      ...(run.branch ? [`${words.branch}: ${run.branch}`] : []),
+      ...(run.tests ? [formatTestsPassing(run.tests, locale)] : []),
     ],
   };
 }
@@ -258,7 +259,7 @@ export interface RunSettledModel {
   line: SettledLine;
   chips: RunChips;
   /** “Watch ›” while live, “Open ›” after (AP-699). */
-  link: (typeof RUN_LINE_LINK)[keyof typeof RUN_LINE_LINK];
+  link: string;
   /** The compact live card's title: `Run #5 · Verify and deploy`. */
   title: string;
   /** `Now: Running pnpm test`; null when the run says nothing yet. */
@@ -277,7 +278,10 @@ export interface ChatSubItem {
 }
 
 /** The run line's link on the phone (AP-699): the web's “Watch run” / “Open run”, short, with the phone's chevron. */
-const RUN_LINE_LINK = { 'Watch run': 'Watch ›', 'Open run': 'Open ›' } as const;
+function runLineLink(link: 'Watch run' | 'Open run', locale?: string): string {
+  const { t } = mobileTranslator(locale);
+  return link === 'Watch run' ? t('data.messages.watchRun') : t('data.messages.openRun');
+}
 
 /** The run line (AP-668): what it says, the run it opens and, while live, its progress. */
 export interface RunLineModel extends RunLineText {
@@ -285,7 +289,7 @@ export interface RunLineModel extends RunLineText {
   live: boolean;
   progress: number;
   /** “Watch ›” while the run is live, “Open ›” once nothing moves on it (AP-699). */
-  link: (typeof RUN_LINE_LINK)[keyof typeof RUN_LINE_LINK];
+  link: string;
   /** Try again on a failed run (AP-705). */
   retry: boolean;
   /** Whose run it is, for “Asked Banjo to try again.”. */
@@ -325,20 +329,25 @@ export interface AssessmentCardModel {
  * the full assessment for the screen to show. The assessor's words are plain text.
  */
 export function assessmentSummary(card: AssessmentCard, ctx: ViewContext): CardSummary {
-  const verdict = assessmentVerdict(card);
+  const { locale } = ctx;
+  const verdict = assessmentVerdict(card, locale);
+  const hints = decisionActionHints(locale);
   const decided = card.decided
     ? decidedLine(
         card.decided,
-        card.decided.decidedById === ctx.viewer.id ? 'You' : ctx.people.name(card.decided.decidedById),
+        card.decided.decidedById === ctx.viewer.id
+          ? mobileTranslator(locale).t('data.messages.you')
+          : ctx.people.name(card.decided.decidedById),
         formatClock(card.decided.decidedAt, ctx.timeZone),
+        locale,
       )
     : null;
   return {
     kind: 'assessment',
-    label: assessmentCardLabel(card),
+    label: assessmentCardLabel(card, locale),
     title: verdict.text,
     detail: card.decision?.question ?? null,
-    meta: decided ?? assessmentHeadline(card.assessment),
+    meta: decided ?? assessmentHeadline(card.assessment, locale),
     tone: verdict.tone === 'mut' ? null : verdict.tone,
     approvalNumber: null,
     assessment: {
@@ -348,11 +357,11 @@ export function assessmentSummary(card: AssessmentCard, ctx: ViewContext): CardS
           ? card.decision.options.map((o) => ({
               label: o.label,
               recommended: o.recommended,
-              hint: DECISION_ACTION_HINTS[o.action],
+              hint: hints[o.action],
             }))
           : null,
-      rows: assessmentDetailRows(card.assessment),
-      evidence: card.assessment.evidence.map(evidenceLine),
+      rows: assessmentDetailRows(card.assessment, locale),
+      evidence: card.assessment.evidence.map((e) => evidenceLine(e, locale)),
     },
   };
 }
@@ -362,17 +371,18 @@ export function assessmentSummary(card: AssessmentCard, ctx: ViewContext): CardS
  * renders no Markdown or mentions), the assessment's summary once there is one, and the state line with the
  * screenshot count; failed assessments in the bad tone, blocked ones in warn.
  */
-export function reportSummary(card: ReportCard): CardSummary {
+export function reportSummary(card: ReportCard, locale?: string): CardSummary {
+  const { t, tp } = mobileTranslator(locale);
   const assessed = card.assessment.state === 'done' && card.assessment.summary;
-  const outcome = card.assessment.outcome ? FEEDBACK_OUTCOME_LABELS[card.assessment.outcome] : null;
-  const files = card.attachments > 0 ? ` · ${plural(card.attachments, 'screenshot')}` : '';
+  const outcome = card.assessment.outcome ? feedbackOutcomeLabels(locale)[card.assessment.outcome] : null;
+  const files = card.attachments > 0 ? ` · ${tp('data.messages.screenshots', card.attachments)}` : '';
   return {
     kind: 'report',
-    label: reportCardLabel(card),
-    title: card.contentRemoved ? 'Content removed' : card.summary,
+    label: reportCardLabel(card, locale),
+    title: card.contentRemoved ? t('data.messages.contentRemoved') : card.summary,
     quiet: card.contentRemoved,
     detail: assessed ? (outcome ? `${outcome}: ${card.assessment.summary}` : card.assessment.summary) : null,
-    meta: `${reportCardState(card)}${files}`,
+    meta: `${reportCardState(card, locale)}${files}`,
     tone: card.assessment.state === 'failed' ? 'bad' : card.assessment.state === 'blocked' ? 'warn' : null,
     approvalNumber: null,
   };
@@ -527,7 +537,10 @@ export interface ChatItem {
 }
 
 /** The line above the first unread message (MX-05). */
-export const UNREAD_MARKER_TEXT = 'New';
+export function unreadMarkerText(locale?: string): string {
+  return mobileTranslator(locale).t('data.messages.unread');
+}
+export const UNREAD_MARKER_TEXT = unreadMarkerText();
 
 /**
  * The first message the viewer hadn't read when they opened the conversation (MX-05): the first one by someone else
@@ -566,18 +579,24 @@ export function flattenPages(pages: readonly MessagePage[] | undefined): Message
 /** The card as it was on this message, folded; null when it keeps none. */
 function earlierItem(m: Message, ctx: ViewContext): EarlierItem | null {
   const card = m.earlierCard;
-  const line = earlierCardLine(m);
+  const line = earlierCardLine(m, [], ctx.locale);
   if (!card || !line) return null;
   const now = ctx.now.getTime();
   return {
     line,
-    spoken: earlierCardText(m),
+    spoken: earlierCardText(m, ctx.locale),
     // A copy doesn't tick: nothing on it is at work now.
-    council: card.kind === 'council' ? { ...councilItem(card, [], now), ticking: false } : null,
+    council: card.kind === 'council' ? { ...councilItem(card, [], now, ctx.locale), ticking: false } : null,
     delegation:
       card.kind === 'delegation'
         ? {
-            ...delegationItem(card, [], now, ctx.people.agent?.name ?? ctx.people.name(m.authorId)),
+            ...delegationItem(
+              card,
+              [],
+              now,
+              ctx.people.agent?.name ?? ctx.people.name(m.authorId),
+              ctx.locale,
+            ),
             ticking: false,
           }
         : null,
@@ -586,6 +605,8 @@ function earlierItem(m: Message, ctx: ViewContext): EarlierItem | null {
 
 export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSummary | null {
   if (!card) return null;
+  const { locale } = ctx;
+  const { t, tp } = mobileTranslator(locale);
   const base = { kind: card.kind, tone: null, approvalNumber: null } as const;
   switch (card.kind) {
     case 'plan': {
@@ -595,7 +616,7 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
         ...base,
         label: formatPlanLabel(card.plan.steps.length, ctx.locale),
         title: card.plan.title,
-        detail: `${done} of ${total} done`,
+        detail: t('data.messages.doneOf', { done, total }),
         planId: card.plan.id,
         head: planHead(
           card.plan,
@@ -608,9 +629,9 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
     case 'research':
       return {
         ...base,
-        label: formatResearchLabel(card.topic),
+        label: formatResearchLabel(card.topic, locale),
         title: card.rows.map((r) => r.name).join(', '),
-        detail: formatResearchMeta(card.sourceCount, card.testedCount),
+        detail: formatResearchMeta(card.sourceCount, card.testedCount, locale),
       };
     case 'run': {
       // A live run that needs a person says why instead of “Now: …”, in warn (CT-197, AP-597).
@@ -618,21 +639,21 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
       const attention = runAttention(r);
       const live = r.status === 'live';
       const progress = Math.max(0, Math.min(100, r.progress));
-      const controls = runLineControls(r);
+      const controls = runLineControls(r, locale);
       const agentName = ctx.people.name(r.agentId);
       const runLine: RunLineModel | null = runShowsAsLine(r)
         ? {
-            ...runLineText(r),
+            ...runLineText(r, locale),
             runNumber: r.number,
             live,
             progress,
-            link: RUN_LINE_LINK[controls.link],
+            link: runLineLink(controls.link, locale),
             retry: controls.retry,
             agentName,
           }
         : null;
-      const settled = runLineText(r);
-      const liveText = runLiveText(r, 0);
+      const settled = runLineText(r, locale);
+      const liveText = runLiveText(r, 0, locale);
       return {
         ...base,
         runLine,
@@ -641,8 +662,8 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
           : {
               runNumber: r.number,
               line: settled,
-              chips: runChips(r),
-              link: RUN_LINE_LINK[controls.link],
+              chips: runChips(r, locale),
+              link: runLineLink(controls.link, locale),
               title: liveText.title,
               now: liveText.now,
               startedAt: r.startedAt,
@@ -660,7 +681,7 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
                   ? {
                       add: formatAdditions(r.diff.add),
                       del: formatDeletions(r.diff.del),
-                      files: plural(r.diff.files, 'file'),
+                      files: tp('data.messages.files', r.diff.files),
                     }
                   : null,
               pr: r.prNumber ? `PR #${r.prNumber}` : null,
@@ -671,14 +692,14 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
         head: runLine ? null : runHead(r, ctx.timeZone, ctx.locale),
         label: formatRunLabel(r.status, ctx.locale),
         title: r.title,
-        detail: attention ? `${RUN_ATTENTION_LABEL} · ${attention}` : runNowText(r),
+        detail: attention ? `${runAttentionLabel(locale)} · ${attention}` : runNowText(r, locale),
         tone: attention ? 'warn' : live ? 'ok' : null,
       };
     }
     case 'review':
       return {
         ...base,
-        label: formatReviewLabel(card.changesRequested),
+        label: formatReviewLabel(card.changesRequested, locale),
         title: card.line ? `${card.file}:${card.line}` : card.file,
         detail: card.comments[0]?.text ?? null,
         tone: 'bad',
@@ -710,25 +731,34 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
     case 'commits':
       return {
         ...base,
-        label: card.commits.length === 1 ? '1 COMMIT' : `${card.commits.length} COMMITS`,
+        label: tp('data.messages.commits', card.commits.length),
         title: card.commits[0]?.message ?? '',
-        detail: formatCommitsFooter(card.diff, ctx.people.name(card.signedById)),
+        detail: formatCommitsFooter(card.diff, ctx.people.name(card.signedById), locale),
       };
     case 'pill':
       return { ...base, label: '', title: card.text, detail: null, tone: card.tone };
     case 'report':
-      return reportSummary(card);
+      return reportSummary(card, locale);
     case 'assessment':
       return assessmentSummary(card, ctx);
     case 'schedule': {
       // A turn an agent scheduled for itself (RA-30, AP-691): read on the phone, cancelled on the web.
       const s = card.schedule;
-      if (!s) return { ...base, label: 'SCHEDULE', title: SCHEDULE_TEXT.gone, detail: null, quiet: true };
+      if (!s)
+        return {
+          ...base,
+          label: t('data.messages.schedule'),
+          title: scheduleText(locale).gone,
+          detail: null,
+          quiet: true,
+        };
       return {
         ...base,
-        label: `SCHEDULE · ${SCHEDULE_STATUS_LABELS[s.status].toUpperCase()}`,
-        title: scheduleCardTitle(ctx.people.name(s.agentId), s),
-        detail: describeScheduleWhen(s.when, ctx.timeZone, ctx.now),
+        label: t('data.messages.scheduleStatus', {
+          status: scheduleStatusLabels(locale)[s.status].toUpperCase(),
+        }),
+        title: scheduleCardTitle(ctx.people.name(s.agentId), s, locale),
+        detail: describeScheduleWhen(s.when, ctx.timeZone, ctx.now, locale),
         tone: s.status === 'active' ? 'ok' : s.status === 'paused' ? 'warn' : null,
       };
     }
@@ -737,22 +767,22 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
       const ok = card.status === 'succeeded';
       return {
         ...base,
-        label: DEPLOYMENT_STATUS_PILLS[card.status],
-        title: `${card.service} to ${card.environment}`,
+        label: deploymentStatusPills(locale)[card.status],
+        title: t('data.messages.deployTo', { service: card.service, environment: card.environment }),
         detail: null,
-        meta: card.sha ? deploySettledLine(card).detail : null,
+        meta: card.sha ? deploySettledLine(card, locale).detail : null,
         tone: ok ? 'ok' : 'bad',
         deploy: { url: card.url ?? null },
       };
     }
     case 'task': {
       // The live card while it runs; once ended the card its line opens: the full words, the server and the time.
-      const view = taskCardView(card, ctx.now.getTime());
+      const view = taskCardView(card, ctx.now.getTime(), locale);
       const tone = TASK_TONES[card.state];
       const running = card.state === 'running';
       return {
         ...base,
-        label: `TASK · ${view.state.toUpperCase()}`,
+        label: t('data.messages.task', { state: view.state.toUpperCase() }),
         title: card.title,
         detail: card.result,
         meta: running ? card.server : [card.server, view.elapsed].filter(Boolean).join(' · '),
@@ -770,7 +800,7 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
     }
     case 'thing_watch': {
       if (!card.watch) return null;
-      const lines = thingWatchCardLines(card.watch, ctx.timeZone, ctx.now);
+      const lines = thingWatchCardLines(card.watch, ctx.timeZone, ctx.now, locale);
       return {
         ...base,
         label: '',
@@ -783,7 +813,7 @@ export function cardSummary(card: MessageCard | null, ctx: ViewContext): CardSum
       // A one-time Find My watch (findmy-watch.md), every word core's: what it waits for and until when, with Cancel
       // while it watches. One nobody can read any more leaves the message's words alone.
       if (!card.watch) return null;
-      const lines = findMyWatchCardLines(card.watch, ctx.timeZone, ctx.now);
+      const lines = findMyWatchCardLines(card.watch, ctx.timeZone, ctx.now, locale);
       return {
         ...base,
         label: '',
@@ -821,8 +851,8 @@ export interface LookPlanItem {
 }
 
 /** The `look_plan` card as a row draws it; null when there is nothing to draw (its research is gone). */
-export function lookPlanItem(card: LookPlanCard): LookPlanItem | null {
-  const view = lookPlanCardView(card.plan);
+export function lookPlanItem(card: LookPlanCard, locale?: string): LookPlanItem | null {
+  const view = lookPlanCardView(card.plan, locale);
   if (!view) return null;
   const research = card.plan?.research ?? null;
   return { view, research, thread: research ? lookThreadHref(research) : null };
@@ -847,37 +877,41 @@ export function settledLine(
           name: ctx.people.name,
           now: ctx.now,
           timeZone: ctx.timeZone,
+          locale: ctx.locale,
         })
       : null;
   if (!card || cardDisplay(card) !== 'line') return null;
+  const { locale } = ctx;
   switch (card.kind) {
     case 'look_plan':
-      return lookPlanLine(card.plan);
+      return lookPlanLine(card.plan, locale);
     case 'feature_request':
       // Who decided, by name, as an approval's line says it.
       return card.request
-        ? featureRequestLine(card.request, featureDeciderName(card.request, ctx.people))
+        ? featureRequestLine(card.request, featureDeciderName(card.request, ctx.people), locale)
         : null;
     case 'approval':
       return approvalLine(
         card.approval,
         card.approval.decidedById ? ctx.people.name(card.approval.decidedById) : null,
+        locale,
       );
     case 'plan':
-      return planLine(card.plan);
+      return planLine(card.plan, locale);
     case 'schedule':
       return scheduleLine(
         card,
         ctx.people.name(card.schedule?.agentId ?? authorId),
         ctx.timeZone,
         ctx.now.getTime(),
+        locale,
       );
     case 'assessment':
-      return assessmentLine(card);
+      return assessmentLine(card, locale);
     case 'turn_failed':
-      return turnFailedLine(card, ctx.timeZone);
+      return turnFailedLine(card, ctx.timeZone, locale);
     case 'deploy':
-      return deploySettledLine(card);
+      return deploySettledLine(card, locale);
     case 'task':
       return taskLine(card, ctx.now.getTime());
     case 'thing_watch':
@@ -979,7 +1013,7 @@ export function chatItems(
         continues,
         time: labels.settled(m.createdAt),
         sentAt: m.createdAt,
-        text: MESSAGE_DELETED_TEXT,
+        text: messageDeletedText(ctx.locale),
         receipts: null,
         digest: null,
         guide: null,
@@ -1019,11 +1053,12 @@ export function chatItems(
             viewer: { id: me, kind: ctx.viewer.kind },
             retryFeature: options.retry !== false,
             timeZone: ctx.timeZone,
+            locale: ctx.locale,
           })
         : null;
     // In a thread the root is the whole report (RR-07); in the conversation its row (RR-02).
     const inThread = options.threads === false;
-    const report = m.card?.kind === 'report' && !inThread ? reportLine(m.card) : null;
+    const report = m.card?.kind === 'report' && !inThread ? reportLine(m.card, ctx.locale) : null;
     return {
       id: m.id,
       key: m.clientId ? `c-${m.clientId}` : m.id,
@@ -1042,11 +1077,12 @@ export function chatItems(
       deviceSkill: m.card?.kind === 'device_skill' ? m.card : null,
       automationPlan:
         m.card?.kind === 'automation_plan' && m.card.plan
-          ? planCardView(m.card.plan, ctx.people.agent?.name ?? ctx.people.name(m.authorId))
+          ? planCardView(m.card.plan, ctx.people.agent?.name ?? ctx.people.name(m.authorId), ctx.locale)
           : null,
-      lookPlan: m.card?.kind === 'look_plan' ? lookPlanItem(m.card) : null,
-      featureRequest: featureRequestItem(m.card, ctx.people),
-      council: m.card?.kind === 'council' ? councilItem(m.card, m.attachments, ctx.now.getTime()) : null,
+      lookPlan: m.card?.kind === 'look_plan' ? lookPlanItem(m.card, ctx.locale) : null,
+      featureRequest: featureRequestItem(m.card, ctx.people, ctx.locale),
+      council:
+        m.card?.kind === 'council' ? councilItem(m.card, m.attachments, ctx.now.getTime(), ctx.locale) : null,
       // A question a task asks the assistant reads “Asked Dusty”: the assistant is the card's author.
       delegation:
         m.card?.kind === 'delegation'
@@ -1055,6 +1091,7 @@ export function chatItems(
               m.attachments,
               ctx.now.getTime(),
               ctx.people.agent?.name ?? ctx.people.name(m.authorId),
+              ctx.locale,
             )
           : null,
       earlier: earlierItem(m, ctx),
@@ -1069,9 +1106,9 @@ export function chatItems(
       deleted: false,
       edited: m.editedAt !== null && m.editedAt !== undefined,
       pinned: Boolean(m.pinnedAt),
-      reactions: reactionPills(m.reactions),
-      previews: options.previews === false ? [] : previewCards(m.previews),
-      vaultSaved: vaultSavedRows(m.vaultSaved),
+      reactions: reactionPills(m.reactions, ctx.locale),
+      previews: options.previews === false ? [] : previewCards(m.previews, ctx.locale),
+      vaultSaved: vaultSavedRows(m.vaultSaved, ctx.locale),
       turnFailed: failed,
       display: m.card ? cardDisplayHere(m.card, inThread) : null,
       line: m.card?.kind === 'run' ? null : settledLine(m.card, ctx, m.authorId),
@@ -1189,7 +1226,7 @@ export function sentFollowsClock(sentAt: string, now: Date): boolean {
 export function lastReplyText(moment: string, now: Date, timeZone: string, locale?: string): string {
   const recent = lastReplyFollowsClock(moment, now);
   const label = () => {
-    if (!locale) return lastReplyLabel(moment, now, timeZone);
+    if (!locale) return lastReplyLabel(moment, now, timeZone, locale);
     const { t } = mobileTranslator(locale);
     return recent
       ? t('chat.lastReply', { when: formatAgo(moment, now, timeZone, locale) })
@@ -1226,17 +1263,22 @@ export function keepSameItems(previous: readonly ChatItem[], next: ChatItem[]): 
  * conversation one is not in, the same as for one that does not exist (no probing), so both read as not
  * being in it; only the connection and the server's own trouble offer Try again.
  */
-export function conversationLoadError(error: unknown): { text: string; retry: boolean } {
+export function conversationLoadError(error: unknown, locale?: string): { text: string; retry: boolean } {
+  const { t } = mobileTranslator(locale);
   const status = error instanceof ApiError ? error.status : null;
-  if (status === 403 || status === 404) return { text: 'You’re not in this conversation.', retry: false };
-  return { text: 'This conversation didn’t load.', retry: true };
+  if (status === 403 || status === 404) return { text: t('data.messages.notInConversation'), retry: false };
+  return { text: t('data.messages.conversationDidntLoad'), retry: true };
 }
 
 /** A thread screen's header: `Thread`, and `#billing-v2 · Collect the merged PRs` (the topic when there is one). */
-export function threadHeader(view: { where: string; topic: string | null } | undefined): {
+export function threadHeader(
+  view: { where: string; topic: string | null } | undefined,
+  locale?: string,
+): {
   title: string;
   subtitle: string | null;
 } {
-  if (!view) return { title: 'Thread', subtitle: null };
-  return { title: 'Thread', subtitle: view.topic ? `${view.where} · ${view.topic}` : view.where };
+  const title = mobileTranslator(locale).t('data.messages.thread');
+  if (!view) return { title, subtitle: null };
+  return { title, subtitle: view.topic ? `${view.where} · ${view.topic}` : view.where };
 }

@@ -9,13 +9,12 @@
  */
 
 import {
-  LOCAL_MODEL_FIELDS,
-  LOCAL_MODEL_TEXT,
   type LocalModelDraft,
   type LocalModelField,
   type LocalModelTone,
   localModelCheckLine,
   localModelDraft,
+  localModelFields,
   localModelKeyChoice,
   localModelOf,
   localModelProblems,
@@ -23,6 +22,7 @@ import {
   localModelSaved,
   localModelSetBody,
   localModelTestBody,
+  localModelText,
 } from '@whombat/client';
 import { useClearLocalModel, useSetLocalModel, useTestLocalModel } from '@whombat/client/react';
 import { type LocalModelCheck, type LocalModelView, localModelCopy } from '@whombat/core';
@@ -50,8 +50,8 @@ function toneColor(theme: ReturnType<typeof useTheme>, tone: LocalModelTone): st
 }
 
 /** What a write's outcome says when it didn't go through; null when it did. */
-function refusalOf(result: Parameters<typeof outcomeText>[0]): string | null {
-  const text = outcomeText(result);
+function refusalOf(result: Parameters<typeof outcomeText>[0], locale: string): string | null {
+  const text = outcomeText(result, locale);
   return text ? `${text.title}. ${text.body}` : null;
 }
 
@@ -157,21 +157,21 @@ function Saved({
   const [problem, setProblem] = useState<string | null>(null);
   const row = localModelRow(view);
   const line = test.isPending
-    ? { text: LOCAL_MODEL_TEXT.testing, tone: 'mut' as const }
-    : localModelCheckLine(view.check, view.model);
+    ? { text: localModelText(rawLocale).testing, tone: 'mut' as const }
+    : localModelCheckLine(view.check, view.model, rawLocale);
   const checkAgain = () => {
     setProblem(null);
     test.mutate(
       { params: { burrow: slug }, body: {} },
       {
-        onSuccess: (r) => setProblem(refusalOf(r)),
-        onError: (e) => setProblem(errorText(e)),
+        onSuccess: (r) => setProblem(refusalOf(r, rawLocale)),
+        onError: (e) => setProblem(errorText(e, rawLocale)),
       },
     );
   };
   const remove = () =>
     Alert.alert(localModelCopyHere.removeTitle, localModelCopyHere.removeBody, [
-      { text: LOCAL_MODEL_TEXT.cancel, style: 'cancel' },
+      { text: localModelText(rawLocale).cancel, style: 'cancel' },
       {
         text: localModelCopyHere.remove,
         style: 'destructive',
@@ -181,13 +181,13 @@ function Saved({
             { params: { burrow: slug } },
             {
               onSuccess: (r) => {
-                const refused = refusalOf(r);
+                const refused = refusalOf(r, rawLocale);
                 if (refused) return setProblem(refused);
                 if (r.status === 'ok' && r.data.burrow.localModel != null)
-                  return setProblem(LOCAL_MODEL_TEXT.failed);
+                  return setProblem(localModelText(rawLocale).failed);
                 showNotice(localModelCopyHere.removed);
               },
-              onError: (e) => setProblem(errorText(e)),
+              onError: (e) => setProblem(errorText(e, rawLocale)),
             },
           );
         },
@@ -223,7 +223,7 @@ function Saved({
           style={GROW}
         />
         <Button
-          label={LOCAL_MODEL_TEXT.change}
+          label={localModelText(rawLocale).change}
           variant="secondary"
           disabled={busy}
           onPress={onChange}
@@ -274,7 +274,7 @@ function Form({
   const [tried, setTried] = useState(false);
   const [found, setFound] = useState<{ check: LocalModelCheck; model: string } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
-  const problems = localModelProblems(draft);
+  const problems = localModelProblems(draft, rawLocale);
   const blocked = Object.keys(problems).length > 0;
   const keyKept = localModelKeyChoice(draft, view) === 'keep';
   const edit = (field: LocalModelField, value: string) => {
@@ -291,9 +291,9 @@ function Form({
       {
         onSuccess: (r) => {
           if (r.status === 'ok') setFound({ check: r.data.check, model });
-          else setProblem(refusalOf(r));
+          else setProblem(refusalOf(r, rawLocale));
         },
-        onError: (e) => setProblem(errorText(e)),
+        onError: (e) => setProblem(errorText(e, rawLocale)),
       },
     );
   };
@@ -307,32 +307,32 @@ function Form({
       { params: { burrow: slug }, body },
       {
         onSuccess: (r) => {
-          const refused = refusalOf(r);
+          const refused = refusalOf(r, rawLocale);
           if (refused) return setProblem(refused);
           if (r.status !== 'ok' || !localModelSaved(body, r.data.localModel)) {
-            setProblem(LOCAL_MODEL_TEXT.failed);
-            onMismatch(LOCAL_MODEL_TEXT.failed);
+            setProblem(localModelText(rawLocale).failed);
+            onMismatch(localModelText(rawLocale).failed);
             return;
           }
           showNotice(localModelCopyHere.saved);
           onDone();
         },
-        onError: (e) => setProblem(errorText(e)),
+        onError: (e) => setProblem(errorText(e, rawLocale)),
       },
     );
   };
   const line = test.isPending
-    ? { text: LOCAL_MODEL_TEXT.testing, tone: 'mut' as const }
+    ? { text: localModelText(rawLocale).testing, tone: 'mut' as const }
     : found
-      ? localModelCheckLine(found.check, found.model)
+      ? localModelCheckLine(found.check, found.model, rawLocale)
       : view
-        ? localModelCheckLine(view.check, view.model)
-        : { text: LOCAL_MODEL_TEXT.notTested, tone: 'mut' as const };
+        ? localModelCheckLine(view.check, view.model, rawLocale)
+        : { text: localModelText(rawLocale).notTested, tone: 'mut' as const };
   const busy = set.isPending || test.isPending;
   return (
     <>
       <Head tone={line.tone} status={line.text} />
-      {LOCAL_MODEL_FIELDS.map(({ field, label, hint }) => {
+      {localModelFields(rawLocale).map(({ field, label, hint }) => {
         const input = FIELD_INPUT[field];
         return (
           <FormField
@@ -369,7 +369,7 @@ function Form({
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {view ? (
           <Button
-            label={LOCAL_MODEL_TEXT.cancel}
+            label={localModelText(rawLocale).cancel}
             variant="quiet"
             disabled={busy}
             onPress={onDone}

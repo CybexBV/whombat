@@ -18,38 +18,48 @@ import {
   type GatewayProvider,
   sortGatewayAccounts,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import {
-  AI_GATEWAY_COPY,
+  aiGatewayCopy,
   GATEWAY_TOOL_LABELS,
   gatewayAccountStatusText,
   gatewaySwitchConfirms,
   gatewayToolsText,
   gatewayUpdatedText,
 } from '@whombat/core/text';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** The app's own words around the contracts' (AP-1117…AP-1124). */
-export const GATEWAY_TEXT = {
-  /** The switches' section on the connection page (web and Android). */
-  section: 'CLAUDE CODE AND CODEX',
-  /** The connection page's block instead of the agents' lines (AIG-01): which tools go through it. */
-  usedBy: (tools: string) => `Used by ${tools}`,
-  usedByText: (on: string, off: string | null) =>
-    `${on} turns go through it.${off ? ` ${off} turns run on your own sign-in.` : ''}`,
-  unused: 'Not switched on yet',
-  unusedText: 'Claude Code and ChatGPT run on your own sign-in until a switch below is on.',
-  /** The overview row's line. */
-  rowOn: (tools: string) => `${tools} turns go through it`,
-  rowOff: 'Not switched on',
-  /** The toasts after a switch was saved. */
-  savedOn: (tool: string, name: string) => `${tool} turns now go through ${name}.`,
-  savedOff: (tool: string) => `${tool} runs on its own sign-in again.`,
-  /** A Fusebox provider group without accounts. */
-  noAccounts: (provider: string, name: string) => `${name} has no ${provider} accounts.`,
-  /** An account without meters. */
-  noLimits: (name: string) => `${name} didn’t report its limits.`,
-  /** Runs on (AIG-17): the agent's own choice, which applies again when the switch is off. */
-  ownChoice: (choice: string) => `When it’s off: ${choice}`,
-} as const;
+/** The app's own words around the contracts', in a locale (English when none). */
+export function gatewayText(locale?: string | null) {
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).gateway;
+  return {
+    /** The switches' section on the connection page (web and Android). */
+    section: w.section,
+    /** The connection page's block instead of the agents' lines: which tools go through it. */
+    usedBy: (tools: string) => interpolate(w.usedBy, { tools }),
+    usedByText: (on: string, off: string | null) =>
+      [interpolate(w.usedByOn, { on }), off ? interpolate(w.usedByOff, { off }) : '']
+        .filter(Boolean)
+        .join(' '),
+    unused: w.unused,
+    unusedText: w.unusedText,
+    /** The overview row's line. */
+    rowOn: (tools: string) => interpolate(w.rowOn, { tools }),
+    rowOff: w.rowOff,
+    /** The toasts after a switch was saved. */
+    savedOn: (tool: string, name: string) => interpolate(w.savedOn, { tool, name }),
+    savedOff: (tool: string) => interpolate(w.savedOff, { tool }),
+    /** A Fusebox provider group without accounts. */
+    noAccounts: (provider: string, name: string) => interpolate(w.noAccounts, { provider, name }),
+    /** An account without meters. */
+    noLimits: (name: string) => interpolate(w.noLimits, { name }),
+    /** Runs on: the agent's own choice, which applies again when the switch is off. */
+    ownChoice: (choice: string) => interpolate(w.ownChoice, { choice }),
+  };
+}
+
+export const GATEWAY_TEXT = gatewayText();
 
 /** The burrow’s gateway; null without one. */
 export function aiGatewayOf(
@@ -62,9 +72,10 @@ export function aiGatewayOf(
  * A gateway connection's line on the overview (AP-1117): “Claude Code and ChatGPT turns go through it”, “Not switched
  * on”.
  */
-export function gatewayRowLine(switches: AiGatewaySwitches | null): string {
+export function gatewayRowLine(switches: AiGatewaySwitches | null, locale?: string | null): string {
   const on = aiGatewayProviders(switches);
-  return on.length ? GATEWAY_TEXT.rowOn(gatewayToolsText(on)) : GATEWAY_TEXT.rowOff;
+  const text = gatewayText(locale);
+  return on.length ? text.rowOn(gatewayToolsText(on, locale)) : text.rowOff;
 }
 
 /**
@@ -93,12 +104,14 @@ export interface GatewayRunsOn {
 export function gatewayRunsOn(
   burrow: { aiGateway?: BurrowAiGateway | null } | null | undefined,
   provider: string,
+  locale?: string | null,
 ): GatewayRunsOn | null {
   const gateway = aiGatewayFor(burrow, provider);
   if (!gateway) return null;
+  const copy = aiGatewayCopy(locale);
   return {
-    title: AI_GATEWAY_COPY.runsOnTitle(gateway.name),
-    note: AI_GATEWAY_COPY.runsOnNote(provider as GatewayProvider, gateway.name),
+    title: copy.runsOnTitle(gateway.name),
+    note: copy.runsOnNote(provider as GatewayProvider, gateway.name),
   };
 }
 
@@ -113,11 +126,12 @@ export interface GatewaySwitchText {
 }
 
 /** The two switches of a gateway connection, Claude Code first, in its name. */
-export function gatewaySwitches(name: string): GatewaySwitchText[] {
+export function gatewaySwitches(name: string, locale?: string | null): GatewaySwitchText[] {
+  const copy = aiGatewayCopy(locale);
   return GATEWAY_PROVIDERS.map((provider) => ({
     provider,
-    label: AI_GATEWAY_COPY.switchLabel(provider, name),
-    hint: AI_GATEWAY_COPY.switchHint(provider, name),
+    label: copy.switchLabel(provider, name),
+    hint: copy.switchHint(provider, name),
   }));
 }
 
@@ -138,31 +152,43 @@ export function gatewayConfirm(
   provider: GatewayProvider,
   name: string,
   on: boolean,
+  locale?: string | null,
 ): GatewayConfirmText | null {
   if (!on || !gatewaySwitchConfirms(kind)) return null;
+  const copy = aiGatewayCopy(locale);
   return {
-    title: AI_GATEWAY_COPY.confirmTitle(provider, name),
-    body: AI_GATEWAY_COPY.confirmBody,
-    confirm: AI_GATEWAY_COPY.confirm(name),
-    cancel: AI_GATEWAY_COPY.cancel,
+    title: copy.confirmTitle(provider, name),
+    body: copy.confirmBody,
+    confirm: copy.confirm(name),
+    cancel: copy.cancel,
   };
 }
 
 /** The toast after a switch was saved: “Claude Code turns now go through Fusebox.” / “ChatGPT runs on … again.”. */
-export function gatewaySavedText(provider: GatewayProvider, name: string, on: boolean): string {
+export function gatewaySavedText(
+  provider: GatewayProvider,
+  name: string,
+  on: boolean,
+  locale?: string | null,
+): string {
   const tool = GATEWAY_TOOL_LABELS[provider];
-  return on ? GATEWAY_TEXT.savedOn(tool, name) : GATEWAY_TEXT.savedOff(tool);
+  const text = gatewayText(locale);
+  return on ? text.savedOn(tool, name) : text.savedOff(tool);
 }
 
 /** What the gateway connection's page says instead of the agents' lines (AIG-01): which tools go through it now. */
-export function gatewayUsedBy(switches: AiGatewaySwitches | null): { title: string; text: string } {
+export function gatewayUsedBy(
+  switches: AiGatewaySwitches | null,
+  locale?: string | null,
+): { title: string; text: string } {
   const on = aiGatewayProviders(switches);
-  if (!on.length) return { title: GATEWAY_TEXT.unused, text: GATEWAY_TEXT.unusedText };
+  const words = gatewayText(locale);
+  if (!on.length) return { title: words.unused, text: words.unusedText };
   const off = GATEWAY_PROVIDERS.filter((p) => !on.includes(p));
-  const tools = gatewayToolsText(on);
+  const tools = gatewayToolsText(on, locale);
   return {
-    title: GATEWAY_TEXT.usedBy(tools),
-    text: GATEWAY_TEXT.usedByText(tools, off.length ? gatewayToolsText(off) : null),
+    title: words.usedBy(tools),
+    text: words.usedByText(tools, off.length ? gatewayToolsText(off, locale) : null),
   };
 }
 
@@ -175,6 +201,7 @@ export function gatewayPoolLine(
   pool: Pick<GatewayPool, 'name' | 'reachable' | 'observedAt'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): { tone: GatewayTone; text: string } {
   const text = gatewayUpdatedText({
     name: pool.name,
@@ -182,6 +209,7 @@ export function gatewayPoolLine(
     observedAt: pool.observedAt,
     now,
     timeZone,
+    locale,
   });
   return { tone: !pool.reachable ? 'warn' : pool.observedAt ? 'ok' : 'mut', text };
 }
@@ -190,10 +218,10 @@ export function gatewayPoolLine(
 export function gatewayProviderLine(
   provider: GatewayProvider,
   pool: Pick<GatewayPool, 'name' | 'claude' | 'codex'>,
+  locale?: string | null,
 ): string {
-  return pool[provider]
-    ? AI_GATEWAY_COPY.toolOn(provider, pool.name)
-    : AI_GATEWAY_COPY.toolOff(provider, pool.name);
+  const copy = aiGatewayCopy(locale);
+  return pool[provider] ? copy.toolOn(provider, pool.name) : copy.toolOff(provider, pool.name);
 }
 
 /**
@@ -205,6 +233,7 @@ export function gatewayAccountStatus(
   pool: Pick<GatewayPool, 'name'>,
   now: Date | number,
   timeZone: string,
+  locale?: string | null,
 ): { tone: GatewayTone; text: string } | null {
   const text = gatewayAccountStatusText({
     status: account.status,
@@ -213,6 +242,7 @@ export function gatewayAccountStatus(
     name: pool.name,
     now,
     timeZone,
+    locale,
   });
   return text ? { tone: account.status === 'off' ? 'mut' : 'warn', text } : null;
 }

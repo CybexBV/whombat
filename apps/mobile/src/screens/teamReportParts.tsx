@@ -3,17 +3,18 @@
  * app's blue dot when something is new, the four-step track, and the report page's ⋯ with Withdraw report.
  */
 import {
-  TEAM_REPORT_KIND_WORDS,
-  TEAM_REPORT_WORDS,
   type TeamReportStepState,
+  teamReportKindWords,
   teamReportTrack,
   teamReportTrackLabel,
+  teamReportWords,
 } from '@whombat/client';
 import type { TeamReportKind, TeamReportStatus } from '@whombat/core';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { plainMenu } from '../data/nativeMenu';
-import { TEAM_REPORTS_PHONE_WORDS } from '../data/teamReports';
+import { teamReportsPhoneWords } from '../data/teamReports';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Bug, Ellipsis, Lightbulb } from '../ui/icons';
@@ -71,8 +72,11 @@ export function KindTile({
 }
 
 /** “#12 · Problem”: the report's number and kind, the mono line over its title. */
-export function reportKicker(report: { number: number; kind: TeamReportKind }): string {
-  return `#${report.number} · ${TEAM_REPORT_KIND_WORDS[report.kind]}`;
+export function reportKicker(
+  report: { number: number; kind: TeamReportKind },
+  locale?: string | null,
+): string {
+  return `#${report.number} · ${teamReportKindWords(locale)[report.kind]}`;
 }
 
 /**
@@ -80,8 +84,10 @@ export function reportKicker(report: { number: number; kind: TeamReportKind }): 
  * the one the team is at ringed, the rest quiet; their names under them. Read as one line, “Step 2 of 4: …”.
  */
 export function ReportTrack({ status }: { status: TeamReportStatus }) {
+  const { rawLocale } = useI18n();
+  const teamReportWordsHere = teamReportWords(rawLocale);
   const theme = useTheme();
-  const steps = teamReportTrack(status);
+  const steps = teamReportTrack(status, rawLocale);
   const dot = (state: TeamReportStepState) =>
     state === 'done'
       ? { backgroundColor: theme.colors.ink2, borderColor: theme.colors.ink2 }
@@ -91,7 +97,7 @@ export function ReportTrack({ status }: { status: TeamReportStatus }) {
   return (
     <View
       accessible
-      accessibilityLabel={`${TEAM_REPORT_WORDS.progress}. ${teamReportTrackLabel(status)}`}
+      accessibilityLabel={`${teamReportWordsHere.progress}. ${teamReportTrackLabel(status, rawLocale)}`}
       style={{ flexDirection: 'row' }}
     >
       {steps.map((step, i) => (
@@ -146,15 +152,18 @@ export function ReportTrack({ status }: { status: TeamReportStatus }) {
   );
 }
 
-const MORE_MENU = plainMenu([
-  [{ id: 'withdraw', title: TEAM_REPORT_WORDS.withdraw, icon: 'trash', destructive: true }],
-]);
+function moreMenu(locale?: string | null) {
+  return plainMenu([
+    [{ id: 'withdraw', title: teamReportWords(locale).withdraw, icon: 'trash', destructive: true }],
+  ]);
+}
 
 /** The report page's ⋯: Withdraw report (the caller asks first). iOS's own menu on an iPhone, a sheet elsewhere. */
 export function ReportMore({ title, onWithdraw }: { title: string; onWithdraw: () => void }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
-  const label = TEAM_REPORTS_PHONE_WORDS.more(title);
+  const label = teamReportsPhoneWords(rawLocale).more(title);
   const onPick = (id: string) => {
     if (id === 'withdraw') onWithdraw();
   };
@@ -171,7 +180,7 @@ export function ReportMore({ title, onWithdraw }: { title: string; onWithdraw: (
   const face = <Ellipsis size={18} color={theme.colors.ink} strokeWidth={1.8} />;
   if (hasNativeMenu)
     return (
-      <NativeMenu spec={MORE_MENU} onPick={onPick} trigger="tap" label={label} style={box}>
+      <NativeMenu spec={moreMenu(rawLocale)} onPick={onPick} trigger="tap" label={label} style={box}>
         <View style={box}>{face}</View>
       </NativeMenu>
     );
@@ -188,7 +197,7 @@ export function ReportMore({ title, onWithdraw }: { title: string; onWithdraw: (
         {face}
       </Touchable>
       <MenuSheet
-        spec={open ? MORE_MENU : null}
+        spec={open ? moreMenu(rawLocale) : null}
         visible={open}
         label={label}
         onClose={() => setOpen(false)}

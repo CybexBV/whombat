@@ -7,9 +7,9 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   onSessionReopen,
   WHATS_NEW_PATH,
-  WHATS_NEW_TEXT,
   whatsNewNotice,
   whatsNewSeenKey,
+  whatsNewText,
   whatsNewTold,
 } from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
@@ -19,11 +19,12 @@ import { UI_ORIGINS } from './config';
 export const WHATS_NEW_URL = `${UI_ORIGINS[0] ?? 'https://app.whombat.com'}${WHATS_NEW_PATH}`;
 
 /** About's row under the updates. */
-export const WHATS_NEW_ROW = {
-  title: WHATS_NEW_TEXT.link,
-  body: WHATS_NEW_TEXT.linkMeta,
-  label: `${WHATS_NEW_TEXT.link}. ${WHATS_NEW_TEXT.linkMeta}`,
-} as const;
+export function whatsNewRow(locale?: string | null) {
+  const text = whatsNewText(locale);
+  return { title: text.link, body: text.linkMeta, label: `${text.link}. ${text.linkMeta}` } as const;
+}
+
+export const WHATS_NEW_ROW = whatsNewRow();
 
 /** Checks of one store and Whombat waiting for the one before them (see `whatsNewToShow`). */
 const turns = new WeakMap<KeyValueStore, Map<string, Promise<unknown>>>();

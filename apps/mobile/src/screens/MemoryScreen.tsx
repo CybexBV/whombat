@@ -10,9 +10,9 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  MEMORY_TEXT,
   memoryEntryFits,
   memoryFileEntries,
+  memoryText,
   memoryUsage,
   memoryWithEdit,
   memoryWithEntry,
@@ -54,6 +54,7 @@ export function MemoryScreen({ navigation }: Props) {
 /** The memory files' cards, Forget everything and the entry sheet; the part around them scrolls and refreshes. */
 export function MemoryFiles() {
   const { rawLocale } = useI18n();
+  const memoryTextHere = memoryText(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrowBase();
@@ -74,16 +75,16 @@ export function MemoryFiles() {
         params: { burrow: slug, file },
         body: { text, ...(view.version ? { ifVersion: view.version } : {}) },
       });
-      return result.status === 'ok' ? null : MEMORY_TEXT.failed;
+      return result.status === 'ok' ? null : memoryTextHere.failed;
     } catch (error) {
       void query.refetch();
-      return memoryWriteProblem(error, copy.changed);
+      return memoryWriteProblem(error, copy.changed, rawLocale);
     }
   };
 
   const removeEntry = (file: MemoryFile, view: MemoryFileView, index: number) =>
     void save(file, view, memoryWithout(view, index)).then((said) =>
-      said ? setProblem({ file, text: said }) : showNotice(MEMORY_TEXT.removed),
+      said ? setProblem({ file, text: said }) : showNotice(memoryTextHere.removed),
     );
 
   const forget = () =>
@@ -97,7 +98,7 @@ export function MemoryFiles() {
             { params: { burrow: slug }, query: {} },
             {
               onSuccess: (result) => (result.status === 'ok' ? showNotice(copy.cleared) : undefined),
-              onError: (error) => Alert.alert(memoryWriteProblem(error, copy.changed)),
+              onError: (error) => Alert.alert(memoryWriteProblem(error, copy.changed, rawLocale)),
             },
           ),
       },
@@ -114,7 +115,7 @@ export function MemoryFiles() {
       </View>
       {!data ? (
         query.error ? (
-          <ErrorState text={MEMORY_TEXT.loadFailed} onRetry={() => void query.refetch()} />
+          <ErrorState text={memoryTextHere.loadFailed} onRetry={() => void query.refetch()} />
         ) : (
           <SkeletonRows count={3} lines={2} label={copy.title} />
         )
@@ -166,7 +167,7 @@ export function MemoryFiles() {
               ? memoryWithEntry(editingView, text)
               : memoryWithEdit(editingView, editing.index, text);
           const said = await save(editing.file, editingView, next);
-          if (!said) showNotice(MEMORY_TEXT.saved);
+          if (!said) showNotice(memoryTextHere.saved);
           return said;
         }}
       />
@@ -197,9 +198,11 @@ function MemoryFileCard({
   onEdit: (index: number) => void;
   onRemove: (index: number) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const memoryTextHere = memoryText(rawLocale);
   const theme = useTheme();
   const entries = memoryFileEntries(view);
-  const usage = memoryUsage(view);
+  const usage = memoryUsage(view, rawLocale);
   const tone = usage.tone === 'ok' ? theme.colors.mut : toneColor(theme, usage.tone);
   const fits = memoryEntryFits(view, '');
   const title = file === 'memory' ? copy.memory : copy.user;
@@ -266,10 +269,10 @@ function MemoryFileCard({
               style={{ paddingHorizontal: 18 }}
             />
             <Button
-              label={MEMORY_TEXT.remove}
+              label={memoryTextHere.remove}
               variant="quiet"
               disabled={busy}
-              accessibilityHint={`${MEMORY_TEXT.remove}: ${entry}`}
+              accessibilityHint={`${memoryTextHere.remove}: ${entry}`}
               onPress={() => onRemove(index)}
               style={{ paddingHorizontal: 18 }}
             />
@@ -285,7 +288,7 @@ function MemoryFileCard({
         )}
         <RowButtons>
           <Button
-            label={MEMORY_TEXT.add}
+            label={memoryTextHere.add}
             variant="secondary"
             disabled={busy || !fits}
             accessibilityHint={title}
@@ -316,6 +319,8 @@ function EntrySheet({
   onClose: () => void;
   onSave: (text: string) => Promise<string | null>;
 }) {
+  const { rawLocale } = useI18n();
+  const memoryTextHere = memoryText(rawLocale);
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [shown, setShown] = useState<string | null>(null);
@@ -348,18 +353,18 @@ function EntrySheet({
       visible={editing !== null}
       onClose={close}
       title={title}
-      label={editing?.index === null ? MEMORY_TEXT.add : copy.edit}
+      label={editing?.index === null ? memoryTextHere.add : copy.edit}
     >
       <View style={{ paddingHorizontal: 22, gap: 12 }}>
         <FormField
-          label={editing?.index === null ? MEMORY_TEXT.add : copy.edit}
+          label={editing?.index === null ? memoryTextHere.add : copy.edit}
           value={text}
           onChangeText={(next) => {
             setText(next);
             if (problem) setProblem(null);
           }}
           multiline
-          placeholder={editing ? MEMORY_TEXT.placeholder(editing.file, agent) : undefined}
+          placeholder={editing ? memoryTextHere.placeholder(editing.file, agent) : undefined}
           autoFocus
         />
         <FormMessage text={problem} />

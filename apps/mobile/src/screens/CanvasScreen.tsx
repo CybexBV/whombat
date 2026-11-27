@@ -11,8 +11,8 @@ import { queryHook } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
-import { CANVAS_TEXT, canvasMeta, canvasProblem, canvasReadingMarkdown } from '../data/canvas';
-import { useMobileT } from '../i18n';
+import { canvasMeta, canvasProblem, canvasReadingMarkdown, canvasText } from '../data/canvas';
+import { useI18n, useMobileT } from '../i18n';
 import { APP_ORIGINS } from '../navigation/hooks';
 import { type RootStackParamList, webUrlForLink } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -28,6 +28,8 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Canvas'>;
 const useCanvasContent = queryHook(api.canvases.content);
 
 export function CanvasScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const canvasTextHere = canvasText(rawLocale);
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
@@ -51,7 +53,7 @@ export function CanvasScreen({ route, navigation }: Props) {
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const data = query.data;
   const title = data?.canvas.title ?? route.params.title ?? route.params.slug;
-  const problem = query.error ? canvasProblem(query.error) : null;
+  const problem = query.error ? canvasProblem(query.error, rawLocale) : null;
 
   return (
     <Screen>
@@ -70,7 +72,7 @@ export function CanvasScreen({ route, navigation }: Props) {
       >
         <View style={{ paddingHorizontal: 22, paddingBottom: 16, gap: 6 }}>
           <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-            {CANVAS_TEXT.kicker}
+            {canvasTextHere.kicker}
           </Text>
           <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
             {title}
@@ -89,7 +91,7 @@ export function CanvasScreen({ route, navigation }: Props) {
             />
             {web && problem.retry ? (
               <View style={{ paddingHorizontal: 22 }}>
-                <Button label={CANVAS_TEXT.openOnWeb} variant="quiet" onPress={openWeb} />
+                <Button label={canvasTextHere.openOnWeb} variant="quiet" onPress={openWeb} />
               </View>
             ) : null}
           </View>
@@ -100,7 +102,7 @@ export function CanvasScreen({ route, navigation }: Props) {
             {data.markdown.trim() ? (
               <MessageBody text={canvasReadingMarkdown(data.markdown)} />
             ) : (
-              <QuietText style={{ paddingHorizontal: 0 }}>{CANVAS_TEXT.empty}</QuietText>
+              <QuietText style={{ paddingHorizontal: 0 }}>{canvasTextHere.empty}</QuietText>
             )}
             <View
               style={{
@@ -111,9 +113,9 @@ export function CanvasScreen({ route, navigation }: Props) {
               }}
             >
               <Text size={13} lh={1.45} color={theme.colors.mut}>
-                {CANVAS_TEXT.readOnly}
+                {canvasTextHere.readOnly}
               </Text>
-              {web ? <Button label={CANVAS_TEXT.openOnWeb} variant="secondary" onPress={openWeb} /> : null}
+              {web ? <Button label={canvasTextHere.openOnWeb} variant="secondary" onPress={openWeb} /> : null}
             </View>
           </View>
         )}

@@ -17,96 +17,106 @@ import {
   findMyDateAdd,
   findMyPlaceKey,
 } from '@whombat/core/domain';
+import { interpolate, resolveLanguage } from '@whombat/core/i18n';
 import {
   dayKey,
   formatClock,
-  MONTHS,
-  SHORT_MONTHS,
-  SHORT_WEEKDAYS,
-  WEEKDAYS,
+  monthName,
+  shortMonthName,
+  shortWeekdayName,
+  weekdayName,
   zonedParts,
 } from '@whombat/core/text';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_FIND_MY_TIMELINE_WORDS } from '../i18n/messages/connectionsHosts/findMy';
 import { findMyEvery, findMyFirstName } from './findmy';
 
 /** The timeline's words that aren't built from what was kept. */
-export const FIND_MY_TIMELINE_WORDS = {
-  everyone: 'Everyone',
-  settings: 'Timeline settings',
-  day: 'Day',
-  week: 'Week',
-  dayOrWeek: 'Day or week',
-  dayBefore: 'Day before',
-  dayAfter: 'Day after',
-  lastWeek: 'Last 7 days',
-  today: 'Today',
-  yesterday: 'Yesterday',
-  notKept: 'Not kept',
-  keepToo: (first: string) => `Keep ${first}’s too`,
-  onTheWay: 'On the way',
-  notRead: 'Not read',
-  noLocation: 'No location',
-  now: 'Now',
-  nearby: 'Nearby',
-  soFar: (duration: string) => `${duration} so far`,
-  linesNote: (first: string) => `Lines join the spots Whombat read, not the way ${first} went.`,
-  spotsNote: (shortest: string) =>
-    `Spots are where Find My’s address is, about 100 m. A stop shorter than ${shortest} can be missed.`,
-  noLocationFor: (first: string) => `Find My had no location for ${first}.`,
-  inUse: (mac: string) =>
-    `${mac.charAt(0).toUpperCase()}${mac.slice(1)} was in use, so Whombat left it alone.`,
-  notReadThen: 'Whombat didn’t read Find My then.',
-  couldntRead: (mac: string) => `Whombat couldn’t read Find My on ${mac} then.`,
-  nothingKept: (first: string) => `Whombat kept nothing for ${first} on this day.`,
-  mapAlt: (first: string) => `${first}’s stops on a map`,
-  drawing: 'Drawing the map…',
-  noSpots: (first: string) => `No spots to draw for ${first} on this day.`,
-  weekTitle: (first: string) => `${first}’s week`,
-  pickDay: 'Pick a day to see its stops and the map.',
-  stripLabel: (first: string, day: string) => `${first}’s ${day.toLowerCase()}`,
-  /** Before it's on. */
-  introTitle: 'Keep a timeline?',
-  introBody:
-    'Whombat sees where people are now, but keeps no history. A timeline keeps where each person you choose was at every read, so you can look back at a day.',
-  introPlaces: (every: string) => `Places and streets, as Find My names them, ${every}.`,
-  introOnly: 'Only on this Whombat, and only you see it.',
-  introDays: `Days older than ${FIND_MY_TIMELINE_DAYS} are deleted by themselves.`,
-  keep: 'Keep a timeline',
-  shouldKnow: 'The people on it should know you keep it.',
-  noRead: 'Whombat hasn’t read Find My yet. Read it once on the Find My tab, then choose people here.',
-  keepLabel: (first: string) => `Keep ${first}’s timeline`,
-  /** The settings. */
-  whose: 'Whose',
-  whoseHint: 'Only the people you tick. Unticking someone deletes their days.',
-  keptSince: (date: string) => `kept since ${date}`,
-  keptDays: `Kept ${FIND_MY_TIMELINE_DAYS} days`,
-  keptDaysHint: `Days older than ${FIND_MY_TIMELINE_DAYS} are deleted by themselves.`,
-  assistantReads: (name: string) => `${name} can read it`,
-  assistantHint: (first: string) => `Then you can ask “Where was ${first} on Friday afternoon?”`,
-  assistantLabel: (name: string) => `${name} can read the timeline`,
-  onlyYou: (name: string) =>
-    `Only you see it. When ${name} reads it, what it reads goes to its AI like any chat.`,
-  deleteTitle: 'Delete the timeline',
-  deleteHint: 'Removes every day kept so far.',
-  deleteButton: 'Delete…',
-  stopTitle: 'Stop keeping a timeline',
-  stopHint: 'Deletes every day and stops keeping new ones.',
-  stopButton: 'Stop…',
-  /** Asked first. */
-  untickAsk: (first: string) => `Stop keeping ${first}’s timeline?`,
-  untickBody: (name: string) => `Whombat deletes the days it kept for ${name} and keeps no new ones.`,
-  untickConfirm: (first: string) => `Delete ${first}’s days`,
-  deleteAsk: 'Delete the timeline?',
-  deleteBody:
-    'Whombat deletes every day it kept so far and goes on keeping new ones for the people you ticked.',
-  deleteConfirm: 'Delete',
-  stopAsk: 'Stop keeping a timeline?',
-  stopBody: 'Whombat deletes every day it kept and keeps no new ones.',
-  stopConfirm: 'Stop and delete',
-  cancel: 'Cancel',
-  /** Said after a change. */
-  deleted: 'Deleted every day kept so far.',
-  stopped: 'Stopped keeping a timeline.',
-} as const;
+export function findMyTimelineWords(locale?: string | null) {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS);
+  const days = FIND_MY_TIMELINE_DAYS;
+  return {
+    everyone: w.everyone,
+    settings: w.settings,
+    day: w.day,
+    week: w.week,
+    dayOrWeek: w.dayOrWeek,
+    dayBefore: w.dayBefore,
+    dayAfter: w.dayAfter,
+    lastWeek: w.lastWeek,
+    today: w.today,
+    yesterday: w.yesterday,
+    notKept: w.notKept,
+    keepToo: (first: string) => interpolate(w.keepToo, { first }),
+    onTheWay: w.onTheWay,
+    notRead: w.notRead,
+    noLocation: w.noLocation,
+    now: w.now,
+    nearby: w.nearby,
+    soFar: (duration: string) => interpolate(w.soFar, { duration }),
+    linesNote: (first: string) => interpolate(w.linesNote, { first }),
+    spotsNote: (shortest: string) => interpolate(w.spotsNote, { shortest }),
+    noLocationFor: (first: string) => interpolate(w.noLocationFor, { first }),
+    inUse: (mac: string) => interpolate(w.inUse, { Mac: `${mac.charAt(0).toUpperCase()}${mac.slice(1)}` }),
+    notReadThen: w.notReadThen,
+    couldntRead: (mac: string) => interpolate(w.couldntRead, { mac }),
+    nothingKept: (first: string) => interpolate(w.nothingKept, { first }),
+    mapAlt: (first: string) => interpolate(w.mapAlt, { first }),
+    drawing: w.drawing,
+    noSpots: (first: string) => interpolate(w.noSpots, { first }),
+    weekTitle: (first: string) => interpolate(w.weekTitle, { first }),
+    pickDay: w.pickDay,
+    stripLabel: (first: string, day: string) => interpolate(w.stripLabel, { first, day: day.toLowerCase() }),
+    /** Before it's on. */
+    introTitle: w.introTitle,
+    introBody: w.introBody,
+    introPlaces: (every: string) => interpolate(w.introPlaces, { every }),
+    introOnly: w.introOnly,
+    introDays: interpolate(w.introDays, { days }),
+    keep: w.keep,
+    shouldKnow: w.shouldKnow,
+    noRead: w.noRead,
+    keepLabel: (first: string) => interpolate(w.keepLabel, { first }),
+    /** The settings. */
+    whose: w.whose,
+    whoseHint: w.whoseHint,
+    keptSince: (date: string) => interpolate(w.keptSince, { date }),
+    keptDays: interpolate(w.keptDays, { days }),
+    keptDaysHint: interpolate(w.keptDaysHint, { days }),
+    assistantReads: (name: string) => interpolate(w.assistantReads, { name }),
+    assistantHint: (first: string) => interpolate(w.assistantHint, { first }),
+    assistantLabel: (name: string) => interpolate(w.assistantLabel, { name }),
+    onlyYou: (name: string) => interpolate(w.onlyYou, { name }),
+    deleteTitle: w.deleteTitle,
+    deleteHint: w.deleteHint,
+    deleteButton: w.deleteButton,
+    stopTitle: w.stopTitle,
+    stopHint: w.stopHint,
+    stopButton: w.stopButton,
+    /** Asked first. */
+    untickAsk: (first: string) => interpolate(w.untickAsk, { first }),
+    untickBody: (name: string) => interpolate(w.untickBody, { name }),
+    untickConfirm: (first: string) => interpolate(w.untickConfirm, { first }),
+    deleteAsk: w.deleteAsk,
+    deleteBody: w.deleteBody,
+    deleteConfirm: w.deleteConfirm,
+    stopAsk: w.stopAsk,
+    stopBody: w.stopBody,
+    stopConfirm: w.stopConfirm,
+    cancel: w.cancel,
+    /** Said after a change. */
+    deleted: w.deleted,
+    stopped: w.stopped,
+  };
+}
+
+export const FIND_MY_TIMELINE_WORDS = findMyTimelineWords('en');
+
+/** A weekday's name as a title (“Saturday”, “Zaterdag”). */
+function weekdayTitle(weekday: number, locale?: string | null): string {
+  const name = weekdayName(weekday, locale);
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)}`;
+}
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 3_600_000;
@@ -139,36 +149,40 @@ function dateParts(date: string): { y: number; m: number; d: number; weekday: nu
  * The bar's day: “Today” with “Monday 23 November”, “Yesterday” with “Sunday 22 November”, else “Saturday” with “21
  * November” (the year too when it isn't today's).
  */
-export function findMyDayTitle(date: string, today: string): { title: string; date: string } {
+export function findMyDayTitle(
+  date: string,
+  today: string,
+  locale?: string | null,
+): { title: string; date: string } {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS);
   const p = dateParts(date);
   const year = p.y === dateParts(today).y ? '' : ` ${p.y}`;
-  const day = `${p.d} ${MONTHS[p.m - 1]}${year}`;
-  const weekday = WEEKDAYS[p.weekday] ?? '';
-  if (date === today) return { title: FIND_MY_TIMELINE_WORDS.today, date: `${weekday} ${day}` };
-  if (date === findMyDateAdd(today, -1))
-    return { title: FIND_MY_TIMELINE_WORDS.yesterday, date: `${weekday} ${day}` };
-  return { title: weekday, date: day };
+  const day = `${p.d} ${monthName(p.m, locale)}${year}`;
+  const weekday = weekdayName(p.weekday, locale);
+  if (date === today) return { title: w.today, date: `${weekday} ${day}` };
+  if (date === findMyDateAdd(today, -1)) return { title: w.yesterday, date: `${weekday} ${day}` };
+  return { title: weekdayTitle(p.weekday, locale), date: day };
 }
 
 /** A week row's day: “Tue 17”. */
-export function findMyWeekDay(date: string): string {
+export function findMyWeekDay(date: string, locale?: string | null): string {
   const p = dateParts(date);
-  return `${SHORT_WEEKDAYS[p.weekday] ?? ''} ${p.d}`;
+  return `${shortWeekdayName(p.weekday, locale)} ${p.d}`;
 }
 
 /** The week's dates in its card's head: “17 – 23 November”, “28 October – 3 November”. */
-export function findMyWeekRange(first: string, last: string): string {
+export function findMyWeekRange(first: string, last: string, locale?: string | null): string {
   const a = dateParts(first);
   const b = dateParts(last);
   return a.m === b.m && a.y === b.y
-    ? `${a.d} – ${b.d} ${MONTHS[b.m - 1]}`
-    : `${a.d} ${MONTHS[a.m - 1]} – ${b.d} ${MONTHS[b.m - 1]}`;
+    ? `${a.d} – ${b.d} ${monthName(b.m, locale)}`
+    : `${a.d} ${monthName(a.m, locale)} – ${b.d} ${monthName(b.m, locale)}`;
 }
 
 /** “kept since 23 Nov”, in the zone. */
-export function findMyKeptSince(iso: string, tz: string): string {
+export function findMyKeptSince(iso: string, tz: string, locale?: string | null): string {
   const p = zonedParts(iso, tz);
-  return FIND_MY_TIMELINE_WORDS.keptSince(`${p.day} ${SHORT_MONTHS[p.month - 1]}`);
+  return findMyTimelineWords(locale).keptSince(`${p.day} ${shortMonthName(p.month, locale)}`);
 }
 
 /** “7 h 50 min”, “40 min”, “2 h”. */
@@ -181,11 +195,12 @@ export function findMyDuration(ms: number): string {
 }
 
 /** “5 minutes”, “a minute”, “an hour”, “2 hours”: the shortest stop the pace can miss. */
-export function findMyMinutes(minutes: number): string {
-  if (minutes === 1) return 'a minute';
-  if (minutes === 60) return 'an hour';
-  if (minutes > 60 && minutes % 60 === 0) return `${minutes / 60} hours`;
-  return `${minutes} minutes`;
+export function findMyMinutes(minutes: number, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).minutes;
+  if (minutes === 1) return w.minute;
+  if (minutes === 60) return w.hour;
+  if (minutes > 60 && minutes % 60 === 0) return interpolate(w.hours, { count: minutes / 60 });
+  return interpolate(w.minutes, { count: minutes });
 }
 
 /**
@@ -204,8 +219,10 @@ export function findMyClock(iso: string, tz: string, dayTo?: string): string {
 }
 
 /** Find My's “seen …” words after “seen”: “seen 4 min ago”, “seen now”. */
-function seen(when: string): string {
-  return `seen ${when.charAt(0).toLowerCase()}${when.slice(1)}`;
+function seen(when: string, locale?: string | null): string {
+  return interpolate(clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).seen, {
+    when: `${when.charAt(0).toLowerCase()}${when.slice(1)}`,
+  });
 }
 
 /**
@@ -215,12 +232,14 @@ export function findMyEveryoneMeta(
   timeline: { paceMinutes: number | null; readAt: string | null },
   today: boolean,
   tz: string,
+  locale?: string | null,
 ): string {
-  const pace = timeline.paceMinutes ? findMyEvery(timeline.paceMinutes) : null;
-  if (!today) return pace ? `Read ${pace}` : '';
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).meta;
+  const pace = timeline.paceMinutes ? findMyEvery(timeline.paceMinutes, locale) : null;
+  if (!today) return pace ? interpolate(w.read, { pace }) : '';
   const clock = timeline.readAt ? formatClock(timeline.readAt, tz) : null;
-  if (pace) return clock ? `Reads ${pace} · last read ${clock}` : `Reads ${pace}`;
-  return clock ? `Last read ${clock}` : '';
+  if (pace) return clock ? interpolate(w.readsLast, { pace, clock }) : interpolate(w.reads, { pace });
+  return clock ? interpolate(w.last, { clock }) : '';
 }
 
 /* Colours per place --------------------------------------------------------------------------------- */
@@ -305,16 +324,23 @@ function rank(order: readonly string[], key: string): number {
 /* Strips and their axis ------------------------------------------------------------------------------ */
 
 /** A gap's or hole's title: “No location”, else “Not read”. */
-export function findMyWhyTitle(why: FindMyTimelineWhy): string {
-  return why === 'no_location' ? FIND_MY_TIMELINE_WORDS.noLocation : FIND_MY_TIMELINE_WORDS.notRead;
+export function findMyWhyTitle(why: FindMyTimelineWhy, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS);
+  return why === 'no_location' ? w.noLocation : w.notRead;
 }
 
 /** A gap's line in the list: why there was no place, in plain words. */
-export function findMyWhyText(why: FindMyTimelineWhy, first: string, mac: string): string {
-  if (why === 'no_location') return FIND_MY_TIMELINE_WORDS.noLocationFor(first);
-  if (why === 'not_read') return FIND_MY_TIMELINE_WORDS.notReadThen;
-  if (why === 'in_use') return FIND_MY_TIMELINE_WORDS.inUse(mac);
-  return FIND_MY_TIMELINE_WORDS.couldntRead(mac);
+export function findMyWhyText(
+  why: FindMyTimelineWhy,
+  first: string,
+  mac: string,
+  locale?: string | null,
+): string {
+  const w = findMyTimelineWords(locale);
+  if (why === 'no_location') return w.noLocationFor(first);
+  if (why === 'not_read') return w.notReadThen;
+  if (why === 'in_use') return w.inUse(mac);
+  return w.couldntRead(mac);
 }
 
 export type FindMyStripPart = {
@@ -340,8 +366,10 @@ export function findMyStrip(
   day: Span,
   order: readonly string[],
   tz: string,
+  locale?: string | null,
 ): FindMyStripPart[] {
   const out: FindMyStripPart[] = [];
+  const onTheWay = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).onTheWay;
   const range = (s: Span) => `${findMyClock(s.from, tz)}–${findMyClock(s.to, tz, day.to)}`;
   const place = (s: Span) => {
     const at = fraction(day, s.from);
@@ -356,10 +384,9 @@ export function findMyStrip(
         title: `${s.place} · ${range(s)}`,
       });
       for (const h of s.holes)
-        out.push({ kind: 'gap', ...place(h), title: `${findMyWhyTitle(h.why)} · ${range(h)}` });
-    } else if (s.kind === 'trip')
-      out.push({ kind: 'trip', ...place(s), title: `${FIND_MY_TIMELINE_WORDS.onTheWay} · ${range(s)}` });
-    else out.push({ kind: 'gap', ...place(s), title: `${findMyWhyTitle(s.why)} · ${range(s)}` });
+        out.push({ kind: 'gap', ...place(h), title: `${findMyWhyTitle(h.why, locale)} · ${range(h)}` });
+    } else if (s.kind === 'trip') out.push({ kind: 'trip', ...place(s), title: `${onTheWay} · ${range(s)}` });
+    else out.push({ kind: 'gap', ...place(s), title: `${findMyWhyTitle(s.why, locale)} · ${range(s)}` });
   }
   return out;
 }
@@ -421,9 +448,12 @@ export function findMyKm(a: Pick<FindMySpot, 'lat' | 'lon'>, b: Pick<FindMySpot,
 }
 
 /** “300 m”, “3.7 km”, “31 km”. */
-export function findMyDistance(km: number): string {
+export function findMyDistance(km: number, locale?: string | null): string {
   if (km < 1) return `${Math.max(100, Math.round(km * 10) * 100)} m`;
-  if (km < 10) return `${km.toFixed(1)} km`;
+  if (km < 10) {
+    const text = km.toFixed(1);
+    return `${resolveLanguage(locale) === 'nl' ? text.replace('.', ',') : text} km`;
+  }
   return `${Math.round(km)} km`;
 }
 
@@ -439,15 +469,19 @@ const stays = (segments: readonly FindMyTimelineSegment[]) =>
 export function findMyDayMeta(
   segments: readonly FindMyTimelineSegment[],
   person: Pick<FindMyTimelinePerson, 'now'>,
+  locale?: string | null,
 ): string {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).dayMeta;
   const list = stays(segments);
   const last = list.at(-1);
   if (last?.ongoing) {
     const when = person.now?.when;
-    return when ? `Now in ${last.place} · ${seen(when)}` : `Now in ${last.place}`;
+    return when
+      ? interpolate(w.nowSeen, { place: last.place, seen: seen(when, locale) })
+      : interpolate(w.now, { place: last.place });
   }
-  if (!list.length) return 'No stops';
-  const count = list.length === 1 ? '1 stop' : `${list.length} stops`;
+  if (!list.length) return w.none;
+  const count = w.stops(list.length);
   let km = 0;
   let measured = false;
   let prev: FindMySpot | null = null;
@@ -458,7 +492,9 @@ export function findMyDayMeta(
     }
     if (s.spot) prev = s.spot;
   }
-  return measured && list.length > 1 ? `${count} · about ${findMyDistance(km)} between them` : count;
+  return measured && list.length > 1
+    ? interpolate(w.between, { count, distance: findMyDistance(km, locale) })
+    : count;
 }
 
 export type FindMyListRow = {
@@ -494,8 +530,13 @@ export function findMyListRows(
     /** The Mac's name as the page shows it. */
     mac: string;
     order: readonly string[];
+    /** The language the words are in (English when none is given). */
+    locale?: string | null;
   },
 ): FindMyListRow[] {
+  const locale = ctx.locale;
+  const words = findMyTimelineWords(locale);
+  const route$ = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).route;
   const first = findMyFirstName(ctx.person.name);
   const clock = (iso: string) => findMyClock(iso, ctx.tz, ctx.day.to);
   let n = 0;
@@ -508,19 +549,19 @@ export function findMyListRows(
       n++;
       prev = s;
       const when = ctx.person.now?.when;
-      const sub = [s.address, s.ongoing && when ? seen(when) : null].filter(Boolean).join(' · ');
+      const sub = [s.address, s.ongoing && when ? seen(when, locale) : null].filter(Boolean).join(' · ');
       return {
         kind: 'stay',
         key,
         time,
-        duration: s.ongoing ? FIND_MY_TIMELINE_WORDS.soFar(length) : length,
+        duration: s.ongoing ? words.soFar(length) : length,
         n,
         tone: findMyPlaceTone(ctx.order, s.place),
         place: s.place,
         sub,
         ongoing: s.ongoing,
         nearby: s.ongoing && !!ctx.person.now?.nearby,
-        holes: s.holes.map((h) => `${findMyWhyTitle(h.why)} ${clock(h.from)}–${clock(h.to)}`),
+        holes: s.holes.map((h) => `${findMyWhyTitle(h.why, locale)} ${clock(h.from)}–${clock(h.to)}`),
       };
     }
     if (s.kind === 'trip') {
@@ -529,23 +570,23 @@ export function findMyListRows(
       const route =
         from && to
           ? findMyPlaceKey(from.place) === findMyPlaceKey(to.place)
-            ? `Within ${to.place}`
+            ? interpolate(route$.within, { place: to.place })
             : `${from.place} → ${to.place}`
           : to
-            ? `To ${to.place}`
+            ? interpolate(route$.to, { place: to.place })
             : from
-              ? `From ${from.place}`
+              ? interpolate(route$.from, { place: from.place })
               : null;
       const far =
         from?.spot && to?.spot
-          ? `about ${findMyDistance(findMyKm(from.spot, to.spot))} in a straight line`
+          ? interpolate(route$.far, { distance: findMyDistance(findMyKm(from.spot, to.spot), locale) })
           : null;
       return {
         kind: 'trip',
         key,
         time,
         duration: length,
-        title: FIND_MY_TIMELINE_WORDS.onTheWay,
+        title: words.onTheWay,
         sub: [route, far].filter(Boolean).join(' · '),
       };
     }
@@ -554,8 +595,8 @@ export function findMyListRows(
       key,
       time,
       duration: length,
-      title: findMyWhyTitle(s.why),
-      sub: findMyWhyText(s.why, first, ctx.mac),
+      title: findMyWhyTitle(s.why, locale),
+      sub: findMyWhyText(s.why, first, ctx.mac, locale),
     };
   });
 }
@@ -659,16 +700,18 @@ export interface FindMyTotal {
 }
 
 /** Whole hours: “104 h”; a little time is “under 1 h”. */
-function hours(ms: number): string {
+function hours(ms: number, locale?: string | null): string {
   const h = Math.round(ms / HOUR_MS);
-  return h === 0 ? 'under 1 h' : `${h} h`;
+  return h === 0 ? clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS).underHour : `${h} h`;
 }
 
 /** One person's week in whole hours: each place in its colours' order, then On the way, then Not read. */
 export function findMyWeekTotals(
   days: readonly (readonly FindMyTimelineSegment[])[],
   order: readonly string[],
+  locale?: string | null,
 ): FindMyTotal[] {
+  const w = clientTree(locale, HOSTS_FIND_MY_TIMELINE_WORDS);
   const places = new Map<string, { label: string; ms: number }>();
   let trip = 0;
   let gap = 0;
@@ -688,11 +731,14 @@ export function findMyWeekTotals(
   const out: FindMyTotal[] = [...places.entries()]
     .filter(([, p]) => p.ms > 0)
     .sort(([a], [b]) => rank(order, a) - rank(order, b))
-    .map(([key, p]) => ({ key, label: p.label, tone: findMyPlaceTone(order, p.label), value: hours(p.ms) }));
-  if (trip > 0)
-    out.push({ key: 'trip', label: FIND_MY_TIMELINE_WORDS.onTheWay, tone: 'trip', value: hours(trip) });
-  if (gap > 0)
-    out.push({ key: 'gap', label: FIND_MY_TIMELINE_WORDS.notRead, tone: 'gap', value: hours(gap) });
+    .map(([key, p]) => ({
+      key,
+      label: p.label,
+      tone: findMyPlaceTone(order, p.label),
+      value: hours(p.ms, locale),
+    }));
+  if (trip > 0) out.push({ key: 'trip', label: w.onTheWay, tone: 'trip', value: hours(trip, locale) });
+  if (gap > 0) out.push({ key: 'gap', label: w.notRead, tone: 'gap', value: hours(gap, locale) });
   return out;
 }
 

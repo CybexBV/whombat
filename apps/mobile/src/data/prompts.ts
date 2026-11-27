@@ -8,11 +8,11 @@ import {
   type DelegationAiDraft,
   delegationAiChoice,
   delegationAiLine,
-  PROMPT_WORDS,
   promptPreview,
   promptProjectRows,
   promptRanWord,
   promptsFor,
+  promptWords,
 } from '@whombat/client';
 import {
   type CouncilProviderOption,
@@ -94,13 +94,15 @@ export function promptPickerView(
   failed: boolean,
   search: string,
   now: Date,
+  locale?: string,
 ): PromptPickerView {
-  if (!data) return failed ? { kind: 't3', text: PROMPT_WORDS.t3.unreachable } : loading;
+  const PROMPT_WORDS = promptWords(locale);
+  if (!data) return failed ? { kind: 't3', text: PROMPT_WORDS.t3.unreachable } : loadingView(locale);
   if (data.t3 !== 'ready' || !data.projects)
     return { kind: 't3', text: PROMPT_WORDS.t3[data.t3 === 'ready' ? 'unreachable' : data.t3] };
   if (!data.projects.length) return { kind: 'empty', text: PROMPT_WORDS.pickEmpty };
   const rows = promptProjectRows(prompt, data.projects, search).map((p) => {
-    const ran = p.ranAt ? promptRanWord(p.ranAt, now) : null;
+    const ran = p.ranAt ? promptRanWord(p.ranAt, now, locale) : null;
     return {
       id: p.id,
       title: p.title,
@@ -112,7 +114,10 @@ export function promptPickerView(
   return rows.length ? { kind: 'rows', rows } : { kind: 'empty', text: PROMPT_WORDS.pickNone };
 }
 
-const loading: PromptPickerView = { kind: 'loading', text: PROMPT_WORDS.pickLoading };
+const loadingView = (locale?: string): PromptPickerView => ({
+  kind: 'loading',
+  text: promptWords(locale).pickLoading,
+});
 
 /* Settings → You → Prompts ----------------------------------------------------------------------------------------- */
 
@@ -126,10 +131,10 @@ export interface PromptListLine {
   label: string;
 }
 
-export function promptListLine(p: Prompt, now: Date): PromptListLine {
+export function promptListLine(p: Prompt, now: Date, locale?: string): PromptListLine {
   const latest = p.runs[0];
   const ran = latest
-    ? [promptRanWord(latest.at, now), latest.title.trim()].filter(Boolean).join(' · ')
+    ? [promptRanWord(latest.at, now, locale), latest.title.trim()].filter(Boolean).join(' · ')
     : null;
   const preview = promptPreview(p.text);
   return {
@@ -237,8 +242,9 @@ export function promptAiShown(
 export function promptAiLine(
   ai: PromptAi | null,
   options: readonly CouncilProviderOption[] | null | undefined,
+  locale?: string,
 ): string {
-  return delegationAiLine(promptAiShown(ai, options)) ?? PROMPT_WORDS.aiDefault;
+  return delegationAiLine(promptAiShown(ai, options), locale) ?? promptWords(locale).aiDefault;
 }
 
 /** The delegation menu's Done as the prompt keeps it (null: T3 Code's default). */

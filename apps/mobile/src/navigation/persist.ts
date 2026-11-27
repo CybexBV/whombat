@@ -9,7 +9,7 @@
  * added later until they are listed) aren't restored. The app always opens on Chat (Whombat chat-channel.md CHT-22;
  * chat-channel.md AP-2451, one-layout-android.md AP-2645): a saved tab is never restored, the screens above it are.
  */
-import { TAB_WORDS } from '../data/shell';
+import { tabWords } from '../data/shell';
 import { branchRoomFor, type SidebarLookup, stripLinkedActionParams } from './routes';
 
 /** The file's name in the secure box (per storage scope). */
@@ -214,7 +214,7 @@ export function restorableRoute(route: SavedRoute, world: RestoreWorld): boolean
  */
 export function restorableNavigation(
   saved: SavedNavigation | null | undefined,
-  input: { now: number; burrow: string; world: RestoreWorld },
+  input: { now: number; burrow: string; world: RestoreWorld; locale?: string },
 ): SavedState | undefined {
   if (saved?.v !== 1 || saved.burrow !== input.burrow || !saved.state || !Array.isArray(saved.state.routes))
     return undefined;
@@ -223,7 +223,7 @@ export function restorableNavigation(
   const above: SavedRoute[] = [];
   for (const route of first?.name === 'Tabs' ? rest : saved.state.routes) {
     if (typeof route?.name !== 'string' || !restorableRoute(route, input.world)) break;
-    const params = chatParams(route);
+    const params = chatParams(route, input.locale);
     above.push(params ? { name: route.name, params } : { name: route.name });
   }
   if (above.length === 0) return undefined;
@@ -238,11 +238,11 @@ const CODE_TAB_WORD = 'Code';
  * A saved screen's params as they read now that the Code tab is gone: a page opened from it says “‹ Chat” and goes back
  * there, and Code's Settled is Chat's.
  */
-function chatParams(route: SavedRoute): Record<string, unknown> | undefined {
+function chatParams(route: SavedRoute, locale?: string): Record<string, unknown> | undefined {
   const p = route.params;
   if (!p || (p.back !== CODE_TAB_WORD && !(route.name === 'Settled' && 'place' in p))) return p;
   const out = { ...p };
-  if (out.back === CODE_TAB_WORD) out.back = TAB_WORDS.ChatRoom;
+  if (out.back === CODE_TAB_WORD) out.back = tabWords(locale).ChatRoom;
   if (route.name === 'Settled') delete out.place;
   return out;
 }

@@ -20,7 +20,7 @@ import { useBurrowBase } from '../data/BurrowProvider';
 import { chatCopy, startedChatRoute } from '../data/chatRoom';
 import { askAboutLine, chatsCopy } from '../data/chats';
 import { useAgentWords } from '../data/useAgent';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { navigateTo, useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -49,6 +49,7 @@ export function NewChatSheet({
   /** The sheet's title and the field's label and placeholder, instead of “Ask about …” / “Ask Dusty”. */
   words?: { title: string; label: string; placeholder: string } | null;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
   const chatCopyHere = chatCopy(rawLocale);
   const chatsCopyHere = chatsCopy(rawLocale);
@@ -89,13 +90,15 @@ export function NewChatSheet({
       }, feedback.onError)
       .finally(() => setBusy(false));
   };
-  const title = words?.title ?? (subject ? `Ask about ${subject.name}` : chatsCopyHere.newChat);
+  const title =
+    words?.title ??
+    (subject ? tMobile('screens2.chat.askAbout', { name: subject.name }) : chatsCopyHere.newChat);
   return (
     <OneSheet
       visible={visible}
       onClose={busy ? () => {} : onClose}
       title={title}
-      body={subject ? askAboutLine(subject, assistant) : null}
+      body={subject ? askAboutLine(subject, assistant, rawLocale) : null}
       buttons={[]}
     >
       <View style={{ marginTop: 14, gap: 14 }}>

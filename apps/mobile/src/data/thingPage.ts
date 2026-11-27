@@ -51,12 +51,12 @@ import {
 } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
 import type { AccountPage } from '../navigation/connectionLinks';
-import { OVERVIEW_TITLE } from './shell';
+import { overviewTitle } from './shell';
 
 export function thingPageCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
   return {
-    back: OVERVIEW_TITLE,
+    back: overviewTitle(locale),
     loading: t('thingPage.thingPageCopy.loading'),
     failed: t('thingPage.thingPageCopy.failed'),
     notFound: t('thingPage.thingPageCopy.notFound'),
@@ -67,7 +67,8 @@ export function thingPageCopy(locale?: string) {
     runsOnHint: t('thingPage.thingPageCopy.runsOnHint'),
     alsoConnected: t('thingPage.thingPageCopy.alsoConnected'),
     ask: (name: string) => t('thingPage.thingPageCopy.ask', { name }),
-    open: (label: string) => `Opens ${label.replace(/^Open /, '')} in your browser`,
+    open: (label: string) =>
+      t('data.thingPage.opensInBrowser', { name: label.replace(/^Open /, '').replace(/ openen$/, '') }),
     /** The Open button's word; its full name (“Open Home Assistant”) is what screen readers say. */
     openWord: t('thingPage.thingPageCopy.openWord'),
     moreDetail: t('thingPage.thingPageCopy.moreDetail'),
@@ -145,9 +146,10 @@ export interface PhoneThingTab {
 /** The page's tabs: the server's in order, Activity, then Connection when the page has one (CP-05; AP-2634; SST-06). */
 export function phoneThingTabs(
   page: Pick<ThingPage, 'tabs' | 'settings' | 'connectionId' | 'catalogId'>,
+  locale?: string,
 ): PhoneThingTab[] {
   // An account's Connection is its own screen, which GitHub and Website feedback have without a connection id.
-  return thingTabs(page)
+  return thingTabs(page, locale)
     .filter((t) => t.own !== 'settings' || !!page.connectionId || isAccountPageId(page.catalogId))
     .map((t) => ({
       key: t.key,
@@ -225,9 +227,12 @@ export function problemLine(
   page: Pick<ThingPage, 'problem' | 'readAt'>,
   now: Date | number,
   timeZone: string,
+  locale?: string,
 ): string | null {
   if (!page.problem) return null;
-  const from = page.readAt ? ` ${THING_PAGE_COPY.figuresFrom(doneWhen(page.readAt, now, timeZone))}` : '';
+  const from = page.readAt
+    ? ` ${thingPageCopy(locale).figuresFrom(doneWhen(page.readAt, now, timeZone, locale))}`
+    : '';
   return `${page.problem}${from}`;
 }
 
@@ -256,9 +261,10 @@ export interface ThingLookCardView {
 export function thingLookCard(
   page: Pick<ThingPage, 'research' | 'status'> & { name?: string },
   assistant: string,
+  locale?: string,
 ): ThingLookCardView | null {
   const research = page.research;
-  const view = lookResearchView(research, assistant);
+  const view = lookResearchView(research, assistant, undefined, locale);
   if (!research || !view) return null;
   const bad = page.status === 'bad' || page.status === 'offline';
   return {
@@ -267,7 +273,7 @@ export function thingLookCard(
     tone: view.fixed ? 'ok' : bad ? 'bad' : 'warn',
     thread: lookThreadHref(research),
     // A plan of several steps (handle-it.md): the plan card instead, Go ahead and Change something.
-    plan: page.name ? researchPlanView(research, page.name) : null,
+    plan: page.name ? researchPlanView(research, page.name, locale) : null,
     planTone: bad ? 'bad' : 'warn',
   };
 }
@@ -379,7 +385,10 @@ export interface NoticeRowView {
 }
 
 /** A tone's words for TalkBack beside the dot. */
-const NOTICE_TONE_WORDS = { bad: 'Problem', warn: 'Needs a look', info: null } as const;
+function noticeToneWords(locale?: string): Record<ThingPageNotice['tone'], string | null> {
+  const { t } = mobileTranslator(locale);
+  return { bad: t('data.thingPage.tone.bad'), warn: t('data.thingPage.tone.warn'), info: null };
+}
 
 /** The words a quiet line's Undo and ⋯ button are read with. */
 export function quietLineCopy(locale?: string) {
@@ -402,12 +411,13 @@ export const QUIET_LINE_COPY = quietLineCopy();
 export function noticeRows(
   panel: Extract<ThingPagePanel, { kind: 'notices' }>,
   tabs: readonly PhoneThingTab[],
-  { quiet = false, askLabel }: { quiet?: boolean; askLabel?: string } = {},
+  { quiet = false, askLabel, locale }: { quiet?: boolean; askLabel?: string; locale?: string } = {},
 ): NoticeRowView[] {
+  const toneWords = noticeToneWords(locale);
   return panel.items.map((n) => {
-    const quietText = quietLineText(n);
+    const quietText = quietLineText(n, locale);
     const action = linkRun(noticeLink(n, askLabel), tabs);
-    const words = quietText ? null : NOTICE_TONE_WORDS[n.tone];
+    const words = quietText ? null : toneWords[n.tone];
     const detail = n.detail?.trim() || null;
     const held = heldLine(n);
     const ref = quiet && !held && quietUndo(n) ? noticeRef(n) : null;
@@ -426,7 +436,7 @@ export function noticeRows(
         ...(n.subject ? { subject: n.subject } : {}),
         ...(n.ignore ? { ignore: n.ignore } : {}),
       },
-      menu: quiet ? quietMenu(n) : null,
+      menu: quiet ? quietMenu(n, locale) : null,
       quiet: quietText,
       undo: ref,
       endNow: quiet && held === 'window',
@@ -475,9 +485,10 @@ export function listRows(
   panel: Extract<ThingPagePanel, { kind: 'list' }>,
   now: Date | number,
   timeZone: string,
+  locale?: string,
 ): ListRowView[] {
   return panel.items.map((it) => {
-    const right = it.right?.trim() || (it.at ? doneWhen(it.at, now, timeZone) : null);
+    const right = it.right?.trim() || (it.at ? doneWhen(it.at, now, timeZone, locale) : null);
     return {
       id: it.id,
       title: it.title,
@@ -495,12 +506,16 @@ export function listRows(
 
 /* What Whombat may do */
 
-export const ACCESS_TIER_WORDS: Record<ThingPageAccessItem['tier'], string> = {
-  allowed: 'Allowed',
-  ask: 'Asks you',
-  off: 'Off',
-  mixed: 'Mixed',
-};
+export function accessTierWords(locale?: string): Record<ThingPageAccessItem['tier'], string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    allowed: t('data.thingPage.tier.allowed'),
+    ask: t('data.thingPage.tier.ask'),
+    off: t('data.notify.off'),
+    mixed: t('data.thingPage.tier.mixed'),
+  };
+}
+export const ACCESS_TIER_WORDS = accessTierWords();
 
 export interface AccessRowView {
   label: string;
@@ -510,15 +525,20 @@ export interface AccessRowView {
   spoken: string;
 }
 
-export function accessRows(panel: Extract<ThingPagePanel, { kind: 'access' }>): AccessRowView[] {
+export function accessRows(
+  panel: Extract<ThingPagePanel, { kind: 'access' }>,
+  locale?: string,
+): AccessRowView[] {
+  const words = accessTierWords(locale);
+  const { tp } = mobileTranslator(locale);
   return panel.items.map((a) => {
-    const tier = ACCESS_TIER_WORDS[a.tier];
+    const tier = words[a.tier];
     return {
       label: a.label,
       tier,
       tone: a.tier === 'allowed' ? 'ok' : a.tier === 'ask' ? 'warn' : 'neutral',
       count: a.count,
-      spoken: `${a.label}: ${tier}, ${a.count === 1 ? '1 tool' : `${a.count} tools`}`,
+      spoken: `${a.label}: ${tier}, ${tp('data.thingPage.tools', a.count)}`,
     };
   });
 }
@@ -540,21 +560,18 @@ export function partsOf<T extends { partOf?: string | undefined }>(
  */
 export function foldHeadsUps<T extends Parameters<typeof noticeGroups>[0][number]>(
   items: readonly T[],
+  locale?: string,
 ): { shown: T[]; folded: T[]; foldLabel: string | null } {
-  const g = noticeGroups(items);
+  const g = noticeGroups(items, locale);
   const asking = new Set<T>(g.asking);
   const headsUps = items.filter((n) => !n.quiet && !asking.has(n));
   const quiet = items.filter((n) => n.quiet);
-  // The shared label's quiet words (“2 ignored”), after its heads-ups count when it has one.
-  const quietWords = quiet.length ? (g.foldLabel?.replace(/^Show (\d+ heads-ups? and )?/, '') ?? null) : null;
-  const parts = [
-    headsUps.length ? `${headsUps.length} heads-up${headsUps.length === 1 ? '' : 's'}` : null,
-    quietWords,
-  ].filter(Boolean);
+  // Every heads-up folds here, one with a button too: the shared label counts them all once they have none.
+  const folded = noticeGroups([...headsUps.map((n) => ({ ...n, action: undefined })), ...quiet], locale);
   return {
     shown: [...g.asking],
     folded: [...headsUps, ...quiet],
-    foldLabel: parts.length ? `Show ${parts.join(' and ')}` : null,
+    foldLabel: headsUps.length || quiet.length ? folded.foldLabel : null,
   };
 }
 

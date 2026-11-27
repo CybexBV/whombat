@@ -20,7 +20,7 @@ import { Button } from '../../ui/primitives';
 import { Touchable } from '../../ui/Touchable';
 import { AddScreenSheet } from './AddScreenSheet';
 import { screenRow } from './screensList';
-import { PHONE_SCREENS_TEXT } from './tiles';
+import { phoneScreensText } from './tiles';
 
 export function ScreensList({ api, list }: { api: DeskApi; list: DeskScreensList }) {
   const { rawLocale } = useI18n();
@@ -47,14 +47,16 @@ export function ScreensList({ api, list }: { api: DeskApi; list: DeskScreensList
       </View>
       <View style={{ gap: 6 }}>
         <Button
-          label={PHONE_SCREENS_TEXT.add}
+          label={phoneScreensText(rawLocale).add}
           variant="secondary"
           disabled={!list.canAdd}
           onPress={() => setAdding(true)}
-          accessibilityHint={list.canAdd ? PHONE_SCREENS_TEXT.addHint : PHONE_SCREENS_TEXT.full}
+          accessibilityHint={
+            list.canAdd ? phoneScreensText(rawLocale).addHint : phoneScreensText(rawLocale).full
+          }
         />
         <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-          {list.canAdd ? PHONE_SCREENS_TEXT.addHint : PHONE_SCREENS_TEXT.full}
+          {list.canAdd ? phoneScreensText(rawLocale).addHint : phoneScreensText(rawLocale).full}
         </Text>
       </View>
       <AddScreenSheet api={api} visible={adding} onClose={() => setAdding(false)} />

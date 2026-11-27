@@ -13,76 +13,88 @@ import {
   type CouncilStage,
   formatTaskDuration,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
 
-export const COUNCIL_WORDS = {
-  /** The card's name in front of what it is about: “Council · Improve the Settings page”. */
-  name: 'Council',
-  /** The first round, by what the council does. */
-  firstRound: {
-    review: 'Reviewing',
-    research: 'Researching',
-    improve: 'Looking at it',
-  } satisfies Record<CouncilKind, string>,
-  stages: {
-    agree: 'Agreeing on the plan',
-    approve: 'Waiting for your go-ahead',
-    build: 'T3 Code is building the plan',
-    check: 'Checking the result',
-    done: 'Done',
-    stopped: 'Stopped',
-  } satisfies Record<Exclude<CouncilStage, 'research'>, string>,
-  /** Building again after a check: the lead fixes what the reviewers found. */
-  fixing: 'T3 Code fixes what the check found',
-  states: {
-    working: 'Working',
-    done: 'Answered',
-    failed: 'Ran into a problem',
-    no_answer: 'Didn’t answer',
-    stopped: 'Stopped',
-  } satisfies Record<CouncilMemberState, string>,
-  /** A seat whose reviewer hasn't started yet. */
-  waiting: 'Getting ready',
-  verdicts: { agree: 'Agrees', changes: 'Wants changes' },
-  /** The thread in T3 Code that runs the council: it starts the reviewers, and builds and fixes. */
-  builder: 'Lead',
-  stop: 'Stop',
-  /** The live card's link to Settings → the assistant → Council: the rounds and score of the next council. */
-  changeCouncil: 'Council settings',
-  plan: 'The plan',
-  /** A member's answer, folded on its row (CNL-64). */
-  readAnswer: 'Read its answer',
-  hideAnswer: 'Hide its answer',
-  /** The rest of a long answer is in T3 Code. */
-  restInT3: 'The rest is in T3 Code',
-  /** The final card: the last round's members whose answers can still be read (CNL-64). */
-  lastAnswers: 'Their last answers',
-  /** Stop asks first (CNL-43). */
-  stopAsk: {
-    title: 'Stop the council?',
-    body: 'Every member stops.',
-    keep: 'Keep going',
-  },
-  /** A press that didn't go through (the server's own words come first when it has some). */
-  failed: {
-    stop: 'Couldn’t stop the council. Try again.',
-  },
-  pictures: 'What changed',
-  /** Under a screen's picture. */
-  picturesHint: 'Before on top, after below. The numbers match the notes.',
-  /** The status word while its plan waits for the person's go-ahead: the reviewers' part is done. */
-  planAgreed: 'Plan agreed',
-  /** The final table's column of a round: the first named by what the council does, then what the round is. */
-  roundShort: { research: 'Look', agree: 'Plan', check: 'Check' },
-  firstRoundShort: { review: 'Review', research: 'Research', improve: 'Look' } satisfies Record<
-    CouncilKind,
-    string
-  >,
-  /** A research council's members agree on one answer, not on a plan to build. */
-  agreeOnAnswer: 'Agree',
-} as const;
+/** The council card's words, in a locale (English when none). */
+export function councilWords(locale?: string | null) {
+  const w = clientTree(locale, CARDS_AREA_WORDS).council;
+  return {
+    /** The card's name in front of what it is about: “Council · Improve the Settings page”. */
+    name: w.name,
+    /** The first round, by what the council does. */
+    firstRound: {
+      review: w.firstRound.review,
+      research: w.firstRound.research,
+      improve: w.firstRound.improve,
+    } satisfies Record<CouncilKind, string>,
+    stages: {
+      agree: w.stages.agree,
+      approve: w.stages.approve,
+      build: w.stages.build,
+      check: w.stages.check,
+      done: w.stages.done,
+      stopped: w.stages.stopped,
+    } satisfies Record<Exclude<CouncilStage, 'research'>, string>,
+    /** Building again after a check: the lead fixes what the reviewers found. */
+    fixing: w.fixing,
+    states: {
+      working: w.states.working,
+      done: w.states.done,
+      failed: w.states.failed,
+      no_answer: w.states.no_answer,
+      stopped: w.states.stopped,
+    } satisfies Record<CouncilMemberState, string>,
+    /** A seat whose reviewer hasn't started yet. */
+    waiting: w.waiting,
+    verdicts: { agree: w.verdicts.agree, changes: w.verdicts.changes },
+    /** The thread in T3 Code that runs the council: it starts the reviewers, and builds and fixes. */
+    builder: w.builder,
+    stop: w.stop,
+    /** The live card's link to Settings → the assistant → Council: the rounds and score of the next council. */
+    changeCouncil: w.changeCouncil,
+    plan: w.plan,
+    /** A member's answer, folded on its row (CNL-64). */
+    readAnswer: w.readAnswer,
+    hideAnswer: w.hideAnswer,
+    /** The rest of a long answer is in T3 Code. */
+    restInT3: w.restInT3,
+    /** The final card: the last round's members whose answers can still be read (CNL-64). */
+    lastAnswers: w.lastAnswers,
+    /** Stop asks first (CNL-43). */
+    stopAsk: { title: w.stopAsk.title, body: w.stopAsk.body, keep: w.stopAsk.keep },
+    /** A press that didn't go through (the server's own words come first when it has some). */
+    failed: { stop: w.failed.stop },
+    pictures: w.pictures,
+    /** Under a screen's picture. */
+    picturesHint: w.picturesHint,
+    /** The status word while its plan waits for the person's go-ahead: the reviewers' part is done. */
+    planAgreed: w.planAgreed,
+    /** The final table's column of a round: the first named by what the council does, then what the round is. */
+    roundShort: { research: w.roundShort.research, agree: w.roundShort.agree, check: w.roundShort.check },
+    firstRoundShort: {
+      review: w.firstRoundShort.review,
+      research: w.firstRoundShort.research,
+      improve: w.firstRoundShort.improve,
+    } satisfies Record<CouncilKind, string>,
+    /** A research council's members agree on one answer, not on a plan to build. */
+    agreeOnAnswer: w.agreeOnAnswer,
+  };
+}
+
+/** The council card's words, in English. */
+export const COUNCIL_WORDS = councilWords();
+
+type CouncilWords = ReturnType<typeof councilWords>;
+const wordsIn = (locale?: string | null): CouncilWords => (locale ? councilWords(locale) : COUNCIL_WORDS);
 
 /** A round's short name: “Review 1”, “Plan 2”, “Check 1”. */
-function roundName(r: Pick<CouncilRoundResult, 'stage' | 'round'>, kind: CouncilKind): string {
+function roundName(
+  r: Pick<CouncilRoundResult, 'stage' | 'round'>,
+  kind: CouncilKind,
+  COUNCIL_WORDS: CouncilWords = wordsIn(),
+): string {
   const word =
     r.stage === 'research'
       ? COUNCIL_WORDS.firstRoundShort[kind]
@@ -100,13 +112,18 @@ export function councilScoreText(score: number): string {
 /** What the council does now: “Checking the result · round 2 of 3”, “Looking at it”. */
 export function councilStageLine(
   card: Pick<CouncilCard, 'what' | 'stage' | 'round' | 'roundsMax' | 'target'>,
+  locale?: string | null,
 ): string {
   const { stage } = card;
-  const of = card.roundsMax > 1 ? ` · round ${card.round} of ${card.roundsMax}` : '';
+  const COUNCIL_WORDS = wordsIn(locale);
+  const w = clientTree(locale, CARDS_AREA_WORDS).council;
+  const of =
+    card.roundsMax > 1 ? ` · ${interpolate(w.roundOf, { round: card.round, max: card.roundsMax })}` : '';
   if (stage === 'research') return COUNCIL_WORDS.firstRound[card.what];
   if (stage === 'agree') return `${COUNCIL_WORDS.stages.agree}${of}`;
   if (stage === 'check') {
-    const target = card.target !== null ? ` · aiming for ${councilScoreText(card.target)}` : '';
+    const target =
+      card.target !== null ? ` · ${interpolate(w.aimingFor, { score: councilScoreText(card.target) })}` : '';
     return `${COUNCIL_WORDS.stages.check}${of}${target}`;
   }
   if (stage === 'build') return card.round > 1 ? COUNCIL_WORDS.fixing : COUNCIL_WORDS.stages.build;
@@ -163,7 +180,12 @@ export function councilElderPose(
 
 const letterOf = (provider: string) => (provider.trim()[0] ?? '?').toUpperCase();
 
-export function councilMemberView(m: CouncilCardMember, nowMs: number): CouncilMemberView {
+export function councilMemberView(
+  m: CouncilCardMember,
+  nowMs: number,
+  locale?: string | null,
+): CouncilMemberView {
+  const COUNCIL_WORDS = wordsIn(locale);
   const waiting = !!m.waiting && m.state === 'working';
   const working = m.state === 'working' && !waiting;
   const score = m.score !== null ? councilScoreText(m.score) : null;
@@ -216,9 +238,11 @@ export interface CouncilScoreTable {
 export function councilScoreTable(
   history: readonly CouncilRoundResult[],
   kind: CouncilKind = 'improve',
+  locale?: string | null,
 ): CouncilScoreTable {
+  const COUNCIL_WORDS = wordsIn(locale);
   const rounds = history.filter((r) => r.members.some((m) => m.score !== null || m.verdict !== null));
-  const columns = rounds.map((r) => roundName(r, kind));
+  const columns = rounds.map((r) => roundName(r, kind, COUNCIL_WORDS));
   const names: { name: string; mark: CouncilCardMember['mark']; provider: string }[] = [];
   for (const r of rounds)
     for (const m of r.members)
@@ -259,18 +283,21 @@ export interface CouncilCardView {
   label: string;
 }
 
-export function councilCardView(card: CouncilCard, nowMs: number): CouncilCardView {
+export function councilCardView(card: CouncilCard, nowMs: number, locale?: string | null): CouncilCardView {
+  const COUNCIL_WORDS = wordsIn(locale);
+  const w = clientTree(locale, CARDS_AREA_WORDS).council;
   const heading = `${COUNCIL_WORDS.name} · ${card.title}`;
-  const stage = councilStageLine(card);
-  const members = card.members.map((m) => councilMemberView(m, nowMs));
+  const stage = councilStageLine(card, locale);
+  const members = card.members.map((m) => councilMemberView(m, nowMs, locale));
   const round = card.members.filter((m) => m.role === 'member');
   // Only answers count: a member that didn't answer is shown as such on its row.
   const answered = round.filter((m) => m.state === 'done').length;
   const working = round.some((m) => m.state === 'working');
-  const progress = card.live && round.length && working ? `${answered} of ${round.length} answered` : null;
+  const progress =
+    card.live && round.length && working ? interpolate(w.answered, { answered, of: round.length }) : null;
   const earlier = card.history.map(
     (r) =>
-      `${roundName(r, card.what)} · ${r.members
+      `${roundName(r, card.what, COUNCIL_WORDS)} · ${r.members
         .map((m) =>
           m.score !== null
             ? councilScoreText(m.score).replace('/10', '')
@@ -286,7 +313,7 @@ export function councilCardView(card: CouncilCard, nowMs: number): CouncilCardVi
     : card.outcome === 'stopped'
       ? COUNCIL_WORDS.stages.stopped
       : noAnswer
-        ? `${COUNCIL_WORDS.stages.done}, ${noAnswer} didn’t answer`
+        ? interpolate(w.doneNoAnswer, { done: COUNCIL_WORDS.stages.done, n: noAnswer })
         : COUNCIL_WORDS.stages.done;
   return {
     heading,
@@ -294,7 +321,7 @@ export function councilCardView(card: CouncilCard, nowMs: number): CouncilCardVi
     members,
     progress,
     earlier,
-    table: councilScoreTable(card.history, card.what),
+    table: councilScoreTable(card.history, card.what, locale),
     stoppable: card.live && card.stage !== 'done' && card.stage !== 'stopped',
     ended,
     label: `${heading}: ${ended ?? stage}`,

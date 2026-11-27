@@ -4,6 +4,7 @@
  * every item points at the object that owns its state and offers that object's own controls.
  */
 import { z } from 'zod';
+import { tCore } from '../i18n/catalog.js';
 import {
   ApprovalId,
   ConversationId,
@@ -29,15 +30,13 @@ import { LinkRef } from './links.js';
 export const WorkSection = z.enum(['needs_you', 'running', 'queued', 'blocked', 'failed', 'done']);
 export type WorkSection = z.infer<typeof WorkSection>;
 
+/** Section titles in order (the inbox's mono labels), in a locale. */
+export function workSections(locale?: string | null): readonly { section: WorkSection; title: string }[] {
+  return WorkSection.options.map((section) => ({ section, title: tCore(locale, `work.section.${section}`) }));
+}
+
 /** Section titles in order (the inbox's mono labels). */
-export const WORK_SECTIONS: readonly { section: WorkSection; title: string }[] = [
-  { section: 'needs_you', title: 'NEEDS YOU' },
-  { section: 'running', title: 'RUNNING' },
-  { section: 'queued', title: 'QUEUED' },
-  { section: 'blocked', title: 'BLOCKED' },
-  { section: 'failed', title: 'FAILED' },
-  { section: 'done', title: 'RECENTLY DONE' },
-];
+export const WORK_SECTIONS: readonly { section: WorkSection; title: string }[] = workSections('en');
 
 export const WorkItemKind = z.enum([
   'approval',
@@ -199,22 +198,40 @@ export function canStopTurn(
 /** Minutes after the last new activity when a working turn counts as quiet. */
 export const WORK_QUIET_AFTER_MS = 2 * 60_000;
 
-function minutesAgo(ms: number): string {
-  const m = Math.max(0, Math.round(ms / 60_000));
-  return m < 1 ? 'just now' : `${m} min ago`;
+function wholeMinutes(ms: number): number {
+  return Math.max(0, Math.round(ms / 60_000));
+}
+
+/** “just now”, “3 min ago”. */
+function minutesAgo(ms: number, locale?: string | null): string {
+  const minutes = wholeMinutes(ms);
+  return minutes < 1
+    ? tCore(locale, 'work.health.justNow')
+    : tCore(locale, 'work.health.minAgo', { minutes });
+}
+
+/** How long, without “ago”: “3 min” (“just now” under a minute). */
+function minutesFor(ms: number, locale?: string | null): string {
+  const minutes = wholeMinutes(ms);
+  return minutes < 1
+    ? tCore(locale, 'work.health.justNow')
+    : tCore(locale, 'work.health.minutes', { minutes });
 }
 
 /**
  * The health of a working turn (WS-19). `leaseMs` is the server's lease; beyond it without a heartbeat the turn is
  * stalled (the lease sweep then retries or fails it). Quiet is not failure.
  */
-export function workHealth(input: {
-  now: Date;
-  heartbeatAt: string | null;
-  lastProgressAt: string | null;
-  leaseMs: number;
-  waiting?: 'approval' | 'question' | null;
-}): WorkHealth {
+export function workHealth(
+  input: {
+    now: Date;
+    heartbeatAt: string | null;
+    lastProgressAt: string | null;
+    leaseMs: number;
+    waiting?: 'approval' | 'question' | null;
+  },
+  locale?: string | null,
+): WorkHealth {
   const now = input.now.getTime();
   const beat = input.heartbeatAt ? Date.parse(input.heartbeatAt) : null;
   const progress = input.lastProgressAt ? Date.parse(input.lastProgressAt) : null;
@@ -223,7 +240,10 @@ export function workHealth(input: {
     return {
       ...base,
       state: 'waiting',
-      text: input.waiting === 'approval' ? 'Waiting for approval' : 'Waiting for an answer',
+      text:
+        input.waiting === 'approval'
+          ? tCore(locale, 'work.health.waitingApproval')
+          : tCore(locale, 'work.health.waitingAnswer'),
     };
   }
   if (beat === null || now - beat > input.leaseMs) {
@@ -233,19 +253,23 @@ export function workHealth(input: {
       state: 'stalled',
       text:
         since === null
-          ? 'No word from the runner yet'
-          : `No word from the runner for ${minutesAgo(since).replace(' ago', '')}`,
+          ? tCore(locale, 'work.health.noWordYet')
+          : tCore(locale, 'work.health.noWordFor', { time: minutesFor(since, locale) }),
     };
   }
   if (progress !== null && now - progress <= WORK_QUIET_AFTER_MS) {
-    return { ...base, state: 'progressing', text: `Working · last step ${minutesAgo(now - progress)}` };
+    return {
+      ...base,
+      state: 'progressing',
+      text: tCore(locale, 'work.health.working', { ago: minutesAgo(now - progress, locale) }),
+    };
   }
   return {
     ...base,
     state: 'quiet',
     text:
       progress === null
-        ? 'Working quietly · no steps reported yet'
-        : `Working quietly · last step ${minutesAgo(now - progress)}`,
+        ? tCore(locale, 'work.health.quietNone')
+        : tCore(locale, 'work.health.quiet', { ago: minutesAgo(now - progress, locale) }),
   };
 }

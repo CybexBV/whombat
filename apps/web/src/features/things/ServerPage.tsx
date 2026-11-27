@@ -25,9 +25,9 @@ import {
   isUnraidServer,
   LIBVIRT_SERVER_TAB_WORDS,
   LIBVIRT_SERVER_TABS,
-  MAC_SERVER_TAB_WORDS,
   macScreenView,
   macServerTabs,
+  macServerTabWords,
   parseDashboardRange,
   parseIncusServerTab,
   parseLibvirtServerTab,
@@ -35,16 +35,16 @@ import {
   parseServerTab,
   parseUnraidTab,
   SERVER_DASHBOARD_RANGES,
-  SERVER_TAB_WORDS,
   SERVER_TABS,
   serverDashboardHead,
   serverDashboardKind,
   serverMark,
   serverPageVerdict,
   serverReportAt,
+  serverTabWords,
   splitTemporary,
-  UNRAID_TAB_WORDS,
   UNRAID_TABS,
+  unraidTabWords,
 } from '@whombat/client/hosts';
 import { useFindMyOnMac, useHostServer, useHostsLive, useServerDashboard } from '@whombat/client/hosts/react';
 import { useHomeOverview, useRenameThing, useTheAgent } from '@whombat/client/react';
@@ -102,15 +102,22 @@ function kindTabs(
   kind: ServerKind,
   d: HostServerDetail | undefined,
   findMyHere: boolean,
+  locale: string | undefined,
 ): { key: string; label: string }[] {
-  if (kind === 'unraid') return UNRAID_TABS.map((key) => ({ key, label: UNRAID_TAB_WORDS[key] }));
+  if (kind === 'unraid') {
+    const words = unraidTabWords(locale);
+    return UNRAID_TABS.map((key) => ({ key, label: words[key] }));
+  }
   if (kind === 'libvirt')
     return LIBVIRT_SERVER_TABS.map((key) => ({ key, label: LIBVIRT_SERVER_TAB_WORDS[key] }));
   if (kind === 'incus') return INCUS_SERVER_TABS.map((key) => ({ key, label: INCUS_SERVER_TAB_WORDS[key] }));
-  if (kind === 'mac')
-    return macServerTabs(findMyHere).map((key) => ({ key, label: MAC_SERVER_TAB_WORDS[key] }));
-  const guests = d ? guestsWord(serverDashboardKind(d)) : SERVER_TAB_WORDS.guests;
-  return SERVER_TABS.map((key) => ({ key, label: key === 'guests' ? guests : SERVER_TAB_WORDS[key] }));
+  if (kind === 'mac') {
+    const words = macServerTabWords(locale);
+    return macServerTabs(findMyHere).map((key) => ({ key, label: words[key] }));
+  }
+  const words = serverTabWords(locale);
+  const guests = d ? guestsWord(serverDashboardKind(d), locale) : words.guests;
+  return SERVER_TABS.map((key) => ({ key, label: key === 'guests' ? guests : words[key] }));
 }
 
 function parseTab(kind: ServerKind, v: string | undefined, findMyHere: boolean): string {
@@ -292,7 +299,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
           }
         >
           <Tabs<string>
-            tabs={kindTabs(kind, d, findMyHere).map((t) => {
+            tabs={kindTabs(kind, d, findMyHere, uiLocale).map((t) => {
               const count = tabCount(t.key, d);
               return count !== null ? { ...t, meta: count } : t;
             })}
@@ -447,8 +454,9 @@ function ServerHead({
   onKeepQuiet: (() => void) | null;
 }) {
   const now = useNow(30_000);
-  const head = serverDashboardHead(detail);
-  const verdict = useMemo(() => serverPageVerdict(detail), [detail]);
+  const { tag: locale } = useWebI18n();
+  const head = serverDashboardHead(detail, undefined, locale);
+  const verdict = useMemo(() => serverPageVerdict(detail, locale ? { locale } : {}), [detail, locale]);
   const rc = detail.server.remoteControl;
   // The host's shell (and a Mac's screen beside it) goes with the host-shell switch only, as the hosts service asks.
   const shellOk = rc.hostShell !== false && detail.server.status !== 'offline';
@@ -536,7 +544,11 @@ function useServerTechnical(
   const parts = useServerParts(burrow, serverId);
   // A part's page is read while the pointer rests on its name (page-speed.md AP-2660).
   const linkProps = useThingLinkProps(burrow);
-  const rows = useMemo(() => (detail ? serverDashboardHead(detail).details : []), [detail]);
+  const { tag: locale } = useWebI18n();
+  const rows = useMemo(
+    () => (detail ? serverDashboardHead(detail, undefined, locale).details : []),
+    [detail, locale],
+  );
   return {
     rows,
     extra: parts.length ? (

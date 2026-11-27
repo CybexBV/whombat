@@ -5,7 +5,7 @@
  * sheet. The arranged order, the edits and what a figure says are the shared `home/arrange.ts`. Pure; the screen is
  * `screens/HomeScreen.tsx` and `screens/home/`.
  */
-import { ARRANGE_WORDS, isTileThing, OVERVIEW_PAGE_WORDS, topKey } from '@whombat/client';
+import { arrangeWords, isTileThing, overviewPageWords, topKey } from '@whombat/client';
 import type {
   DeskCatalog,
   DeskCatalogItem,
@@ -15,6 +15,7 @@ import type {
   OverviewTileSize,
 } from '@whombat/core';
 import { dayKey, formatClock } from '@whombat/core/text';
+import { mobileTranslator } from '../i18n/translate';
 
 /* Words ------------------------------------------------------------------------------------------------------------ */
 
@@ -22,25 +23,31 @@ import { dayKey, formatClock } from '@whombat/core/text';
  * The phone's few words the shared `ARRANGE_WORDS` and `OVERVIEW_WORDS` don't have yet: the summary card's Live and its
  * all-fine heading, and Today's heading, count and fold.
  */
-export const ARRANGED_PHONE_WORDS = {
-  live: OVERVIEW_PAGE_WORDS.live,
-  fine: OVERVIEW_PAGE_WORDS.fine,
-  /** “read 2 s ago”, after the greeting and the date. */
-  readAgo: (seconds: number) =>
-    seconds < 60
-      ? `read ${Math.max(0, Math.round(seconds))} s ago`
-      : seconds < 3600
-        ? `read ${Math.floor(seconds / 60)} min ago`
-        : `read ${Math.floor(seconds / 3600)} h ago`,
-  today: OVERVIEW_PAGE_WORDS.today,
-  todayCount: OVERVIEW_PAGE_WORDS.todayLine,
-  allActivity: OVERVIEW_PAGE_WORDS.allActivity,
-  showAll: 'Show all',
-  showLess: 'Show less',
-  automation: OVERVIEW_PAGE_WORDS.automation,
-  planned: 'Planned',
-  failed: 'Failed',
-} as const;
+export function arrangedPhoneWords(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const page = overviewPageWords(locale);
+  return {
+    live: page.live,
+    fine: page.fine,
+    /** “read 2 s ago”, after the greeting and the date. */
+    readAgo: (seconds: number) =>
+      seconds < 60
+        ? t('data.overviewArranged.readS', { n: Math.max(0, Math.round(seconds)) })
+        : seconds < 3600
+          ? t('data.overviewArranged.readMin', { n: Math.floor(seconds / 60) })
+          : t('data.overviewArranged.readH', { n: Math.floor(seconds / 3600) }),
+    today: page.today,
+    todayCount: page.todayLine,
+    allActivity: page.allActivity,
+    showAll: t('data.overviewArranged.showAll'),
+    showLess: t('data.overviewArranged.showLess'),
+    automation: page.automation,
+    planned: t('data.overviewArranged.planned'),
+    failed: t('data.overviewArranged.failed'),
+  };
+}
+
+export const ARRANGED_PHONE_WORDS = arrangedPhoneWords();
 
 /* Tiles in rows ------------------------------------------------------------------------------------------------- */
 
@@ -106,7 +113,9 @@ export function todayMoments(
   now: Date | number,
   timeZone: string,
   assistant: string,
+  locale?: string,
 ): TodayMoment[] {
+  const automation = overviewPageWords(locale).automation;
   const today = dayKey(now, timeZone);
   const out: TodayMoment[] = [];
   for (const d of data.doneToday ?? []) {
@@ -128,7 +137,7 @@ export function todayMoments(
       at: Date.parse(a.at),
       time: formatClock(a.at, timeZone),
       text: a.name,
-      from: ARRANGED_PHONE_WORDS.automation,
+      from: automation,
       tone: a.state === 'failed' ? 'bad' : a.state === 'scheduled' ? 'plan' : 'ok',
       href: null,
     });
@@ -200,7 +209,12 @@ const showOf = (item: DeskCatalogItem): OverviewShow =>
   item.type === 'panel' && item.opts.panel ? { panel: item.opts.panel } : {};
 
 /** What a thing's tile can show: its main figures first, then each panel of its page, each once. */
-export function tileShowChoices(catalog: DeskCatalog | undefined, thing: string): ShowChoice[] {
+export function tileShowChoices(
+  catalog: DeskCatalog | undefined,
+  thing: string,
+  locale?: string,
+): ShowChoice[] {
+  const mainFigures = arrangeWords(locale).mainFigures;
   const out: ShowChoice[] = [];
   const seen = new Set<string>();
   for (const group of catalog?.groups ?? []) {
@@ -214,7 +228,7 @@ export function tileShowChoices(catalog: DeskCatalog | undefined, thing: string)
       out.push({
         key,
         show,
-        name: show.panel ? item.name : ARRANGE_WORDS.mainFigures,
+        name: show.panel ? item.name : mainFigures,
         line: item.line,
         chart: item.view === 'chart',
       });
@@ -249,7 +263,9 @@ export function topChoiceGroups(
   catalog: DeskCatalog | undefined,
   top: readonly OverviewLayoutTop[],
   index: number,
+  locale?: string,
 ): TopChoiceGroup[] {
+  const words = arrangeWords(locale);
   const here = top[index] ? topKey(top[index] as OverviewLayoutTop) : null;
   const elsewhere = new Set(top.filter((_, i) => i !== index).map(topKey));
   const choice = (t: OverviewLayoutTop, name: string, line: string | null): TopChoice => {
@@ -258,10 +274,10 @@ export function topChoiceGroups(
   };
   const own: TopChoiceGroup = {
     key: 'own',
-    label: ARRANGE_WORDS.own,
+    label: words.own,
     thing: null,
-    items: (Object.keys(ARRANGE_WORDS.ownNames) as (keyof typeof ARRANGE_WORDS.ownNames)[]).map((o) =>
-      choice({ own: o }, ARRANGE_WORDS.ownNames[o], null),
+    items: (Object.keys(words.ownNames) as (keyof typeof words.ownNames)[]).map((o) =>
+      choice({ own: o }, words.ownNames[o], null),
     ),
   };
   const groups: TopChoiceGroup[] = [own];
@@ -275,7 +291,7 @@ export function topChoiceGroups(
       const key = topKey(t);
       if (seen.has(key)) continue;
       seen.add(key);
-      items.push(choice(t, item.type === 'figures' ? ARRANGE_WORDS.mainFigures : item.name, item.line));
+      items.push(choice(t, item.type === 'figures' ? words.mainFigures : item.name, item.line));
     }
     if (items.length) groups.push({ key: group.key, label: group.label, thing: group.thing ?? null, items });
   }

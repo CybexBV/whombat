@@ -9,7 +9,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { PROMPT_WORDS, problemText } from '@whombat/client';
+import { problemText, promptWords } from '@whombat/client';
 import { queryHook } from '@whombat/client/react';
 import { api, PROMPT_TEXT_MAX, PROMPT_TITLE_MAX } from '@whombat/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -30,7 +30,6 @@ import { usePrompts, usePromptWrites } from '../data/usePrompts';
 import { useI18n, useMobileT } from '../i18n';
 import { Card } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
-import { LEAVE_TEXT } from '../screens/agent/parts';
 import { DelegationAiSheet } from '../screens/DelegationAiSheet';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -47,14 +46,12 @@ import { Touchable } from '../ui/Touchable';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'PromptEdit'>;
 
-/** What leaving with changes not saved says (the assistant's parts say it of a part; this is one prompt). */
-export const PROMPT_LEAVE_TEXT = 'Your changes to this prompt aren’t saved yet.';
-
 /** `delegations.models`: what T3 Code runs, for the AI a prompt's thread runs on. */
 const useDelegationModels = queryHook(api.delegations.models);
 
 export function PromptEditScreen({ navigation, route }: Props) {
   const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
@@ -91,16 +88,16 @@ export function PromptEditScreen({ navigation, route }: Props) {
       navigation.addListener('beforeRemove', (e) => {
         if (!guard.current.dirty || guard.current.leaving) return;
         e.preventDefault();
-        Alert.alert(LEAVE_TEXT.title, PROMPT_LEAVE_TEXT, [
-          { text: LEAVE_TEXT.stay, style: 'cancel' },
+        Alert.alert(tMobile('settings2.leave.title'), tMobile('settings2.prompts.leave'), [
+          { text: tMobile('settings2.leave.stay'), style: 'cancel' },
           {
-            text: LEAVE_TEXT.discard,
+            text: tMobile('settings2.leave.discard'),
             style: 'destructive',
             onPress: () => navigation.dispatch(e.data.action),
           },
         ]);
       }),
-    [navigation],
+    [navigation, tMobile],
   );
   const goBack = () =>
     navigation.canGoBack() ? navigation.goBack() : navigation.navigate('SettingsPrompts');
@@ -122,14 +119,14 @@ export function PromptEditScreen({ navigation, route }: Props) {
     setProblem(null);
   };
   const canSave = !!draft && promptCanSave(draft, promptId ? original : null) && !busy;
-  const failed = (error: unknown) => setProblem(problemText(error, PROMPT_WORDS.failed, rawLocale));
+  const failed = (error: unknown) => setProblem(problemText(error, promptWordsHere.failed, rawLocale));
   const onSave = () => {
     if (!draft || !canSave) return;
     const body = promptDraftBody(draft);
     const done = (status: string) => {
-      if (status !== 'ok') return setProblem(PROMPT_WORDS.failed);
+      if (status !== 'ok') return setProblem(promptWordsHere.failed);
       haptic('success');
-      if (!promptId) showNotice(PROMPT_WORDS.saved);
+      if (!promptId) showNotice(promptWordsHere.saved);
       leave();
     };
     if (promptId)
@@ -145,17 +142,17 @@ export function PromptEditScreen({ navigation, route }: Props) {
   };
   const onRemove = () => {
     if (!promptId || !prompt) return;
-    Alert.alert(PROMPT_WORDS.removeAsk(prompt.title), undefined, [
-      { text: PROMPT_WORDS.cancel, style: 'cancel' },
+    Alert.alert(promptWordsHere.removeAsk(prompt.title), undefined, [
+      { text: promptWordsHere.cancel, style: 'cancel' },
       {
-        text: PROMPT_WORDS.remove,
+        text: promptWordsHere.remove,
         style: 'destructive',
         onPress: () =>
           writes.remove.mutate(
             { params: { burrow: slug, promptId } },
             {
               onSuccess: (r) => {
-                if (r.status !== 'ok') return setProblem(PROMPT_WORDS.failed);
+                if (r.status !== 'ok') return setProblem(promptWordsHere.failed);
                 haptic('success');
                 leave();
               },
@@ -166,9 +163,9 @@ export function PromptEditScreen({ navigation, route }: Props) {
     ]);
   };
 
-  const title = promptId ? PROMPT_WORDS.edit : PROMPT_WORDS.add;
+  const title = promptId ? promptWordsHere.edit : promptWordsHere.add;
   const back = (
-    <BackBar label={fromText === null ? PROMPT_WORDS.title : tMobile('managed.back')} onPress={goBack} />
+    <BackBar label={fromText === null ? promptWordsHere.title : tMobile('managed.back')} onPress={goBack} />
   );
   if (!draft)
     return (
@@ -177,11 +174,14 @@ export function PromptEditScreen({ navigation, route }: Props) {
         {waiting ? (
           <Loading />
         ) : (
-          <ErrorState text={problemText(here.error, PROMPT_WORDS.failed, rawLocale)} onRetry={here.refetch} />
+          <ErrorState
+            text={problemText(here.error, promptWordsHere.failed, rawLocale)}
+            onRetry={here.refetch}
+          />
         )}
       </Screen>
     );
-  const aiValue = promptAiLine(draft.ai, options);
+  const aiValue = promptAiLine(draft.ai, options, rawLocale);
   return (
     <Screen>
       {back}
@@ -203,14 +203,14 @@ export function PromptEditScreen({ navigation, route }: Props) {
             {title}
           </Text>
           <FormField
-            label={PROMPT_WORDS.fieldTitle}
+            label={promptWordsHere.fieldTitle}
             value={draft.title}
             onChangeText={(t) => change({ title: t })}
             maxLength={PROMPT_TITLE_MAX}
             returnKeyType="next"
           />
           <FormField
-            label={PROMPT_WORDS.fieldText}
+            label={promptWordsHere.fieldText}
             value={draft.text}
             onChangeText={(t) => change({ text: t })}
             maxLength={PROMPT_TEXT_MAX}
@@ -220,22 +220,22 @@ export function PromptEditScreen({ navigation, route }: Props) {
           <Card>
             <SwitchRow
               first
-              title={PROMPT_WORDS.onRepository}
-              hint={PROMPT_WORDS.onRepositoryHint}
+              title={promptWordsHere.onRepository}
+              hint={promptWordsHere.onRepositoryHint}
               on={draft.onRepository}
               onChange={(on) => change({ onRepository: on })}
             />
             {draft.onRepository ? (
               <>
                 <SwitchRow
-                  title={PROMPT_WORDS.ownIt}
-                  hint={PROMPT_WORDS.ownItHint}
+                  title={promptWordsHere.ownIt}
+                  hint={promptWordsHere.ownItHint}
                   on={draft.ownIt}
                   onChange={(on) => change({ ownIt: on })}
                 />
                 <SwitchRow
-                  title={PROMPT_WORDS.merge}
-                  hint={PROMPT_WORDS.mergeHint}
+                  title={promptWordsHere.merge}
+                  hint={promptWordsHere.mergeHint}
                   on={draft.merge}
                   onChange={(on) => change({ merge: on })}
                 />
@@ -245,7 +245,7 @@ export function PromptEditScreen({ navigation, route }: Props) {
                     setAiOpen(true);
                   }}
                   feedback="wash"
-                  accessibilityLabel={`${PROMPT_WORDS.ai}: ${aiValue}`}
+                  accessibilityLabel={`${promptWordsHere.ai}: ${aiValue}`}
                   style={{
                     minHeight: 48,
                     flexDirection: 'row',
@@ -258,7 +258,7 @@ export function PromptEditScreen({ navigation, route }: Props) {
                   }}
                 >
                   <Text size={15.5} weight={500} numberOfLines={1} style={{ flexShrink: 0 }}>
-                    {PROMPT_WORDS.ai}
+                    {promptWordsHere.ai}
                   </Text>
                   <Text
                     size={15}
@@ -274,7 +274,7 @@ export function PromptEditScreen({ navigation, route }: Props) {
             ) : null}
           </Card>
           {promptId && prompt ? (
-            <Button label={PROMPT_WORDS.remove} variant="quiet" onPress={onRemove} disabled={busy} />
+            <Button label={promptWordsHere.remove} variant="quiet" onPress={onRemove} disabled={busy} />
           ) : null}
         </ScrollView>
         <View
@@ -295,14 +295,14 @@ export function PromptEditScreen({ navigation, route }: Props) {
           ) : null}
           <View style={{ flexDirection: 'row', gap: 10 }}>
             <Button
-              label={PROMPT_WORDS.cancel}
+              label={promptWordsHere.cancel}
               variant="secondary"
               size="lg"
               onPress={goBack}
               style={{ flex: 1 }}
             />
             <Button
-              label={PROMPT_WORDS.save}
+              label={promptWordsHere.save}
               size="lg"
               onPress={onSave}
               busy={writes.create.isPending || writes.save.isPending}
@@ -315,9 +315,9 @@ export function PromptEditScreen({ navigation, route }: Props) {
       <DelegationAiSheet
         visible={aiOpen}
         opening={aiOpening}
-        title={PROMPT_WORDS.ai}
+        title={promptWordsHere.ai}
         subtitle={draft.title.trim() || null}
-        first={PROMPT_WORDS.aiDefault}
+        first={promptWordsHere.aiDefault}
         current={promptAiShown(draft.ai, options)}
         models={models.data}
         error={models.error}

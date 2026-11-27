@@ -7,6 +7,7 @@
  * come from the answers), no I/O beyond `hostMetricsLoader`'s session.
  */
 import { type SpendDaily, type SpendOverview, spendTokens } from '@whombat/core/domain';
+import { formatLocaleNumber } from '@whombat/core/i18n';
 import {
   bitsPerSecond,
   cacheReadPct,
@@ -16,9 +17,9 @@ import {
   formatShortWeekday,
   formatUsagePct,
   HOST_CHART_DAYS,
-  HOST_DISK_PART_LABELS,
-  HOST_STATUS_COPY,
+  hostDiskPartLabels,
   hostDiskUsedPct,
+  hostStatusCopy,
   NBSP,
 } from '@whombat/core/text';
 import {
@@ -33,6 +34,8 @@ import {
   type HostPoint,
   type HostSeries,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { HOST_CHART_WORDS_TREE } from '../i18n/messages/hostManaged/hostCharts';
 import { sessionOps } from '../session/managed-ops';
 import type { ApplianceSession, CallOptions } from '../session/types';
 
@@ -48,7 +51,12 @@ export function hostMetricsLoader(session: ApplianceSession): HostMetricsLoader 
 }
 
 /** The words on the charts that the contracts leave to the mock: the time axis's last tick, the days' last column. */
-export const HOST_CHART_WORDS = { now: 'now', today: 'today' } as const;
+export function hostChartWords(locale?: string | null): { readonly now: string; readonly today: string } {
+  const w = clientTree(locale, HOST_CHART_WORDS_TREE);
+  return { now: w.now, today: w.today };
+}
+
+export const HOST_CHART_WORDS = hostChartWords('en');
 
 /** “Other” on the disk is shown from half a gigabyte (smaller rests go unmentioned). */
 const OTHER_MIN_BYTES = 500_000_000;
@@ -146,11 +154,11 @@ export function hostPeak(series: HostSeries): { pct: number; at: number } | null
  * `Measuring since 14:02. The charts fill in as time goes on.` while the range reaches back before the first
  * measurement (by more than one step); null once the range is measured all the way.
  */
-export function hostMeasuringNote(metrics: HostMetrics): string | null {
+export function hostMeasuringNote(metrics: HostMetrics, locale?: string | null): string | null {
   const { series } = metrics;
   const rangeStart = hostPointStart(series, series.points.length - HOST_METRICS_POINTS[series.range]);
   return at(metrics.measuringSince) > rangeStart + series.stepS * 1000
-    ? HOST_STATUS_COPY.measuringSince(metrics.measuringSince, metrics.timeZone)
+    ? hostStatusCopy(locale).measuringSince(metrics.measuringSince, metrics.timeZone)
     : null;
 }
 
@@ -165,9 +173,14 @@ export interface HostTiles {
 }
 
 /** `1.8` with `of 16 GB` when both are in the same unit; else `850 MB` with `of 16 GB`. */
-function usedOf(used: number, total: number, of: (total: string) => string): { value: string; unit: string } {
-  const u = formatBytes(used);
-  const t = formatBytes(total);
+function usedOf(
+  used: number,
+  total: number,
+  of: (total: string) => string,
+  locale?: string | null,
+): { value: string; unit: string } {
+  const u = formatBytes(used, locale);
+  const t = formatBytes(total, locale);
   const [uNumber, uUnit] = u.split(NBSP);
   const tUnit = t.split(NBSP)[1];
   return { value: uUnit === tUnit ? (uNumber ?? u) : u, unit: of(t) };
@@ -178,35 +191,33 @@ function usedOf(used: number, total: number, of: (total: string) => string): { v
  * agent's containers' share (OP-16); Disk used of total with a meter (as `df` counts it) and what's free; Today received with sent. The
  * sparklines are the range's processor and download (null: a gap).
  */
-export function hostTiles(metrics: HostMetrics): HostTiles {
+export function hostTiles(metrics: HostMetrics, locale?: string | null): HostTiles {
+  const copy = hostStatusCopy(locale);
   const { now, disks, series, timeZone } = metrics;
   const peak = hostPeak(series);
   const today = metrics.days.at(-1);
-  const memory = usedOf(now.memoryUsedBytes, now.memoryTotalBytes, HOST_STATUS_COPY.memoryOf);
-  const disk = usedOf(disks.data.usedBytes, disks.data.totalBytes, HOST_STATUS_COPY.diskOf);
+  const memory = usedOf(now.memoryUsedBytes, now.memoryTotalBytes, copy.memoryOf, locale);
+  const disk = usedOf(disks.data.usedBytes, disks.data.totalBytes, copy.diskOf, locale);
   return {
     processor: {
       value: formatUsagePct(now.cpuPermille / 10),
-      line: peak ? HOST_STATUS_COPY.peak(peak.pct, iso(peak.at), timeZone) : null,
+      line: peak ? copy.peak(peak.pct, iso(peak.at), timeZone) : null,
       spark: series.points.map((p) => (p ? p.cpuPermille / 10 : null)),
     },
     memory: {
       ...memory,
-      line:
-        now.containersMemoryBytes === null
-          ? null
-          : HOST_STATUS_COPY.memoryContainers(now.containersMemoryBytes),
+      line: now.containersMemoryBytes === null ? null : copy.memoryContainers(now.containersMemoryBytes),
       pct: now.memoryTotalBytes > 0 ? (now.memoryUsedBytes / now.memoryTotalBytes) * 100 : 0,
     },
     disk: {
       ...disk,
-      line: HOST_STATUS_COPY.diskFree(disks.data.freeBytes),
+      line: copy.diskFree(disks.data.freeBytes),
       pct: hostDiskUsedPct(disks.data),
     },
     today: {
-      value: formatBytes(today?.inBytes ?? 0),
-      unit: HOST_STATUS_COPY.todayIn,
-      line: HOST_STATUS_COPY.todayOut(today?.outBytes ?? 0),
+      value: formatBytes(today?.inBytes ?? 0, locale),
+      unit: copy.todayIn,
+      line: copy.todayOut(today?.outBytes ?? 0),
       spark: series.points.map((p) => (p ? bitsPerSecond(p.inBytes, series.stepS) : null)),
     },
   };
@@ -221,9 +232,9 @@ export interface HostTick {
 }
 
 /** A moment on the axis: `14:25` within a day's ranges, `Mon` across a week, `3 Oct` across a month. */
-function axisLabel(ms: number, range: HostMetricsRange, timeZone: string): string {
-  if (range === 'week') return formatShortWeekday(ms, timeZone);
-  if (range === 'month') return formatDate(ms, timeZone, { year: 'never' });
+function axisLabel(ms: number, range: HostMetricsRange, timeZone: string, locale?: string | null): string {
+  if (range === 'week') return formatShortWeekday(ms, timeZone, locale);
+  if (range === 'month') return formatDate(ms, timeZone, { year: 'never' }, locale);
   return formatClock(ms, timeZone);
 }
 
@@ -232,22 +243,28 @@ export function hostTimeTicks(
   points: readonly HostChartPoint[],
   range: HostMetricsRange,
   timeZone: string,
+  locale?: string | null,
 ): HostTick[] {
   const n = points.length;
   if (n < 2) return [];
   const indexes = [0, 1, 2, 3].map((q) => Math.round(((n - 1) * q) / 4));
   return [
-    ...indexes.map((index) => ({ index, label: axisLabel(points[index]?.at ?? 0, range, timeZone) })),
-    { index: n - 1, label: HOST_CHART_WORDS.now },
+    ...indexes.map((index) => ({ index, label: axisLabel(points[index]?.at ?? 0, range, timeZone, locale) })),
+    { index: n - 1, label: hostChartWords(locale).now },
   ];
 }
 
 /** A point's moment at the top of its tooltip: `14:25`, or `Sat 10 Oct · 14:30` in the week's and month's ranges. */
-export function hostPointLabel(ms: number, range: HostMetricsRange, timeZone: string): string {
+export function hostPointLabel(
+  ms: number,
+  range: HostMetricsRange,
+  timeZone: string,
+  locale?: string | null,
+): string {
   const clock = formatClock(ms, timeZone);
   return range === 'hour' || range === 'day'
     ? clock
-    : `${formatShortWeekday(ms, timeZone)} ${formatDate(ms, timeZone, { year: 'never' })} · ${clock}`;
+    : `${formatShortWeekday(ms, timeZone, locale)} ${formatDate(ms, timeZone, { year: 'never' }, locale)} · ${clock}`;
 }
 
 /** A value scale's top and its three gridlines (0, half, top). */
@@ -275,10 +292,16 @@ export function hostSpeedScale(points: readonly HostChartPoint[]): HostScale {
   return scale(niceCeiling(top / 1_000_000, 1) * 1_000_000);
 }
 
-/** The speed axis's numbers (no unit, the hint says it): `0`, `40`, `2.5`. */
-export function hostSpeedTick(bitsPerS: number): string {
-  const m = bitsPerS / 1_000_000;
-  return String(Number(m.toFixed(1)));
+/** The speed axis's numbers (no unit, the hint says it): `0`, `40`, `2.5` (`2,5` in Dutch). */
+export function hostSpeedTick(bitsPerS: number, locale?: string | null): string {
+  return axisNumber(bitsPerS / 1_000_000, locale);
+}
+
+/** An axis number with at most one decimal, in the locale's way of writing it (English's when none is given). */
+function axisNumber(value: number, locale?: string | null): string {
+  const rounded = Number(value.toFixed(1));
+  if (typeof locale !== 'string') return String(rounded);
+  return formatLocaleNumber(rounded, locale, { maximumFractionDigits: 1, useGrouping: false });
 }
 
 /** A tooltip line split where its value ends (`12 Mbit/s` · `down`, `2.2 GB` · `received`): values lead, in bold. */
@@ -293,16 +316,16 @@ export function splitLead(line: string): { value: string; rest: string } {
 const noonOf = (date: string) => `${date}T12:00:00Z`;
 
 /** `Sat 10 Oct`; `Today so far` for today. */
-function dayTitle(date: string, today: boolean): string {
+function dayTitle(date: string, today: boolean, locale?: string | null): string {
   return today
-    ? HOST_STATUS_COPY.todaySoFar
-    : `${formatShortWeekday(noonOf(date), 'UTC')} ${formatDate(noonOf(date), 'UTC', { year: 'never' })}`;
+    ? hostStatusCopy(locale).todaySoFar
+    : `${formatShortWeekday(noonOf(date), 'UTC', locale)} ${formatDate(noonOf(date), 'UTC', { year: 'never' }, locale)}`;
 }
 
 /** Under the 14 columns: `today` under the last, a weekday under every third (the second, fifth, …), as the mock. */
-function dayAxis(date: string, i: number, today: boolean): string {
-  if (today) return HOST_CHART_WORDS.today;
-  return i % 3 === 1 ? formatShortWeekday(noonOf(date), 'UTC') : '';
+function dayAxis(date: string, i: number, today: boolean, locale?: string | null): string {
+  if (today) return hostChartWords(locale).today;
+  return i % 3 === 1 ? formatShortWeekday(noonOf(date), 'UTC', locale) : '';
 }
 
 /** One column of Data per day. */
@@ -318,14 +341,14 @@ export interface HostDayRow {
 }
 
 /** The last `HOST_CHART_DAYS` days of traffic, oldest first, today last (BS-05). */
-export function hostDayRows(days: readonly HostDay[]): HostDayRow[] {
+export function hostDayRows(days: readonly HostDay[], locale?: string | null): HostDayRow[] {
   const last = days.slice(-HOST_CHART_DAYS);
   return last.map((d, i) => {
     const today = i === last.length - 1;
     return {
       date: d.date,
-      axis: dayAxis(d.date, i, today),
-      title: dayTitle(d.date, today),
+      axis: dayAxis(d.date, i, today, locale),
+      title: dayTitle(d.date, today, locale),
       today,
       inBytes: d.inBytes,
       outBytes: d.outBytes,
@@ -334,10 +357,11 @@ export function hostDayRows(days: readonly HostDay[]): HostDayRow[] {
 }
 
 /** A day's tooltip lines: received and sent. */
-export function hostDayLines(row: HostDayRow): { received: string; sent: string } {
+export function hostDayLines(row: HostDayRow, locale?: string | null): { received: string; sent: string } {
+  const copy = hostStatusCopy(locale);
   return {
-    received: HOST_STATUS_COPY.receivedValue(row.inBytes),
-    sent: HOST_STATUS_COPY.sentValue(row.outBytes),
+    received: copy.receivedValue(row.inBytes),
+    sent: copy.sentValue(row.outBytes),
   };
 }
 
@@ -350,9 +374,9 @@ export function hostDayScale(rows: readonly HostDayRow[]): HostScale {
 }
 
 /** The days axis's numbers in the scale's unit, without it (the mock's `0`, `2.5`, `5` for gigabytes). */
-export function hostDayTick(bytes: number, max: number): string {
+export function hostDayTick(bytes: number, max: number, locale?: string | null): string {
   const unit = max >= 1_000_000_000 ? 1_000_000_000 : 1_000_000;
-  return String(Number((bytes / unit).toFixed(1)));
+  return axisNumber(bytes / unit, locale);
 }
 
 /* Disk ------------------------------------------------------------------------------------------------------------- */
@@ -372,41 +396,48 @@ export interface HostDiskRow {
  * The data disk's parts, largest first, then `Other` (used minus the parts, from half a gigabyte) and `Free` (BS-10).
  * While the quota numbers are recounted (`parts` null) only Free: the card's line says what is used.
  */
-export function hostDiskRows(disk: HostDisks['data']): HostDiskRow[] {
+export function hostDiskRows(disk: HostDisks['data'], locale?: string | null): HostDiskRow[] {
+  const copy = hostStatusCopy(locale);
+  const labels = hostDiskPartLabels(locale);
   const parts = (disk.parts ?? []).filter((p) => p.bytes > 0).sort((a, b) => b.bytes - a.bytes);
   const rows: HostDiskRow[] = parts.map((p) => ({
     key: p.key,
-    label: HOST_DISK_PART_LABELS[p.key],
+    label: labels[p.key],
     bytes: p.bytes,
-    value: formatBytes(p.bytes),
+    value: formatBytes(p.bytes, locale),
   }));
   const rest = disk.usedBytes - parts.reduce((sum, p) => sum + p.bytes, 0);
   if (disk.parts && rest >= OTHER_MIN_BYTES)
-    rows.push({ key: 'other', label: HOST_STATUS_COPY.other, bytes: rest, value: formatBytes(rest) });
+    rows.push({ key: 'other', label: copy.other, bytes: rest, value: formatBytes(rest, locale) });
   rows.push({
     key: 'free',
-    label: HOST_STATUS_COPY.free,
+    label: copy.free,
     bytes: disk.freeBytes,
-    value: formatBytes(disk.freeBytes),
+    value: formatBytes(disk.freeBytes, locale),
   });
   return rows;
 }
 
 /** The Disk card's line (`40 GB used of 87 GB`) and the system and backup disks' lines under the legend. */
-export function hostDiskText(disks: HostDisks): { used: string; others: string[] } {
-  const others = [HOST_STATUS_COPY.systemDisk(disks.system.usedBytes, disks.system.totalBytes)];
-  if (disks.backup) others.push(HOST_STATUS_COPY.backupDisk(disks.backup.usedBytes, disks.backup.totalBytes));
-  return { used: HOST_STATUS_COPY.diskUsedOf(disks.data.usedBytes, disks.data.totalBytes), others };
+export function hostDiskText(disks: HostDisks, locale?: string | null): { used: string; others: string[] } {
+  const copy = hostStatusCopy(locale);
+  const others = [copy.systemDisk(disks.system.usedBytes, disks.system.totalBytes)];
+  if (disks.backup) others.push(copy.backupDisk(disks.backup.usedBytes, disks.backup.totalBytes));
+  return { used: copy.diskUsedOf(disks.data.usedBytes, disks.data.totalBytes), others };
 }
 
 /** The bar's parts: the used ones (one segment for all of it while there are no parts) and Free, in the legend's order. */
-export function hostDiskBar(disk: HostDisks['data'], rows: readonly HostDiskRow[]): HostDiskRow[] {
+export function hostDiskBar(
+  disk: HostDisks['data'],
+  rows: readonly HostDiskRow[],
+  locale?: string | null,
+): HostDiskRow[] {
   if (disk.parts) return rows.filter((r) => r.bytes > 0);
   const used: HostDiskRow = {
     key: 'other',
-    label: HOST_STATUS_COPY.other,
+    label: hostStatusCopy(locale).other,
     bytes: disk.usedBytes,
-    value: formatBytes(disk.usedBytes),
+    value: formatBytes(disk.usedBytes, locale),
   };
   return [used, ...rows].filter((r) => r.bytes > 0);
 }
@@ -434,22 +465,27 @@ export interface HostTokens {
  * The Tokens card (BS-07, BS-10): today's total and cache share and 14 days of columns from `spend.daily` (today from
  * `spend.overview` while the days aren't there). One agent: no list of agents under it (one-agent.md AP-4951).
  */
-export function hostTokens(daily: SpendDaily | null, overview: SpendOverview | null): HostTokens {
+export function hostTokens(
+  daily: SpendDaily | null,
+  overview: SpendOverview | null,
+  locale?: string | null,
+): HostTokens {
+  const copy = hostStatusCopy(locale);
   const days = (daily?.days ?? []).slice(-HOST_CHART_DAYS);
   const todayUsage = days.at(-1) ?? overview?.totals.today ?? null;
   const tokens = todayUsage ? spendTokens(todayUsage) : 0;
   const cache = todayUsage ? cacheReadPct(todayUsage) : null;
   return {
-    summary: HOST_STATUS_COPY.tokensToday(tokens, cache),
+    summary: copy.tokensToday(tokens, cache),
     days: days.map((d, i) => {
       const today = i === days.length - 1;
       const t = spendTokens(d);
       return {
         date: d.date,
-        title: dayTitle(d.date, today),
+        title: dayTitle(d.date, today, locale),
         today,
         tokens: t,
-        line: HOST_STATUS_COPY.tokensValue(t),
+        line: copy.tokensValue(t),
       };
     }),
   };

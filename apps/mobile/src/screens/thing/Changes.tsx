@@ -43,7 +43,7 @@ function useUndo() {
         if (result.status !== 'ok') return feedback.onResult(result);
         if (result.data.state === 'requested') {
           // The assistant puts it back in its chat: that opens, where it says so (backup-places.md BPL-15).
-          const outcome = undoOutcome(result.data, assistantName);
+          const outcome = undoOutcome(result.data, assistantName, rawLocale);
           showNotice(outcome.message);
           if (outcome.kind === 'requested' && outcome.href) openHref(outcome.href);
           return;
@@ -153,8 +153,8 @@ export function ChangesCard({ title, limit, ctx }: { title: string; limit: numbe
   // A change that links to this page shows no Review here (AP-4573).
   const here = thingPageHref(ctx.thing.id);
   const rows = useMemo(
-    () => doneRows(list.data?.changes ?? [], now, timeZone, { here }),
-    [list.data, now, timeZone, here],
+    () => doneRows(list.data?.changes ?? [], now, timeZone, { here, locale: rawLocale }),
+    [list.data, now, timeZone, here, rawLocale],
   );
   const { busy, run } = useUndo();
   if (!rows.length) return null;
@@ -249,8 +249,8 @@ function ActivityPage({
   );
   const here = thingPageHref(page.id);
   const rows = useMemo(
-    () => doneRows(list.data?.changes ?? [], now, timeZone, { here }),
-    [list.data, now, timeZone, here],
+    () => doneRows(list.data?.changes ?? [], now, timeZone, { here, locale: rawLocale }),
+    [list.data, now, timeZone, here, rawLocale],
   );
   if (list.isPending)
     return <SkeletonRows count={before ? 2 : 4} lines={2} label={tMobile('screens.loading-what-changed')} />;

@@ -57,7 +57,8 @@ export function PullRequestScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const qc = useQueryClient();
   const { slug, bootstrap, people } = useBurrow();
-  const { number, back = 'Back' } = route.params;
+  const { number, back: backParam } = route.params;
+  const back = backParam ?? tMobile('screens2.common.back');
   // A number alone: the sidebar's one room with it says which repository (AP-514).
   const repo = route.params.repo ?? branchRoomFor(bootstrap.sidebar.branchRooms, number, undefined)?.repo;
   const repoQuery = repo ? { repo } : {};
@@ -92,6 +93,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
     lookup: (id) => people.get(id),
     agentsMayMerge: true,
     agent: agent.name,
+    locale: rawLocale,
   });
   const params = { burrow: slug, number };
 
@@ -101,7 +103,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
       { params, query: repoQuery, body: {} },
       {
         onSuccess: (result) => {
-          const refused = mergeOutcomeText(result);
+          const refused = mergeOutcomeText(result, rawLocale);
           if (refused) return setMergeError(refused);
           if (result.status === 'ok')
             qc.setQueryData(queryKeys.prs.get({ params, query: repoQuery }), result.data);
@@ -109,17 +111,17 @@ export function PullRequestScreen({ route, navigation }: Props) {
           showNotice(mergeToast(number, rawLocale));
         },
         onError: (error) => {
-          setMergeError(mergeErrorText(error));
+          setMergeError(mergeErrorText(error, rawLocale));
           void query.refetch();
         },
       },
     );
   };
   const askMerge = () => {
-    const ask = mergeConfirm(detail);
+    const ask = mergeConfirm(detail, rawLocale);
     Alert.alert(ask.title, ask.body, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Merge', onPress: doMerge },
+      { text: tMobile('screens2.common.cancel'), style: 'cancel' },
+      { text: tMobile('screens2.common.merge'), onPress: doMerge },
     ]);
   };
 
@@ -204,7 +206,7 @@ export function PullRequestScreen({ route, navigation }: Props) {
               ))
             )}
           </Section>
-          <Section title={`FILES CHANGED · ${model.diff.toUpperCase()}`}>
+          <Section title={tMobile('screens2.pr.filesChanged', { diff: model.diff }).toUpperCase()}>
             {model.files.length === 0 ? (
               <QuietText>{tMobile('screens.no-files-changed')}</QuietText>
             ) : (
@@ -294,7 +296,7 @@ export function PullRequestBar({ number, repo, back }: { number: number; repo?: 
       meta={`#${number} · checks · files changed · merge`}
       trailing="›"
       onPress={() => navigation.navigate('PullRequest', { number, back, ...(repo ? { repo } : {}) })}
-      accessibilityLabel={`Pull request #${number}: checks, files changed and merge`}
+      accessibilityLabel={tMobile('screens2.pr.rowLabel', { number })}
     />
   );
 }

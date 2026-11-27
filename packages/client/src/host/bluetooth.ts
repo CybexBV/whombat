@@ -7,6 +7,9 @@
  * the web and the phone. Pure, apart from the poller's timers (injectable) and `bluetoothApi`'s session.
  */
 
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { BLUETOOTH_WORDS } from '../i18n/messages/hostManaged/bluetooth';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import {
@@ -68,89 +71,67 @@ export function bluetoothApi(session: ApplianceSession): BluetoothApi {
 
 /* Words ----------------------------------------------------------------------------------------------------------- */
 
-/** Every word of BLUETOOTH and its dialogs (BT-11's where it has them). `name` is a device's name. */
-export const BLUETOOTH_TEXT = {
-  section: 'BLUETOOTH',
-  kinds: {
-    keyboard: 'Keyboard',
-    mouse: 'Mouse',
-    headphones: 'Headphones',
-    headset: 'Headset',
-    speaker: 'Speaker',
-    gamepad: 'Game controller',
-    other: 'Device',
-  } as Record<BluetoothKind, string>,
-  connected: 'Connected',
-  notConnected: 'Not connected',
-  battery: (pct: number) => `Battery ${pct} %`,
-  connecting: 'Connecting…',
-  disconnecting: 'Disconnecting…',
-  connect: 'Connect',
-  disconnect: 'Disconnect',
-  remove: 'Remove',
-  add: 'Add a device',
-  /** Nothing paired yet: the row Add a device sits on. */
-  none: 'No devices yet',
-  noneMeta: 'Keyboards, mice, speakers and headphones work with this Whombat.',
-  /** The ⋯ button's name. */
-  actions: (name: string) => `Actions for ${name}`,
-  unavailable: 'Bluetooth couldn’t be read right now.',
-  tryAgain: 'Try again',
-  missing: {
-    no_driver: 'This Bluetooth adapter has no driver yet.',
-    disabled: 'Bluetooth is switched off.',
-  } as Record<Exclude<BluetoothMissing, 'no_adapter'>, string>,
-  /** The adapter is in the hardware report (About → HARDWARE). */
-  seeHardware: 'See hardware',
-  /** Connect answered, but the device didn't come. */
-  didNotConnect: (name: string) => `${name} didn’t connect. Check that it’s switched on and nearby.`,
-  removeDialog: {
-    title: (name: string) => `Remove ${name}?`,
-    lead: 'You’ll need to pair it again to use it.',
-    submit: 'Remove',
-    busy: 'Removing…',
-    cancel: 'Cancel',
-  },
-  dialog: {
-    title: 'Add a device',
-    hint: 'Put your device in pairing mode. Keyboards and mice often have a button for it; speakers and headphones usually need the power button held.',
-    looking: 'Looking for devices…',
-    nearby: 'Devices nearby',
-    none: 'No devices nearby.',
-    again: 'Look again',
-    couldNotLook: 'Couldn’t look for devices. Try again.',
-    pairing: (name: string) => `Pairing with ${name}…`,
-    code: (code: string, name: string) => `Type ${code} on ${name}, then press Enter.`,
-    confirm: (name: string, code: string) => `Does ${name} show ${code}?`,
-    yes: 'Yes',
-    no: 'No',
-    ready: (name: string) => `${name} is ready.`,
-    tryAgain: 'Try again',
-    cancel: 'Cancel',
-    close: 'Close',
-    done: 'Done',
-  },
-  failures: {
-    rejected: (name: string) => `${name} didn’t accept the pairing. Put it in pairing mode and try again.`,
-    timeout: (name: string) => `${name} didn’t answer in time. Put it in pairing mode and try again.`,
-    not_found: (name: string) => `${name} isn’t nearby any more.`,
-    canceled: (name: string) => `Pairing with ${name} stopped. Try again.`,
-    failed: (name: string) => `Pairing with ${name} didn’t work. Try again.`,
-  } as Record<BluetoothPairingFailure, (name: string) => string>,
-  errors: {
-    no_bluetooth: () => 'Bluetooth is switched off.',
-    busy: () => 'Another device is pairing. Try again in a moment.',
-    not_found: (name: string) => `${name} isn’t nearby any more.`,
-    not_paired: (name: string) => `${name} isn’t paired any more.`,
-    unavailable: () => 'Bluetooth isn’t answering right now. Try again.',
-    forbidden: () => 'Bluetooth can’t be changed from here.',
-  } as Record<BluetoothRefusal, (name: string) => string>,
-  failed: 'That didn’t work. Try again.',
-  signal: (signal: BluetoothSignal) =>
-    signal >= 4 ? 'Strong signal' : signal >= 2 ? 'Good signal' : 'Weak signal',
-} as const;
+/** Every word of BLUETOOTH and its dialogs, in a locale (English when none is given). `name` is a device's name. */
+export function bluetoothText(locale?: string | null) {
+  const w = clientTree(locale, BLUETOOTH_WORDS);
+  const named = (template: string) => (name: string) => interpolate(template, { name });
+  return {
+    section: w.section,
+    kinds: w.kinds as Record<BluetoothKind, string>,
+    connected: w.connected,
+    notConnected: w.notConnected,
+    battery: (pct: number) => interpolate(w.battery, { pct }),
+    connecting: w.connecting,
+    disconnecting: w.disconnecting,
+    connect: w.connect,
+    disconnect: w.disconnect,
+    remove: w.remove,
+    add: w.add,
+    /** Nothing paired yet: the row Add a device sits on. */
+    none: w.none,
+    noneMeta: w.noneMeta,
+    /** The ⋯ button's name. */
+    actions: named(w.actions),
+    unavailable: w.unavailable,
+    tryAgain: w.tryAgain,
+    missing: w.missing as Record<Exclude<BluetoothMissing, 'no_adapter'>, string>,
+    /** The adapter is in the hardware report (About → HARDWARE). */
+    seeHardware: w.seeHardware,
+    /** Connect answered, but the device didn't come. */
+    didNotConnect: named(w.didNotConnect),
+    removeDialog: { ...w.removeDialog, title: named(w.removeDialog.title) },
+    dialog: {
+      ...w.dialog,
+      pairing: named(w.dialog.pairing),
+      code: (code: string, name: string) => interpolate(w.dialog.code, { code, name }),
+      confirm: (name: string, code: string) => interpolate(w.dialog.confirm, { name, code }),
+      ready: named(w.dialog.ready),
+    },
+    failures: {
+      rejected: named(w.failures.rejected),
+      timeout: named(w.failures.timeout),
+      not_found: named(w.failures.not_found),
+      canceled: named(w.failures.canceled),
+      failed: named(w.failures.failed),
+    } as Record<BluetoothPairingFailure, (name: string) => string>,
+    errors: {
+      no_bluetooth: () => w.errors.no_bluetooth,
+      busy: () => w.errors.busy,
+      not_found: named(w.errors.not_found),
+      not_paired: named(w.errors.not_paired),
+      unavailable: () => w.errors.unavailable,
+      forbidden: () => w.errors.forbidden,
+    } as Record<BluetoothRefusal, (name: string) => string>,
+    failed: w.failed,
+    signal: (signal: BluetoothSignal) =>
+      signal >= 4 ? w.signal.strong : signal >= 2 ? w.signal.good : w.signal.weak,
+  } as const;
+}
 
-const T = BLUETOOTH_TEXT;
+export type BluetoothText = ReturnType<typeof bluetoothText>;
+
+/** BLUETOOTH's words in English. */
+export const BLUETOOTH_TEXT: BluetoothText = bluetoothText('en');
 
 /**
  * Each kind's icon by its Lucide name, the same on the web (`lucide-react`) and the phone (`lucide-react-native`):
@@ -168,12 +149,17 @@ export const BLUETOOTH_KIND_ICONS = {
 export type BluetoothIcon = (typeof BLUETOOTH_KIND_ICONS)[BluetoothKind];
 
 /** “Keyboard”, “Game controller”, “Device”. */
-export function bluetoothKindText(kind: BluetoothKind): string {
+export function bluetoothKindText(kind: BluetoothKind, locale?: string | null): string {
+  const T = bluetoothText(locale);
   return T.kinds[kind] ?? T.kinds.other;
 }
 
 /** “Connected · Battery 80 %”, “Connected”, “Not connected” (a battery only while connected: it is read then). */
-export function bluetoothDeviceMeta(device: Pick<BluetoothDevice, 'connected' | 'battery'>): string {
+export function bluetoothDeviceMeta(
+  device: Pick<BluetoothDevice, 'connected' | 'battery'>,
+  locale?: string | null,
+): string {
+  const T = bluetoothText(locale);
   if (!device.connected) return T.notConnected;
   return device.battery === undefined ? T.connected : `${T.connected} · ${T.battery(device.battery)}`;
 }
@@ -256,22 +242,25 @@ export function bluetoothScanRunning(
 }
 
 /** Paired devices as BLUETOOTH lists them: connected first, then by name (§2.1's order, kept whatever arrives). */
-export function bluetoothDeviceRows(devices: readonly BluetoothDevice[]): BluetoothDeviceRow[] {
+export function bluetoothDeviceRows(
+  devices: readonly BluetoothDevice[],
+  locale?: string | null,
+): BluetoothDeviceRow[] {
   return [...devices]
     .sort((a, b) => Number(b.connected) - Number(a.connected) || byName(a.name, b.name))
     .map((d) => {
-      const meta = bluetoothDeviceMeta(d);
+      const meta = bluetoothDeviceMeta(d, locale);
       return {
         address: d.address,
         name: d.name,
         kind: d.kind,
-        kindText: bluetoothKindText(d.kind),
+        kindText: bluetoothKindText(d.kind, locale),
         icon: BLUETOOTH_KIND_ICONS[d.kind] ?? BLUETOOTH_KIND_ICONS.other,
         connected: d.connected,
         meta,
         label: [
           d.name,
-          ...[bluetoothKindText(d.kind), ...meta.split(' · ')].map((s) => s.toLowerCase()),
+          ...[bluetoothKindText(d.kind, locale), ...meta.split(' · ')].map((s) => s.toLowerCase()),
         ].join(', '),
         toggle: d.connected ? 'disconnect' : 'connect',
       };
@@ -284,7 +273,8 @@ const byName = (a: string, b: string) => a.localeCompare(b, undefined, { sensiti
  * What BLUETOOTH shows (AP-3702…AP-3705): why there is no Bluetooth (no driver, switched off), the paired devices in
  * their order, a pairing that runs, and whether Add a device and the device menus may be used.
  */
-export function bluetoothSectionView(state: BluetoothState): BluetoothSectionView {
+export function bluetoothSectionView(state: BluetoothState, locale?: string | null): BluetoothSectionView {
+  const T = bluetoothText(locale);
   const missing = bluetoothMissing(state);
   const usable = missing === null;
   const running = bluetoothPairingRunning(state.pairing);
@@ -293,8 +283,8 @@ export function bluetoothSectionView(state: BluetoothState): BluetoothSectionVie
       missing === null || missing === 'no_adapter'
         ? null
         : { text: T.missing[missing], dot: missing === 'no_driver' ? 'bad' : 'warn' },
-    devices: bluetoothDeviceRows(state.devices),
-    pairing: running && state.pairing ? bluetoothPairingView(state.pairing) : null,
+    devices: bluetoothDeviceRows(state.devices, locale),
+    pairing: running && state.pairing ? bluetoothPairingView(state.pairing, locale) : null,
     canAdd: usable && !running,
     canChange: usable,
   };
@@ -320,7 +310,9 @@ export interface BluetoothFoundRow {
 export function bluetoothFoundRows(
   scan: Pick<BluetoothScan, 'devices'>,
   paired: readonly Pick<BluetoothDevice, 'address'>[] = [],
+  locale?: string | null,
 ): BluetoothFoundRow[] {
+  const T = bluetoothText(locale);
   const skip = new Set(paired.map((d) => d.address));
   const rows: BluetoothFoundRow[] = [];
   const signalOf = (d: BluetoothDevice) => (d.signal ?? -1) as number;
@@ -332,12 +324,12 @@ export function bluetoothFoundRows(
       address: d.address,
       name: d.name,
       kind: d.kind,
-      kindText: bluetoothKindText(d.kind),
+      kindText: bluetoothKindText(d.kind, locale),
       icon: BLUETOOTH_KIND_ICONS[d.kind] ?? BLUETOOTH_KIND_ICONS.other,
       signal,
       label: [
         d.name,
-        bluetoothKindText(d.kind).toLowerCase(),
+        bluetoothKindText(d.kind, locale).toLowerCase(),
         signal === null ? null : T.signal(signal).toLowerCase(),
       ]
         .filter(Boolean)
@@ -348,7 +340,12 @@ export function bluetoothFoundRows(
 }
 
 /** A pairing failure in words (BT-11). */
-export function bluetoothFailureText(failure: BluetoothPairingFailure | undefined, name: string): string {
+export function bluetoothFailureText(
+  failure: BluetoothPairingFailure | undefined,
+  name: string,
+  locale?: string | null,
+): string {
+  const T = bluetoothText(locale);
   return (T.failures[failure ?? 'failed'] ?? T.failures.failed)(name);
 }
 
@@ -356,7 +353,11 @@ export function bluetoothFailureText(failure: BluetoothPairingFailure | undefine
  * A pairing in words (BT-04, BT-11): “Pairing with {name}…” while it pairs and connects, the code to type with the
  * digits typed so far, “Does {name} show {code}?”, “{name} is ready.”, or the failure's sentence.
  */
-export function bluetoothPairingView(pairing: BluetoothPairing): BluetoothPairingView {
+export function bluetoothPairingView(
+  pairing: BluetoothPairing,
+  locale?: string | null,
+): BluetoothPairingView {
+  const T = bluetoothText(locale);
   const { name, code } = pairing;
   const base = {
     id: pairing.id,
@@ -384,7 +385,7 @@ export function bluetoothPairingView(pairing: BluetoothPairing): BluetoothPairin
     case 'failed':
       return {
         ...base,
-        text: bluetoothFailureText(pairing.failure, name),
+        text: bluetoothFailureText(pairing.failure, name, locale),
         failure: pairing.failure ?? 'failed',
         dot: 'bad',
       };
@@ -407,7 +408,12 @@ export function bluetoothErrorCode(error: unknown): BluetoothRefusal | null {
  * A `host.bluetooth.*` refusal in words. `name` is the device's; `paired` for Connect, Disconnect and Remove, whose
  * `not_found` means the device was removed meanwhile (not that it went away).
  */
-export function bluetoothErrorText(error: unknown, name: string, { paired = false } = {}): string {
+export function bluetoothErrorText(
+  error: unknown,
+  name: string,
+  { paired = false, locale }: { paired?: boolean; locale?: string | null } = {},
+): string {
+  const T = bluetoothText(locale);
   const code = bluetoothErrorCode(error);
   if (!code) return T.failed;
   return T.errors[paired && code === 'not_found' ? 'not_paired' : code](name);

@@ -8,6 +8,7 @@
  */
 import type { ApplianceSession, ChunkSource, ResourceRef } from '@whombat/client/session';
 import { resourceKey } from '@whombat/client/session';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface FileHandleLike {
   offset: number | null;
@@ -34,6 +35,7 @@ export interface FileApi {
 export function fileChunkSource(
   api: FileApi,
   file: { uri: string; name: string; type: string; size: number },
+  locale?: string | null,
 ): ChunkSource & { close(): void } {
   let handle: FileHandleLike | null = null;
   return {
@@ -44,7 +46,7 @@ export function fileChunkSource(
       handle ??= api.open(file.uri, 'r');
       handle.offset = offset;
       const bytes = handle.readBytes(length);
-      if (bytes.byteLength !== length) throw new Error('The file changed while uploading.');
+      if (bytes.byteLength !== length) throw new Error(mobileTranslator(locale).t('managed2.files.changed'));
       return bytes;
     },
     close() {
@@ -89,7 +91,7 @@ export async function resourceToCacheFile(
   api: FileApi,
   session: ApplianceSession,
   ref: ResourceRef,
-  options: { scope: string; name: string; signal?: AbortSignal; maxBytes?: number },
+  options: { scope: string; name: string; signal?: AbortSignal; maxBytes?: number; locale?: string | null },
 ): Promise<string> {
   const { dir, target } = cachePaths(api, ref, options);
   if (api.exists(target)) return target;
@@ -103,7 +105,7 @@ export async function resourceToCacheFile(
       written += chunk.byteLength;
       if (options.maxBytes !== undefined && written > options.maxBytes) {
         stream.cancel();
-        throw new Error('This file is too large to open here.');
+        throw new Error(mobileTranslator(options.locale).t('managed2.files.tooLarge'));
       }
       out.writeBytes(chunk);
     }
@@ -127,7 +129,7 @@ export async function rangeToFile(
   session: ApplianceSession,
   ref: ResourceRef,
   range: { start: number; end: number },
-  where: { dir: string; target: string; signal?: AbortSignal },
+  where: { dir: string; target: string; signal?: AbortSignal; locale?: string | null },
 ): Promise<string> {
   const want = range.end - range.start;
   api.mkdir(where.dir);
@@ -143,11 +145,11 @@ export async function rangeToFile(
       written += chunk.byteLength;
       if (written > want) {
         stream.cancel();
-        throw new Error('The download wasn’t the file.');
+        throw new Error(mobileTranslator(where.locale).t('managed2.files.notTheFile'));
       }
       out.writeBytes(chunk);
     }
-    if (written !== want) throw new Error('The download was cut short.');
+    if (written !== want) throw new Error(mobileTranslator(where.locale).t('managed2.files.cutShort'));
   } catch (error) {
     out.close();
     api.remove(part);

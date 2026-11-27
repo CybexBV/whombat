@@ -4,45 +4,53 @@
  * those T3 Code runs (or the default), the efforts that model takes and its fast tier when it has one.
  */
 import type { CouncilProviderOption, DelegationAi, DelegationAiChoice } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { effortWord } from './councilSetups';
+import { clientTree } from './i18n/catalog';
+import { CARDS_AREA_WORDS } from './i18n/messages/chatWork/cards';
 
-export const DELEGATION_AI_WORDS = {
-  /** A task's chip while it has no AI of its own. */
-  chipDefault: 'Default',
-  taskTitle: (n: number) => `AI for task ${n}`,
-  allTitle: 'AI for every task',
-  /** Under “AI for every task”: how many ticked tasks take it (the rest chose their own). */
-  allCount: (n: number, of: number) => `${n} of ${of} use this`,
-  /** A task's first choice: what every task gets; the card's: T3 Code's own. */
-  sameAsOthers: 'Same as the others',
-  t3Default: 'T3 Code’s default',
-  model: 'Model',
-  effort: 'Effort',
-  fast: 'Fast',
-  fastHint: 'Quicker, uses more of your plan',
-  done: 'Done',
-  cancel: 'Cancel',
-  /** The line beside Hand over when some ticked tasks chose their own: “Others: GPT 6.1 Sol · High”. */
-  others: (line: string) => `Others: ${line}`,
-  /** For screen readers on the chip and on Hand over's arrow. */
-  openTask: (title: string, line: string | null) => `AI for ${title}: ${line ?? 'default'}`,
-  openAll: (line: string | null) => `AI for every task: ${line ?? 'T3 Code’s default'}`,
-  loading: 'Asking T3 Code what it runs…',
-  t3: {
-    not_connected: 'Connect T3 Code with Manage to choose the AI.',
-    unreachable: 'T3 Code can’t be reached now, so its AIs can’t be listed.',
-  },
-  failed: 'Couldn’t change the AI. Try again.',
-} as const;
+/** The AI menu's words on a delegation's checklist, in a locale (English when none). */
+export function delegationAiWords(locale?: string | null) {
+  const w = clientTree(locale, CARDS_AREA_WORDS).delegationAi;
+  return {
+    /** A task's chip while it has no AI of its own. */
+    chipDefault: w.chipDefault,
+    taskTitle: (n: number) => interpolate(w.taskTitle, { n }),
+    allTitle: w.allTitle,
+    /** Under “AI for every task”: how many ticked tasks take it (the rest chose their own). */
+    allCount: (n: number, of: number) => interpolate(w.allCount, { n, of }),
+    /** A task's first choice: what every task gets; the card's: T3 Code's own. */
+    sameAsOthers: w.sameAsOthers,
+    t3Default: w.t3Default,
+    model: w.model,
+    effort: w.effort,
+    fast: w.fast,
+    fastHint: w.fastHint,
+    done: w.done,
+    cancel: w.cancel,
+    /** The line beside Hand over when some ticked tasks chose their own: “Others: GPT 6.1 Sol · High”. */
+    others: (line: string) => interpolate(w.others, { line }),
+    /** For screen readers on the chip and on Hand over's arrow. */
+    openTask: (title: string, line: string | null) =>
+      interpolate(w.openTask, { title, line: line ?? w.defaultLower }),
+    openAll: (line: string | null) => interpolate(w.openAll, { line: line ?? w.t3Default }),
+    loading: w.loading,
+    t3: { not_connected: w.t3.not_connected, unreachable: w.t3.unreachable },
+    failed: w.failed,
+  };
+}
+
+/** The AI menu's words on a delegation's checklist, in English. */
+export const DELEGATION_AI_WORDS = delegationAiWords();
 
 /** “Claude Opus 5.5 · Extra high · Fast”: the model, the effort chosen, and Fast when the fast tier is on. */
 export function delegationAiLine(
   ai: Pick<DelegationAi, 'label' | 'effort' | 'fast'> | null | undefined,
+  locale?: string | null,
 ): string | null {
   if (!ai) return null;
-  return [ai.label, effortWord(ai.effort), ai.fast ? DELEGATION_AI_WORDS.fast : null]
-    .filter(Boolean)
-    .join(' · ');
+  const fast = locale ? delegationAiWords(locale).fast : DELEGATION_AI_WORDS.fast;
+  return [ai.label, effortWord(ai.effort), ai.fast ? fast : null].filter(Boolean).join(' · ');
 }
 
 /** The menu's draft: a model (null: the default), its effort and fast tier (null: the model's own). */

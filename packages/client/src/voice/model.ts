@@ -10,7 +10,6 @@ import {
   DUTCH_VOICE_LICENCE_VERSION,
   VOICE_LANGUAGES,
   VOICE_MODEL_CHOICES,
-  VOICE_WORDS,
   type VoiceDutchVoice,
   type VoiceLanguage,
   type VoiceModelChoice,
@@ -18,8 +17,11 @@ import {
   type VoiceSttModel,
   type VoiceTyping,
   type VoiceTypingModel,
+  voiceWords,
 } from '@whombat/core/domain';
 import { VOICE_IN_USE } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { SETTINGS_AREA_WORDS } from '../i18n/messages/chatWork/settings';
 import { OperationError } from '../session/managed-ops';
 import { ConnectError } from '../session/wire';
 import type { VoiceTypingProblem } from './controller';
@@ -29,31 +31,37 @@ export function fillVoiceWords(text: string, values: Record<string, string | num
   return text.replace(/\{(\w+)\}/g, (all, key: string) => (key in values ? String(values[key]) : all));
 }
 
-/** Every word of voice typing: `VOICE_WORDS`, and what only the composer and the settings' failures need. */
-export const VOICE_TEXT = {
-  ...VOICE_WORDS,
-  /** The section's label, as Settings' labels are written. */
-  sectionLabel: VOICE_WORDS.section.toUpperCase(),
-  /** What a screen reader hears once when recording starts (the clock isn't read out every second). */
-  recordingNow: 'Recording',
-  errors: {
-    ...VOICE_WORDS.errors,
-    /** The draft changed while the person spoke: the words were not put in (DT-08). */
-    changed: 'The message changed while you spoke, so the words weren’t added.',
-    /** Another composer records now. */
-    elsewhere: 'Voice typing is already recording somewhere else.',
-    /** The microphone stopped, or the app went to the background. */
-    interrupted: 'The recording stopped. Try again.',
-    /** *Remove* for a model the settings use (`in_use`). */
-    inUse: 'The settings use this model, so it stays.',
-    /** The box doesn't have this voice setting yet (`unknown_op`). */
-    needsUpdate: 'Update this Whombat to use this setting.',
-    /** The box answered without keeping the change. */
-    notSaved: 'This Whombat didn’t keep that change. Try again.',
-    /** Any other refusal of a setting. */
-    setting: 'That didn’t go through. Try again.',
-  },
-} as const;
+/** Every word of voice typing: `VOICE_WORDS`, and what only the composer and the settings' failures need, in a locale. */
+export function voiceText(locale?: string | null) {
+  const shared = voiceWords(locale);
+  const w = clientTree(locale, SETTINGS_AREA_WORDS).voice;
+  return {
+    ...shared,
+    /** The section's label, as Settings' labels are written. */
+    sectionLabel: shared.section.toUpperCase(),
+    /** What a screen reader hears once when recording starts (the clock isn't read out every second). */
+    recordingNow: w.recordingNow,
+    errors: {
+      ...shared.errors,
+      /** The draft changed while the person spoke: the words were not put in. */
+      changed: w.changed,
+      /** Another composer records now. */
+      elsewhere: w.elsewhere,
+      /** The microphone stopped, or the app went to the background. */
+      interrupted: w.interrupted,
+      /** *Remove* for a model the settings use (`in_use`). */
+      inUse: w.inUse,
+      /** The box doesn't have this voice setting yet (`unknown_op`). */
+      needsUpdate: w.needsUpdate,
+      /** The box answered without keeping the change. */
+      notSaved: w.notSaved,
+      /** Any other refusal of a setting. */
+      setting: w.setting,
+    },
+  };
+}
+
+export const VOICE_TEXT = voiceText();
 
 /* The composer's mic --------------------------------------------------------------------------------------------------- */
 
@@ -75,8 +83,8 @@ export function formatRecordingTime(seconds: number): string {
 }
 
 /** “Recording 0:12”. */
-export function recordingLabel(seconds: number): string {
-  return fillVoiceWords(VOICE_TEXT.composer.recording, { time: formatRecordingTime(seconds) });
+export function recordingLabel(seconds: number, locale?: string | null): string {
+  return fillVoiceWords(voiceText(locale).composer.recording, { time: formatRecordingTime(seconds) });
 }
 
 /** How long errors stay in the composer before it is quiet again. */
@@ -111,19 +119,20 @@ export function voiceTypingProblemOf(error: unknown): VoiceTypingProblem {
 }
 
 /** A problem in words. */
-export function voiceProblemText(problem: VoiceTypingProblem): string {
-  return VOICE_TEXT.errors[problem];
+export function voiceProblemText(problem: VoiceTypingProblem, locale?: string | null): string {
+  return voiceText(locale).errors[problem];
 }
 
 /** A refused setting, *Download*, *Try again* or *Remove* in words. */
-export function voiceSettingErrorText(error: unknown): string {
-  if (detailsCode(error) === VOICE_IN_USE) return VOICE_TEXT.errors.inUse;
-  if (error instanceof ConnectError) return VOICE_TEXT.errors.offline;
+export function voiceSettingErrorText(error: unknown, locale?: string | null): string {
+  const text = voiceText(locale);
+  if (detailsCode(error) === VOICE_IN_USE) return text.errors.inUse;
+  if (error instanceof ConnectError) return text.errors.offline;
   if (error instanceof OperationError) {
-    if (error.code === 'unknown_op') return VOICE_TEXT.errors.needsUpdate;
-    if (OFFLINE_CODES.has(error.code)) return VOICE_TEXT.errors.offline;
+    if (error.code === 'unknown_op') return text.errors.needsUpdate;
+    if (OFFLINE_CODES.has(error.code)) return text.errors.offline;
   }
-  return VOICE_TEXT.errors.setting;
+  return text.errors.setting;
 }
 
 /* Settings → This Whombat → VOICE TYPING ------------------------------------------------------------------------------- */
@@ -217,21 +226,22 @@ const TONES: Record<VoiceModelState, VoiceModelRow['tone']> = {
   absent: 'mut',
 };
 
-export function voiceModelRow(model: VoiceTypingModel): VoiceModelRow {
-  const words = VOICE_TEXT.models[model.id];
+export function voiceModelRow(model: VoiceTypingModel, locale?: string | null): VoiceModelRow {
+  const text = voiceText(locale);
+  const words = text.models[model.id];
   const progress =
     model.state === 'downloading' && model.size > 0 ? Math.min(1, model.received / model.size) : null;
   const status =
     model.state === 'downloading'
-      ? fillVoiceWords(VOICE_TEXT.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
-      : VOICE_TEXT.states[model.state];
+      ? fillVoiceWords(text.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
+      : text.states[model.state];
   const action: VoiceModelRow['action'] =
     model.state === 'absent'
-      ? { kind: 'download', label: VOICE_TEXT.actions.download }
+      ? { kind: 'download', label: text.actions.download }
       : model.state === 'failed'
-        ? { kind: 'retry', label: VOICE_TEXT.actions.retry }
+        ? { kind: 'retry', label: text.actions.retry }
         : model.state === 'ready' && !model.inUse
-          ? { kind: 'remove', label: VOICE_TEXT.actions.remove }
+          ? { kind: 'remove', label: text.actions.remove }
           : null;
   const shownProblem = model.state === 'waiting' || model.state === 'failed';
   return {
@@ -243,12 +253,13 @@ export function voiceModelRow(model: VoiceTypingModel): VoiceModelRow {
     status,
     tone: TONES[model.state],
     progress,
-    problem: shownProblem && model.problem ? VOICE_TEXT.problems[model.problem] : null,
+    problem: shownProblem && model.problem ? text.problems[model.problem] : null,
     action,
   };
 }
 
-export function voiceDutchRow(dutch: VoiceDutchVoice): VoiceDutchRow {
+export function voiceDutchRow(dutch: VoiceDutchVoice, locale?: string | null): VoiceDutchRow {
+  const text = voiceText(locale);
   const size = formatModelSize(dutch.size);
   const progress =
     dutch.on && dutch.state === 'downloading' && dutch.size > 0
@@ -256,54 +267,55 @@ export function voiceDutchRow(dutch: VoiceDutchVoice): VoiceDutchRow {
       : null;
   const status =
     dutch.state === 'removing'
-      ? VOICE_TEXT.dutchVoice.removing
+      ? text.dutchVoice.removing
       : dutch.state === 'downloading'
-        ? fillVoiceWords(VOICE_TEXT.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
-        : VOICE_TEXT.states[dutch.state];
+        ? fillVoiceWords(text.states.downloading, { percent: Math.floor((progress ?? 0) * 100) })
+        : text.states[dutch.state];
   const shownProblem = dutch.on && (dutch.state === 'waiting' || dutch.state === 'failed');
   return {
-    title: VOICE_TEXT.dutchVoice.label,
-    meta: fillVoiceWords(VOICE_TEXT.dutchVoice.meta, { size }),
+    title: text.dutchVoice.label,
+    meta: fillVoiceWords(text.dutchVoice.meta, { size }),
     on: dutch.on,
     size,
     state: dutch.state,
     status,
     tone: TONES[dutch.state],
     progress,
-    problem: shownProblem && dutch.problem ? VOICE_TEXT.problems[dutch.problem] : null,
-    retryLabel: dutch.on && dutch.state === 'failed' ? VOICE_TEXT.actions.retry : null,
+    problem: shownProblem && dutch.problem ? text.problems[dutch.problem] : null,
+    retryLabel: dutch.on && dutch.state === 'failed' ? text.actions.retry : null,
     licenceVersion: DUTCH_VOICE_LICENCE_VERSION,
     licenceUrl: DUTCH_VOICE_LICENCE_URL,
     dialog: {
-      title: VOICE_TEXT.dutchVoice.dialog.title,
-      intro: fillVoiceWords(VOICE_TEXT.dutchVoice.dialog.intro, { size }),
-      restrictions: VOICE_TEXT.dutchVoice.dialog.restrictions,
-      licenceLink: VOICE_TEXT.dutchVoice.dialog.licenceLink,
-      agree: VOICE_TEXT.dutchVoice.dialog.agree,
-      cancel: VOICE_TEXT.dutchVoice.dialog.cancel,
+      title: text.dutchVoice.dialog.title,
+      intro: fillVoiceWords(text.dutchVoice.dialog.intro, { size }),
+      restrictions: text.dutchVoice.dialog.restrictions,
+      licenceLink: text.dutchVoice.dialog.licenceLink,
+      agree: text.dutchVoice.dialog.agree,
+      cancel: text.dutchVoice.dialog.cancel,
     },
   };
 }
 
 /** The section's rows, from `voice.get`. */
-export function voiceSectionView(voice: VoiceTyping): VoiceSectionView {
+export function voiceSectionView(voice: VoiceTyping, locale?: string | null): VoiceSectionView {
+  const text = voiceText(locale);
   const usesShown = voice.uses !== null && (voice.model === 'auto' || voice.uses !== voice.model);
   return {
-    on: { title: VOICE_TEXT.on.label, meta: VOICE_TEXT.on.meta, on: voice.on },
+    on: { title: text.on.label, meta: text.on.meta, on: voice.on },
     model: {
-      title: VOICE_TEXT.model.label,
-      options: VOICE_MODEL_CHOICES.map((value) => ({ value, label: VOICE_TEXT.model.choices[value] })),
+      title: text.model.label,
+      options: VOICE_MODEL_CHOICES.map((value) => ({ value, label: text.model.choices[value] })),
       value: voice.model,
-      uses: usesShown && voice.uses ? VOICE_TEXT.model.uses[voice.uses] : null,
-      warning: voice.model === 'whisper' && voice.gpu === null ? VOICE_TEXT.model.slow : null,
+      uses: usesShown && voice.uses ? text.model.uses[voice.uses] : null,
+      warning: voice.model === 'whisper' && voice.gpu === null ? text.model.slow : null,
     },
     language: {
-      title: VOICE_TEXT.language.label,
-      options: VOICE_LANGUAGES.map((value) => ({ value, label: VOICE_TEXT.language.choices[value] })),
+      title: text.language.label,
+      options: VOICE_LANGUAGES.map((value) => ({ value, label: text.language.choices[value] })),
       value: voice.language,
     },
-    models: { title: VOICE_TEXT.models.label, rows: voice.models.map(voiceModelRow) },
-    dutchVoice: voice.dutchVoice ? voiceDutchRow(voice.dutchVoice) : null,
-    gpu: voice.gpu ? fillVoiceWords(VOICE_TEXT.gpu.found, { name: voice.gpu.name }) : VOICE_TEXT.gpu.none,
+    models: { title: text.models.label, rows: voice.models.map((m) => voiceModelRow(m, locale)) },
+    dutchVoice: voice.dutchVoice ? voiceDutchRow(voice.dutchVoice, locale) : null,
+    gpu: voice.gpu ? fillVoiceWords(text.gpu.found, { name: voice.gpu.name }) : text.gpu.none,
   };
 }

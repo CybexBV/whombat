@@ -6,12 +6,10 @@
  */
 import {
   currentStep,
-  HIDE_STEPS,
   handoffClock,
   handoffLine,
   handoffMinutes,
-  OPEN_IN_T3_CODE,
-  SHOW_STEPS,
+  handoffWords,
   threadHandoffs,
 } from '@whombat/client';
 import { useHandoffs } from '@whombat/client/react';
@@ -19,6 +17,7 @@ import { HANDOFF_COUNCIL_STEP, type Handoff } from '@whombat/core';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, View } from 'react-native';
 import { useNow, useNowLabel } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -147,9 +146,10 @@ export function HandoffBar({ handoffs, agentName }: { handoffs: readonly Handoff
 }
 
 function HandoffLineRow({ handoff, agentName }: { handoff: Handoff; agentName: string }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const openUrl = useOpenUrl();
-  const line = handoffLine(handoff, agentName);
+  const line = handoffLine(handoff, agentName, rawLocale);
   const [open, setOpen] = useState(false);
   const now = useSeconds(line.clockFrom !== null);
   const url = handoff.url;
@@ -188,7 +188,15 @@ function HandoffLineRow({ handoff, agentName }: { handoff: Handoff; agentName: s
           feedback="fade"
           accessibilityRole={line.hasSteps ? 'button' : 'text'}
           accessibilityState={line.hasSteps ? { expanded: open } : undefined}
-          accessibilityLabel={[line.title, line.now, line.hasSteps ? (open ? HIDE_STEPS : SHOW_STEPS) : null]
+          accessibilityLabel={[
+            line.title,
+            line.now,
+            line.hasSteps
+              ? open
+                ? handoffWords(rawLocale).hideSteps
+                : handoffWords(rawLocale).showSteps
+              : null,
+          ]
             .filter(Boolean)
             .join(', ')}
           style={{
@@ -218,7 +226,7 @@ function HandoffLineRow({ handoff, agentName }: { handoff: Handoff; agentName: s
               </Text>
               {line.clockFrom !== null ? (
                 <Text size={12} mono color={theme.colors.mut}>
-                  {handoffClock(line.clockFrom, now)}
+                  {handoffClock(line.clockFrom, now, rawLocale)}
                 </Text>
               ) : null}
             </View>
@@ -242,7 +250,7 @@ function HandoffLineRow({ handoff, agentName }: { handoff: Handoff; agentName: s
             onPress={() => openUrl(url)}
             feedback="wash"
             accessibilityRole="link"
-            accessibilityLabel={OPEN_IN_T3_CODE}
+            accessibilityLabel={handoffWords(rawLocale).openInT3Code}
             ringRadius={9}
             style={{
               width: 44,

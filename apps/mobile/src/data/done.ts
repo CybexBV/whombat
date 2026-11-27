@@ -3,16 +3,21 @@
  * card is gone, home-simplify.md AP-2269). What Undo did is the shared `undoOutcome`. Pure; the parts are
  * `screens/home/DoneParts.tsx` and `screens/DoneScreen.tsx`.
  */
-export const DONE_COPY = {
-  screenTitle: 'Everything I did',
-  intro: (name: string) =>
-    `What ${name} changed for you, newest first. Undo works for a day where there’s a way back.`,
-  screenEmpty: (name: string) => `Nothing yet. What ${name} changes for you shows up here.`,
-  failed: 'This list didn’t load.',
-  showOlder: 'Show older',
-  undo: 'Undo',
-  review: 'Review',
-  undone: 'Undone',
-  /** Opens the chat where the assistant puts a change back (contracts 0.91 `requested`). */
-  openChat: 'Open chat',
-} as const;
+import { mobileTranslator } from '../i18n/translate';
+
+export function doneCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    screenTitle: t('data.done.screenTitle'),
+    intro: (name: string) => t('data.done.intro', { name }),
+    screenEmpty: (name: string) => t('data.done.screenEmpty', { name }),
+    failed: t('data.done.failed'),
+    showOlder: t('data.done.showOlder'),
+    undo: t('data.done.undo'),
+    review: t('data.done.review'),
+    undone: t('data.done.undone'),
+    /** Opens the chat where the assistant puts a change back (contracts 0.91 `requested`). */
+    openChat: t('data.done.openChat'),
+  } as const;
+}
+export const DONE_COPY = doneCopy();
