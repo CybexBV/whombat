@@ -12,7 +12,7 @@ import {
   youParts,
 } from './settingsGroups';
 
-describe('Settings in five groups', () => {
+describe('Settings in six groups', () => {
   it('names the groups, the assistant by its name', () => {
     const names = SETTINGS_GROUP_TEXT.groups('neo');
     expect(SETTINGS_GROUPS.map((g) => names[g])).toEqual([
@@ -20,6 +20,7 @@ describe('Settings in five groups', () => {
       'Neo',
       'Connections',
       'This Whombat',
+      'News and weather',
       'Advanced',
     ]);
     expect(SETTINGS_GROUP_TEXT.agent('neo').may).toBe('What Neo may do');

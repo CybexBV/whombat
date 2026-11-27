@@ -3,6 +3,7 @@ import { BrandMark } from '@whombat/brand/react';
 import { type AppPlace, agentFaceOf, appPath, hasLooksAhead, SEARCH_WORDS } from '@whombat/client';
 import { licenceRefusalText } from '@whombat/client/managed';
 import {
+  placeNewsShown,
   useApiMutation,
   useBootstrap,
   useChats,
@@ -32,6 +33,7 @@ import {
   Lock,
   type LucideIcon,
   MessageCircle,
+  Newspaper,
   Plug,
   Search as SearchIcon,
   Settings,
@@ -165,15 +167,18 @@ export function SearchScreen({ burrow, q, type, filters: asked = {}, onChange }:
   const { agent: researcher, words } = useTheAgent(burrow);
   // Things, settings and places: found here as the person types (the shell reads Home already).
   const { data: home } = useHomeOverview({ params: { burrow } }, { retry: false });
-  const looksAhead = hasLooksAhead(useSessionProtocol());
+  const protocol = useSessionProtocol();
+  const looksAhead = hasLooksAhead(protocol);
+  const news = placeNewsShown(protocol);
   const catalog = useMemo(
     () =>
       searchCatalog({
         things: home?.things,
         agent: words.name,
         here: { managed: managed !== null, looksAhead },
+        news,
       }),
-    [home?.things, words.name, managed, looksAhead],
+    [home?.things, words.name, managed, looksAhead, news],
   );
   const found = useMemo(() => matchCatalog(catalog, q), [catalog, q]);
 
@@ -567,6 +572,7 @@ const SETTING_ICONS: Record<Extract<CatalogIcon, { kind: 'setting' }>['group'], 
   agent: Bot,
   connections: Plug,
   appliance: Box,
+  news: Newspaper,
   advanced: SlidersHorizontal,
 };
 

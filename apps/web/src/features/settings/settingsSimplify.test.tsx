@@ -50,7 +50,7 @@ afterEach(() => {
 });
 
 describe('Settings’ home (final-settings-vault-files-usage.md)', () => {
-  it('shows Often used, then You, the assistant by its name, Connections, This Whombat and Advanced, in that order', async () => {
+  it('shows Often used, then You, the assistant by its name, Connections, This Whombat, News and weather and Advanced, in that order', async () => {
     const user = userEvent.setup();
     const app = renderApp('/settings', world());
     await screen.findByRole('heading', { name: 'Settings', level: 1 });
@@ -65,7 +65,14 @@ describe('Settings’ home (final-settings-vault-files-usage.md)', () => {
       (g) => g.querySelector('[class*="name"]')?.textContent,
     );
     // Screens shows where this Whombat has screens; the fixture world has none.
-    expect(groups).toEqual(['You', ASSISTANT_NAME, 'Connections', 'This Whombat', 'Advanced']);
+    expect(groups).toEqual([
+      'You',
+      ASSISTANT_NAME,
+      'Connections',
+      'This Whombat',
+      'News and weather',
+      'Advanced',
+    ]);
     // Theme opens its choice in place.
     await user.click(within(often).getByRole('button', { name: /^Theme/, expanded: false }));
     expect(within(often).getByRole('group', { name: 'Theme' })).toBeTruthy();
@@ -105,6 +112,9 @@ describe('old Settings addresses (SS-02)', () => {
     ['/settings?tab=appliance#devices', '/settings?part=devices', '', 'You'],
     ['/settings?tab=appliance&section=access', '/settings?tab=agent&part=may', '', ASSISTANT_NAME],
     ['/settings#ai-provider', '/settings?tab=agent&part=ai', '', ASSISTANT_NAME],
+    // Where this Whombat is and its news left About for a page of their own.
+    ['/settings?tab=appliance&section=about#place', '/settings?tab=news', '#place', 'News and weather'],
+    ['/settings?tab=appliance&section=about#news', '/settings?tab=news', '#news', 'News and weather'],
   ])('opens %s as %s%s, in place of the old entry', async (from, to, hash, title) => {
     const app = renderApp(from, world());
     expect(await screen.findByRole('heading', { name: title, level: 1 })).toBeTruthy();

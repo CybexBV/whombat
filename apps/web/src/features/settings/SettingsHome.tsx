@@ -2,8 +2,8 @@
  * Settings' home (`/settings`; the final design, docs/design-handoff/council-ui-2026-11/16-final/settings/,
  * docs/decisions/final-settings-vault-files-usage.md): **Often used** — Notifications, Phone app (the Phone app page,
  * saying which phone is in once one is) and Theme opening its Light / Dark choice in place — beside **All settings**, the
- * groups in their one order (You, the assistant by its name, Connections, This Whombat, Screens where this Whombat
- * has screens, Advanced), each with its own icon and what it holds; This Whombat's says what needs you there while
+ * groups in their one order (You, the assistant by its name, Connections, This Whombat, News and weather where this
+ * Whombat answers it, Screens where this Whombat has screens, Advanced), each with its own icon and what it holds; This Whombat's says what needs you there while
  * something does. Your saved settings are read here; while they load or when they can't be read a card says so in
  * Often used and every row keeps working.
  */
@@ -18,7 +18,7 @@ import {
 } from '@whombat/client';
 import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
-import { usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
+import { placeNewsShown, usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
 import type { ThemeName } from '@whombat/tokens';
 import {
@@ -28,6 +28,7 @@ import {
   Contrast,
   type LucideIcon,
   Monitor,
+  Newspaper,
   Plug,
   Settings as SettingsIcon,
   SlidersVertical,
@@ -54,6 +55,7 @@ const GROUP_ICONS: Record<SettingsHomeGroup, LucideIcon> = {
   agent: Bot,
   connections: Plug,
   appliance: Box,
+  news: Newspaper,
   screens: Monitor,
   advanced: SlidersVertical,
 };
@@ -64,6 +66,7 @@ const GROUP_SEARCH: Record<SettingsHomeGroup, Record<string, string>> = {
   agent: { tab: 'agent' },
   connections: { tab: 'connections' },
   appliance: { tab: 'appliance' },
+  news: { tab: 'news' },
   screens: { tab: 'appliance', section: 'screen' },
   advanced: { tab: 'advanced' },
 };
@@ -79,9 +82,11 @@ export function SettingsHome({ burrow }: { burrow: string }) {
   const prefs = usePreferences({}, { staleTime: 0 });
   const screen = useScreenPart(burrow, false);
   const you = useYouParts(burrow);
-  const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(useSessionProtocol()) });
+  const protocol = useSessionProtocol();
+  const agentParts = agentGroupParts({ looksAhead: hasLooksAhead(protocol) });
+  const news = placeNewsShown(protocol);
   const rows = settingsHomeRows(words.name, you, agentParts).filter(
-    (r) => r.key !== 'screens' || screen.shown,
+    (r) => (r.key !== 'screens' || screen.shown) && (r.key !== 'news' || news),
   );
   const needs = useApplianceNeeds(burrow, words.name);
   const phones = useSignedInPhones(burrow);

@@ -666,6 +666,7 @@ function Editor({
             onChoose={choose}
             say={say}
             nameOf={nameOf}
+            onOpen={(href) => leave(() => navigate(href))}
           />
         </div>
       </div>

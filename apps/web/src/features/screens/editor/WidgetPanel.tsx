@@ -5,8 +5,9 @@
  * widget's live preview shows after half a second on it (DK-156); drag one in or *+* — or, with a widget chosen, its
  * settings (DK-144): a preview at its size, its server, connection or account, *What it shows* (every view of it, as the
  * Overview's gear offers), its chart's range, *On a locked screen* where it shows something private, *What’s going on*'s
- * choices and *Servers*' order (the screen's own, saved as they're chosen), its size as shapes and steppers, what
- * touching it does, and *Remove from this page*.
+ * choices and *Servers*' order (the screen's own, saved as they're chosen), the way to Settings → News and weather for
+ * the weather's place and the news' sources, its size as shapes and steppers, what touching it does, and *Remove from
+ * this page*.
  */
 import { isBrandMark } from '@whombat/brand';
 import { BrandMark } from '@whombat/brand/react';
@@ -56,6 +57,7 @@ import {
   useDeskScreenViews,
   useDeskWidgets,
 } from '@whombat/client/desk/react';
+import { NEWS_WORDS, WEATHER_WORDS } from '@whombat/core';
 import { cellRect, type Grid, screenGrid, serverShow, sizeOf, type WidgetSize } from '@whombat/screen';
 import { WidgetPreview } from '@whombat/screen/react';
 import {
@@ -83,6 +85,7 @@ import {
   Plus,
   Rows3,
   Server,
+  Settings,
   Sparkles,
   Thermometer,
   TriangleAlert,
@@ -94,6 +97,7 @@ import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
 import { GroupLabel, LevelRow, OptionMark, ServerRows } from '../../desk/ShowsPart';
+import { AppLink } from '../../things/parts';
 import e from './Editor.module.css';
 import type { ScreenEditor } from './useScreenEditor';
 
@@ -211,6 +215,8 @@ export interface WidgetPanelProps {
   onChoose: (id: string, item: DeskCatalogItem) => void;
   say: (text: string | null) => void;
   nameOf: (w: Pick<DeskWidget, 'id' | 'type' | 'ref' | 'opts'>) => string;
+  /** Opens a page of the app (Settings → News and weather), asking first when the layout has changes to save. */
+  onOpen?: (href: string) => void;
 }
 
 export function WidgetPanel(props: WidgetPanelProps) {
@@ -674,6 +680,7 @@ function ChosenPanel({
   onChoose,
   say,
   nameOf,
+  onOpen,
   widget,
 }: WidgetPanelProps & { widget: DeskWidget }) {
   const view = views.get(widget.id);
@@ -734,6 +741,15 @@ function ChosenPanel({
         />
       </div>
 
+      {widget.type === 'news' ? (
+        <SettingsLink href={NEWS_HREF} onOpen={onOpen}>
+          {NEWS_WORDS.gear}
+        </SettingsLink>
+      ) : widget.type === 'weather' ? (
+        <SettingsLink href={PLACE_HREF} onOpen={onOpen}>
+          {WEATHER_WORDS.noPlace}
+        </SettingsLink>
+      ) : null}
       {widget.type === 'server' ? <ServerField catalog={catalog} widget={widget} ed={ed} /> : null}
       {widget.type === 'panel' || widget.type === 'figures' ? (
         <ThingField catalog={catalog} widget={widget} ed={ed} />
@@ -792,6 +808,37 @@ function ChosenPanel({
         {E.remove}
       </button>
     </>
+  );
+}
+
+/** Where the news widget's sources and the weather's place are chosen: Settings → News and weather. */
+const NEWS_HREF = '/settings?tab=news#news';
+const PLACE_HREF = '/settings?tab=news#place';
+
+/** A real link to a Settings page (a new tab works too); a plain click goes through `onOpen`, which asks first. */
+function SettingsLink({
+  href,
+  onOpen,
+  children,
+}: {
+  href: string;
+  onOpen: ((href: string) => void) | undefined;
+  children: string;
+}) {
+  return (
+    <AppLink
+      href={href}
+      className={e.settingsLink}
+      data-settings-link=""
+      onClick={(ev) => {
+        if (!onOpen || ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+        ev.preventDefault();
+        onOpen(href);
+      }}
+    >
+      <Icon icon={Settings} size={15} />
+      {children}
+    </AppLink>
   );
 }
 

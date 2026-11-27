@@ -6,7 +6,8 @@ import {
   SETTINGS_HOME_TEXT,
   type YouPart,
 } from '@whombat/client';
-import { useTheAgent } from '@whombat/client/react';
+import { placeNewsShown, useSessionProtocol, useTheAgent } from '@whombat/client/react';
+import { NEWS_WORDS } from '@whombat/core';
 import { useEffect } from 'react';
 import type { SettingsTab, WhombatTabPart } from '../../app/routing/search';
 import { AgentTab } from '../agent/settings/AgentTab';
@@ -15,6 +16,7 @@ import { PhoneAppPanel, PhoneAppSub, usePhoneAppSources } from '../mobile';
 import { UsageScreen } from '../spend';
 import { AdvancedTab } from './AdvancedTab';
 import { ConnectionsTab } from './ConnectionsTab';
+import { NewsWeatherTab } from './NewsWeatherTab';
 import { BackLabel, PlacePage, placeStyles as place } from './Place';
 import { SettingsHome } from './SettingsHome';
 import styles from './SettingsScreen.module.css';
@@ -25,7 +27,9 @@ export interface SettingsScreenProps {
   burrow: string;
   /** The home (`/settings` with nothing after it): Often used and the groups. */
   home?: boolean;
-  /** `you` (no `?tab=`, a part named), `agent`, `connections`, `appliance` or `advanced` (settings-groups.md). */
+  /**
+   * `you` (no `?tab=`, a part named), `agent`, `connections`, `appliance`, `news` or `advanced` (settings-groups.md).
+   */
   tab: SettingsTab;
   /** You's part (`&part=`): Profile without. */
   youPart?: YouPart;
@@ -98,6 +102,7 @@ function useAnchorScroll(tab: SettingsTab) {
  *   do (`&part=`).
  * - **Connections** (`?tab=connections`): what this Whombat is signed in to, and how; what needs you first.
  * - **This Whombat** (`?tab=appliance`): the Overview, backups, the screen and About (`&section=`).
+ * - **News and weather** (`?tab=news`), where the Whombat answers them: where it is, and the sources of its headlines.
  * - **Advanced** (`?tab=advanced`): folded — a list of the expert pages, each at `&part=`.
  * - **Phone app** (`?tab=phone`), Often used's: signing a phone in by its code and getting the app.
  * The tabs and parts from before redirect (`settingsRedirect`). Reached from the account menu in the sidebar. Every
@@ -127,7 +132,9 @@ export function SettingsScreen({
 
   // This Whombat's Screen part goes by the home's row name, where this Whombat has one.
   const screensPart = useScreenPart(burrow, tab === 'appliance' && section === 'screen');
-  if (home) return <SettingsHome burrow={burrow} />;
+  // News and weather is only a Whombat's that answers it; elsewhere its address opens the home, as a missing part would.
+  const news = placeNewsShown(useSessionProtocol());
+  if (home || (tab === 'news' && !news)) return <SettingsHome burrow={burrow} />;
   // Usage is a place of its own (final-shell-web.md): the Spend report at its old address, without Settings' groups.
   if (tab === 'advanced' && advancedPart === 'spend') return <UsageScreen burrow={burrow} />;
   const title =
@@ -141,7 +148,7 @@ export function SettingsScreen({
       screen="settings-group"
       title={title}
       wide={tab === 'appliance' && section === 'screen'}
-      intro={tab === 'phone' ? <PhoneAppIntro /> : undefined}
+      intro={tab === 'phone' ? <PhoneAppIntro /> : tab === 'news' ? NEWS_WORDS.pageLine : undefined}
       back={
         <Link to="/settings" className={place.back} data-settings-back="">
           <BackLabel>{SETTINGS_HOME_TEXT.back}</BackLabel>
@@ -171,6 +178,8 @@ export function SettingsScreen({
             onScreenChange={onScreenChange}
             onEditLayout={onEditLayout}
           />
+        ) : tab === 'news' ? (
+          <NewsWeatherTab burrow={burrow} />
         ) : tab === 'advanced' ? (
           <AdvancedTab burrow={burrow} part={advancedPart} />
         ) : (

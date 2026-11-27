@@ -52,7 +52,6 @@ import {
   ManagedPolicy,
   useApplianceStatus,
 } from './ManagedTabs';
-import { PlaceNewsSections } from './PlaceNewsSections';
 import { RemoteHelpSection } from './RemoteHelpSection';
 import styles from './SettingsScreen.module.css';
 import tw from './ThisWhombat.module.css';
@@ -80,10 +79,11 @@ export type GoToPart = (part: WhombatTabPart, hash?: string) => void;
  * - **Screen**, where the box has a screen (or one paired) or the runtime has screens of widgets: the box's screen as a
  *   desk display, or every screen (`&part=`, `&screen=`).
  * - **About**: which Whombat this is and whether it is up to date, the versions under Technical details, WHOMBAT TEAM
- *   (Report a problem or idea, where the person may send one or has some), then on a
+ *   (Report a problem or idea, where the person may send one or has some), the quiet hours, then on a
  *   managed Whombat UPDATES (with “Keep server agents up to date” where servers are), PLAN, HARDWARE (every part folded),
  *   REMOTE HELP and TURNED OFF HERE (what this Whombat doesn't do, with why). The audit log, the signing keys and the
- *   diagnostics file are Advanced's.
+ *   diagnostics file are Advanced's; where this Whombat is and the news it reads have a page of their own, Settings →
+ *   News and weather.
  * A Whombat is one person's: every section is theirs to change (one-person.md AP-5671).
  */
 export function ThisWhombatTab({
@@ -205,8 +205,6 @@ export function ThisWhombatTab({
           <TeamReportsAbout burrow={burrow} />
           {/* When the assistant may install updates and restart things (care-plan.md), before the updates themselves. */}
           <QuietHoursSection burrow={burrow} />
-          {/* Where this Whombat is, beside its time zone, and the news it reads (Whombat weather-news.md). */}
-          <PlaceNewsSections burrow={burrow} />
           {managed ? <ApplianceSections appliance={appliance} /> : null}
           {managed ? (
             appliance.status ? (

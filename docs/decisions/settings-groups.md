@@ -31,6 +31,7 @@ and `packages/client/src/agentPermissions.ts` (the three words); web `apps/web/s
 | STG-10 | **Superseded in part by final-shell-web.md FSW-05 (the one place is Usage, in the sidebar) and phone-shell-final.md PSH-07 (on the phone Spend is called Usage and is one of Places too), and by final-settings-vault-files-usage.md FSV-06 (Usage in dollars and times worked, no tokens or tasks).** **Spend in one place, one unit**: Advanced → Spend (tasks and tokens as the providers report them, today, 7 and 30 days). The agent's own Spend part (with a dollar estimate) is gone, the AI page has no Spend, and How it's doing has no Tokens chart on the web or the phone (it no longer reads spend). | Spend was three times in two units (#21). |
 | STG-11 | **The rest of the merges**: the AI sign-in once (the assistant's AI sign-in holds what it runs on and your sign-ins; Model and effort keeps the provider choice in Advanced without a second sign-in); Notes inside Memory; your signing key and the box's fingerprint in Advanced → Audit log and signing keys; Skills a page of Advanced; the Overview's SCREEN row gone (Screen is a part); the key label “Message people outside your Whombat”. | 6.2, #32. |
 | STG-12 | **Superseded in part by final-settings-vault-files-usage.md FSV-01** (the phone's Settings is the home of Often used and five groups).**** **The phone** follows the same groups: the profile card opens You (profile, notifications, Chat, Devices on a Whombat); the assistant's row (its name and face, its line what it runs on or an AI sign-in in trouble, which carries the tab's dot) opens its page with Name and face, AI sign-in (no Spend), Memory with its notes and What it may do (a pure view model, `agentMay.ts`); Advanced lists the shared rows the phone has a screen for (Model, AI on this Whombat, Keys, Running, Schedules, Spend, Skills, Connections, GitHub, Website feedback, Audit log, Diagnostics); the Vault is reached from What it may do. Old routes (`SettingsNotifications`, `SettingsAi`, `Memory`, the agent page's old parts) open their new place. The phone has no home network ranges or local network switch: they are the web's. | One structure on both; the phone shows only what it can open. |
+| STG-13 | **News and weather is a group of its own** on the Settings home, between This Whombat and Screens: where this Whombat is (for the weather and local news) and the news sources it reads, with a newspaper and “Your place, the weather and your headlines” (`SETTINGS_HOME_GROUPS`; on the web `?tab=news`, app weather-news-apps.md AP-10015). It shows only where the Whombat answers the place and the news; the old addresses of About's PLACE and NEWS land there. | John, 2026-11-27: the place and the news grew past a part of About — up to 30 sources to put in order, browsed by country and topic, imported from another reader — and a person looks for them by name, not under the box's facts. |
 
 **The Vault** (5.3, #19) reads as what the assistant can sign in to; what it stores, seals and sends is unchanged
 (vault.md, vault-self-serve.md), only what the person reads and the order they meet it change:
@@ -62,10 +63,12 @@ and `packages/client/src/agentPermissions.ts` (the three words); web `apps/web/s
 - `docs/decisions/server-asks.md` SA-08 in part (its words, by STG-04); `docs/decisions/resourceful-agents.md` and
   `docs/app/decisions/resourceful-agents.md` AP-679 in part (Off · Ask · On, by STG-04).
 - `docs/decisions/vault.md` VT-70, VT-71, VT-D29, VT-S13 in part (by STG-21…STG-30).
+- `docs/decisions/settings-phone-link.md` SPL-22 in part (the home's groups, by STG-13);
+  `docs/decisions/weather-news.md` WN-10 in part (the assistant's settings page, by STG-13).
 
 ## Rows for DECISIONS.md
 
-- STG-01…STG-03: `DECISIONS.md` holds the six groups of the Settings home (`sidebar-tabs.md`,
+- STG-01…STG-03, STG-13: `DECISIONS.md` holds the seven groups of the Settings home (`sidebar-tabs.md`,
   `settings-phone-link.md`, `final-settings-vault-files-usage.md`).
 - STG-04 **What the assistant may do is one page in three words — Just watch · Ask me first · Go ahead** — for servers,
   connections and key tiers alike. (`settings-groups.md`)
