@@ -120,6 +120,8 @@ describe('burrow-less paths (AP-360…)', () => {
       'done',
       // Reports to the Whombat Team (Whombat team-reports.md).
       'reports',
+      // What's new (docs/app/decisions/whats-new.md).
+      'whats-new',
     ]);
   });
 
