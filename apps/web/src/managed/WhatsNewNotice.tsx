@@ -26,6 +26,7 @@ import styles from '../app/shell/ShellLayout.module.css';
 import { cx } from '../components/cx';
 import { StatusDot } from '../components/StatusDot';
 import { APPLIANCE_STATUS_KEY } from '../features/settings/version';
+import { whatsNewOpensFresh } from '../features/whatsNew/freshPage';
 
 /** The release this browser saw for a Whombat: undefined where its storage can't be read. */
 function readSeen(key: string): string | null | undefined {
@@ -92,6 +93,8 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   // The box comes back after a drop (an update restarts it): ask again, so an open page hears of the update.
   useEffect(() => {
     if (!id) return;
+    // Already open: the first answer gets the same second chance as one after a drop.
+    if (session.state().status === 'open') backAt.current = Date.now();
     return onSessionReopen(session, () => {
       backAt.current = Date.now();
       void queryClient.invalidateQueries({ queryKey: APPLIANCE_STATUS_KEY });
@@ -127,7 +130,12 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
     <div className={styles.notice} role="status" data-testid="whats-new-notice">
       <StatusDot tone="ok" size={7} label={null} />
       <span className={styles.noticeText}>{WHATS_NEW_TEXT.notice}</span>
-      <Link to={WHATS_NEW_PATH as never} className={styles.noticeLink} onClick={close}>
+      <Link
+        to={WHATS_NEW_PATH as never}
+        reloadDocument={whatsNewOpensFresh()}
+        className={styles.noticeLink}
+        onClick={close}
+      >
         {WHATS_NEW_TEXT.see}
       </Link>
       <button type="button" className={cx(styles.noticeButton, styles.noticeQuiet)} onClick={close}>

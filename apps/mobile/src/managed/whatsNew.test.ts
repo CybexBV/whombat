@@ -1,7 +1,7 @@
 /** “What’s new” on the phone: About's row and the one-time “Whombat updated” notice. */
 import { readFileSync } from 'node:fs';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
-import { WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
+import { WHATS_NEW_TEXT, whatsNewRefetchInterval, whatsNewSeenKey } from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
 import { describe, expect, it, vi } from 'vitest';
 import { type KeyValueStore, memoryStore } from '../lib/kv';
@@ -129,7 +129,6 @@ describe('the one-time “Whombat updated” notice', () => {
     const off = observer.subscribe(() => {});
     await vi.waitFor(() => expect(client.getQueryData(queryKey)).toBe(1));
     const watch = watchStatusOnReopen(session, client, queryKey);
-    expect(watch.backAt()).toBe(0);
     move('connecting');
     move('open');
     // The answer is seconds old, but the box was gone: asked again at once.
@@ -141,6 +140,45 @@ describe('the one-time “Whombat updated” notice', () => {
     await Promise.resolve();
     expect(reads).toBe(2);
     off();
+  });
+
+  it('asks again soon when the first read on an open session fails or says nothing of updates', () => {
+    const session = (status: string) => ({ state: () => ({ status }), onState: () => () => {} });
+    const client = new QueryClient();
+    const open = watchStatusOnReopen(session('open'), client, ['k']);
+    const interval = whatsNewRefetchInterval(open.backAt);
+    expect(interval({ state: { data: undefined, status: 'error' } })).toBe(5_000);
+    expect(interval({ state: { data: { update: null }, status: 'success' } })).toBe(5_000);
+    expect(interval({ state: { data: status('pve-20260928.6'), status: 'success' } })).toBe(false);
+    open.stop();
+    // Not open yet: the window starts when it opens.
+    const later = watchStatusOnReopen(session('connecting'), client, ['k']);
+    expect(later.backAt()).toBe(0);
+    later.stop();
+  });
+
+  it('reads that overlap keep the newest update and tell of it once', async () => {
+    const inner = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') }),
+    });
+    // The first write lands after the second, as a busy secure store may do.
+    let writes = 0;
+    const store: KeyValueStore = {
+      get: (key) => inner.get(key),
+      set: async (key, value) => {
+        writes += 1;
+        if (writes === 1) await new Promise((resolve) => setTimeout(resolve, 20));
+        await inner.set(key, value);
+      },
+      remove: (key) => inner.remove(key),
+    };
+    const [first, second] = await Promise.all([
+      whatsNewToShow(store, WHOMBAT, status('pve-20260928.6')),
+      whatsNewToShow(store, WHOMBAT, status('pve-20260929.1')),
+    ]);
+    expect([first, second].filter(Boolean)).toEqual(expect.arrayContaining(['pve-20260928.6']));
+    expect(seenIn(inner)).toBe('pve-20260929.1');
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260929.1'))).toBeNull();
   });
 
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {

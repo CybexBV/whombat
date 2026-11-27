@@ -98,6 +98,7 @@ import { saveBlob } from '../../lib/saveBlob';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { BOX_PAGE_TEXT } from '../../managed/pageText';
 import { FingerprintConfirm } from '../mobile/FingerprintConfirm';
+import { whatsNewOpensFresh } from '../whatsNew/freshPage';
 import { AgentUpdatesSection, AgentUpdatesSwitch } from './AgentUpdatesSwitch';
 import { BackupOverview, useBackupOptionsShown } from './BackupOverview';
 import { BackupPlacesSection, CurrentPlaceRow } from './BackupPlaces';
@@ -498,7 +499,12 @@ export function ManagedAbout({
             title={WHATS_NEW_TEXT.link}
             meta={WHATS_NEW_TEXT.linkMeta}
             action={
-              <RouterButtonLink variant="secondary" size="sm" to={WHATS_NEW_PATH as never}>
+              <RouterButtonLink
+                variant="secondary"
+                size="sm"
+                to={WHATS_NEW_PATH as never}
+                reloadDocument={whatsNewOpensFresh()}
+              >
                 {WHATS_NEW_TEXT.open}
               </RouterButtonLink>
             }

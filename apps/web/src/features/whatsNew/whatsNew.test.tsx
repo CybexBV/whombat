@@ -128,7 +128,7 @@ function renderAt(ui: ReactNode, path = '/') {
       </ToastProvider>
     </QueryClientProvider>,
   );
-  return { ...view, statusRead };
+  return { ...view, statusRead, router };
 }
 
 const seenEntry = whatsNewSeenKey(BOX);
@@ -180,6 +180,26 @@ describe('This Whombat → About', () => {
     expect(within(updates).getByText(WHATS_NEW_TEXT.link)).toBeTruthy();
     await user.click(within(updates).getByRole('link', { name: WHATS_NEW_TEXT.open }));
     expect(await screen.findByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeTruthy();
+  });
+
+  it('on the page a box serves, Read loads the page afresh, with the notes of the version now running', async () => {
+    vi.stubEnv('VITE_WHOMBAT_TARGET', 'box');
+    try {
+      const user = userEvent.setup();
+      const view = renderAt(
+        <ManagedAbout burrow="hq" status={status('whombat-20261127.2') as never} onSetUpBackups={() => {}} />,
+      );
+      const updates = await screen.findByRole('region', { name: 'UPDATES' });
+      const read = within(updates).getByRole('link', { name: WHATS_NEW_TEXT.open });
+      expect(read.getAttribute('href')).toBe('/whats-new');
+      await user.click(read);
+      // Not drawn by this page: the browser asks the box for it, which serves its version now running.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(view.router.state.location.pathname).toBe('/');
+      expect(screen.queryByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 
@@ -389,6 +409,93 @@ describe('the notice after an update', () => {
     renderAt(<WhatsNewNotice onWhatsNew />, '/whats-new');
     await vi.waitFor(() => expect(seenRelease()).toBe('whombat-20261127.2'));
     expect(notice()).toBeNull();
+  });
+
+  it('on the page a box serves, See what’s new loads the page afresh, with the notes of the version now running', async () => {
+    vi.stubEnv('VITE_WHOMBAT_TARGET', 'box');
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      const user = userEvent.setup();
+      const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      const see = await screen.findByRole('link', { name: WHATS_NEW_TEXT.see });
+      expect(see.getAttribute('href')).toBe('/whats-new');
+      await user.click(see);
+      // A page open across the update still runs the version from before it: the browser loads the page again.
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(view.router.state.location.pathname).toBe('/');
+      expect(screen.queryByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeNull();
+      expect(notice()).toBeNull();
+      expect(seenRelease()).toBe('whombat-20261127.2');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('a page opened while its first read fails asks again shortly', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockRejectedValueOnce(new Error('not yet'));
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await vi.waitFor(() => expect(ops.status).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(notice()).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a page opened before the box says how its updates stand asks again until it does', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValueOnce({ ...status(null), update: null });
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await vi.waitFor(() => expect(ops.status).toHaveBeenCalledTimes(1));
+      await act(async () => {});
+      expect(notice()).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('two pages that claim the same update through the browser’s lock in turn: only one tells', async () => {
+    // One holder at a time, as the browser's lock does; each claim waits for the one before it.
+    let last: Promise<unknown> = Promise.resolve();
+    let claims = 0;
+    const locks = {
+      request: (_name: string, take: () => unknown) => {
+        claims += 1;
+        const turn = last.then(() => new Promise((resolve) => setTimeout(() => resolve(take()), 5)));
+        last = turn;
+        return turn;
+      },
+    };
+    vi.stubGlobal('navigator', { ...navigator, locks });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      renderAt(
+        <>
+          <WhatsNewNotice onWhatsNew={false} />
+          <WhatsNewNotice onWhatsNew={false} />
+        </>,
+      );
+      await screen.findByTestId('whats-new-notice');
+      await vi.waitFor(() => expect(claims).toBeGreaterThanOrEqual(2));
+      await act(() => last);
+      expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
+      expect(seenRelease()).toBe('whombat-20261127.2');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('the first update after the first look gets the notice', async () => {

@@ -24,39 +24,57 @@ export const WHATS_NEW_ROW = {
   label: `${WHATS_NEW_TEXT.link}. ${WHATS_NEW_TEXT.linkMeta}`,
 } as const;
 
+/** Checks of one store and Whombat waiting for the one before them (see `whatsNewToShow`). */
+const turns = new WeakMap<KeyValueStore, Map<string, Promise<unknown>>>();
+
+function inTurn<T>(store: KeyValueStore, key: string, run: () => Promise<T>): Promise<T> {
+  let queue = turns.get(store);
+  if (!queue) {
+    queue = new Map();
+    turns.set(store, queue);
+  }
+  const next = (queue.get(key) ?? Promise.resolve()).then(run, run);
+  queue.set(key, next);
+  return next;
+}
+
 /**
  * The release the notice tells about, or null for none. It is kept as seen at once, so the notice shows once even when
- * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly.
+ * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly. Checks of
+ * one Whombat run one after another, so a slow write can't land after a newer one and bring an update back.
  */
-export async function whatsNewToShow(
+export function whatsNewToShow(
   store: KeyValueStore,
   whombat: string,
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
 ): Promise<string | null> {
   const key = whatsNewSeenKey(whombat);
-  let seen: string | null;
-  try {
-    seen = await store.get(key);
-  } catch {
-    return null;
-  }
-  // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
-  const { action, release, value } = whatsNewNotice(status, seen);
-  if (action === 'none') return null;
-  await store.set(key, value).catch(() => {});
-  return action === 'show' ? release : null;
+  return inTurn(store, key, async () => {
+    let seen: string | null;
+    try {
+      seen = await store.get(key);
+    } catch {
+      return null;
+    }
+    // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
+    const { action, release, value } = whatsNewNotice(status, seen);
+    if (action === 'none') return null;
+    await store.set(key, value).catch(() => {});
+    return action === 'show' ? release : null;
+  });
 }
 
 /**
  * Asks for the status again each time the box's session opens after a drop (an update restarts the box), however
- * fresh the last answer, and remembers when: for a short while after, a missing or failed answer is asked again.
+ * fresh the last answer, and remembers when: for a short while after, a missing or failed answer is asked again. A
+ * session already open counts as just opened, so the first answer gets the same second chance.
  */
 export function watchStatusOnReopen(
   session: Parameters<typeof onSessionReopen>[0],
   queryClient: QueryClient,
   queryKey: QueryKey,
 ): { stop: () => void; backAt: () => number } {
-  let backAt = 0;
+  let backAt = session.state().status === 'open' ? Date.now() : 0;
   const stop = onSessionReopen(session, () => {
     backAt = Date.now();
     void queryClient.invalidateQueries({ queryKey });
