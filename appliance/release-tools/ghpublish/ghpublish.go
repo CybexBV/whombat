@@ -76,6 +76,10 @@ type Config struct {
 	// Retries and Backoff for GitHub's 5xx and 429 answers (default 3, 2 s).
 	Retries int
 	Backoff time.Duration
+	// PushTries and PushWait for a push of the metadata that GitHub fails on its own side (default 30 tries in all,
+	// 30 s apart: such a failure has lasted up to a quarter of an hour).
+	PushTries int
+	PushWait  time.Duration
 	// Log receives one line per step.
 	Log func(format string, a ...any)
 }
@@ -113,6 +117,12 @@ func New(cfg Config) (*Publisher, error) {
 	}
 	if cfg.Backoff == 0 {
 		cfg.Backoff = 2 * time.Second
+	}
+	if cfg.PushTries == 0 {
+		cfg.PushTries = 30
+	}
+	if cfg.PushWait == 0 {
+		cfg.PushWait = 30 * time.Second
 	}
 	if cfg.Log == nil {
 		cfg.Log = func(string, ...any) {}
@@ -1445,7 +1455,43 @@ func (p *Publisher) pull(ctx context.Context) error {
 // and couldn't push. If the published metadata for any role in pend moved on the remote (for instance an emergency
 // pause or resume landed while an upload was in flight), commitPush refuses to push, discards only this publish's
 // stale metadata, and returns an error so it can never overwrite a pause or reuse a lower/equal version.
+//
+// A push GitHub fails on its own side is made again (pushAgain). Each try is a whole round with its own checks of the
+// published metadata, as running the publish again is, and the devtuf lock is free while it waits.
 func (p *Publisher) commitPush(ctx context.Context, msg string, pend *pendingPublish, hasPendingFile bool) (string, error) {
+	failed := 0
+	for {
+		head, err := p.commitPushOnce(ctx, msg, pend, hasPendingFile)
+		if err == nil || !p.pushAgain(ctx, &failed, err) {
+			return head, err
+		}
+	}
+}
+
+// githubsOwnFailure matches a push GitHub failed on its own side instead of refusing the commits: its check of the
+// branch's rules broke (“fatal error in commit_refs_rules”, with nothing on its status page), or it answered 500 or
+// above. The same push goes through a little later.
+var githubsOwnFailure = regexp.MustCompile(`fatal error in commit_refs|returned error: 5\d\d|remote: Internal Server Error`)
+
+// pushAgain waits before another try at a push GitHub failed on its own side and says whether to make one: never for
+// another refusal (a rule, a remote that moved, a wrong token), nor once the tries are used up or the caller gave up.
+// failed counts the failures so far.
+func (p *Publisher) pushAgain(ctx context.Context, failed *int, pushErr error) bool {
+	if pushErr == nil || !githubsOwnFailure.MatchString(pushErr.Error()) || *failed+1 >= p.cfg.PushTries {
+		return false
+	}
+	*failed++
+	p.cfg.Log("GitHub failed the push on its own side (try %d of %d); pushing again in %s: %v", *failed, p.cfg.PushTries, p.cfg.PushWait, pushErr)
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(p.cfg.PushWait):
+		return true
+	}
+}
+
+// commitPushOnce is one round of commitPush, under the devtuf lock.
+func (p *Publisher) commitPushOnce(ctx context.Context, msg string, pend *pendingPublish, hasPendingFile bool) (string, error) {
 	unlockRepo, err := devtuf.Lock(p.cfg.Dir, time.Minute)
 	if err != nil {
 		return "", err
@@ -1644,6 +1690,7 @@ func (p *Publisher) publishChannelPause(ctx context.Context, channel string, pau
 		res         = &Result{Channel: channel, Uploaded: []string{}}
 		pr          *devtuf.ChannelPauseResult
 		lastPushErr error
+		failed      int
 	)
 	for attempt := 0; attempt < 3; attempt++ {
 		if _, err := p.gitIn(ctx, tmpDir, "fetch", "-q", p.cfg.Remote, p.cfg.Branch); err != nil {
@@ -1727,8 +1774,17 @@ func (p *Publisher) publishChannelPause(ctx context.Context, channel string, pau
 				return nil, nil, pushErr
 			}
 			newHead, rerr := p.gitIn(ctx, tmpDir, "rev-parse", "FETCH_HEAD")
-			if rerr != nil || newHead == baseHead {
+			if rerr != nil {
 				return nil, nil, pushErr
+			}
+			if newHead == baseHead {
+				// The remote didn't move: only GitHub failing on its own side is worth another try, signed afresh
+				// from what is published, and it doesn't use up the tries a moving remote gets.
+				if !p.pushAgain(ctx, &failed, pushErr) {
+					return nil, nil, pushErr
+				}
+				attempt--
+				continue
 			}
 			p.cfg.Log("push refused because the remote moved, re-signing %s %s from published metadata: %v", channel, action, pushErr)
 		}
