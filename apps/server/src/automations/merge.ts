@@ -34,6 +34,17 @@ export type MergeStep = Extract<AutomationStep, { kind: 'merge_pull_request' }>;
 export const MERGE_CHECKS_GRACE_MS = 10 * 60_000;
 
 /**
+ * The grace in a repository known to run no checks on its merges (`MergeHistory.quiet`). GitHub registers a pull
+ * request's checks within seconds, and the mirror reads a repository at least every three minutes even when nobody is
+ * there, so after four minutes a repository that just gained CI shows its checks as running, and the step then waits
+ * for them as usual.
+ */
+export const MERGE_NO_CHECKS_GRACE_MS = 4 * 60_000;
+
+/** How many merges without a single check make a repository known to run none: one or two could be chance. */
+export const QUIET_MERGES_KNOWN = 3;
+
+/**
  * How long a merge waits for a check its repository runs on its merges that hasn't reported at all, once the others
  * passed (TA-58): a check that still runs has the step's whole wait, one that never shows doesn't.
  */
@@ -209,6 +220,14 @@ export async function mergePlan(
   };
 }
 
+/** What a repository's last merged pull requests into a base say about the checks it runs on its merges. */
+export interface MergeHistory {
+  /** The checks it runs on them (`expectedChecks`). */
+  expected: string[];
+  /** It merged at least `QUIET_MERGES_KNOWN` of them and none had a check at all. */
+  quiet: boolean;
+}
+
 /**
  * The checks a repository runs on its merges into `base` (TA-58): the names that passed on at least two of its last
  * five merged pull requests there (on its only one, when it merged one) and passed on the newest of them it reported
@@ -221,6 +240,16 @@ export async function expectedChecks(
   base: string,
   exceptPrId: string,
 ): Promise<string[]> {
+  return (await mergeHistory(db, repoId, base, exceptPrId)).expected;
+}
+
+/** `expectedChecks` and whether the same merges show the repository runs no checks at all (`MergeHistory`). */
+export async function mergeHistory(
+  db: Db,
+  repoId: string,
+  base: string,
+  exceptPrId: string,
+): Promise<MergeHistory> {
   const merged = await db
     .select({ id: pullRequests.id })
     .from(pullRequests)
@@ -234,7 +263,7 @@ export async function expectedChecks(
     )
     .orderBy(desc(pullRequests.mergedAt))
     .limit(5);
-  if (!merged.length) return [];
+  if (!merged.length) return { expected: [], quiet: false };
   const rows = await db
     .select({ prId: prChecks.prId, name: prChecks.name, state: prChecks.state })
     .from(prChecks)
@@ -244,10 +273,13 @@ export async function expectedChecks(
         merged.map((m) => m.id),
       ),
     );
-  return usualChecks(
-    merged.map((m) => m.id),
-    rows,
-  );
+  return {
+    expected: usualChecks(
+      merged.map((m) => m.id),
+      rows,
+    ),
+    quiet: merged.length >= QUIET_MERGES_KNOWN && !rows.length,
+  };
 }
 
 /**
@@ -338,8 +370,9 @@ export type MergeReadiness =
  * of that head and its reviews — and the run's own review. In this order: merged meanwhile (succeeded); closed; changed
  * after the run's review (its head isn't the commit the review read); the review asked for changes; someone requested
  * changes; checks failed (run once more first when GitHub Actions can, `failedChecks`); checks passed (merge); checks
- * running (wait, until `waitMinutes` after it began waiting); no checks (wait up to `MERGE_CHECKS_GRACE_MS` after the
- * pull request opened — never past its wait — then merge; a report's fix only on the run's review of its head). Pure.
+ * running (wait, until `waitMinutes` after it began waiting); no checks (wait up to the grace after the pull request
+ * opened — never past its wait — then merge; a report's fix only on the run's review of its head). The grace is
+ * `MERGE_CHECKS_GRACE_MS`, and `MERGE_NO_CHECKS_GRACE_MS` in a repository known to run no checks (`quiet`). Pure.
  */
 export function mergeReadiness(p: {
   number: number;
@@ -355,6 +388,8 @@ export function mergeReadiness(p: {
   expected?: readonly string[];
   /** Never merge without checks (a fix of a customer's report, TA-58). */
   requireChecks?: boolean;
+  /** The repository is known to run no checks on its merges (`MergeHistory.quiet`): the shorter grace applies. */
+  quiet?: boolean;
 }): MergeReadiness {
   const n = p.number;
   const S = MERGE_SUMMARIES;
@@ -376,6 +411,7 @@ export function mergeReadiness(p: {
   const timeout = p.waitingSince.getTime() + p.waitMinutes * 60_000;
   if (checks === 'failed') return failedChecks(n, p.repo, pr.checks, p.rerun, p.now.getTime(), timeout);
   const expected = p.expected ?? [];
+  const grace = p.quiet && !expected.length ? MERGE_NO_CHECKS_GRACE_MS : MERGE_CHECKS_GRACE_MS;
   if (checks === 'passed') {
     // The checks this repository runs on its merges must have reported too: some only report once they finish (TA-58).
     const missing = expected.filter((name) => !pr.checks.some((c) => c.name === name));
@@ -383,7 +419,7 @@ export function mergeReadiness(p: {
     const settling =
       !expected.length &&
       p.requireChecks === true &&
-      p.now.getTime() < Math.max(row.openedAt.getTime(), p.waitingSince.getTime()) + MERGE_CHECKS_GRACE_MS;
+      p.now.getTime() < Math.max(row.openedAt.getTime(), p.waitingSince.getTime()) + grace;
     if (!missing.length && !settling) return { kind: 'merge', reviewed, summary: S.passed(n) };
     if (!missing.length) return { kind: 'wait' };
     // A check that never reports is left for a person sooner than one that still runs (TA-58).
@@ -401,7 +437,7 @@ export function mergeReadiness(p: {
         ? fail(S.noChecks(n), MERGE_WORDS.noChecks(n), 'no_checks')
         : { kind: 'wait' };
     const opened = Math.min(row.openedAt.getTime(), p.waitingSince.getTime());
-    return p.now.getTime() >= Math.min(opened + MERGE_CHECKS_GRACE_MS, timeout)
+    return p.now.getTime() >= Math.min(opened + grace, timeout)
       ? { kind: 'merge', reviewed, summary: S.none(n) }
       : { kind: 'wait' };
   }

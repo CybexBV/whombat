@@ -8,7 +8,7 @@
  */
 import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
-import { expectedChecks, MERGE_WORDS, mergeReadiness } from '../automations/merge';
+import { MERGE_WORDS, mergeHistory, mergeReadiness } from '../automations/merge';
 import { mergeTarget, recordMerge } from '../commands/prs';
 import { defineCommand } from '../commit/types';
 import type { Db } from '../db/client';
@@ -58,6 +58,9 @@ export async function promptMergeStep(db: Db, watch: T3WatchRow, now: Date): Pro
   if (!pr) return late ? { kind: 'left', text: PROMPT_MERGE_WORDS.nothing } : { kind: 'wait' };
   const target = await mergeTarget(db, watch.burrowId, pr.number, pr.repo);
   if (!target && !late) return { kind: 'wait' };
+  const history = target
+    ? await mergeHistory(db, target.repo.id, target.row.baseBranch, target.row.id)
+    : { expected: [], quiet: false };
   const ready = mergeReadiness({
     number: pr.number,
     repo: pr.repo,
@@ -68,7 +71,7 @@ export async function promptMergeStep(db: Db, watch: T3WatchRow, now: Date): Pro
     // Failed checks aren't run again: the thread already got them passing before it ended, so a failure now is real.
     rerun: null,
     now,
-    expected: target ? await expectedChecks(db, target.repo.id, target.row.baseBranch, target.row.id) : [],
+    ...history,
   });
   switch (ready.kind) {
     case 'wait':
