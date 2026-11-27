@@ -1868,11 +1868,17 @@ Setup and operation: `docs/github.md`.
   (`placeFromTimeZone`, from `zone.tab`); `place.find` looks one up on OpenStreetMap's Nominatim (`PlaceFinder`: one
   request a second per box, answers kept a day), `place.set` keeps it. `WeatherService` keeps MET Norway's
   Locationforecast per place in memory and asks again only after it expires (never within 30 minutes, with jitter,
-  never on the hour, `If-Modified-Since`); sunrise and sunset are worked out on the box (`sunTimes`). The news sites the
-  person turned on or added (`burrows.news`, up to 12; `news.sources`, `news.setSources`, `news.addSite`, which finds a
-  page's feed) are read by `NewsReader` every 15 minutes while something needs them (RSS, RDF and Atom with htmlparser2;
-  headline, site, time and link only). Every such request goes through `openDataGet` with Whombat's User-Agent and the
-  outbound rules. The `weather` and `news` widgets read both once per burrow (`desk/widgets/weather-news.ts`), the
+  never on the hour, `If-Modified-Since`); sunrise and sunset are worked out on the box (`sunTimes`). The news sources
+  the person turned on, added or imported (`burrows.news`, up to 30) change through `news.setSources`, `news.addSite`
+  (`news/discover.ts`: a feed, a page's feed, or the feed of a YouTube channel, subreddit, Mastodon or Bluesky account,
+  Apple podcast or GitHub project, with its `kind`) and `news.importSites` (`news/import.ts`: another reader's list,
+  each address checked as one added, four at a time within 20 seconds, then one commit); `news.sources` and
+  `news.browse` read them and the suggestions table (`NEWS_SUGGESTIONS`, generated from
+  `scripts/weather-news/news-feeds.psv`). An app before session minor 19 is shown the first 12 and keeps the rest when
+  it saves (`news/older-apps.ts`, through the session's `protocolMinor` in the handler context). `NewsReader` reads
+  them every 15 minutes while something needs them, six at a time, each feed's first MiB (RSS, RDF and Atom with
+  htmlparser2; headline, site, time and link only), and the widget and the assistant take each source's share of the
+  newest. Every such request goes through `openDataGet` with Whombat's User-Agent and the outbound rules. The `weather` and `news` widgets read both once per burrow (`desk/widgets/weather-news.ts`), the
   assistant through `weather_forecast` and `news_headlines`, and a Looks ahead calendar check gets the forecast for the
   plan's day.
 - **Incidents** (`apps/server/src/incidents/`, [monitoring.md](docs/decisions/monitoring.md)): every minute a home job
