@@ -41,7 +41,7 @@ export const NewsHeadlinesOutput = z.discriminatedUnion('status', [
     /** Each site that is on, and whether it could be read just now. */
     sources: z.array(z.object({ name: z.string(), read: z.boolean() })),
   }),
-  /** No news site is on (the person turns them on in Settings → This Whombat → News). */
+  /** No news site is on (the person turns them on in Settings → News and weather). */
   z.object({ status: z.literal('none'), message: z.string() }),
   /** None of the sites could be read just now. */
   z.object({ status: z.literal('unavailable'), message: z.string() }),
@@ -53,7 +53,7 @@ export const NEWS_MCP_TOOLS = {
     name: 'news_headlines',
     title: 'News headlines',
     description:
-      'The latest headlines from the news sites the person turned on (local and national), newest first: each one’s site, words, time and link. Only headlines, no articles: open the link with your browser for more. status none: no site is on (the person chooses them in Settings → This Whombat → News, or asks you).',
+      'The latest headlines from the news sites the person turned on (local and national), newest first: each one’s site, words, time and link. Only headlines, no articles: open the link with your browser for more. status none: no site is on (the person chooses them in Settings → News and weather, or asks you).',
     input: NewsHeadlinesInput,
     output: NewsHeadlinesOutput,
     requiredKey: null,
