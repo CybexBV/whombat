@@ -403,7 +403,7 @@ release's commit carries the release's id as a tag.
 | `packages/control-contracts`, `packages/release` | | Control's API schemas; release tuples, manifests and update states. |
 | `packages/canvas-schema`, `packages/fixtures` | | The canvas document schema; the mock world shared by tests, the seed and the apps. |
 | `packages/client` | `@whombat/client` | The apps' session client and the reducers that apply realtime frames to the query cache. |
-| `packages/tokens`, `packages/avatars`, `packages/brand` | | Design tokens (CSS variables on web), the agent faces, logos and marks. |
+| `packages/tokens`, `packages/avatars`, `packages/brand` | | Design tokens (CSS variables on web), the agent faces (the still files, and the live face that shows what the agent does: `@whombat/avatars/live`, its poses and motion rules; the phone has its own engine in `apps/mobile/src/avatars/`), logos and marks. |
 | `packages/agent-runtime` | `@whombat/agent-runtime` | The provider-neutral turn contract; `HermesProvider` over ACP and the scripted stand-in (`hermes/`); Claude Code's checks, model lists and sign-ins; the turn's words (`persona/`); the managed sandbox (`access/managed/`); the workspace manager; host paths. |
 | `packages/commands` | `@whombat/commands` | What runs inside a command's wrapper: `whombat-command` (Hermes's terminal prefix), the holder and its network, the `gh`, `git` and `whombat` helpers. |
 | `packages/hermes-whombat` | (Python) | Whombat's Hermes plugin: the pinned DirectSDK provider, the commands terminal backend, the tool-policy hook, the logins vault, the skills steps, the `whombat:settings` skill. |
