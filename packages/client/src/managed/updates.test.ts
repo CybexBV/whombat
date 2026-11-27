@@ -15,6 +15,7 @@ import {
   updateView,
   WHATS_NEW_NO_UPDATE,
   whatsNewNotice,
+  whatsNewPollMs,
   whatsNewSeenKey,
 } from './updates';
 
@@ -439,6 +440,28 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(whatsNewNotice(updated('pve-20260928.6', 'ForwardRepairRequired'), 'pve-20260927.1').action).toBe(
       'none',
     );
+  });
+
+  it('asks again every few seconds only while an update is being installed', () => {
+    expect(whatsNewPollMs({ update: { ...base, state: 'Verifying', candidate: 'pve-20260929.1' } })).toBe(
+      5_000,
+    );
+    expect(whatsNewPollMs({ update: { ...base, state: 'Activating', candidate: 'pve-20260929.1' } })).toBe(
+      5_000,
+    );
+    expect(whatsNewPollMs(updated('pve-20260928.6'))).toBe(false);
+    // Waiting for the owner's yes can take days: not news yet, and no reason to ask.
+    expect(
+      whatsNewPollMs({
+        update: {
+          ...base,
+          state: 'Staged',
+          candidate: 'pve-20260929.1',
+          waiting: { reason: 'owner', since: NOW.toISOString(), blockers: [] },
+        },
+      }),
+    ).toBe(false);
+    expect(whatsNewPollMs(null)).toBe(false);
   });
 
   it('keeps one seen release per Whombat, in letters a secure store takes', () => {

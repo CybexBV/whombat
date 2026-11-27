@@ -5,7 +5,7 @@
  * the Settings list already asks for (same query), not a poll of its own.
  */
 import { useQuery } from '@tanstack/react-query';
-import { WHATS_NEW_TEXT } from '@whombat/client/managed';
+import { WHATS_NEW_TEXT, whatsNewPollMs } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -35,7 +35,12 @@ export function useWhatsNewNotice({
   /** The session is open: asked before, a failed read would keep the notice away until Settings asks again. */
   open: boolean;
 }): WhatsNewNoticeState | null {
-  const status = useQuery({ ...applianceStatusQuery({ session, cacheScope }), enabled: open }).data;
+  // While an update is being installed its last update changes when it is done: ask until then.
+  const status = useQuery({
+    ...applianceStatusQuery({ session, cacheScope }),
+    enabled: open,
+    refetchInterval: (query) => whatsNewPollMs(query.state.data),
+  }).data;
   const [shown, setShown] = useState<{ whombat: string; release: string } | null>(null);
   useEffect(() => {
     if (!status) return;

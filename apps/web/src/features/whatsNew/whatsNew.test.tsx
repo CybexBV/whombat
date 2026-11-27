@@ -106,9 +106,13 @@ function renderAt(ui: ReactNode, path = '/') {
     history: createMemoryHistory({ initialEntries: [path] }),
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  /** Until the box's status has arrived and the screen has drawn what it says. */
-  const statusRead = async () => {
-    await vi.waitFor(() => expect(client.getQueryData([...APPLIANCE_STATUS_KEY])).toBeTruthy());
+  /** Until the box's status (with `release` as its last update, when given) has arrived and the screen drew it. */
+  const statusRead = async (release?: string) => {
+    await vi.waitFor(() => {
+      const data = client.getQueryData<ReturnType<typeof status>>([...APPLIANCE_STATUS_KEY]);
+      expect(data).toBeTruthy();
+      if (release) expect(data?.update.lastUpdate?.release).toBe(release);
+    });
     await act(async () => {});
   };
   const view = render(
@@ -222,6 +226,46 @@ describe('the notice after an update', () => {
     act(() => session.move('connecting'));
     act(() => session.move('open'));
     expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+  });
+
+  it('an open page back while the box still checks the update hears of it once the check is done', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261126.5'));
+      const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await view.statusRead();
+      // Back while the box still checks the update: the last update is the old one until it is done.
+      const checking = status('whombat-20261126.5');
+      ops.status.mockResolvedValue({
+        ...checking,
+        update: { ...checking.update, state: 'Verifying', candidate: 'whombat-20261127.2' },
+      });
+      act(() => session.move('connecting'));
+      act(() => session.move('open'));
+      await vi.waitFor(() => expect(ops.status).toHaveBeenCalledTimes(2));
+      await act(async () => {});
+      expect(notice()).toBeNull();
+      // The check is done: the page asks again by itself while an update moves.
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('a second page open at the same time says nothing for an update the first one told about', async () => {
+    ops.status.mockResolvedValue(status('whombat-20261126.5'));
+    const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+    await vi.waitFor(() => expect(window.localStorage.getItem(seenEntry)).toBe('whombat-20261126.5'));
+    // Another page of this browser showed the notice for the update and kept it.
+    window.localStorage.setItem(seenEntry, 'whombat-20261127.2');
+    ops.status.mockResolvedValue(status('whombat-20261127.2'));
+    act(() => session.move('connecting'));
+    act(() => session.move('open'));
+    await view.statusRead('whombat-20261127.2');
+    expect(notice()).toBeNull();
   });
 
   it('See what’s new opens the page and counts as seen', async () => {

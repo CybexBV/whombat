@@ -329,6 +329,16 @@ export function whatsNewNotice(
   return { action: 'show', release };
 }
 
+/**
+ * How often the notice asks for the status again: every 5 s while an update is being installed (its last update
+ * changes once it is done, after the box is back), as About does; never while it waits (for the owner's yes, a backup,
+ * the maintenance window: that can take days) or is paused.
+ */
+export function whatsNewPollMs(status: Pick<ApplianceStatus, 'update'> | null | undefined): number | false {
+  const u = status?.update;
+  return u && MOVING.has(u.state) && !u.waiting && !u.paused ? 5_000 : false;
+}
+
 /** Where a device keeps what it saw, one per Whombat (letters a phone's secure store takes). */
 export function whatsNewSeenKey(whombat: string): string {
   return `whombat.whatsNew.seen.${whombat.replace(/[^A-Za-z0-9._-]/g, '_')}`;

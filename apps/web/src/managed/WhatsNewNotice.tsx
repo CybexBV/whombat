@@ -3,12 +3,19 @@
  * (`appliance.status` → `update.lastUpdate`) compared with the release this browser saw last (`whatsNewNotice`). The
  * first look only remembers, since there is nothing to compare with. The release is kept as seen as soon as the notice
  * shows (and when What's new is open), so it shows once; it stays on this page until See what’s new or Dismiss. An
- * open page asks for the status again when the box comes back after a drop, which is how an update reaches it. Kept in
- * this browser's storage; where it can't be read the notice stays away rather than showing at every start.
+ * open page asks for the status again when the box comes back after a drop, and every few seconds while an update is
+ * being installed, which is how an update reaches it. Kept in this browser's storage, read afresh each time so two
+ * pages don't both tell; where it can't be read the notice stays away rather than showing at every start.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
-import { WHATS_NEW_PATH, WHATS_NEW_TEXT, whatsNewNotice, whatsNewSeenKey } from '@whombat/client/managed';
+import {
+  WHATS_NEW_PATH,
+  WHATS_NEW_TEXT,
+  whatsNewNotice,
+  whatsNewPollMs,
+  whatsNewSeenKey,
+} from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { useAppServices } from '../app/providers';
@@ -44,6 +51,8 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
     enabled: Boolean(id),
     staleTime: 5 * 60_000,
     retry: false,
+    // While an update is being installed its last update changes when it is done: ask until then.
+    refetchInterval: (query) => whatsNewPollMs(query.state.data),
   });
   // The box comes back after a drop (an update restarts it): ask again, so an open page hears of the update.
   useEffect(() => {
@@ -57,18 +66,16 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   }, [id, session, queryClient]);
   // Kept per Whombat: without its id there is nowhere to keep it, so no notice.
   const key = id ? whatsNewSeenKey(id) : null;
-  // What this page kept (or found kept), so a render before storage is read again agrees with it.
-  const [kept, setKept] = useState<string | null>(null);
   // The notice on screen: it stays until it is tapped, though its release is already kept.
   const [shown, setShown] = useState<{ key: string; release: string } | null>(null);
+  // Read from storage each time: another page of this browser may have shown the notice already.
   const seen = key ? readSeen(key) : undefined;
-  const notice = status.data && seen !== undefined ? whatsNewNotice(status.data, kept ?? seen) : null;
+  const notice = status.data && seen !== undefined ? whatsNewNotice(status.data, seen) : null;
   const action = notice?.action;
   const release = notice?.release;
   useEffect(() => {
     if (!key || !release || action === 'none' || action === undefined) return;
     keepSeen(key, release);
-    setKept(release);
     if (action === 'show' && !onWhatsNew) setShown({ key, release });
   }, [key, action, release, onWhatsNew]);
   // Reading What's new is what the notice asked for: it doesn't come back after.
