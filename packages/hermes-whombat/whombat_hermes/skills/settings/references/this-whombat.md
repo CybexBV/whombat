@@ -34,6 +34,8 @@ How the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing 
 - Join a Wi-Fi network (it needs a password) — `host.wifi.join` · theirs: send them there
 - Look for Wi-Fi networks nearby — `host.wifi.scan` · read
 - Add a news site — `news.addSite` · change, always asks
+- Browse the news sites suggested in a country — `news.browse` · read
+- Add news sources from another reader’s list — `news.importSites` · change, always asks
 - Turn news sites on or off — `news.setSources` · change
 - Read the news sites that are on and the ones suggested — `news.sources` · read
 - Look up a place on OpenStreetMap — `place.find` · read

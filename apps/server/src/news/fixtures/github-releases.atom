@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/example-org/example-app/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/example-org/example-app/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/example-org/example-app/releases.atom"/>
+  <title>Release notes from example-app</title>
+  <updated>2026-11-26T08:40:42Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/27193779/v2.4.0</id>
+    <updated>2026-11-26T08:40:42Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/example-org/example-app/releases/tag/v2.4.0"/>
+    <title>v2.4.0</title>
+    <content type="html">&lt;h3&gt;What changed&lt;/h3&gt;&lt;ul&gt;&lt;li&gt;Faster start&lt;/li&gt;&lt;/ul&gt;</content>
+    <author>
+      <name>example-maintainer</name>
+    </author>
+  </entry>
+</feed>

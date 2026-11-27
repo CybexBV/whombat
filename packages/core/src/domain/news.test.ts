@@ -17,18 +17,28 @@ import { NEWS_SUGGESTIONS } from './news-suggestions.js';
 const ids = (place: Parameters<typeof newsSuggestionsFor>[0]) => newsSuggestionsFor(place).map((s) => s.id);
 
 describe('the suggested news sites', () => {
-  it('put the region’s first, then the country’s', () => {
+  it('put the region’s first, then the country’s, its all-news sites before its topics', () => {
     const brabant = newsSuggestionsFor({ country: 'NL', region: 'NL-NB' });
-    expect(brabant.map((s) => [s.id, s.near])).toEqual([
+    expect(brabant.slice(0, 2).map((s) => [s.id, s.near])).toEqual([
       ['nl-omroep-brabant', 'region'],
       ['nl-nos', 'country'],
     ]);
-    expect(ids({ country: 'NL', region: 'NL-ZH' })).toEqual(['nl-rijnmond', 'nl-omroep-west', 'nl-nos']);
+    expect(brabant.slice(1).every((s) => s.near === 'country')).toBe(true);
+    const firstTopic = brabant.findIndex((s) => s.topic);
+    expect(firstTopic).toBeGreaterThan(1);
+    expect(brabant.slice(firstTopic).every((s) => s.topic)).toBe(true);
+    expect(ids({ country: 'NL', region: 'NL-ZH' }).slice(0, 3)).toEqual([
+      'nl-rijnmond',
+      'nl-omroep-west',
+      'nl-nos',
+    ]);
   });
 
   it('suggest only the country’s own where the region has none or isn’t known', () => {
-    expect(ids({ country: 'NL', region: 'NL-FL' })).toEqual(['nl-nos']);
-    expect(ids({ country: 'NL' })).toEqual(['nl-nos']);
+    const country = newsSuggestionsFor({ country: 'NL' });
+    expect(country[0]?.id).toBe('nl-nos');
+    expect(country.every((s) => s.near === 'country')).toBe(true);
+    expect(ids({ country: 'NL', region: 'NL-FL' })).toEqual(ids({ country: 'NL' }));
   });
 
   it('match an area where the region is too large', () => {
@@ -61,12 +71,35 @@ describe('the suggested news sites', () => {
       'CA',
       'AU',
       'US',
+      'NZ',
+      'ES',
+      'PT',
+      'PL',
+      'CZ',
+      'FI',
+      'EE',
+      'LV',
+      'LT',
+      'GR',
+      'CY',
+      'MT',
+      'SI',
+      'SK',
+      'HR',
+      'HU',
+      'RO',
+      'BG',
+      'IS',
     ])
       expect([country, ids({ country }).length > 0]).toEqual([country, true]);
-    expect(ids({ country: 'DE', region: 'DE-BY' })).toEqual(['de-tagesschau-by', 'de-tagesschau']);
+    expect(ids({ country: 'DE', region: 'DE-BY' }).slice(0, 2)).toEqual([
+      'de-tagesschau-by',
+      'de-tagesschau',
+    ]);
     expect(ids({ country: 'AT', region: 'AT-6' })[0]).toBe('at-orf-steiermark');
-    expect(ids({ country: 'GB', region: 'GB-SCT' })).toEqual(['gb-bbc-scotland', 'gb-bbc']);
-    expect(ids({ country: 'FI' })).toEqual([]);
+    expect(ids({ country: 'GB', region: 'GB-SCT' }).slice(0, 2)).toEqual(['gb-bbc-scotland', 'gb-bbc']);
+    expect(ids({ country: 'US', region: 'US-CA' })[0]).toBe('us-ca-calmatters');
+    expect(ids({ country: 'JP' })).toEqual([]);
     expect(ids(null)).toEqual([]);
   });
 
@@ -82,6 +115,8 @@ describe('the suggested news sites', () => {
       expect(row.url).not.toMatch(/news\.google\.|yle\.fi/);
       for (const code of [...(row.regions ?? []), ...(row.areas ?? [])])
         expect(code.startsWith(`${row.country}-`)).toBe(true);
+      // A regional site names where it is for; a country's doesn't.
+      expect([row.id, !!row.where]).toEqual([row.id, !!(row.regions ?? row.areas)]);
       expect(seen.has(row.id)).toBe(false);
       seen.add(row.id);
     }
