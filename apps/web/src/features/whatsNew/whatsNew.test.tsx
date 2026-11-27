@@ -457,6 +457,22 @@ describe('the notice after an update', () => {
     }
   });
 
+  it('on the hosted app too, See what’s new loads the page afresh, with the changelog published now', async () => {
+    vi.stubEnv('VITE_WHOMBAT_TARGET', 'hosted');
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      const user = userEvent.setup();
+      const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await user.click(await screen.findByRole('link', { name: WHATS_NEW_TEXT.see }));
+      await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+      expect(view.router.state.location.pathname).toBe('/');
+      expect(screen.queryByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('a page opened while its first read fails asks again shortly', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

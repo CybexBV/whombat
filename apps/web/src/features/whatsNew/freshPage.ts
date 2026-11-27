@@ -1,8 +1,9 @@
 /**
- * On the page a box serves, What’s new opens as a fresh page: a page left open across an update still runs the version
- * from before it, with that version's changelog, while the box already serves the new one. The hosted app's page
- * follows the hosted app's own version, so it opens in place.
+ * What’s new opens as a fresh page in the built app: a page left open across an update still runs the version from
+ * before it, with that version's changelog, while the box (or the hosted app) already serves the new one. On the hosted
+ * app a fresh load shows it as its public page, with the way back into the app at its top.
  */
 export function whatsNewOpensFresh(): boolean {
-  return import.meta.env.VITE_WHOMBAT_TARGET === 'box';
+  const target = import.meta.env.VITE_WHOMBAT_TARGET;
+  return target === 'box' || target === 'hosted';
 }

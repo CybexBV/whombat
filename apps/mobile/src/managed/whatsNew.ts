@@ -39,6 +39,21 @@ function inTurn<T>(store: KeyValueStore, key: string, run: () => Promise<T>): Pr
 }
 
 /**
+ * Updates kept as seen by a watcher that stopped before it could tell (the app moved to another Whombat while it kept
+ * the release): the next check of that Whombat tells of it instead.
+ */
+const untold = new WeakMap<KeyValueStore, Map<string, string>>();
+
+function untoldOf(store: KeyValueStore): Map<string, string> {
+  let map = untold.get(store);
+  if (!map) {
+    map = new Map();
+    untold.set(store, map);
+  }
+  return map;
+}
+
+/**
  * The release the notice tells about, or null for none. It is kept as seen at once, so the notice shows once even when
  * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly; a release
  * that can't be kept says nothing. Checks of one Whombat run one after another, so a slow write can't land after a newer
@@ -60,16 +75,25 @@ export function whatsNewToShow(
     }
     // Gone while reading (the app moved to another Whombat): nothing is kept, so coming back still tells.
     if (!live()) return null;
+    const waiting = untoldOf(store);
     // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
     const { action, release, value } = whatsNewNotice(status, seen);
-    if (action === 'none') return null;
+    if (action === 'none') {
+      const missed = waiting.get(key) ?? null;
+      waiting.delete(key);
+      return missed;
+    }
     // Not kept, it would tell again at every start: it says nothing, as when the store can't be read.
     try {
       await store.set(key, value);
     } catch {
       return null;
     }
-    return action === 'show' ? release : null;
+    if (action !== 'show') return null;
+    waiting.delete(key);
+    // Gone while keeping it: the next check of this Whombat tells.
+    if (!live()) waiting.set(key, release);
+    return release;
   });
 }
 
