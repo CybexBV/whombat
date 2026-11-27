@@ -18,6 +18,7 @@ import {
   whatsNewNotice,
   whatsNewPollMs,
   whatsNewSeenKey,
+  whatsNewTold,
 } from './updates';
 
 const NOW = new Date('2026-09-29T12:00:00Z');
@@ -453,6 +454,21 @@ describe('the one-time “Whombat updated” notice', () => {
     expect(
       whatsNewNotice(updated('pve-20260929.1', 'Healthy', '2026-09-29T13:00:00Z'), first.value).action,
     ).toBe('show');
+  });
+
+  it('an update kept before it could be shown (`untold`) still shows, until it is marked told', () => {
+    const shown = whatsNewNotice(updated('pve-20260928.6'), 'pve-20260927.1');
+    expect(whatsNewNotice(updated('pve-20260928.6'), shown.untold)).toMatchObject({
+      action: 'show',
+      release: 'pve-20260928.6',
+    });
+    const told = whatsNewTold(shown.untold, 'pve-20260928.6');
+    expect(told).not.toBeNull();
+    expect(whatsNewNotice(updated('pve-20260928.6'), told).action).toBe('none');
+    // Already told, or another release kept since: nothing to mark.
+    expect(whatsNewTold(told, 'pve-20260928.6')).toBeNull();
+    expect(whatsNewTold(shown.untold, 'pve-20260929.1')).toBeNull();
+    expect(whatsNewTold(null, 'pve-20260928.6')).toBeNull();
   });
 
   it('asks again every few seconds only while an update is being installed', () => {

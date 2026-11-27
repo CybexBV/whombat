@@ -39,7 +39,7 @@
  *   /reports                        Your reports to the Whombat Team (Whombat team-reports.md); ?draft= → /reports/new
  *   /reports/new                    a new report, ?draft=<id> the assistant's draft (its card's Edit)
  *   /reports/:reportId              one report (`tr_…`), ?sent=1 right after Send; the box's Inbox item and push open it
- *   /whats-new                      What's new: the plain-language changelog (docs/changelog.md)
+ *   /settings/whats-new             What's new: the plain-language changelog (docs/changelog.md)
  *   /settings/agent                 → /settings?tab=agent, `?part=` and `?key=` kept (the agent's link, AgentLink;
  *                                   AP-4922); its old Skills part → /settings?tab=skills (AP-5530)
  *   /settings                       the home (Often used, the five groups) · ?part=profile|notifications|… (You) ·
@@ -751,10 +751,10 @@ const deploysRoute = createRoute({
   }),
 });
 
-/** What's new (`/whats-new`): the plain-language changelog, from This Whombat → About and the notice after an update. */
+/** What's new (`/settings/whats-new`): the plain-language changelog, from This Whombat → About and the notice after an update. */
 const whatsNewRoute = createRoute({
   getParentRoute: () => burrowRoute,
-  path: 'whats-new',
+  path: 'settings/whats-new',
   component: withScreens([WhatsNewScreen], function WhatsNewRoute() {
     return <WhatsNewScreen />;
   }),

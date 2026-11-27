@@ -13,7 +13,7 @@ import {
 } from '@tanstack/react-router';
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
+import { WHATS_NEW_PATH, WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../components/Toast';
@@ -106,7 +106,7 @@ function renderAt(ui: ReactNode, path = '/') {
     ),
   });
   const home = createRoute({ getParentRoute: () => root, path: '/', component: () => <p>Home</p> });
-  const page = createRoute({ getParentRoute: () => root, path: '/whats-new', component: WhatsNewScreen });
+  const page = createRoute({ getParentRoute: () => root, path: WHATS_NEW_PATH, component: WhatsNewScreen });
   const router = createRouter({
     routeTree: root.addChildren([home, page]),
     history: createMemoryHistory({ initialEntries: [path] }),
@@ -160,7 +160,7 @@ describe('What’s new page', () => {
   });
 
   it('renders the changelog: its title, its days and their lines', async () => {
-    renderAt(null, '/whats-new');
+    renderAt(null, WHATS_NEW_PATH);
     expect(await screen.findByRole('heading', { level: 1, name: 'What’s new in Whombat' })).toBeTruthy();
     const days = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
     expect(days.length).toBeGreaterThan(0);
@@ -191,7 +191,7 @@ describe('This Whombat → About', () => {
       );
       const updates = await screen.findByRole('region', { name: 'UPDATES' });
       const read = within(updates).getByRole('link', { name: WHATS_NEW_TEXT.open });
-      expect(read.getAttribute('href')).toBe('/whats-new');
+      expect(read.getAttribute('href')).toBe(WHATS_NEW_PATH);
       await user.click(read);
       // Not drawn by this page: the browser asks the box for it, which serves its version now running.
       await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
@@ -431,7 +431,7 @@ describe('the notice after an update', () => {
   it('on What’s new itself it counts as seen without showing', async () => {
     window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
-    renderAt(<WhatsNewNotice onWhatsNew />, '/whats-new');
+    renderAt(<WhatsNewNotice onWhatsNew />, WHATS_NEW_PATH);
     await vi.waitFor(() => expect(seenRelease()).toBe('whombat-20261127.2'));
     expect(notice()).toBeNull();
   });
@@ -444,7 +444,7 @@ describe('the notice after an update', () => {
       const user = userEvent.setup();
       const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
       const see = await screen.findByRole('link', { name: WHATS_NEW_TEXT.see });
-      expect(see.getAttribute('href')).toBe('/whats-new');
+      expect(see.getAttribute('href')).toBe(WHATS_NEW_PATH);
       await user.click(see);
       // A page open across the update still runs the version from before it: the browser loads the page again.
       await act(() => new Promise((resolve) => setTimeout(resolve, 50)));

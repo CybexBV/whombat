@@ -10,6 +10,7 @@ import {
   WHATS_NEW_TEXT,
   whatsNewNotice,
   whatsNewSeenKey,
+  whatsNewTold,
 } from '@whombat/client/managed';
 import type { ApplianceStatus } from '@whombat/client/session';
 import type { KeyValueStore } from '../lib/kv';
@@ -39,21 +40,6 @@ function inTurn<T>(store: KeyValueStore, key: string, run: () => Promise<T>): Pr
 }
 
 /**
- * Updates kept as seen by a watcher that stopped before it could tell (the app moved to another Whombat while it kept
- * the release): the next check of that Whombat tells of it instead.
- */
-const untold = new WeakMap<KeyValueStore, Map<string, string>>();
-
-function untoldOf(store: KeyValueStore): Map<string, string> {
-  let map = untold.get(store);
-  if (!map) {
-    map = new Map();
-    untold.set(store, map);
-  }
-  return map;
-}
-
-/**
  * The release the notice tells about, or null for none. It is kept as seen at once, so the notice shows once even when
  * nobody taps it; the first look only remembers the release (there is nothing to compare it with), quietly; a release
  * that can't be kept says nothing. Checks of one Whombat run one after another, so a slow write can't land after a newer
@@ -75,31 +61,41 @@ export function whatsNewToShow(
     }
     // Gone while reading (the app moved to another Whombat): nothing is kept, so coming back still tells.
     if (!live()) return null;
-    const waiting = untoldOf(store);
     // An older answer (a status from before the update) never replaces what is kept: it says 'none'.
-    const { action, release, value } = whatsNewNotice(status, seen);
-    if (action === 'none') {
-      const missed = waiting.get(key) ?? null;
-      waiting.delete(key);
-      return missed;
+    const { action, release, value, untold } = whatsNewNotice(status, seen);
+    if (action === 'none') return null;
+    // Kept as not told yet, so an app closed or moved to another Whombat before it shows still tells next time; the
+    // watcher marks it told once it showed (`markTold`). Not kept, it would tell again at every start: it says nothing,
+    // as when the store can't be read.
+    const keep = action === 'show' ? untold : value;
+    if (keep !== seen) {
+      try {
+        await store.set(key, keep);
+      } catch {
+        return null;
+      }
     }
-    // Not kept, it would tell again at every start: it says nothing, as when the store can't be read.
+    return action === 'show' ? release : null;
+  });
+}
+
+/** Keeps that the notice for `release` showed, so it doesn't come back. */
+function markTold(store: KeyValueStore, whombat: string, release: string): Promise<void> {
+  const key = whatsNewSeenKey(whombat);
+  return inTurn(store, key, async () => {
     try {
-      await store.set(key, value);
+      const told = whatsNewTold(await store.get(key), release);
+      if (told) await store.set(key, told);
     } catch {
-      return null;
+      // Not kept: it shows once more next time, which is better than never.
     }
-    if (action !== 'show') return null;
-    waiting.delete(key);
-    // Gone while keeping it: the next check of this Whombat tells.
-    if (!live()) waiting.set(key, release);
-    return release;
   });
 }
 
 /**
- * Checks each status answer of one Whombat and calls `show` for the update to tell about, until stopped. A later
- * answer never cancels an earlier one's notice: the earlier one already kept the release, so only it can tell.
+ * Checks each status answer of one Whombat and calls `show` for the update to tell about, until stopped, then keeps it
+ * as told. A later answer never cancels an earlier one's notice, and a watcher stopped first leaves it untold, so the
+ * next check of that Whombat (also after a restart) tells.
  */
 export function whatsNewWatcher(
   store: KeyValueStore,
@@ -107,11 +103,18 @@ export function whatsNewWatcher(
   show: (release: string) => void,
 ): { see: (status: Pick<ApplianceStatus, 'update'> | null | undefined) => void; stop: () => void } {
   let live = true;
+  // The release this watcher showed: a later answer saying the same (before it is marked told) shows nothing new.
+  let showed: string | null = null;
   return {
     see: (status) => {
       if (!status) return;
       void whatsNewToShow(store, whombat, status, () => live).then((release) => {
-        if (live && release) show(release);
+        if (!live || !release) return;
+        if (release !== showed) {
+          showed = release;
+          show(release);
+        }
+        void markTold(store, whombat, release);
       });
     },
     stop: () => {

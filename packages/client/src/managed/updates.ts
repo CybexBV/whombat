@@ -285,7 +285,7 @@ export function backupBlocksText(status: Pick<ApplianceStatus, 'backup'>): strin
  * The web app's “What’s new” page: `docs/changelog.md` in plain words, served by the app itself. On the hosted app it
  * opens without signing in, so the phone opens it in the browser.
  */
-export const WHATS_NEW_PATH = '/whats-new';
+export const WHATS_NEW_PATH = '/settings/whats-new';
 
 export const WHATS_NEW_TEXT = {
   link: 'What’s new',
@@ -311,22 +311,38 @@ export function lastUpdatedRelease(
   return u.lastUpdate.release;
 }
 
-/** What a device keeps as seen: the release and when it was installed (null before the first update). */
+/**
+ * What a device keeps as seen: the release and when it was installed (null before the first update), and `told: false`
+ * while the notice for it was kept but not shown yet (the phone keeps it before it shows, and may be closed between).
+ */
 interface SeenRelease {
   release: string;
   at: string | null;
+  told?: false;
 }
 
-/** What is kept, read back; a bare release (kept without its time) still counts. */
+/** What is kept, read back; a bare release (kept without its time) still counts, as told. */
 function readSeenRelease(seen: string): SeenRelease {
   try {
     const v = JSON.parse(seen) as Partial<SeenRelease> | null;
     if (v && typeof v.release === 'string')
-      return { release: v.release, at: typeof v.at === 'string' ? v.at : null };
+      return {
+        release: v.release,
+        at: typeof v.at === 'string' ? v.at : null,
+        ...(v.told === false && { told: false as const }),
+      };
   } catch {
     // A bare release.
   }
   return { release: seen, at: null };
+}
+
+/** What to keep once the notice for `release` has shown, or null when what is kept says nothing is waiting for it. */
+export function whatsNewTold(seen: string | null, release: string): string | null {
+  if (seen === null) return null;
+  const kept = readSeenRelease(seen);
+  if (kept.release !== release || kept.told !== false) return null;
+  return JSON.stringify({ release: kept.release, at: kept.at } satisfies SeenRelease);
 }
 
 /**
@@ -335,31 +351,36 @@ function readSeenRelease(seen: string): SeenRelease {
  * after the one seen; `remember` (quietly keep `value`) the first time a device looks, since it has nothing to compare
  * with; else `none`, also for an answer older than what is kept (a page that hasn't asked again yet), so nothing goes
  * back to an older release. Each app keeps `value` as soon as it shows the notice, so it shows once even when nobody
- * taps it.
+ * taps it; one that keeps the release before it shows keeps `untold`, then `whatsNewTold`'s value once it showed.
  */
 export function whatsNewNotice(
   status: Pick<ApplianceStatus, 'update'> | null | undefined,
   seen: string | null,
-): { action: 'show' | 'remember' | 'none'; release: string; value: string } {
+): { action: 'show' | 'remember' | 'none'; release: string; value: string; untold: string } {
   const release = lastUpdatedRelease(status) ?? WHATS_NEW_NO_UPDATE;
   const at = release === WHATS_NEW_NO_UPDATE ? null : (status?.update?.lastUpdate?.at ?? null);
   const value = JSON.stringify({ release, at } satisfies SeenRelease);
+  const untold = JSON.stringify({ release, at, told: false } satisfies SeenRelease);
   // A status without update facts (an unmanaged box, or none read yet) says nothing either way.
-  if (!status?.update) return { action: 'none', release, value };
+  if (!status?.update) return { action: 'none', release, value, untold };
   if (seen === null) {
     // While a repair is needed there is nothing to tell, but the last update is still the one to compare with later:
     // remembered as `none`, the repair starting would bring back the notice for that old release.
     const last = status.update.lastUpdate;
     if (release === WHATS_NEW_NO_UPDATE && last) {
       const known = { release: last.release, at: last.at ?? null } satisfies SeenRelease;
-      return { action: 'remember', release: known.release, value: JSON.stringify(known) };
+      return { action: 'remember', release: known.release, value: JSON.stringify(known), untold };
     }
-    return { action: 'remember', release, value };
+    return { action: 'remember', release, value, untold };
   }
   const kept = readSeenRelease(seen);
-  if (release === WHATS_NEW_NO_UPDATE || release === kept.release) return { action: 'none', release, value };
-  if (kept.at && at && Date.parse(at) <= Date.parse(kept.at)) return { action: 'none', release, value };
-  return { action: 'show', release, value };
+  if (release === WHATS_NEW_NO_UPDATE) return { action: 'none', release, value, untold };
+  // Kept before it could be shown: it still shows, until it is marked told.
+  if (release === kept.release)
+    return { action: kept.told === false ? 'show' : 'none', release, value, untold };
+  if (kept.at && at && Date.parse(at) <= Date.parse(kept.at))
+    return { action: 'none', release, value, untold };
+  return { action: 'show', release, value, untold };
 }
 
 /** How long after the box's session opens again a status without update facts is asked for again. */

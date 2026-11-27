@@ -47,7 +47,7 @@ const status = (release: string | null): Pick<ApplianceStatus, 'update'> =>
 
 describe('About’s “What’s new” row', () => {
   it('opens the web app’s page with the shared words', () => {
-    expect(WHATS_NEW_URL).toMatch(/^https:\/\/.+\/whats-new$/);
+    expect(WHATS_NEW_URL).toMatch(/^https:\/\/.+\/settings\/whats-new$/);
     expect(WHATS_NEW_ROW.title).toBe(WHATS_NEW_TEXT.link);
     expect(WHATS_NEW_ROW.body).toBe(WHATS_NEW_TEXT.linkMeta);
     expect(WHATS_NEW_ROW.label).toContain(WHATS_NEW_TEXT.link);
@@ -64,10 +64,14 @@ describe('About’s “What’s new” row', () => {
 describe('the one-time “Whombat updated” notice', () => {
   it('shows once the last update differs from the release this phone saw, and only once', async () => {
     const store = memoryStore({ [KEY]: 'pve-20260927.1' });
-    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
+    const shown: string[] = [];
+    whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r)).see(status('pve-20260928.6'));
+    await vi.waitFor(() => expect(shown).toEqual(['pve-20260928.6']));
     // Kept as seen as soon as it shows: the app closed before Dismiss doesn't show it again.
+    await vi.waitFor(async () =>
+      expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull(),
+    );
     expect(seenIn(store)).toBe('pve-20260928.6');
-    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
     // The next update shows it again.
     expect(await whatsNewToShow(store, WHOMBAT, status('pve-20261001.2'))).toBe('pve-20261001.2');
   });
@@ -185,7 +189,8 @@ describe('the one-time “Whombat updated” notice', () => {
     ]);
     expect([first, second].filter(Boolean)).toEqual(expect.arrayContaining(['pve-20260928.6']));
     expect(seenIn(inner)).toBe('pve-20260929.1');
-    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260929.1'))).toBeNull();
+    // The older answer comes back to nothing: the newest is what is kept.
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBeNull();
   });
 
   it('a store that can’t keep the release says nothing, so the notice doesn’t come back at every start', async () => {
@@ -300,6 +305,27 @@ describe('the one-time “Whombat updated” notice', () => {
     again.see(status('pve-20260928.6'));
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(back).toEqual(['pve-20260928.6']);
+  });
+
+  it('an update kept but never shown (the app moved on or closed first) shows on the next start, then never again', async () => {
+    const store = memoryStore({
+      [KEY]: JSON.stringify({ release: 'pve-20260927.1', at: installedAt('pve-20260927.1') }),
+    });
+    // Kept, but the app closed (or moved to another Whombat) before anything showed it.
+    expect(await whatsNewToShow(store, WHOMBAT, status('pve-20260928.6'))).toBe('pve-20260928.6');
+    expect(seenIn(store)).toBe('pve-20260928.6');
+    // The next start: it still tells, and once shown it is told.
+    const shown: string[] = [];
+    const watcher = whatsNewWatcher(store, WHOMBAT, (r) => shown.push(r));
+    watcher.see(status('pve-20260928.6'));
+    await vi.waitFor(() => expect(shown).toEqual(['pve-20260928.6']));
+    watcher.see(status('pve-20260928.6'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(shown).toEqual(['pve-20260928.6']);
+    const restarted: string[] = [];
+    whatsNewWatcher(store, WHOMBAT, (r) => restarted.push(r)).see(status('pve-20260928.6'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(restarted).toEqual([]);
   });
 
   it('is drawn in the strip with the passkey nudge, never waiting for it', () => {

@@ -494,7 +494,7 @@ export function ManagedAbout({
               }
             />
           ))}
-          {/* What changed, in plain words (the plain-language changelog, `/whats-new`). */}
+          {/* What changed, in plain words (the plain-language changelog, `/settings/whats-new`). */}
           <Row
             title={WHATS_NEW_TEXT.link}
             meta={WHATS_NEW_TEXT.linkMeta}
