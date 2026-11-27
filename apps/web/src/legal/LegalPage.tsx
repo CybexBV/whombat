@@ -103,8 +103,13 @@ export const SELLER_LINE =
   'Cybex B.V. · James Cookstraat 12G · 7825 AN Emmen, the Netherlands · KvK 77711815 · VAT NL861104432B01';
 export const SELLER_EMAIL = 'info@whombat.com';
 
-export function LegalPage({ text }: { text: string }) {
+/** A page's Markdown as blocks, in the reading column's type (the legal pages, What’s new). */
+export function LegalBlocks({ text }: { text: string }) {
   const blocks = useMemo(() => parseLegal(text), [text]);
+  return <>{blocks.map(block)}</>;
+}
+
+export function LegalPage({ text }: { text: string }) {
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -112,7 +117,9 @@ export function LegalPage({ text }: { text: string }) {
           <WhombatLogo variant="lockup" height={23} label="Whombat" />
         </a>
       </header>
-      <main className={styles.column}>{blocks.map(block)}</main>
+      <main className={styles.column}>
+        <LegalBlocks text={text} />
+      </main>
       <footer className={styles.seller}>
         {SELLER_LINE} · <a href={`mailto:${SELLER_EMAIL}`}>{SELLER_EMAIL}</a>
       </footer>

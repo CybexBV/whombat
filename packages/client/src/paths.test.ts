@@ -72,6 +72,14 @@ describe('burrow-less paths (AP-360…)', () => {
     // `/settings/agent` is the agent's page, even when a burrow is called “settings”.
     expect(splitBurrowPath('/settings/agent')).toEqual({ form: 'new', path: '/settings/agent' });
     expect(splitBurrowPath('/c')).toEqual({ form: 'old', burrow: 'c', path: '/' });
+    // What's new lives under Settings, so a burrow called “whats-new” keeps its old addresses.
+    expect(splitBurrowPath('/settings/whats-new')).toEqual({ form: 'new', path: '/settings/whats-new' });
+    expect(splitBurrowPath('/whats-new')).toEqual({ form: 'old', burrow: 'whats-new', path: '/' });
+    expect(splitBurrowPath('/whats-new/connections')).toEqual({
+      form: 'old',
+      burrow: 'whats-new',
+      path: '/connections',
+    });
   });
 
   it('leaves every path outside the burrow app alone', () => {

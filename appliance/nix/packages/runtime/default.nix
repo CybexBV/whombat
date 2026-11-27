@@ -178,8 +178,8 @@ let
     "packages/node-io"
   ];
   # The files the web build reads: the workspace's manifests and lockfile, the patches, every workspace package's
-  # package.json (pnpm installs from the whole workspace's lockfile), and apps/web with the packages it can import,
-  # without tests, browser suites or stories.
+  # package.json (pnpm installs from the whole workspace's lockfile), apps/web with the packages it can import,
+  # without tests, browser suites or stories, and the changelog its What's new page shows.
   fetchedWebSource = builtins.path {
     name = "whombat-web-source";
     path = src;
@@ -216,6 +216,7 @@ let
           "contracts"
           "scripts"
           "patches"
+          "docs"
         ]
         || builtins.elem top [
           "package.json"
@@ -225,6 +226,8 @@ let
         ]
       else if top == "patches" then
         true
+      else if top == "docs" then
+        rel == "docs/changelog.md"
       else if depth == 2 then
         type == "directory"
       else if depth == 3 && name == "package.json" then

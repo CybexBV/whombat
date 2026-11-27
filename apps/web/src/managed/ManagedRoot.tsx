@@ -74,6 +74,7 @@ import {
   screenSignInPeer,
   trustDecision,
   verifyOnce,
+  WHATS_NEW_PATH,
   WHOMBAT_LINK_TEXT,
   withConnectError,
 } from '@whombat/client/managed';
@@ -90,6 +91,7 @@ import { clearOpenTimings } from '../app/openTiming';
 import { ThemeProvider } from '../app/theme';
 import { Button } from '../components/Button';
 import { AccountMobilePage, PhoneLinkPage, PublicMobilePage } from '../features/mobile';
+import { WHATS_NEW_MARKDOWN } from '../features/whatsNew/changelog';
 import { LEGAL_PAGES, LegalPage } from '../legal/LegalPage';
 import { ApplianceApp } from './ApplianceApp';
 import { BringBackFlow } from './BringBack';
@@ -382,9 +384,15 @@ export function ManagedRoot({ env }: { env: ManagedEnvironment }) {
   // The Android APK, public (CT-191): the phone sign-in link's landing offers it too.
   const loadAndroid = useCallback(() => env.control.androidDownload(), [env]);
 
+  // What's new opened as a page of its own (the phone's link, an address typed in). Inside the app the router shows it
+  // in the shell, and going back and forward there must never close the app for it.
+  const [whatsNewPage] = useState(() => window.location.pathname === WHATS_NEW_PATH);
+
   // The legal pages are public (LC-17): the claim screens link to them.
   const legal = LEGAL_PAGES[url.pathname];
   if (legal) return <LegalPage text={legal} />;
+  // What's new is public too: the phone opens it in the browser, and a link to it works for anyone.
+  if (whatsNewPage && url.pathname === WHATS_NEW_PATH) return <LegalPage text={WHATS_NEW_MARKDOWN} />;
   // A phone sign-in QR code opened in a browser (AP-526): public, and never redeemed here; its fragment stays on this
   // page (never a sign-in's `next`).
   if (url.pathname === PHONE_SIGNIN_PATH) return <PhoneLinkPage loadDownload={loadAndroid} />;

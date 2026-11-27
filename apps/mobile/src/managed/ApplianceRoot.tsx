@@ -117,6 +117,8 @@ import { useAppUpdate } from './useAppUpdate';
 import { pushStore, useManagedPush } from './usePush';
 import { useTailscaleTurnOn } from './useReach';
 import { VersionGate } from './VersionGate';
+import { useWhatsNewNotice, WhatsNewNoticeView } from './WhatsNewNotice';
+import { stripNotices } from './whatsNew';
 
 const REAL_CLOCK = () => new Date();
 
@@ -599,8 +601,8 @@ function Shell({
       community,
     ],
   );
-  // The strip and the passkey nudge are asked for here, once for the app; every screen shows the same view of them
-  // (AP-931).
+  // The strip, the passkey nudge and the update notice are asked for here, once for the app; every screen shows the
+  // same view of them (AP-931).
   const line = useStrip({ state, session: setup.raw, updates: props.env.control, note });
   const nudge = usePasskeyNudge({
     session: setup.raw,
@@ -612,17 +614,21 @@ function Shell({
     me: state.status === 'open' ? (state.info.account?.id ?? null) : null,
   });
   const open = state.status === 'open';
+  // “Whombat updated” once after each update of this Whombat (its device id keeps what this phone saw).
+  const whatsNew = useWhatsNewNotice({ session: setup.raw, cacheScope, whombat: appliance.device, open });
   // A passkey sign-in's backup key, handed to the Whombat now its session is open (backup-passkey.md).
   useDeliverBackupKey(setup.raw, appliance.device, open);
-  const strip = useMemo(
-    () => (
+  const strip = useMemo(() => {
+    // After an update, once: under the passkey nudge when that shows too, never waiting for it.
+    const shows = stripNotices({ open, nudge: Boolean(nudge), whatsNew: Boolean(whatsNew) });
+    return (
       <>
         {line ? <StripLine line={line} onRetry={() => setup.raw.reconnectNow()} /> : null}
-        {open && nudge ? <PasskeyNudgeView nudge={nudge} /> : null}
+        {shows.nudge && nudge ? <PasskeyNudgeView nudge={nudge} /> : null}
+        {shows.whatsNew && whatsNew ? <WhatsNewNoticeView notice={whatsNew} /> : null}
       </>
-    ),
-    [line, nudge, open, setup],
-  );
+    );
+  }, [line, nudge, whatsNew, open, setup]);
   return (
     <ManagedContext.Provider value={value}>
       <ScreenStripContext.Provider value={strip}>

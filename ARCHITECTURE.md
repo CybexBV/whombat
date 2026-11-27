@@ -2050,7 +2050,8 @@ through the manager and control) and the way back to the account site. Settings 
 name; for the 30 days the old address still works, its page says where the box moved and opens the new one with a device
 link, and the phone keeps the address the box reports ([own-address.md](docs/app/decisions/own-address.md)). The legal
 pages are
-`apps/web/src/legal/*.md` at `/legal/…`. Development and the visual harness:
+`apps/web/src/legal/*.md` at `/legal/…`; What’s new at `/settings/whats-new` is `docs/changelog.md`, linked from This Whombat →
+About, and after an update both apps say so once per device ([whats-new.md](docs/app/decisions/whats-new.md)). Development and the visual harness:
 [docs/app/README.md](docs/app/README.md).
 
 What a person reads follows one word list (your Whombat, Whombat’s helper, machine, app, storage, sign in again,

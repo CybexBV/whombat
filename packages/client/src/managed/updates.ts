@@ -278,3 +278,169 @@ export function askFirstView(
 export function backupBlocksText(status: Pick<ApplianceStatus, 'backup'>): string | null {
   return status.backup.state === 'unprotected' ? UPDATE_TEXT.breakingWait : null;
 }
+
+/* What's new ---------------------------------------------------------------------------------------------- */
+
+/**
+ * The web app's “What’s new” page: `docs/changelog.md` in plain words, served by the app itself. On the hosted app it
+ * opens without signing in, so the phone opens it in the browser.
+ */
+export const WHATS_NEW_PATH = '/settings/whats-new';
+
+export const WHATS_NEW_TEXT = {
+  link: 'What’s new',
+  linkMeta: 'What changed in Whombat lately, in plain words.',
+  open: 'Read',
+  notice: 'Whombat updated',
+  see: 'See what’s new',
+  dismiss: 'Dismiss',
+} as const;
+
+/**
+ * What a device remembers before this Whombat's first update: it has looked, and there was no update yet. The first
+ * update after it then gets the notice, as any later one does.
+ */
+export const WHATS_NEW_NO_UPDATE = 'none';
+
+/** The release the last update installed, null when there is none to tell about (none yet, or one that went wrong). */
+export function lastUpdatedRelease(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+): string | null {
+  const u = status?.update;
+  if (!u?.lastUpdate || u.state === 'ForwardRepairRequired') return null;
+  return u.lastUpdate.release;
+}
+
+/**
+ * What a device keeps as seen: the release and when it was installed (null before the first update), and `told: false`
+ * while the notice for it was kept but not shown yet (the phone keeps it before it shows, and may be closed between).
+ */
+interface SeenRelease {
+  release: string;
+  at: string | null;
+  told?: false;
+}
+
+/** What is kept, read back; a bare release (kept without its time) still counts, as told. */
+function readSeenRelease(seen: string): SeenRelease {
+  try {
+    const v = JSON.parse(seen) as Partial<SeenRelease> | null;
+    if (v && typeof v.release === 'string')
+      return {
+        release: v.release,
+        at: typeof v.at === 'string' ? v.at : null,
+        ...(v.told === false && { told: false as const }),
+      };
+  } catch {
+    // A bare release.
+  }
+  return { release: seen, at: null };
+}
+
+/** What to keep once the notice for `release` has shown, or null when what is kept says nothing is waiting for it. */
+export function whatsNewTold(seen: string | null, release: string): string | null {
+  if (seen === null) return null;
+  const kept = readSeenRelease(seen);
+  if (kept.release !== release || kept.told !== false) return null;
+  return JSON.stringify({ release: kept.release, at: kept.at } satisfies SeenRelease);
+}
+
+/**
+ * The one-time “Whombat updated · See what’s new” notice, from the Whombat's status and what this device saw last
+ * (`seen`, as `value` was kept; null when it never looked): `show` once the last update is another release installed
+ * after the one seen; `remember` (quietly keep `value`) the first time a device looks, since it has nothing to compare
+ * with; else `none`, also for an answer older than what is kept (a page that hasn't asked again yet), so nothing goes
+ * back to an older release. Each app keeps `value` as soon as it shows the notice, so it shows once even when nobody
+ * taps it; one that keeps the release before it shows keeps `untold`, then `whatsNewTold`'s value once it showed.
+ */
+export function whatsNewNotice(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+  seen: string | null,
+): { action: 'show' | 'remember' | 'none'; release: string; value: string; untold: string } {
+  const release = lastUpdatedRelease(status) ?? WHATS_NEW_NO_UPDATE;
+  const at = release === WHATS_NEW_NO_UPDATE ? null : (status?.update?.lastUpdate?.at ?? null);
+  const value = JSON.stringify({ release, at } satisfies SeenRelease);
+  const untold = JSON.stringify({ release, at, told: false } satisfies SeenRelease);
+  // A status without update facts (an unmanaged box, or none read yet) says nothing either way.
+  if (!status?.update) return { action: 'none', release, value, untold };
+  if (seen === null) {
+    // While a repair is needed there is nothing to tell, but the last update is still the one to compare with later:
+    // remembered as `none`, the repair starting would bring back the notice for that old release.
+    const last = status.update.lastUpdate;
+    if (release === WHATS_NEW_NO_UPDATE && last) {
+      const known = { release: last.release, at: last.at ?? null } satisfies SeenRelease;
+      return { action: 'remember', release: known.release, value: JSON.stringify(known), untold };
+    }
+    return { action: 'remember', release, value, untold };
+  }
+  const kept = readSeenRelease(seen);
+  if (release === WHATS_NEW_NO_UPDATE) return { action: 'none', release, value, untold };
+  // Kept before it could be shown: it still shows, until it is marked told.
+  if (release === kept.release)
+    return { action: kept.told === false ? 'show' : 'none', release, value, untold };
+  if (kept.at && at && Date.parse(at) <= Date.parse(kept.at))
+    return { action: 'none', release, value, untold };
+  return { action: 'show', release, value, untold };
+}
+
+/** How long after the box's session opens again a status without update facts is asked for again. */
+export const WHATS_NEW_BACK_MS = 60_000;
+
+/**
+ * How often the notice asks for the status again: every 5 s while an update is being installed (its last update
+ * changes once it is done, after the box is back), as About does, through its last checks even while updates are
+ * paused; and for a short while after the box is back (`justBack`) while it hasn't said how its updates stand yet or
+ * a read failed (`failed`). Never while an update waits (for the owner's yes, a backup, the maintenance window: that can take days).
+ */
+export function whatsNewPollMs(
+  status: Pick<ApplianceStatus, 'update'> | null | undefined,
+  { justBack = false, failed = false }: { justBack?: boolean; failed?: boolean } = {},
+): number | false {
+  // A read that failed just after the box is back (it may still be starting): ask again soon.
+  if (justBack && failed) return 5_000;
+  if (!status) return false;
+  const u = status.update;
+  if (!u) return justBack ? 5_000 : false;
+  if (u.waiting) return false;
+  if (u.paused && u.state !== 'Activating' && u.state !== 'Verifying') return false;
+  return MOVING.has(u.state) ? 5_000 : false;
+}
+
+/**
+ * The notice's `refetchInterval` for a status query: `whatsNewPollMs` with the box just back (`backAt`, when the
+ * session last opened again) and whether the last read failed.
+ */
+export function whatsNewRefetchInterval(
+  backAt: () => number,
+  now: () => number = Date.now,
+): (query: { state: { data?: Pick<ApplianceStatus, 'update'> | null; status: string } }) => number | false {
+  return (query) =>
+    whatsNewPollMs(query.state.data, {
+      justBack: now() - backAt() < WHATS_NEW_BACK_MS,
+      failed: query.state.status === 'error',
+    });
+}
+
+/** What `onSessionReopen` needs of the box's session. */
+interface SessionStates {
+  state(): { status: string };
+  onState(listener: (state: { status: string }) => void): () => void;
+}
+
+/**
+ * Runs `run` each time the box's session opens again after a drop (an update restarts the box), never for the session
+ * already open. Returns the way to stop.
+ */
+export function onSessionReopen(session: SessionStates, run: () => void): () => void {
+  let wasOpen = session.state().status === 'open';
+  return session.onState((s) => {
+    const open = s.status === 'open';
+    if (open && !wasOpen) run();
+    wasOpen = open;
+  });
+}
+
+/** Where a device keeps what it saw, one per Whombat (letters a phone's secure store takes). */
+export function whatsNewSeenKey(whombat: string): string {
+  return `whombat.whatsNew.seen.${whombat.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+}

@@ -30,6 +30,9 @@ describe('the shell’s addresses (AP-1351)', () => {
     // Connections (AP-2550; the Dashboard and Home before it), Chat and Feedback; a thread in a room opens the thread.
     ['/connections', 'whombat://connections'],
     ['/burrow-hq/connections', 'whombat://connections'],
+    // A burrow called “whats-new” keeps its old links (What's new is under Settings).
+    ['/whats-new/connections', 'whombat://connections'],
+    ['/whats-new/things/connection%3Acon_ha', 'whombat://things/connection%3Acon_ha'],
     ['/connections/extra', 'whombat://inbox'],
     ['/home', 'whombat://connections'],
     ['/dashboard', 'whombat://connections'],

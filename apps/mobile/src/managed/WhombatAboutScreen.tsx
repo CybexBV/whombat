@@ -2,8 +2,9 @@
  * This Whombat → About (managed only; this-whombat-sections-android.md AP-1248), the web's About part (Whombat
  * this-whombat-sections.md AP-1231, AP-1232) on its own screen: facts and tools you look up, about one screen long
  * (docs/app/decisions/about-page.md). VERSION & UPDATES (this app, the Whombat, Hermes; SS-06; then the updates:
- * waiting, failed, the last one with what it brought; “Ask before updating”; “Updates from”, Production or Beta; the
- * oldest app builds let in; “Keep server agents up to date”, agent-updates-app.md AP-2992), REACH (this phone's
+ * waiting, failed, the last one with what it brought; “What’s new”, the web app's page; “Ask before updating”;
+ * “Updates from”, Production or Beta; the oldest app builds let in; “Keep server agents up to date”,
+ * agent-updates-app.md AP-2992), REACH (this phone's
  * connection with the Whombat's fingerprint, Whombat Link, its address, Tailscale; whombat-link.md LNK-42), what a
  * managed Whombat turns off under TURNED OFF HERE (the phone has no Agents’ access part, so they live here),
  * HARDWARE in one row that opens the Hardware screen (`HardwareSummary`), then help: REMOTE HELP as a short card that
@@ -71,6 +72,7 @@ import { useManagedOrThrow } from './context';
 import { COPY, MANAGED_TEXT } from './copy';
 import { phoneClient } from './env';
 import { HardwareSummary } from './HardwareSection';
+import { openSignInPage } from './openSignInPage';
 import { ChannelRow, ReachCard } from './ReachCard';
 import { RemoteHelpSummary } from './RemoteHelpSection';
 import { diagnosticScopeLine } from './thisWhombat';
@@ -79,6 +81,7 @@ import { useApplianceStatus, useReleaseSummary } from './useApplianceStatus';
 import { useMachineHere, useScrollToCard } from './useMachine';
 import { usePhoneReach } from './useReach';
 import { useRemoteHelpHere } from './useRemoteHelpHere';
+import { WHATS_NEW_ROW, WHATS_NEW_URL } from './whatsNew';
 
 export function WhombatAboutScreen() {
   const bottomRoom = useBottomRoom();
@@ -213,6 +216,13 @@ export function WhombatAboutScreen() {
               : null}
             {status.update ? (
               <>
+                {/* What changed lately, on the web app's page (public, so the browser opens it). */}
+                <LinkRow
+                  title={WHATS_NEW_ROW.title}
+                  body={WHATS_NEW_ROW.body}
+                  label={WHATS_NEW_ROW.label}
+                  onPress={() => void openSignInPage(WHATS_NEW_URL)}
+                />
                 {/* “Ask before updating” (ask-before-updating.md ABU-01). */}
                 <AskFirstRow status={status} onChanged={reload} />
                 {/* “Updates from”: Production or Beta (whombat-link.md LNK-21). */}

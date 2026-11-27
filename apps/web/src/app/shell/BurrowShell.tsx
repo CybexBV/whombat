@@ -1,7 +1,7 @@
 import { Outlet, useRouterState } from '@tanstack/react-router';
 import { chatRoomsOf, needsYouBadge, needsYouStatusLevel, needsYouWorst } from '@whombat/client';
 import { useHostsStatus } from '@whombat/client/hosts/status';
-import { whombatPart } from '@whombat/client/managed';
+import { WHATS_NEW_PATH, whombatPart } from '@whombat/client/managed';
 import { useBootstrap, useChats, useHomeOverview, useTheAgent } from '@whombat/client/react';
 import { topics } from '@whombat/core/contracts';
 import { lazy, Suspense, useCallback, useMemo } from 'react';
@@ -11,6 +11,7 @@ import { MessageFilesProvider } from '../../features/messaging/messageFiles';
 import { LinkBanner } from '../../managed/LinkBanner';
 import { MovedBanner } from '../../managed/MovedBanner';
 import { PasskeyNotices } from '../../managed/PasskeyNotices';
+import { WhatsNewNotice } from '../../managed/WhatsNewNotice';
 import { useWebPushOnLoad } from '../../push/useWebPush';
 import { useOpenBurrow } from '../routing/openBurrow';
 import { AgentsBlockedNotice } from './AgentsBlockedNotice';
@@ -181,6 +182,8 @@ export function BurrowShell() {
             {/* At the box's old address after a change: where it moved, and the way there. */}
             <MovedBanner />
             <PasskeyNotices onSettings={location.kind === 'settings'} />
+            {/* After an update: once, with the way to What's new. */}
+            <WhatsNewNotice onWhatsNew={pathname === WHATS_NEW_PATH} />
             <DeskUnlockNotice burrow={burrow} hidden={onWhombatOverview} />
           </>
         }

@@ -80,6 +80,9 @@ export function updateState(status: Pick<ApplianceStatus, 'update'> | null | und
 
 const FIVE_MINUTES = 5 * 60_000;
 
+/** The box's `appliance.status` as the version line, the account menu and the update notice share it. */
+export const APPLIANCE_STATUS_KEY = ['whombat', 'version', 'appliance.status'] as const;
+
 /**
  * Every version this screen knows: the app's at once, the Whombat's once it answers. `read` false asks the Whombat
  * nothing yet (the account menu reads it once the pointer comes near, not while a Whombat opens).
@@ -87,7 +90,7 @@ const FIVE_MINUTES = 5 * 60_000;
 export function useWhombatVersions(read = true): WhombatVersions {
   const { managed, session } = useAppServices();
   const appliance = useQuery({
-    queryKey: ['whombat', 'version', 'appliance.status'],
+    queryKey: APPLIANCE_STATUS_KEY,
     queryFn: () => sessionOps.applianceStatus(session),
     enabled: read && Boolean(managed),
     staleTime: FIVE_MINUTES,
