@@ -7,21 +7,20 @@
  * says so.
  */
 
-import { dndSetText, quietHoursText, toggleDay, WEEKDAY_LABELS } from '@whombat/client';
-import { type DateInput, dndUntilFor, type QuietHours, WEEKDAY_KEYS, type Weekday } from '@whombat/core';
+import { dndSetText, endsText, quietHoursText, toggleDay, weekdayLabels } from '@whombat/client';
+import {
+  type DateInput,
+  dndPresetLabels,
+  dndUntilFor,
+  isDndActive,
+  type QuietHours,
+  WEEKDAY_KEYS,
+  type Weekday,
+} from '@whombat/core';
 import { useState } from 'react';
 import { Platform, Switch, TextInput, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import {
-  DND_HINT,
-  DND_PRESETS,
-  dndStateText,
-  dndUntilClock,
-  nextWholeHour,
-  PREVIEWS_HINT,
-  PREVIEWS_TITLE,
-  QUIET_HOURS_HINT,
-} from '../data/notify';
+import { dndPresets, dndUntilClock, nextWholeHour } from '../data/notify';
 import { useNotificationPreferences, useSaveNotificationPreferences } from '../data/useEssentials';
 import { useI18n, useMobileT } from '../i18n';
 import { errorText, showNotice } from '../screens/feedback';
@@ -54,7 +53,7 @@ export function NotificationsSection() {
       if (notice) showNotice(notice);
       return true;
     } catch (error) {
-      setProblem(errorText(error));
+      setProblem(errorText(error, rawLocale));
       return false;
     } finally {
       setBusy(false);
@@ -64,8 +63,13 @@ export function NotificationsSection() {
     apply((p) => ({ ...p, dndUntil: at }), dndSetText(at, now, timeZone, rawLocale));
   const setSchedule = (change: (s: QuietHours) => QuietHours) =>
     apply((p) => ({ ...p, schedule: change(p.schedule) }));
-  const state = dndStateText(prefs, now, timeZone);
-  const on = state !== 'Off';
+  const on = isDndActive(prefs, now) && !!prefs.dndUntil;
+  const state =
+    on && prefs.dndUntil
+      ? tMobile('settings2.notify.onUntil', { until: endsText(prefs.dndUntil, now, timeZone, rawLocale) })
+      : tMobile('settings2.notify.off');
+  const presetLabels = dndPresetLabels(rawLocale);
+  const weekdays = weekdayLabels(rawLocale);
   const schedule = prefs.schedule;
   // On iPhone “Until” is iOS's time picker, starting at the next whole hour; elsewhere a time you type.
   const picksTime = Platform.OS === 'ios';
@@ -89,7 +93,9 @@ export function NotificationsSection() {
           </Text>
           {on ? (
             <Touchable
-              onPress={() => void apply((p) => ({ ...p, dndUntil: null }), 'Do not disturb is off.')}
+              onPress={() =>
+                void apply((p) => ({ ...p, dndUntil: null }), tMobile('settings2.notify.offNotice'))
+              }
               disabled={busy}
               feedback="fade"
               ringRadius={10}
@@ -104,16 +110,16 @@ export function NotificationsSection() {
           ) : null}
         </View>
         <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-          {DND_HINT}
+          {tMobile('settings2.notify.dndHint')}
         </Text>
         <View
           accessibilityLabel={tMobile('settings.do-not-disturb-for')}
           style={{ flexDirection: 'row', gap: 8 }}
         >
-          {DND_PRESETS.map((p) => (
+          {dndPresets(rawLocale).map((p) => (
             <Button
               key={p.preset}
-              label={p.label}
+              label={presetLabels[p.preset]}
               variant="secondary"
               disabled={busy}
               onPress={() => void setDnd(dndUntilFor(p.preset, now, timeZone), now)}
@@ -126,7 +132,7 @@ export function NotificationsSection() {
             <View style={{ paddingLeft: 6 }}>
               <ClockField
                 label={tClient('keepQuiet.pickLabel')}
-                spoken="Do not disturb until this time"
+                spoken={tMobile('settings2.notify.untilSpoken')}
                 value={untilClock}
                 disabled={busy}
                 onChange={setUntil}
@@ -169,9 +175,9 @@ export function NotificationsSection() {
             variant="secondary"
             disabled={busy || !untilClock.trim()}
             onPress={() => {
-              const r = dndUntilClock(untilClock, now, timeZone);
+              const r = dndUntilClock(untilClock, now, timeZone, rawLocale);
               if (!r.ok) {
-                setProblem(r.error);
+                setProblem(tMobile('settings2.notify.typeTime'));
                 return;
               }
               void setDnd(r.until, now).then((ok) => ok && setUntil(''));
@@ -203,7 +209,7 @@ export function NotificationsSection() {
           />
         </View>
         <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-          {QUIET_HOURS_HINT}
+          {tMobile('settings2.notify.quietHint')}
         </Text>
         {schedule.enabled ? (
           <>
@@ -236,7 +242,7 @@ export function NotificationsSection() {
                     ringRadius={999}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: active }}
-                    accessibilityLabel={WEEKDAY_LABELS[day].long}
+                    accessibilityLabel={weekdays[day].long}
                     hitSlop={hitSlopFor(36)}
                     style={{
                       flex: 1,
@@ -250,7 +256,7 @@ export function NotificationsSection() {
                     }}
                   >
                     <Text size={12} weight={500} mono color={active ? theme.colors.btnfg : theme.colors.ink}>
-                      {WEEKDAY_LABELS[day].short}
+                      {weekdays[day].short}
                     </Text>
                   </Touchable>
                 );
@@ -263,20 +269,20 @@ export function NotificationsSection() {
         <SectionLabel>{tMobile('settings.previews')}</SectionLabel>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 6 }}>
           <Text size={15} weight={500} style={{ flex: 1 }}>
-            {PREVIEWS_TITLE}
+            {tMobile('settings2.notify.previewsTitle')}
           </Text>
           <Switch
             value={prefs.previews}
             disabled={busy}
             onValueChange={(v) => void apply((p) => ({ ...p, previews: v }))}
-            accessibilityLabel={PREVIEWS_TITLE}
+            accessibilityLabel={tMobile('settings2.notify.previewsTitle')}
             accessibilityRole="switch"
             {...switchColors(theme, prefs.previews)}
             style={{ minHeight: 44 }}
           />
         </View>
         <Text size={13} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-          {PREVIEWS_HINT}
+          {tMobile('settings2.notify.previewsHint')}
         </Text>
       </View>
       {problem ? (

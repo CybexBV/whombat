@@ -10,13 +10,18 @@ import type { ThingRenameTarget } from '../home/rename';
 import { renameValue } from '../home/rename';
 import { commitOutcomeText, hostErrorInfo } from '../hosts/errors';
 import { useHostsChange } from '../hosts/react';
+import { clientTree } from '../i18n/catalog';
+import { HOME_AREA_WORDS } from '../i18n/messages/chatWork/home';
 import { queryKeys } from '../query/keys';
 import { useConnectionWrite } from './mutations';
 
 /** How a rename went: done (`changed` false when nothing needed changing), or why not, in words. */
 export type RenameOutcome = { ok: true; changed: boolean } | { ok: false; problem: string };
 
-export function useRenameThing(burrow: string): {
+export function useRenameThing(
+  burrow: string,
+  locale?: string | null,
+): {
   rename: (target: ThingRenameTarget, typed: string) => Promise<RenameOutcome>;
   pending: boolean;
 } {
@@ -33,10 +38,10 @@ export function useRenameThing(burrow: string): {
             params: { burrow, serverId: target.id },
             body: { name: value.name },
           });
-          const refused = commitOutcomeText(r);
+          const refused = commitOutcomeText(r, locale);
           return refused ? { ok: false, problem: refused } : { ok: true, changed: true };
         } catch (err) {
-          const info = hostErrorInfo(err);
+          const info = hostErrorInfo(err, locale);
           return { ok: false, problem: info.fields.name ?? info.message };
         }
       }
@@ -46,19 +51,19 @@ export function useRenameThing(burrow: string): {
           params: { burrow, connectionId: target.id },
           body: { label: value.name },
         });
-        const refused = commitOutcomeText(r);
+        const refused = commitOutcomeText(r, locale);
         if (refused) return { ok: false, problem: refused };
         void qc.invalidateQueries({ queryKey: queryKeys.scope(api.home.overview) });
         return { ok: true, changed: true };
       } catch (err) {
-        const p = connectProblem(err);
+        const p = connectProblem(err, undefined, undefined, locale);
         return {
           ok: false,
-          problem: p.fields.label ?? p.message ?? 'That didn’t work. Try again in a moment.',
+          problem: p.fields.label ?? p.message ?? clientTree(locale, HOME_AREA_WORDS).failed,
         };
       }
     },
-    [burrow, server, connection, qc],
+    [burrow, server, connection, qc, locale],
   );
   return { rename, pending: server.isPending || connection.isPending };
 }

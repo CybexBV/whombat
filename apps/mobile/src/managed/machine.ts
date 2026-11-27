@@ -8,12 +8,12 @@
 import {
   type CableUse,
   type HostNetwork,
-  NETWORK_TEXT,
   type NetworkChange,
   type NetworkChangeView,
   type NetworkPollState,
   networkChangeRunning,
   networkChangeView,
+  networkText,
   type WifiJoinInput,
   type WifiRowView,
   wifiJoinInput,
@@ -22,22 +22,26 @@ import {
   wifiOnlyDialogView,
   wifiPasswordProblem,
 } from '@whombat/client';
-
-const T = NETWORK_TEXT;
-const D = T.dialog;
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * The phone's two words beyond the shared ones (AP-3261), in their voice: the alert's title when a forget is refused
  * (the change line's own words for a forget that failed) and the share sheet that didn't open.
  */
-export const MACHINE_TEXT = {
-  forgetFailed: (ssid: string) => `Couldn’t forget ${ssid}`,
-  /** The alert's title when Use Wi-Fi only or Use the cable again is refused (network-move-app.md). */
-  switchFailed: (use: CableUse) => (use === 'wifi' ? 'Couldn’t use Wi-Fi only' : 'Couldn’t use the cable'),
-  shareFailed: 'Couldn’t share the report. Try again.',
-  /** The title of the screen About's HARDWARE row opens: the machine and every part. */
-  hardware: 'Hardware',
-} as const;
+export function machineText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    forgetFailed: (ssid: string) => t('managed2.machine.forgetFailed', { ssid }),
+    /** The alert's title when Use Wi-Fi only or Use the cable again is refused (network-move-app.md). */
+    switchFailed: (use: CableUse) =>
+      use === 'wifi' ? t('managed2.machine.wifiOnlyFailed') : t('managed2.machine.cableFailed'),
+    shareFailed: t('managed2.machine.shareFailed'),
+    /** The title of the screen About's HARDWARE row opens: the machine and every part. */
+    hardware: t('managed2.machine.hardware'),
+  } as const;
+}
+
+export const MACHINE_TEXT = machineText();
 
 /* The card -------------------------------------------------------------------------------------------------------- */
 
@@ -50,10 +54,12 @@ export function cableConfirm(
   network: HostNetwork,
   use: CableUse,
   name: string,
+  locale?: string | null,
 ): { title: string; message: string; submit: string } {
+  const T = networkText(locale);
   if (use === 'cable')
     return { title: T.cableDialog.title, message: T.cableDialog.lead(name), submit: T.cableDialog.submit };
-  const d = wifiOnlyDialogView(network, name);
+  const d = wifiOnlyDialogView(network, name, locale);
   return {
     title: d.title,
     message: [d.lead, d.guard, d.otherNetwork].filter(Boolean).join('\n\n'),
@@ -108,11 +114,11 @@ export function wifiFormFields(
 }
 
 /** The form's first problem (the name, then the password), or null when it can be sent. */
-export function wifiFormProblem(step: WifiStep, form: WifiForm): WifiProblem | null {
+export function wifiFormProblem(step: WifiStep, form: WifiForm, locale?: string | null): WifiProblem | null {
   const fields = wifiFormFields(step, form);
-  const name = fields.name ? wifiNameProblem(form.ssid) : null;
+  const name = fields.name ? wifiNameProblem(form.ssid, locale) : null;
   if (name) return { field: 'name', text: name };
-  const password = fields.password ? wifiPasswordProblem(form.password) : null;
+  const password = fields.password ? wifiPasswordProblem(form.password, locale) : null;
   return password ? { field: 'password', text: password } : null;
 }
 
@@ -133,7 +139,12 @@ export function wifiFormInput(step: Extract<WifiStep, { at: 'form' }>, form: Wif
  * (“If {name} can’t reach the internet on the new network, it goes back to the one it uses now.”); Other network… and
  * “Type it exactly”; following, the network's name (the one typed, for Other network…) and the guard's note.
  */
-export function wifiSheetHead(step: WifiStep, name: string): { title: string; lead: string } {
+export function wifiSheetHead(
+  step: WifiStep,
+  name: string,
+  locale?: string | null,
+): { title: string; lead: string } {
+  const D = networkText(locale).dialog;
   if (step.at === 'list') return { title: D.title, lead: D.lead(name) };
   if (step.at === 'following') return { title: step.ssid, lead: D.guard(name) };
   if (!step.network) return { title: D.otherTitle, lead: D.otherLead };
@@ -148,9 +159,11 @@ export function wifiSheetHead(step: WifiStep, name: string): { title: string; le
 export function wifiFollowLine(
   change: NetworkChange | null,
   name: string,
+  locale?: string | null,
 ): Pick<NetworkChangeView, 'title' | 'meta' | 'dot' | 'running'> {
+  const D = networkText(locale).dialog;
   if (!change) return { title: D.joining, meta: null, dot: 'mut', running: true };
-  const v = networkChangeView(change, name);
+  const v = networkChangeView(change, name, locale);
   const meta = v.meta === D.guard(name) ? null : v.meta;
   return { title: v.title, meta, dot: v.dot, running: networkChangeRunning(change) };
 }
@@ -164,7 +177,9 @@ export function wifiAfterChange(
   step: WifiStep,
   change: NetworkChange | null,
   name: string,
+  locale?: string | null,
 ): { step: Extract<WifiStep, { at: 'form' }>; problem: WifiProblem | null; note: string | null } | null {
+  const T = networkText(locale);
   if (step.at !== 'following' || !change || change.id !== step.id || change.phase !== 'failed') return null;
   const back = { at: 'form', network: step.network } as const;
   if (change.failure === 'wrong_password')
@@ -173,7 +188,7 @@ export function wifiAfterChange(
       problem: { field: 'password', text: T.failures.wrong_password(change.ssid, name) },
       note: null,
     };
-  return { step: back, problem: null, note: networkChangeView(change, name).meta };
+  return { step: back, problem: null, note: networkChangeView(change, name, locale).meta };
 }
 
 /* The hardware report ---------------------------------------------------------------------------------------------- */

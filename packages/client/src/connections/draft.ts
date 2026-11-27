@@ -22,6 +22,9 @@ import {
   type OAuthSignInKind,
   type TokenAuth,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CONN_DRAFT_WORDS } from '../i18n/messages/connectionsHosts/connectForm';
 import { withBurrow } from '../paths';
 import { asksTwoStepCode, type SignInChoice, usedByAgents } from './form';
 
@@ -31,65 +34,31 @@ type Field = ReturnType<typeof fieldsFor>[number];
 export const PLACED_FIELDS: ReadonlySet<string> = new Set(['url', 'fingerprint']);
 
 /** The form's own words (the catalog's are the entry's): the same on the web and the phone. */
-export const CONNECT_FORM_TEXT = {
-  identifying: 'Looking at the address…',
-  checkAddress: 'Check the address',
-  continue: 'Continue',
-  moreOptions: 'More options',
-  howSignsIn: 'How Whombat signs in',
-  recommended: 'Recommended',
-  chooseOne: 'Choose one',
-  name: 'Name',
-  password: 'Password',
-  passwordHelp: 'Used once to make Whombat’s own key, then forgotten.',
-  code: 'Two-step code',
-  codeOptional: 'Two-step code (optional)',
-  codeHelp: 'Only if this account signs in with a code too.',
-  codePlaceholder: '123456',
-  ownCertificate: 'It uses a certificate of its own. Its fingerprint:',
-  unverifiable:
-    'Its certificate can’t be verified (self-signed, expired or for another name). Its fingerprint:',
-  trust: 'Trust this certificate',
-  trusted: 'Whombat trusts this certificate and only this one.',
-  undo: 'Undo',
-  addNetwork: 'Add this network',
-  useFingerprint: 'Use this fingerprint',
-  nextcloud:
-    'Nextcloud opens in a new tab: log in there and choose Grant access. This page carries on by itself.',
-  /** The phone's Nextcloud line: its browser where the web has a tab (AP-2914). */
-  nextcloudPhone:
-    'Nextcloud opens in your browser: log in there and choose Grant access. This screen carries on by itself.',
-  /** Signing in on the service's own page (SG-05, AP-3905): Nextcloud's line in the entry's words. */
-  serviceLogin: (name: string) =>
-    `${name} opens in a new tab: sign in there and allow Whombat. This page carries on by itself.`,
-  /** The phone's: its browser where the web has a tab. */
-  serviceLoginPhone: (name: string) =>
-    `${name} opens in your browser: sign in there and allow Whombat. This screen carries on by itself.`,
-  homeAssistant: 'Your browser needs to reach Home Assistant at this address.',
-  notThrough: 'That didn’t go through. Try again.',
-  cantStart: 'Couldn’t start the sign-in in this tab. Try again in a moment.',
-  pasteNothing: 'Whombat couldn’t find a key in that. Paste only the key, or fill in the fields below.',
-  fileTooBig: 'That file is too big to be a key.',
-  chooseFile: 'Choose a file',
-  copy: 'Copy',
-  parameterName: 'Parameter name',
-  headerName: 'Header name',
-  parameterHelp: 'The query parameter the token goes in.',
-  headerHelp: 'The header the token goes in.',
-  /** “Signing in to Proxmox VE and making Whombat’s key…”, while sign in once runs. */
-  signingIn: (name: string) => `Signing in to ${name} and making Whombat’s key…`,
-  /** A secret with its own name (T3 Code's): “Signing in to T3 Code with the pairing code…”. */
-  signingInWith: (name: string, secret: string) => `Signing in to ${name} with the ${secret}…`,
-  /** The toast once it's connected (PC-10). */
-  connected: (label: string) => `${label} connected.`,
-  /** The toast once Add this network added it. */
-  networkAdded: (cidr: string, port: number) => `${cidr} port ${port} added to the home network list.`,
-  copied: (label: string) => `${label} copied.`,
-  /** More options folded: “Named “Proxmox VE · pve.local:8006””. */
-  moreSummary: (label: string) => `Named “${label}”`,
-  /** The guided steps' list, for a screen reader: “Making the token”. */
-  making: (secretLabel: string) => `Making the ${secretLabel.toLowerCase()}`,
-} as const;
+export function connectFormText(locale?: string | null) {
+  const { problems: _problems, ...w } = clientTree(locale, CONN_DRAFT_WORDS);
+  return {
+    ...w,
+    /** Signing in on the service's own page: Nextcloud's line in the entry's words. */
+    serviceLogin: (name: string) => interpolate(w.serviceLogin, { name }),
+    /** The phone's: its browser where the web has a tab. */
+    serviceLoginPhone: (name: string) => interpolate(w.serviceLoginPhone, { name }),
+    /** “Signing in to Proxmox VE and making Whombat’s key…”, while sign in once runs. */
+    signingIn: (name: string) => interpolate(w.signingIn, { name }),
+    /** A secret with its own name (T3 Code's): “Signing in to T3 Code with the pairing code…”. */
+    signingInWith: (name: string, secret: string) => interpolate(w.signingInWith, { name, secret }),
+    /** The toast once it's connected. */
+    connected: (label: string) => interpolate(w.connected, { label }),
+    /** The toast once Add this network added it. */
+    networkAdded: (cidr: string, port: number) => interpolate(w.networkAdded, { cidr, port }),
+    copied: (label: string) => interpolate(w.copied, { label }),
+    /** More options folded: “Named “Proxmox VE · pve.local:8006””. */
+    moreSummary: (label: string) => interpolate(w.moreSummary, { label }),
+    /** The guided steps' list, for a screen reader: “Making the token”. */
+    making: (secretLabel: string) => interpolate(w.making, { secret: secretLabel.toLowerCase() }),
+  };
+}
+
+export const CONNECT_FORM_TEXT = connectFormText('en');
 
 /** What the person has typed and picked. Secrets live here only while the form is open. */
 export interface ConnectDraft {
@@ -169,36 +138,42 @@ export function draftProblems(
   choice: Pick<SignInChoice, 'method'>,
   shown: readonly Field[],
   draft: Pick<ConnectDraft, 'fields' | 'secret' | 'account' | 'password' | 'code' | 'codeAsked' | 'authName'>,
+  locale?: string | null,
 ): Record<string, string> {
   const method = choice.method;
+  const w = clientTree(locale, CONN_DRAFT_WORDS);
+  const needed = (label: string) => interpolate(w.problems.needed, { label });
   const out: Record<string, string> = {};
   for (const f of shown) {
     const p = fieldProblem(f, draft.fields[f.id]);
     if (p) out[f.id] = p;
   }
   if ((method.kind === 'token' || method.kind === 'client_credentials') && !draft.secret.trim())
-    out.secret = `${method.secretLabel} is needed.`;
+    out.secret = needed(method.secretLabel);
   if (method.kind === 'password') {
     // A sign-in with no account (T3 Code's pairing code, Whombat t3code.md T3-02) asks for its secret alone.
     if (method.account && !fixedAccountOf(method) && !draft.account.trim())
-      out.account = `${method.account.label} is needed.`;
-    if (!draft.password) out.password = `${method.secret?.label ?? 'Password'} is needed.`;
+      out.account = needed(method.account.label);
+    if (!draft.password) out.password = needed(method.secret?.label ?? w.password);
   }
   if (method.kind === 'password' || asksTwoStepCode(method)) {
-    const p = codeProblem(draft.code, draft.codeAsked);
+    const p = codeProblem(draft.code, draft.codeAsked, locale);
     if (p) out.code = p;
   }
   if (ownsAuth(entry, method) && !/^[A-Za-z0-9_.-]{1,64}$/.test(draft.authName.trim()))
     out.authName =
-      method.kind === 'token' && method.auth.type === 'query' ? 'Name the parameter.' : 'Name the header.';
+      method.kind === 'token' && method.auth.type === 'query'
+        ? w.problems.nameParameter
+        : w.problems.nameHeader;
   return out;
 }
 
 /** A typed code's problem: none when asked, too short to be one (`TwoStepCode` takes 4…64). */
-export function codeProblem(code: string, asked: boolean): string | null {
+export function codeProblem(code: string, asked: boolean, locale?: string | null): string | null {
   const typed = code.trim();
-  if (asked && !typed) return 'Enter the code.';
-  if (typed && typed.length < 4) return 'Enter the whole code.';
+  const w = clientTree(locale, CONN_DRAFT_WORDS).problems;
+  if (asked && !typed) return w.enterCode;
+  if (typed && typed.length < 4) return w.wholeCode;
   return null;
 }
 

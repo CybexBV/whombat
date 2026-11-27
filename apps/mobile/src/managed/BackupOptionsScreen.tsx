@@ -7,6 +7,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { weekdayLabels } from '@whombat/client';
 import { backupOptionsText, keepTicks, policySummary } from '@whombat/client/managed';
 import { useBackupCheckpoints, useBackupPolicy, useSetBackupPolicy } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
@@ -58,7 +59,7 @@ export function BackupOptionsScreen({ navigation }: Props) {
 
   const onSave = () => {
     if (!draft) return;
-    const r = draftInput(draft);
+    const r = draftInput(draft, rawLocale);
     if ('error' in r) {
       setError(r.error);
       return;
@@ -265,8 +266,8 @@ export function BackupOptionsScreen({ navigation }: Props) {
               meta={D.weeklyCheckMeta(
                 lastDrill
                   ? lastDrill.ok
-                    ? D.lastGood(weekday(lastDrill.at))
-                    : D.lastBad(weekday(lastDrill.at))
+                    ? D.lastGood(weekday(lastDrill.at, rawLocale))
+                    : D.lastBad(weekday(lastDrill.at, rawLocale))
                   : null,
               )}
               value={draft.weeklyCheck}
@@ -287,11 +288,9 @@ function suggestedGb(used: number | null | undefined): string {
   return String(Math.max(10, Math.ceil(((used ?? 0) * 2) / 1e9)));
 }
 
-function weekday(iso: string): string {
-  return (
-    ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(iso).getDay()] ??
-    ''
-  );
+function weekday(iso: string, locale?: string | null): string {
+  const key = (['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const)[new Date(iso).getDay()];
+  return key ? weekdayLabels(locale)[key].long : '';
 }
 
 function HeaderButton({

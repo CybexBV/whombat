@@ -74,12 +74,13 @@ export function ArrayCard({
   guests = [],
   full = false,
 }: UnraidBase & { guests?: readonly HostGuest[]; full?: boolean }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   // The web's words and rules (`unraid.ts`): the state, the parity line, what may be done now.
-  const a = unraidArrayView(u.array);
-  const p = parityView(u.array, now);
-  const can = unraidAbilities(u);
+  const a = unraidArrayView(u.array, rawLocale);
+  const p = parityView(u.array, now, rawLocale);
+  const can = unraidAbilities(u, rawLocale);
   const spin = spinnable(u);
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [ask, setAsk] = useState<Ask>(null);
@@ -97,37 +98,59 @@ export function ArrayCard({
     if (can.start)
       buttons.push({
         id: 'start',
-        label: 'Start the array',
+        label: tMobile('screens2.unraid.startArray'),
         primary: true,
         onPress: () => go('start', 'array.start'),
       });
-    if (can.pause) buttons.push({ id: 'pause', label: 'Pause', onPress: () => go('pause', 'parity.pause') });
+    if (can.pause)
+      buttons.push({
+        id: 'pause',
+        label: tMobile('screens2.common.pause'),
+        onPress: () => go('pause', 'parity.pause'),
+      });
     if (can.resume)
       buttons.push({
         id: 'resume',
-        label: 'Resume',
+        label: tMobile('screens2.common.resume'),
         primary: true,
         onPress: () => go('resume', 'parity.resume'),
       });
     if (can.cancel)
-      buttons.push({ id: 'cancel', label: 'Cancel the check', onPress: () => setAsk('cancel') });
+      buttons.push({
+        id: 'cancel',
+        label: tMobile('screens2.unraid.cancelCheck'),
+        onPress: () => setAsk('cancel'),
+      });
     if (can.checkParity)
-      buttons.push({ id: 'parity', label: 'Check parity', onPress: () => setAsk('parity') });
+      buttons.push({
+        id: 'parity',
+        label: tMobile('screens2.unraid.checkParity'),
+        onPress: () => setAsk('parity'),
+      });
     if (full && can.spin && spin.up)
       buttons.push({
         id: 'up',
-        label: 'Spin up all',
+        label: tMobile('screens2.unraid.spinUpAll'),
         onPress: () => go('up', 'disk.spin_up', { params: { disk: 'all' } }),
       });
     if (full && can.spin && spin.down)
       buttons.push({
         id: 'down',
-        label: 'Spin down all',
+        label: tMobile('screens2.unraid.spinDownAll'),
         onPress: () => go('down', 'disk.spin_down', { params: { disk: 'all' } }),
       });
     if (full && can.mover)
-      buttons.push({ id: 'mover', label: 'Run the mover', onPress: () => go('mover', 'mover.start') });
-    if (can.stop) buttons.push({ id: 'stop', label: 'Stop the array', onPress: () => setAsk('stop') });
+      buttons.push({
+        id: 'mover',
+        label: tMobile('screens2.unraid.runMover'),
+        onPress: () => go('mover', 'mover.start'),
+      });
+    if (can.stop)
+      buttons.push({
+        id: 'stop',
+        label: tMobile('screens2.unraid.stopArray'),
+        onPress: () => setAsk('stop'),
+      });
   }
   const why = full && canChange ? [can.checkReason, can.moverReason].filter(Boolean).join(' ') : '';
   return (
@@ -137,7 +160,13 @@ export function ArrayCard({
     >
       <View
         accessible
-        accessibilityLabel={[`Array ${a.stateText}`, a.trouble, a.useText].filter(Boolean).join(', ')}
+        accessibilityLabel={[
+          tMobile('screens2.unraid.arrayState', { state: a.stateText }),
+          a.trouble,
+          a.useText,
+        ]
+          .filter(Boolean)
+          .join(', ')}
         style={{ paddingHorizontal: 14, paddingBottom: 12, gap: 4 }}
       >
         {a.trouble ? (
@@ -228,9 +257,9 @@ export function ArrayCard({
 
 /** unRAID's unread notifications: each opens its text with Archive; Archive all. */
 export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZone, canChange }: UnraidBase) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
-  const rows = notificationRows(u, now, timeZone);
+  const rows = notificationRows(u, now, timeZone, rawLocale);
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [open, setOpen] = useState<NotificationRow | null>(null);
   if (!rows.length) return null;
@@ -241,10 +270,10 @@ export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZo
         canChange && rows.length > 1 ? (
           <RowAction
             label={busy ? tMobile('screens.archiving') : tMobile('screens.archive-all')}
-            spoken="Archive all notifications"
+            spoken={tMobile('screens2.unraid.archiveAll')}
             onPress={() =>
               void run('notification.archive', {
-                done: unraidChangeWords('notification.archive', serverName).finished,
+                done: unraidChangeWords('notification.archive', serverName, undefined, rawLocale).finished,
               })
             }
           />
@@ -282,12 +311,12 @@ export function NotificationsCard({ serverId, serverName, unraid: u, now, timeZo
  * dashboards-mobile.md AP-2130), the disks by group, the parity history and schedule.
  */
 export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; manageOff: string | null }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const { serverId, serverName, detail, unraid: u, now, timeZone, canChange, manageOff } = props;
   const theme = useTheme();
   const [disk, setDisk] = useState<DiskRowView | null>(null);
-  const history = parityHistoryRows(u.array.parity.history, now, timeZone);
+  const history = parityHistoryRows(u.array.parity.history, now, timeZone, rawLocale);
   return (
     <>
       {manageOff ? (
@@ -297,7 +326,7 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
       ) : null}
       <ArrayCard {...props} full />
       <NotificationsCard {...props} />
-      {diskSections(u).map((s) => (
+      {diskSections(u, rawLocale).map((s) => (
         <OneCard
           key={s.id}
           label={s.title}
@@ -338,7 +367,7 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
         <SettingLine
           first
           label={tClient('automations.source.schedule')}
-          value={u.array.parity.schedule?.trim() || 'No schedule'}
+          value={u.array.parity.schedule?.trim() || tMobile('screens2.unraid.noSchedule')}
         />
         {history.length ? (
           history.map((h) => (
@@ -373,14 +402,15 @@ export function UnraidArray(props: UnraidBase & { guests: readonly HostGuest[]; 
 
 /** The Plugins segment: the Unraid version, Check for updates, Update all, each plugin. */
 export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChange }: UnraidBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
-  const rows = pluginPhoneRows(u);
+  const rows = pluginPhoneRows(u, rawLocale);
   const updates = rows.filter((r) => r.update).length;
   const { run, busy } = useUnraidOp(serverId, serverName);
   const [open, setOpen] = useState<PluginRow | 'all' | null>(null);
   const page = unraidPageUrl(detail, 'Tools/Update');
-  const version = unraidVersionView(u);
+  const version = unraidVersionView(u, rawLocale);
   const os = version.update;
   return (
     <>
@@ -394,7 +424,7 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
             os && page ? (
               <RowAction
                 label={tMobile('screens.update-in-unraid')}
-                spoken="Update in Unraid"
+                spoken={tMobile('screens.update-in-unraid')}
                 onPress={() => void Linking.openURL(page)}
               />
             ) : null
@@ -412,7 +442,7 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
           />
           {updates ? (
             <Button
-              label={`Update all (${updates})`}
+              label={tMobile('screens2.unraid.updateAllCount', { count: updates })}
               variant="primary"
               disabled={busy}
               onPress={() => setOpen('all')}
@@ -438,7 +468,11 @@ export function UnraidPlugins({ serverId, serverName, detail, unraid: u, canChan
                 ) : undefined
               }
               {...(canChange && r.update
-                ? { chevron: true, hint: `Updates ${r.name}`, onPress: () => setOpen(r) }
+                ? {
+                    chevron: true,
+                    hint: tMobile('screens2.unraid.updatesName', { name: r.name }),
+                    onPress: () => setOpen(r),
+                  }
                 : {})}
               label={r.label}
             />

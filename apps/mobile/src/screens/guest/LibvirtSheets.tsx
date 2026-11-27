@@ -10,7 +10,7 @@ import { useHostGuests, useHostManageRead } from '@whombat/client/hosts/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
 import type { SheetBase } from './GuestSheets';
@@ -24,21 +24,22 @@ function settle(out: ChangeOutcome, onClose: () => void, setError: (s: string) =
 
 /** Back up now: libvirt's backup job into the server's backups folder. */
 export function LibvirtBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
+  const { t: tMobile } = useMobileT();
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Back up ${guest.name} now`}
-      body={`The backup stays on the server, with its settings. It runs there${
-        guest.state === 'running' ? ' while the VM keeps running' : ''
-      }; you can leave this screen.`}
+      title={tMobile('screens2.guest.backUpNowName', { name: guest.name })}
+      body={tMobile(
+        guest.state === 'running' ? 'screens2.guest.libvirtBackupRunning' : 'screens2.guest.libvirtBackup',
+      )}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Back up',
+          label: tMobile('screens2.common.backUp'),
           variant: 'primary',
           onPress: () =>
             void send({
@@ -49,7 +50,7 @@ export function LibvirtBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
               name: guest.name,
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     />
@@ -58,6 +59,7 @@ export function LibvirtBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Clone: a full copy with its own disks and network addresses, while it is switched off. */
 export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const guests = useHostGuests(
@@ -73,22 +75,24 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
   const [storage, setStorage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const running = stoppedCheck(guest);
+  const running = stoppedCheck(guest, rawLocale);
   const nameError = libvirtNameError(
     name,
     (guests.data?.guests ?? []).map((g) => g.name),
+    undefined,
+    rawLocale,
   );
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Clone ${guest.name}`}
+      title={tMobile('screens2.guest.cloneName', { name: guest.name })}
       body={tMobile('screens.a-full-copy-with-its-own-disks-and')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Clone',
+          label: tMobile('screens2.common.clone'),
           variant: 'primary',
           disabled: !!nameError || !!running,
           onPress: () =>
@@ -100,7 +104,7 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
               name: guest.name,
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error ?? running}
     >
@@ -119,8 +123,11 @@ export function LibvirtCloneSheet({ serverId, guest, onClose }: SheetBase) {
           <Choices
             label={tMobile('screens.its-disks-go-to')}
             options={[
-              { value: '', label: 'Where they are now' },
-              ...stores.map((s) => ({ value: s, label: s === 'folder:domains' ? 'The VM folder' : s })),
+              { value: '', label: tMobile('screens2.guest.whereNow') },
+              ...stores.map((s) => ({
+                value: s,
+                label: s === 'folder:domains' ? tMobile('screens2.guest.vmFolder') : s,
+              })),
             ]}
             value={storage}
             onChange={setStorage}

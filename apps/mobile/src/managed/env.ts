@@ -26,6 +26,7 @@ import type { Identity } from '@whombat/secure-channel';
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { mobileTranslator } from '../i18n/translate';
 import { CONTROL_URL } from './config';
 import { deleteEndpointIdentity, loadOrCreateEndpointIdentity } from './keys';
 import { checkedNativeCrypto } from './nativeCrypto';
@@ -78,9 +79,12 @@ export async function replaceEndpointKey(): Promise<EndpointKey> {
 }
 
 /** How this phone is named on the appliance's device list (“Pixel 7 · Android”). */
-export function phoneLabel(): string {
-  const name = (Device.deviceName || Device.modelName || 'Phone').trim().slice(0, 60);
-  return `${name} · ${Platform.OS === 'ios' ? 'iPhone app' : 'Android app'}`;
+export function phoneLabel(locale?: string | null): string {
+  const { t } = mobileTranslator(locale);
+  const name = (Device.deviceName || Device.modelName || t('managed2.phone.fallbackName'))
+    .trim()
+    .slice(0, 60);
+  return `${name} · ${Platform.OS === 'ios' ? t('managed2.phone.iphoneApp') : t('managed2.phone.androidApp')}`;
 }
 
 export const PHONE_PLATFORM: 'android' | 'ios' = Platform.OS === 'ios' ? 'ios' : 'android';

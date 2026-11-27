@@ -11,6 +11,7 @@
  *   of the direct connection to the PeerId the link names.
  * - The words of the setup and the links (`COMMUNITY_TEXT`, `LINK_TEXT`).
  */
+import { interpolate } from '@whombat/core/i18n';
 import { normalizeLocaleTag } from '@whombat/core/i18n/locale';
 import {
   type ClaimConfirmTags,
@@ -29,6 +30,8 @@ import {
   parseLocalLink,
   protocolAtLeast,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { COMMUNITY_WORDS } from '../i18n/messages/hostManaged/community';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import {
   type ApplianceSession,
@@ -112,9 +115,12 @@ export function localClaimLettersReady(letters: string): boolean {
  * What is wrong with the name or the email by the box's own rules (`ClaimAccount`), in words for under the field, or
  * null. Asked before an exchange starts: a try isn't spent on something the box would refuse anyway.
  */
-export function localClaimAccountProblem(account: { name: string; email: string }): string | null {
+export function localClaimAccountProblem(
+  account: { name: string; email: string },
+  locale?: string | null,
+): string | null {
   const field = claimAccountProblem(account);
-  return field ? COMMUNITY_TEXT.account.errors[field] : null;
+  return field ? communityText(locale).account.errors[field] : null;
 }
 
 /**
@@ -177,10 +183,15 @@ export async function runLocalClaim(input: LocalClaimInput): Promise<LocalClaime
 }
 
 /** What a failed claim on the box's page says (the claim's words where they fit; AP-5402). */
-export function localClaimErrorText(error: unknown, now: number = Date.now()): string {
-  const t = COMMUNITY_TEXT.claim.errors;
+export function localClaimErrorText(
+  error: unknown,
+  now: number = Date.now(),
+  locale?: string | null,
+): string {
+  const words = communityText(locale);
+  const t = words.claim.errors;
   if (error instanceof LocalClaimLettersError) return t.letters;
-  if (error instanceof LocalClaimAccountError) return COMMUNITY_TEXT.account.errors[error.field];
+  if (error instanceof LocalClaimAccountError) return words.account.errors[error.field];
   // The letters, never “the code”: the screen asked for letters.
   if (error instanceof OperationError) {
     if (error.code === 'claim_invalid') return t.wrong;
@@ -198,7 +209,7 @@ export function localClaimErrorText(error: unknown, now: number = Date.now()): s
   if (error instanceof NotDeliveredError && !(error instanceof ConnectionLostError)) return t.unreachable;
   // The connection or the answer was lost on the way: what the letters screen says once the box was asked again.
   if (localClaimLostTouch(error)) return t.lostTouch;
-  return claimErrorText(error, 'code', now);
+  return claimErrorText(error, 'code', now, locale);
 }
 
 /** The exchange or its proof ran out, or the letters changed under it: the letters are asked again. */
@@ -256,9 +267,13 @@ export type LocalClaimNext =
   | { to: 'reread'; text: string }
   | { to: 'letters' | 'account'; text: string };
 
-export function localClaimNext(error: unknown, now: number = Date.now()): LocalClaimNext {
+export function localClaimNext(
+  error: unknown,
+  now: number = Date.now(),
+  locale?: string | null,
+): LocalClaimNext {
   if (localClaimAlreadyClaimed(error)) return { to: 'taken' };
-  const text = localClaimErrorText(error, now);
+  const text = localClaimErrorText(error, now, locale);
   if (localClaimLostTouch(error)) return { to: 'reread', text };
   return { to: localClaimWantsLetters(error) ? 'letters' : 'account', text };
 }
@@ -286,8 +301,8 @@ export function joinWithLink(
 }
 
 /** What a refused link says (AP-5403). */
-export function linkErrorText(error: unknown): string {
-  const t = LINK_TEXT.errors;
+export function linkErrorText(error: unknown, locale?: string | null): string {
+  const t = linkText(locale).errors;
   const code = error instanceof OperationError ? error.code : null;
   switch (code) {
     case 'link_invalid':
@@ -318,122 +333,42 @@ export function linkTimeLeft(expiresAt: string, now: number = Date.now()): strin
 /* Words ------------------------------------------------------------------------------------------------------ */
 
 /**
- * The setup on a community box's own page (AP-5421): three steps in onboarding's frame, then the app's own onboarding
- * (Name your Whombat → Set up your AI → Meet your agent).
+ * The setup on a community box's own page (AP-5421), in a locale (English when none is given): three steps in
+ * onboarding's frame, then the app's own onboarding (Name your Whombat → Set up your AI → Meet your agent).
  */
-export const COMMUNITY_TEXT = {
-  steps: [
-    { t: 'Claim your Whombat', d: 'The letters on its screen' },
-    { t: 'Make your account', d: 'It’s yours alone' },
-    { t: 'Reach it from anywhere', d: 'Tailscale, if you like' },
-  ],
-  stepLabel: (i: number) => `STEP ${i + 1} OF 3`,
-  claim: {
-    title: 'Claim your Whombat',
-    sub: 'Your Whombat shows four letters on its screen. Type them here to make it yours.',
-    tip: 'No screen on it? Plug one in, or open its window if it runs in a virtual machine.',
-    letters: 'LETTERS',
-    lettersPlaceholder: 'ABCD',
-    next: 'Continue',
-    errors: {
-      letters: 'Enter the 4 letters from its screen.',
-      notCommunity: 'This Whombat is claimed in the Whombat app, not on this page.',
-      tooLong: 'That took too long. Enter the letters on its screen again.',
-      // True whether the letters changed after the wrong try or stay for a while (new letters asked for at the box).
-      wrong: 'Those letters aren’t right. Look at your Whombat’s screen and try again.',
-      tooMany: (minutes: number) =>
-        `Too many wrong letters. Try again in ${minutes} min, or choose New letters on your Whombat’s screen.`,
-      newLetters: 'Too many tries. Choose New letters on your Whombat’s screen, then try again.',
-      updateApp: 'Update the Whombat app, then try again.',
-      busy: 'Your Whombat is busy. Try again in a moment.',
-      // The connection dropped in the middle of a claim; shown on the letters once the box was asked again.
-      lostTouch: 'The connection dropped. Enter the letters on its screen again.',
-      boxTooOld:
-        'This Whombat needs an update before it can be claimed here. It updates by itself; try again in a while.',
-      taken: 'Someone already claimed this Whombat.',
-      unreachable: 'This device can’t reach your Whombat. Check that it’s on and on the same network.',
+export function communityText(locale?: string | null) {
+  const w = clientTree(locale, COMMUNITY_WORDS);
+  return {
+    steps: [w.steps.claim, w.steps.account, w.steps.reach],
+    stepLabel: (i: number) => interpolate(w.stepLabel, { n: i + 1 }),
+    claim: {
+      ...w.claim,
+      errors: {
+        ...w.claim.errors,
+        tooMany: (minutes: number) => interpolate(w.claim.errors.tooMany, { minutes }),
+      },
     },
-  },
-  account: {
-    title: 'Make your account',
-    sub: 'This Whombat is yours alone. Your name is how your agent greets you.',
-    tip: 'Your account stays on this Whombat. There’s nothing to sign up for.',
-    name: 'YOUR NAME',
-    email: 'EMAIL',
-    claim: 'Claim it',
-    claiming: 'Claiming…',
-    back: 'Back',
-    errors: {
-      name: 'Enter your name, up to 120 characters.',
-      email: 'Enter an email address, like you@example.com.',
-    },
-  },
-  tailscale: {
-    title: 'Reach it from anywhere',
-    sub: 'Turn on Tailscale to use this Whombat away from home, from any device on your tailnet.',
-    tip: 'You can do this later in Settings → This Whombat.',
-    turnOn: 'Turn on Tailscale',
-    turningOn: 'Turning on…',
-    own: 'Use your own login server',
-    ownHint: 'For Headscale or your company’s server. Leave it empty for Tailscale’s own.',
-    ownLabel: 'LOGIN SERVER',
-    ownPlaceholder: 'https://headscale.example.com',
-    signIn: 'Sign in to Tailscale',
-    signInMeta: 'Sign in with the account this Whombat should join, then come back here.',
-    approval: 'Approve this Whombat in your Tailscale admin console.',
-    on: (name: string) => `This Whombat is ${name} on your tailnet.`,
-    noHttps: 'Turn on HTTPS in your tailnet’s DNS settings to open it in a browser there.',
-    notHere: 'Tailscale isn’t on this Whombat.',
-    skip: 'Skip for now',
-    next: 'Continue',
-  },
-  /** Notifications and passkeys where there's no control behind the box (AP-5406, AP-5428). */
-  push: {
-    phoneTitle: 'No notifications on this phone',
-    phoneMeta:
-      'This Whombat doesn’t send notifications to phones. The app checks for news each time you open it.',
-    insecureTitle: 'Not available on this page',
-    insecureMeta:
-      'Notifications work on this Whombat’s secure Tailscale page, whose address starts with https.',
-  },
-  passkeys: 'Passkeys work on this Whombat’s secure Tailscale page, whose address starts with https.',
-  /** On the box's page of a claimed box, for a browser it doesn't know yet. */
-  welcome: {
-    kicker: 'THIS WHOMBAT',
-    title: 'Add this device',
-    sub: 'This Whombat lets your devices in with a link or QR code from a device you already use it on.',
-    tip: 'Make a QR code on that device under Settings → This Whombat → Devices.',
-    pair: 'Pair with another device',
-  },
-} as const;
+    account: w.account,
+    tailscale: { ...w.tailscale, on: (name: string) => interpolate(w.tailscale.on, { name }) },
+    /** Notifications and passkeys where there's no control behind the box (AP-5406, AP-5428). */
+    push: w.push,
+    passkeys: w.passkeys,
+    /** On the box's page of a claimed box, for a browser it doesn't know yet. */
+    welcome: w.welcome,
+  } as const;
+}
 
-/** Links and QR codes the box makes (AP-5403, AP-5422…AP-5425). */
-export const LINK_TEXT = {
-  device: {
-    title: 'Add this device',
-    sub: 'This link lets this device in to your account.',
-    join: 'Add this device',
-    joining: 'Adding…',
-    section: 'Add a device with a QR code',
-    meta: 'Scan it with the new device, or open the link there. It works once, for 5 minutes.',
-    make: 'Show QR code',
-    making: 'Making a code…',
-    qrLabel: 'QR code that adds a device to your account',
-    left: (time: string) => `Works for ${time} more.`,
-    over: 'This code ran out.',
-    again: 'New code',
-    copy: 'Copy link',
-    copied: 'Link copied.',
-    hide: 'Done',
-  },
-  errors: {
-    invalid: 'This link doesn’t work. Make a new one on your other device.',
-    expired: 'This link ran out. Make a new one on your other device.',
-    used: 'This link was used already. Make a new one on your other device.',
-    enrolled: 'This device is already in.',
-    rateLimited: 'Too many tries. Wait a few minutes, then try again.',
-    unavailable: 'This Whombat has no address to put in a link right now. Check its network, then try again.',
-    failed: 'That didn’t work. Try again.',
-    notThisBox: 'This link is for another Whombat.',
-  },
-} as const;
+/** The community setup's words in English. */
+export const COMMUNITY_TEXT = communityText('en');
+
+/** Links and QR codes the box makes (AP-5403, AP-5422…AP-5425), in a locale (English when none is given). */
+export function linkText(locale?: string | null) {
+  const w = clientTree(locale, COMMUNITY_WORDS).link;
+  return {
+    device: { ...w.device, left: (time: string) => interpolate(w.device.left, { time }) },
+    errors: w.errors,
+  } as const;
+}
+
+/** The links' words in English. */
+export const LINK_TEXT = linkText('en');

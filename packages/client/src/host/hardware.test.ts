@@ -80,7 +80,7 @@ describe('HARDWARE', () => {
   });
 
   it('words link speeds', () => {
-    expect([100, 1000, 2500, 10_000].map(formatLinkSpeed)).toEqual([
+    expect([100, 1000, 2500, 10_000].map((m) => formatLinkSpeed(m))).toEqual([
       '100 Mbit/s',
       '1 Gbit/s',
       '2.5 Gbit/s',

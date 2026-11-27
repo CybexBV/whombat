@@ -18,14 +18,15 @@ import { Image, View } from 'react-native';
 import { useViewContext } from '../data/BurrowProvider';
 import {
   spokenLabel,
-  TRACKER_ITEM_TEXT,
   type TrackerItemModel,
   type TrackerRequest,
   type TrackerSend,
   trackerItemErrorText,
   trackerItemModel,
+  trackerReportText,
   trackerRequest,
 } from '../data/trackerItem';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FullScreenModal } from '../ui/fullScreen';
@@ -50,24 +51,26 @@ export function TrackerItemSection({
   /** The tracker's words as the automation keeps them, until the report says its own. */
   words: TrackerWords;
 }) {
+  const { rawLocale } = useI18n();
+  const copy = trackerReportText(rawLocale);
   const theme = useTheme();
   const { now, timeZone } = useViewContext();
   const data = query.data;
   const model = useMemo(
-    () => (data ? trackerItemModel(data.report, data.can, now, timeZone) : null),
-    [data, now, timeZone],
+    () => (data ? trackerItemModel(data.report, data.can, now, timeZone, rawLocale) : null),
+    [data, now, timeZone, rawLocale],
   );
   return (
-    <Section title={TRACKER_ITEM_TEXT.section}>
+    <Section title={copy.section}>
       {model ? (
         <Report model={model} burrow={burrow} runId={runId} />
       ) : query.error ? (
         <Block>
           <Text size={14} lh={1.42} color={theme.colors.ink2} accessibilityLiveRegion="polite">
-            {trackerItemErrorText(query.error, words)}
+            {trackerItemErrorText(query.error, words, rawLocale)}
           </Text>
           <Button
-            label={TRACKER_ITEM_TEXT.tryAgain}
+            label={copy.tryAgain}
             variant="secondary"
             busy={query.isFetching}
             onPress={() => void query.refetch()}
@@ -77,7 +80,7 @@ export function TrackerItemSection({
       ) : (
         <Block>
           <Text size={14} lh={1.42} color={theme.colors.mut}>
-            {trackerItemText(words).loading}
+            {trackerItemText(words, rawLocale).loading}
           </Text>
         </Block>
       )}
@@ -86,6 +89,8 @@ export function TrackerItemSection({
 }
 
 function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: string; runId: string }) {
+  const { rawLocale } = useI18n();
+  const copy = trackerReportText(rawLocale);
   const theme = useTheme();
   const qc = useQueryClient();
   const update = useApiMutation(api.tracker.update);
@@ -103,7 +108,7 @@ function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: str
       const res = await update.mutateAsync({ params, body: { requestId: request.id, ...body } });
       // Refused by a key, or waiting for a person (the web's words): the sheet stays, and so does the request id.
       if (res.status === 'blocked') return res.message;
-      if (res.status === 'pending_approval') return TRACKER_ITEM_TEXT.needsApproval;
+      if (res.status === 'pending_approval') return copy.needsApproval;
       last.current = null;
       qc.setQueryData(queryKeys.endpoint(api.tracker.item, { params }), (old) =>
         old ? { ...old, report: res.data.report } : old,
@@ -112,7 +117,7 @@ function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: str
       showNotice(done);
       return null;
     } catch (error) {
-      return errorText(error);
+      return errorText(error, rawLocale);
     }
   };
 
@@ -160,21 +165,21 @@ function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: str
           ))}
         </View>
       </View>
-      <Field label={TRACKER_ITEM_TEXT.reporter} value={model.reporter} />
-      <Field label={TRACKER_ITEM_TEXT.filed} value={model.filed} />
-      {model.fix ? <Field label={TRACKER_ITEM_TEXT.fix} value={model.fix} /> : null}
-      <Field label={TRACKER_ITEM_TEXT.happened} value={model.description} />
-      {model.expected ? <Field label={TRACKER_ITEM_TEXT.expected} value={model.expected} /> : null}
+      <Field label={copy.reporter} value={model.reporter} />
+      <Field label={copy.filed} value={model.filed} />
+      {model.fix ? <Field label={copy.fix} value={model.fix} /> : null}
+      <Field label={copy.happened} value={model.description} />
+      {model.expected ? <Field label={copy.expected} value={model.expected} /> : null}
       {model.screenshot ? (
         <Block>
-          <Label>{TRACKER_ITEM_TEXT.screenshot}</Label>
+          <Label>{copy.screenshot}</Label>
           <Touchable
             onPress={() => setViewing(true)}
             feedback="fade"
             ringRadius={12}
             accessibilityRole="imagebutton"
-            accessibilityLabel={TRACKER_ITEM_TEXT.screenshotLabel}
-            accessibilityHint={TRACKER_ITEM_TEXT.screenshotHint}
+            accessibilityLabel={copy.screenshotLabel}
+            accessibilityHint={copy.screenshotHint}
             style={{
               height: 180,
               borderRadius: 12,
@@ -193,10 +198,10 @@ function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: str
         </Block>
       ) : null}
       <Block>
-        <Label>{TRACKER_ITEM_TEXT.conversation}</Label>
+        <Label>{copy.conversation}</Label>
         {model.messages.length === 0 ? (
           <Text size={15} lh={1.42} color={theme.colors.mut}>
-            {TRACKER_ITEM_TEXT.noReplies}
+            {copy.noReplies}
           </Text>
         ) : (
           model.messages.map((m) => (
@@ -223,12 +228,8 @@ function Report({ model, burrow, runId }: { model: TrackerItemModel; burrow: str
       </Block>
       {model.canUpdate ? (
         <Block>
-          <Button label={TRACKER_ITEM_TEXT.reply} variant="secondary" onPress={() => setSheet('reply')} />
-          <Button
-            label={TRACKER_ITEM_TEXT.setStatus}
-            variant="secondary"
-            onPress={() => setSheet('status')}
-          />
+          <Button label={copy.reply} variant="secondary" onPress={() => setSheet('reply')} />
+          <Button label={copy.setStatus} variant="secondary" onPress={() => setSheet('status')} />
           <Text size={13.5} lh={1.45} color={theme.colors.mut}>
             {model.emails}
           </Text>
@@ -309,6 +310,8 @@ function Field({ label, value }: { label: string; value: string }) {
 /** The reporter's screenshot full screen, as a picture in a message opens: Close in a 44dp header. */
 function ScreenshotViewer({ uri, visible, onClose }: { uri: string; visible: boolean; onClose: () => void }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = trackerReportText(rawLocale);
   return (
     <FullScreenModal visible={visible} onClose={onClose}>
       <View
@@ -316,7 +319,7 @@ function ScreenshotViewer({ uri, visible, onClose }: { uri: string; visible: boo
       >
         <Touchable
           onPress={onClose}
-          accessibilityLabel={TRACKER_ITEM_TEXT.close}
+          accessibilityLabel={copy.close}
           feedback="wash"
           ringRadius={22}
           style={{
@@ -330,14 +333,14 @@ function ScreenshotViewer({ uri, visible, onClose }: { uri: string; visible: boo
           <X size={20} color={theme.colors.ink} strokeWidth={2} />
         </Touchable>
         <Text size={15} weight={600} numberOfLines={1} style={{ flex: 1 }} accessibilityRole="header">
-          {TRACKER_ITEM_TEXT.screenshotLabel}
+          {copy.screenshotLabel}
         </Text>
       </View>
       <View style={{ flex: 1, padding: 12 }}>
         <Image
           source={{ uri }}
           resizeMode="contain"
-          accessibilityLabel={TRACKER_ITEM_TEXT.screenshotLabel}
+          accessibilityLabel={copy.screenshotLabel}
           style={{ flex: 1, width: '100%' }}
         />
       </View>

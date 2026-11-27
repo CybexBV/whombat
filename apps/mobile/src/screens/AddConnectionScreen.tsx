@@ -66,13 +66,16 @@ export function AddConnectionScreen({ navigation }: Props) {
   };
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<AddCategory>('all');
-  const chips = useMemo(() => addConnectionChips(offered), [offered]);
+  const chips = useMemo(() => addConnectionChips(offered, rawLocale), [offered, rawLocale]);
   // A chip whose category went (its entries turned off since) falls back to All.
   const category = chips.some((c) => c.value === picked) ? picked : 'all';
-  const groups = useMemo(() => addConnectionGroups(offered, category, q), [offered, category, q]);
+  const groups = useMemo(
+    () => addConnectionGroups(offered, category, q, rawLocale),
+    [offered, category, q, rawLocale],
+  );
   const footer = addConnectionFooter(offered);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Connections'));
-  const placeholder = addSearchPlaceholder(offered.length);
+  const placeholder = addSearchPlaceholder(offered.length, rawLocale);
   // The entries' statuses say what's turned off here, the accounts whether Email (IMAP) is offered; until both answer
   // (or fail) the list would change under a finger.
   const ready = settled;
@@ -192,7 +195,7 @@ export function AddConnectionScreen({ navigation }: Props) {
         ) : groups.length === 0 ? (
           q.trim() ? (
             <Section>
-              <CardNote>{addNoMatch(q)}</CardNote>
+              <CardNote>{addNoMatch(q, rawLocale)}</CardNote>
             </Section>
           ) : null
         ) : (

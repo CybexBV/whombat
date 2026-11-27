@@ -12,14 +12,12 @@ import { useHostGuests, useHostManageRead } from '@whombat/client/hosts/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { FormField } from '../../ui/formField';
 import { OneSheet } from '../../ui/oneSheet';
 import type { SheetBase } from './GuestSheets';
 import { Choices, SwitchLine } from './parts';
 import { type ChangeOutcome, useManageChange } from './useServerChange';
-
-const CANCEL = 'Cancel';
 
 function settle(out: ChangeOutcome, onClose: () => void, setError: (s: string) => void) {
   if (out.ok || out.waiting) onClose();
@@ -50,13 +48,13 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Back up ${guest.name} now`}
+      title={tMobile('screens2.guest.backUpNowName', { name: guest.name })}
       body={tMobile('screens.the-backup-stays-on-the-server-it-runs')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Back up',
+          label: tMobile('screens2.common.backUp'),
           variant: 'primary',
           disabled: !!bad,
           onPress: () =>
@@ -75,7 +73,7 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
               name: guest.name,
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
@@ -91,7 +89,10 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
         />
         <Choices
           label={tMobile('screens.keep-it-for')}
-          options={BACKUP_KEEP_DAYS}
+          options={BACKUP_KEEP_DAYS.map((o) => ({
+            value: o.value,
+            label: tMobile('screens2.guest.keepDays', { count: Number(o.value) }),
+          }))}
           value={keep}
           onChange={setKeep}
         />
@@ -107,6 +108,7 @@ export function IncusBackupNowSheet({ serverId, guest, onClose }: SheetBase) {
 
 /** Copy: a full copy under a new name, on a pool; it starts switched off. */
 export function CopySheet({ serverId, guest, onClose }: SheetBase) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const { slug } = useBurrowBase();
   const taken = useTakenNames(serverId);
@@ -120,18 +122,18 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
   const [withSnapshots, setWithSnapshots] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const nameError = incusNewNameError(name, taken);
+  const nameError = incusNewNameError(name, taken, undefined, rawLocale);
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Copy ${guest.name}`}
+      title={tMobile('screens2.guest.copyName', { name: guest.name })}
       body={tMobile('screens.a-full-copy-with-its-own-disks-in')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Copy',
+          label: tMobile('screens2.common.copy'),
           variant: 'primary',
           disabled: !!nameError,
           onPress: () =>
@@ -148,7 +150,7 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
               follow: { kind: 'guest.copy' },
             }).then((o) => settle(o, onClose, setError)),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
@@ -165,7 +167,10 @@ export function CopySheet({ serverId, guest, onClose }: SheetBase) {
         {pools.length ? (
           <Choices
             label={tMobile('screens.on-the-pool')}
-            options={[{ value: '', label: 'Same as now' }, ...pools.map((p) => ({ value: p, label: p }))]}
+            options={[
+              { value: '', label: tMobile('screens2.guest.sameAsNow') },
+              ...pools.map((p) => ({ value: p, label: p })),
+            ]}
             value={pool}
             onChange={setPool}
           />
@@ -191,24 +196,30 @@ export function RenameSheet({
   onClose,
   onRenamed,
 }: SheetBase & { platform?: 'incus' | 'libvirt'; onRenamed: (id: string, name: string) => void }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const taken = useTakenNames(serverId);
   const [name, setName] = useState(guest.name);
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const running = stoppedCheck(guest);
-  const nameError = (platform === 'libvirt' ? libvirtNameError : incusNewNameError)(name, taken, guest.name);
+  const running = stoppedCheck(guest, rawLocale);
+  const nameError = (platform === 'libvirt' ? libvirtNameError : incusNewNameError)(
+    name,
+    taken,
+    guest.name,
+    rawLocale,
+  );
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Rename ${guest.name}`}
+      title={tMobile('screens2.guest.renameName', { name: guest.name })}
       body={tMobile('screens.its-snapshots-and-backups-go-with-it')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Rename',
+          label: tMobile('screens2.common.rename'),
           variant: 'primary',
           disabled: !!nameError || !!running,
           onPress: () =>
@@ -224,7 +235,7 @@ export function RenameSheet({
               settle(o, onClose, setError);
             }),
         },
-        { id: 'cancel', label: CANCEL, variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error ?? running}
     >

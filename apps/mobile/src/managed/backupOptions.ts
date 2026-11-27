@@ -30,20 +30,26 @@ import {
   type BackupSetPolicyInput,
 } from '@whombat/protocol/session';
 import { encode } from 'uqr';
+import { mobileTranslator } from '../i18n/translate';
 
 /** A passkey-locked kit as control keeps it. */
 export type KitEnvelope = Awaited<ReturnType<ControlApi['kitEnvelopes']>>[number];
 
 /** Words the phone needs that the shared text doesn't have (AP-6852). */
-export const BACKUP_PHONE_TEXT = {
-  back: 'Back',
-  saved: (date: string) => `Saved ${date}`,
-  keepFieldsError: 'Each number is a whole number; “Every backup for” is at least 1 day.',
-  limitError: 'The space limit is at least 1 GB.',
-  printFailed: 'The kit couldn’t be opened for printing. Save it as a file instead.',
-  fileFailed: 'The kit couldn’t be saved. Try again.',
-  waiting: (name: string) => `Waiting for ${name} to answer…`,
-} as const;
+export function backupPhoneText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    back: t('managed2.backup.back'),
+    saved: (date: string) => t('managed2.backup.saved', { date }),
+    keepFieldsError: t('managed2.backup.keepFieldsError'),
+    limitError: t('managed2.backup.limitError'),
+    printFailed: t('managed2.backup.printFailed'),
+    fileFailed: t('managed2.backup.fileFailed'),
+    waiting: (name: string) => t('managed2.backup.waiting', { name }),
+  } as const;
+}
+
+export const BACKUP_PHONE_TEXT = backupPhoneText();
 
 /* The options dialog ------------------------------------------------------------------------------------------ */
 
@@ -97,7 +103,11 @@ export function draftKeep(draft: PolicyDraft): BackupKeep | null {
 }
 
 /** Save's input, or what is wrong with the draft. */
-export function draftInput(draft: PolicyDraft): { input: BackupSetPolicyInput } | { error: string } {
+export function draftInput(
+  draft: PolicyDraft,
+  locale?: string | null,
+): { input: BackupSetPolicyInput } | { error: string } {
+  const BACKUP_PHONE_TEXT = backupPhoneText(locale);
   const keep = draftKeep(draft);
   if (!keep) return { error: BACKUP_PHONE_TEXT.keepFieldsError };
   let limitBytes: number | null = null;
@@ -142,7 +152,7 @@ export function chooseRows(
     return {
       id: cp.id,
       title: backupTitle(cp.createdAt, now, locale),
-      meta: [why ?? agoAt(cp.createdAt, now), replaced, ok].filter(Boolean).join(' · '),
+      meta: [why ?? agoAt(cp.createdAt, now, locale), replaced, ok].filter(Boolean).join(' · '),
       // NEWEST marks the one picked first: never one the old Whombat made after it was replaced.
       newest: cp.id === pick,
       afterReplaced: late.has(cp.id),
@@ -150,12 +160,13 @@ export function chooseRows(
   });
 }
 
-function agoAt(iso: string, now: Date): string {
+function agoAt(iso: string, now: Date, locale?: string | null): string {
+  const { t } = mobileTranslator(locale);
   const s = Math.max(0, (now.getTime() - Date.parse(iso)) / 1000);
-  if (s < 90) return 'just now';
-  if (s < 5400) return `${Math.round(s / 60)} minutes ago`;
-  if (s < 129_600) return `${Math.round(s / 3600)} hours ago`;
-  return `${Math.round(s / 86_400)} days ago`;
+  if (s < 90) return t('managed2.ago.justNow');
+  if (s < 5400) return t('managed2.ago.minutes', { n: Math.round(s / 60) });
+  if (s < 129_600) return t('managed2.ago.hours', { n: Math.round(s / 3600) });
+  return t('managed2.ago.days', { n: Math.round(s / 86_400) });
 }
 
 /** The backup brought back unless the person picks another: the newest (AP-6862). */

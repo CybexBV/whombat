@@ -22,6 +22,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SheetPanel } from '../../modules/whombat-sheet';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { bottomPadding } from './insets';
@@ -37,7 +38,7 @@ export function Sheet({
   label,
   children,
   maxHeight = '85%',
-  closeLabel = 'Close',
+  closeLabel: givenCloseLabel,
   surface = 'bg',
   onDismissed,
 }: {
@@ -58,6 +59,8 @@ export function Sheet({
    */
   surface?: 'bg' | 'sf';
 }) {
+  const { t: tMobile } = useMobileT();
+  const closeLabel = givenCloseLabel ?? tMobile('screens2.common.close');
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const screen = useWindowDimensions();

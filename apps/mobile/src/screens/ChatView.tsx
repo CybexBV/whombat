@@ -49,7 +49,7 @@ import {
   guideFailureText,
   guideRefusalOf,
   isAutomationPrincipal,
-  PROMPT_WORDS,
+  promptWords,
   thingMark,
   threadHandoffs,
   threadWorkLine,
@@ -114,11 +114,11 @@ import { NativeMenuView } from '../../modules/whombat-menu';
 import type { ReplyPlace } from '../avatars/ReplyFace';
 import { fromDocumentAsset, type PickedFile } from '../data/attachments';
 import { useBurrow, useNowLabel, useNowStore } from '../data/BurrowProvider';
-import { PROMPTS_ADD, PROMPTS_HINT, threadReadable, threadReadUpTo } from '../data/chatInbox';
+import { PROMPTS_ADD, promptsHint, threadReadable, threadReadUpTo } from '../data/chatInbox';
 import { roomStage, roomWork } from '../data/chatRoom';
 import {
   ANCHOR_FLASH_MS,
-  ANCHOR_MISSING_TEXT,
+  anchorMissingText,
   anchorStep,
   followAction,
   isAtEnd,
@@ -129,7 +129,7 @@ import { filesToSend, sendWithFollowUp } from '../data/composerSends';
 import { useFileAccess } from '../data/fileAccess';
 import type { GuideWeb } from '../data/guides';
 import {
-  COPIED_TEXT,
+  copiedText,
   deleteConfirm,
   type MessageAction,
   messageLinkPath,
@@ -163,7 +163,7 @@ import { useManaged } from '../managed/context';
 import { useForeground } from '../managed/useHostStatus';
 import { useAppNavigation, useOpenLink, useOpenUrl } from '../navigation/hooks';
 import { isBesideThread, useBeside } from '../navigation/panes';
-import { type AddChoice, ATTACH_CHOICES, type AttachChoice } from '../ui/attachments';
+import { type AddChoice, type AttachChoice, attachChoices } from '../ui/attachments';
 import { Composer, WorkingBubble } from '../ui/chat';
 import { copyToClipboard } from '../ui/clipboard';
 import type { GuideActOutcome } from '../ui/guide';
@@ -316,6 +316,7 @@ export function ChatView({
   inbox = null,
 }: ChatViewProps) {
   const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const { slug, people, mode, bootstrap, clock, viewer: decider, timeZone } = useBurrow();
@@ -442,10 +443,10 @@ export function ChatView({
       { dispatchId },
       {
         onSuccess: (result) => {
-          if (result.status === 'ok') showNotice(retriedNotice(agentName));
-          else problem(retryFailureText(result), false);
+          if (result.status === 'ok') showNotice(retriedNotice(agentName, rawLocale));
+          else problem(retryFailureText(result, rawLocale), false);
         },
-        onError: (error) => problem(retryFailureText(error), isFinalRetryRefusal(error)),
+        onError: (error) => problem(retryFailureText(error, rawLocale), isFinalRetryRefusal(error)),
       },
     );
   };
@@ -455,9 +456,9 @@ export function ChatView({
   const [stopping, setStopping] = useState<string | null>(null);
   const stopViewer = useMemo(() => ({ id: bootstrap.me.id, kind: 'person' as const }), [bootstrap.me.id]);
   const stopTurn = (dispatchId: string, agentName: string) => {
-    const confirm = stopConfirm(agentName);
+    const confirm = stopConfirm(agentName, rawLocale);
     Alert.alert(confirm.title, confirm.body, [
-      { text: 'Cancel', style: 'cancel' },
+      { text: tMobile('screens2.common.cancel'), style: 'cancel' },
       {
         text: confirm.cta,
         style: 'destructive',
@@ -492,7 +493,7 @@ export function ChatView({
       { params: { burrow: slug, number: runNumber } },
       {
         onSuccess: (result) => {
-          if (result.status === 'ok') showNotice(retriedNotice(agentName));
+          if (result.status === 'ok') showNotice(retriedNotice(agentName, rawLocale));
           else feedback.onResult(result);
         },
         onError: feedback.onError,
@@ -510,7 +511,7 @@ export function ChatView({
           if (result.status === 'ok') setEditing(null);
           else feedback.onResult(result);
         },
-        onError: (error) => setEditError(errorText(error)),
+        onError: (error) => setEditError(errorText(error, rawLocale)),
       },
     );
   };
@@ -539,7 +540,7 @@ export function ChatView({
         navigation.navigate('Thread', { messageId: m.id, back: backLabel });
         return;
       case 'copy_text':
-        void copyToClipboard(m.text, COPIED_TEXT.text);
+        void copyToClipboard(m.text, copiedText(rawLocale).text, rawLocale);
         return;
       case 'share':
       case 'share_from':
@@ -553,7 +554,7 @@ export function ChatView({
         return;
       case 'copy_link': {
         const url = linkOf(m);
-        if (url) void copyToClipboard(url, COPIED_TEXT.link);
+        if (url) void copyToClipboard(url, copiedText(rawLocale).link, rawLocale);
         return;
       }
       case 'edit':
@@ -565,9 +566,9 @@ export function ChatView({
         pin.mutate({ messageId: m.id, pinned: action.kind === 'pin' });
         return;
       case 'delete': {
-        const confirm = deleteConfirm(m, viewer.id, people.name(m.authorId));
+        const confirm = deleteConfirm(m, viewer.id, people.name(m.authorId), rawLocale);
         Alert.alert(confirm.title, confirm.body, [
-          { text: 'Cancel', style: 'cancel' },
+          { text: tMobile('screens2.common.cancel'), style: 'cancel' },
           {
             text: confirm.cta,
             style: 'destructive',
@@ -617,8 +618,9 @@ export function ChatView({
       features: { edit: true, pins: true, link: canLink },
       share: shareable,
       savePrompt,
+      locale: rawLocale,
     }),
-    [threadRootId, canLink, shareable, savePrompt],
+    [threadRootId, canLink, shareable, savePrompt, rawLocale],
   );
   // The assessor's decision (Whombat FB-32): a pick runs its action as the viewer; the card follows by `message.updated`.
   const decideReport = useApiMutation(api.feedback.decide, {
@@ -646,7 +648,7 @@ export function ChatView({
   const adds = useMemo<AddChoice[]>(
     () => [
       ...(canAttach
-        ? ATTACH_CHOICES.map((c) => ({
+        ? attachChoices(rawLocale).map((c) => ({
             id: c.kind,
             label: c.label,
             hint: c.hint,
@@ -658,15 +660,15 @@ export function ChatView({
         ? [
             {
               id: PROMPTS_ADD,
-              label: PROMPT_WORDS.title,
-              hint: PROMPTS_HINT,
+              label: promptWordsHere.title,
+              hint: promptsHint(rawLocale),
               Icon: SquareSlash,
               symbol: 'slash.circle',
             },
           ]
         : []),
     ],
-    [canAttach, hasPrompts],
+    [canAttach, hasPrompts, promptWordsHere.title, rawLocale],
   );
   // Files are authorized per request: nothing is requested before the session token is known. A managed
   // Whombat streams them through its session into scoped cache files (AP-27).
@@ -692,10 +694,10 @@ export function ChatView({
         else if (threaded && !threadRootId) navigation.navigate('Thread', { messageId, back: backLabel });
         return { ok: result.status === 'ok' };
       } catch (error) {
-        const fields = guideRefusalOf(error)?.fields;
+        const fields = guideRefusalOf(error, rawLocale)?.fields;
         // A form's refusal shows under its fields; `guide_closed` shows nothing (the card is as the server has it).
         if (fields && Object.keys(fields).length) return { ok: false, fields };
-        const text = guideFailureText(error);
+        const text = guideFailureText(error, rawLocale);
         if (text) feedback.onText(text);
         return { ok: false };
       }
@@ -704,7 +706,7 @@ export function ChatView({
   // A camera photo goes up at most 2048px on its longest side, as JPEG (AP-908, `preparePhotos`); the pickers hand over
   // the file as it is (`quality: 1`), so it is encoded once.
   const addPhotos = async (assets: readonly ImagePicker.ImagePickerAsset[]) => {
-    uploads.add(await preparePhotos(assets, new Date()));
+    uploads.add(await preparePhotos(assets, new Date(), rawLocale));
   };
   const pickPhotos = async () => {
     // The system photo picker: no library permission, no EXIF or location asked for.
@@ -728,8 +730,8 @@ export function ChatView({
         permission.canAskAgain
           ? [{ text: 'OK' }]
           : [
-              { text: 'Cancel', style: 'cancel' },
-              { text: 'Open settings', onPress: () => void Linking.openSettings() },
+              { text: tMobile('screens2.common.cancel'), style: 'cancel' },
+              { text: tMobile('screens2.chat.openSettings'), onPress: () => void Linking.openSettings() },
             ],
       );
       return;
@@ -762,8 +764,8 @@ export function ChatView({
   // In a thread, a message whose council or Tasks card moved to the end links to it (card-moves.md CM-07); a room's
   // rows never hold one.
   const cardLinks = useMemo(
-    () => movedCardLinks(threadRootId ? messages : NO_MESSAGES),
-    [threadRootId, messages],
+    () => movedCardLinks(threadRootId ? messages : NO_MESSAGES, rawLocale),
+    [threadRootId, messages, rawLocale],
   );
   // What answers in the Chat (CR-01, AP-2715): the button's state; in a thread its replies say whether it ran fast.
   const threadReplies = useMemo(
@@ -872,12 +874,12 @@ export function ChatView({
     return (rootId: string) => {
       const view = replaceEqualDeep(
         roomShown.current.get(rootId) ?? null,
-        roomWork(threadWork(rootId), workingRoots.has(rootId), roomAgent, roomWords),
+        roomWork(threadWork(rootId), workingRoots.has(rootId), roomAgent, roomWords, rawLocale),
       );
       roomShown.current.set(rootId, view);
       return view;
     };
-  }, [inRoom, threadWork, workingRoots, roomAgent, roomWords]);
+  }, [inRoom, threadWork, workingRoots, roomAgent, roomWords, rawLocale]);
   // Who is at work from each thread and how far along (a council, a checklist, T3 Code), under its replies.
   const roomThreads = roomTop ? (threaded?.threadsById ?? null) : null;
   const handoffsHere = useHandoffs(slug, conversationId, !!roomThreads);
@@ -1171,7 +1173,7 @@ export function ChatView({
     handledAnchor.current = targetKey;
     if (!jumping) anchorDone.current?.();
     if (step.kind === 'missing') {
-      showNotice(ANCHOR_MISSING_TEXT);
+      showNotice(anchorMissingText(rawLocale));
       jumpToEnd();
       return;
     }
@@ -1183,7 +1185,18 @@ export function ChatView({
     const toIt = () => scrollToRow(list.current, { index: step.index, viewPosition: 0.3, animated: false });
     toIt();
     requestAnimationFrame(toIt);
-  }, [target, targetKey, jumping, anchorReady, items, olderToLoad, loadingOlder, pagesLoaded, fetchOlder]);
+  }, [
+    target,
+    targetKey,
+    jumping,
+    anchorReady,
+    items,
+    olderToLoad,
+    loadingOlder,
+    pagesLoaded,
+    fetchOlder,
+    rawLocale,
+  ]);
   // The highlight fades after a moment; then the list follows the end again once the reader gets there.
   useEffect(() => {
     if (!flash) return;
@@ -1599,7 +1612,7 @@ export function ChatView({
           adds={adds}
           onAdd={(id) => {
             if (id === PROMPTS_ADD) return promptsHere?.open();
-            const choice = ATTACH_CHOICES.find((c) => c.kind === id);
+            const choice = attachChoices(rawLocale).find((c) => c.kind === id);
             if (choice) attach(choice.kind);
           }}
           {...(promptsHere ? { above: promptsHere.above } : {})}

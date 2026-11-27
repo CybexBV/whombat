@@ -4,9 +4,16 @@
  * replies” to screen readers; the thread on screen never shows one, since it is being read.
  */
 import type { ChatUnreadResponse } from '@whombat/core';
+import { clientTree } from '../i18n/catalog';
+import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
 
-/** What a thread with something new says to screen readers (its dot shows it to everyone else). */
-export const THREAD_NEW_LABEL = 'New replies';
+/** What a thread with something new says to screen readers (its dot shows it to everyone else), in a locale. */
+export function threadNewLabel(locale?: string | null): string {
+  return clientTree(locale, CHAT_AREA_WORDS).unread.newReplies;
+}
+
+/** What a thread with something new says to screen readers, in English. */
+export const THREAD_NEW_LABEL = threadNewLabel();
 
 const NONE: ReadonlyMap<string, number> = new Map();
 

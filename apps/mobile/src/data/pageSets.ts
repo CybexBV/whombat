@@ -8,25 +8,30 @@ import { PageSetError, type PagesHostMessage, pageFileName, type ReadRange } fro
 import pagesRuntime from '@whombat/client/pages/pages-runtime.js';
 import { type ApplianceSession, type ResourceRef, readResource } from '@whombat/client/session';
 import { type Attachment, formatFileSize, PAGES_DEFAULT_OPEN, type PageSetManifest } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { withPreviewPolicy } from './richPreview';
 import { SHARED_CACHE_DIR } from './sharedCache';
 
 /** What the card and the viewer say. */
-export const PAGES_COPY = {
-  open: 'Open',
-  back: 'Back',
-  download: 'Download',
-  close: 'Close',
-  opening: 'Opening…',
-  failed: 'Couldn’t open these pages.',
-  tryAgain: 'Try again',
-  missing: 'That page isn’t in this set.',
-  openHint: 'Opens the pages',
-} as const;
+export function pagesCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    open: t('data.pageSets.open'),
+    back: t('data.pageSets.back'),
+    download: t('data.pageSets.download'),
+    close: t('data.pageSets.close'),
+    opening: t('data.pageSets.opening'),
+    failed: t('data.pageSets.failed'),
+    tryAgain: t('data.pageSets.tryAgain'),
+    missing: t('data.pageSets.missing'),
+    openHint: t('data.pageSets.openHint'),
+  } as const;
+}
+export const PAGES_COPY = pagesCopy();
 
 /** The card's quiet line: “Pages · 30 MB”. */
-export function pageSetMeta(a: Pick<Attachment, 'size'>): string {
-  return `Pages · ${formatFileSize(a.size)}`;
+export function pageSetMeta(a: Pick<Attachment, 'size'>, locale?: string): string {
+  return mobileTranslator(locale).t('data.pageSets.meta', { size: formatFileSize(a.size) });
 }
 
 /** A file of the set that a link offers to download: “report.pdf · 2.4 MB”. */
@@ -35,8 +40,8 @@ export function pageFileLine(path: string, size: number): string {
 }
 
 /** Where a link out of the set goes: “This link goes to example.com.” */
-export function externalLine(host: string): string {
-  return `This link goes to ${host}.`;
+export function externalLine(host: string, locale?: string): string {
+  return mobileTranslator(locale).t('data.pageSets.external', { host });
 }
 
 /**

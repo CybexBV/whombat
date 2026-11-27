@@ -10,10 +10,11 @@
 
 import {
   removeAsk,
-  SKILL_LIBRARY_TEXT,
   type SkillPanelModel,
   type SkillRow,
+  skillLibraryText,
 } from '@whombat/client/skill-library';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * Whether the phone shows the agent's skills (AP-2360, AP-4967, AP-5273): wherever the agent is known (every Whombat keeps
@@ -24,25 +25,31 @@ export function skillLibraryHere(here: { agent: boolean }): boolean {
 }
 
 /** The phone's words around the shared ones (`SKILL_LIBRARY_TEXT`). */
-export const SKILLS_PHONE_TEXT = {
-  /** Settings' row, the skill screen's back button. */
-  title: 'Skills',
-  loading: 'Loading skills',
-  failed: 'Skills didn’t load.',
-  loadingSkill: 'Loading the skill',
-  skillFailed: 'This skill didn’t load.',
-  gone: 'This skill isn’t there any more.',
-  /** Opened where the phone has no library (no agent yet, a link). */
-  onWeb: 'Skills are on the web, in Settings → Skills.',
-  /** The open skill's switch row. */
-  switchHint: (name: string, agent: string, on: boolean) =>
-    `Switches ${name} ${on ? 'off' : 'on'} for ${agent}`,
-  files: 'FILES',
-  opens: 'Opens the skill',
-  foldHint: (open: boolean) => (open ? 'Hides these skills' : 'Shows these skills'),
-  cancel: 'Cancel',
-  failedChange: 'That didn’t change. Try again in a moment.',
-} as const;
+export function skillsPhoneText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  const S = 'data.skills.';
+  return {
+    /** Settings' row, the skill screen's back button. */
+    title: t(`${S}title`),
+    loading: t(`${S}loading`),
+    failed: t(`${S}failed`),
+    loadingSkill: t(`${S}loadingSkill`),
+    skillFailed: t(`${S}skillFailed`),
+    gone: t(`${S}gone`),
+    /** Opened where the phone has no library (no agent yet, a link). */
+    onWeb: t(`${S}onWeb`),
+    /** The open skill's switch row. */
+    switchHint: (name: string, agent: string, on: boolean) =>
+      t(on ? `${S}switchOff` : `${S}switchOn`, { name, agent }),
+    files: t(`${S}files`),
+    opens: t(`${S}opens`),
+    foldHint: (open: boolean) => t(open ? `${S}hides` : `${S}shows`),
+    cancel: t('data.common.cancel'),
+    failedChange: t(`${S}failedChange`),
+  };
+}
+
+export const SKILLS_PHONE_TEXT = skillsPhoneText();
 
 /**
  * A row's TalkBack words: name, what it does, where it came from when it isn't one of Hermes's own, its status
@@ -78,8 +85,9 @@ export function restoreConfirm(
   panel: Pick<SkillPanelModel, 'name'>,
   removed: boolean,
   agent: string,
+  locale?: string,
 ): SkillConfirm {
-  const T = SKILL_LIBRARY_TEXT;
+  const T = skillLibraryText(locale);
   return {
     ...splitQuestion(removed ? T.restoreRemovedAsk(panel.name, agent) : T.restoreAsk(panel.name)),
     action: T.restore,
@@ -91,11 +99,12 @@ export function restoreConfirm(
 export function removeConfirm(
   panel: Pick<SkillPanelModel, 'name' | 'removeKind'>,
   agent: string,
+  locale?: string,
 ): SkillConfirm | null {
   if (!panel.removeKind) return null;
   return {
-    ...splitQuestion(removeAsk(panel.removeKind, panel.name, agent)),
-    action: SKILL_LIBRARY_TEXT.remove,
+    ...splitQuestion(removeAsk(panel.removeKind, panel.name, agent, locale)),
+    action: skillLibraryText(locale).remove,
     destructive: true,
   };
 }

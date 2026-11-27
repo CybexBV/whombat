@@ -12,80 +12,104 @@ import {
   type Message,
   threadPreview,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { doneWhen } from '../home/time';
+import { clientTree } from '../i18n/catalog';
+import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
 import { canSettle } from './settle';
 import { threadTitle } from './threads';
 
-/** The inbox's words, verbatim. `{agent}` is the assistant's name. */
-export const INBOX_WORDS = {
-  all: 'All',
-  unread: 'Unread',
-  waiting: 'Waiting',
-  /** A row's and an open thread's status while something in it waits for the person. */
-  waitingForYou: 'Waiting for you',
-  /** A row's status while the assistant works on it. */
-  working: 'Working',
-  you: 'You',
-  /** A row's second line under the person's own question before any reply; never a title. */
-  noReply: 'No reply yet',
-  /** A thread's title when its first message has nothing to call it by (a server older than its card titles). */
-  yourMessage: 'Your message',
-  markUnread: 'Mark as unread',
-  markRead: 'Mark as read',
-  markedUnread: 'Marked as unread.',
-  /** Above the first new message of an open thread. */
-  newLine: 'New',
-  /** The filters' group, for screen readers. */
-  show: 'Show',
-  nothingNew: 'Nothing new',
-  nothingNewHint: 'You’ve read every reply.',
-  nothingWaits: 'Nothing waits for you',
-  allSettled: 'All settled',
-  allSettledHint: 'New questions and replies land here.',
-  /** Settings: when threads settle by themselves (CIB-09). */
-  quietChoice: 'Settle threads by themselves',
-  quietChoiceHint: 'Only threads you’ve read, where nothing waits for you.',
-} as const;
+/** The inbox's words in a locale (English when none). `{agent}` is the assistant's name. */
+export function inboxWords(locale?: string | null) {
+  const w = clientTree(locale, CHAT_AREA_WORDS).inbox;
+  return {
+    all: w.all,
+    unread: w.unread,
+    waiting: w.waiting,
+    /** A row's and an open thread's status while something in it waits for the person. */
+    waitingForYou: w.waitingForYou,
+    /** A row's status while the assistant works on it. */
+    working: w.working,
+    you: w.you,
+    /** A row's second line under the person's own question before any reply; never a title. */
+    noReply: w.noReply,
+    /** A thread's title when its first message has nothing to call it by (a server older than its card titles). */
+    yourMessage: w.yourMessage,
+    markUnread: w.markUnread,
+    markRead: w.markRead,
+    markedUnread: w.markedUnread,
+    /** Above the first new message of an open thread. */
+    newLine: w.newLine,
+    /** The filters' group, for screen readers. */
+    show: w.show,
+    nothingNew: w.nothingNew,
+    nothingNewHint: w.nothingNewHint,
+    nothingWaits: w.nothingWaits,
+    allSettled: w.allSettled,
+    allSettledHint: w.allSettledHint,
+    /** Settings: when threads settle by themselves (CIB-09). */
+    quietChoice: w.quietChoice,
+    quietChoiceHint: w.quietChoiceHint,
+  };
+}
+
+/** The inbox's words, verbatim. */
+export const INBOX_WORDS = inboxWords();
 
 /** “From Dusty”: the second line of a thread someone else started, before any reply. */
-export function fromLine(name: string): string {
-  return `From ${name}`;
+export function fromLine(name: string, locale?: string | null): string {
+  return interpolate(clientTree(locale, CHAT_AREA_WORDS).inbox.fromLine, { name });
 }
 
 /** “Message from Dusty”: a thread's title when its first message has nothing to call it by. */
-export function messageFromTitle(name: string): string {
-  return `Message from ${name}`;
+export function messageFromTitle(name: string, locale?: string | null): string {
+  return interpolate(clientTree(locale, CHAT_AREA_WORDS).inbox.messageFrom, { name });
 }
 
 /** “New replies, 2”: a row's count of new messages for screen readers. */
-export function newCountLabel(n: number): string {
-  return n === 1 ? '1 new message' : `${n} new messages`;
+export function newCountLabel(n: number, locale?: string | null): string {
+  return clientTree(locale, CHAT_AREA_WORDS).inbox.newCount(n);
 }
 
 /* Settling by itself (CIB-09) -------------------------------------------------------------------------------------- */
 
-/** The quiet days people choose from (`Preferences.chat.settleQuietDays`): never, a day, three days, a week. */
-export const SETTLE_QUIET_CHOICES = [
-  { days: null, label: 'Never' },
-  { days: 1, label: 'After 1 day' },
-  { days: 3, label: 'After 3 days' },
-  { days: 7, label: 'After a week' },
-] as const satisfies readonly { days: number | null; label: string }[];
+/** One of the quiet days people choose from. */
+export interface SettleQuietChoice {
+  days: number | null;
+  label: string;
+}
+
+/** The quiet days people choose from (`Preferences.chat.settleQuietDays`), in a locale: never, a day, 3 days, a week. */
+export function settleQuietChoices(locale?: string | null): readonly SettleQuietChoice[] {
+  const q = clientTree(locale, CHAT_AREA_WORDS).inbox.quiet;
+  return [
+    { days: null, label: q.never },
+    { days: 1, label: q.day },
+    { days: 3, label: q.threeDays },
+    { days: 7, label: q.week },
+  ];
+}
+
+/** The quiet days people choose from: never, a day, three days, a week. */
+export const SETTLE_QUIET_CHOICES = settleQuietChoices();
 
 /** The choice to show for stored quiet days: the nearest offered one (a value set elsewhere, 1–90, reads as it). */
-export function quietChoiceOf(days: number | null): (typeof SETTLE_QUIET_CHOICES)[number] {
-  if (days === null) return SETTLE_QUIET_CHOICES[0];
-  let best: (typeof SETTLE_QUIET_CHOICES)[number] = SETTLE_QUIET_CHOICES[1];
-  for (const c of SETTLE_QUIET_CHOICES)
+export function quietChoiceOf(days: number | null, locale?: string | null): SettleQuietChoice {
+  const choices = locale ? settleQuietChoices(locale) : SETTLE_QUIET_CHOICES;
+  const [never, first] = choices as [SettleQuietChoice, SettleQuietChoice];
+  if (days === null) return never;
+  let best = first;
+  for (const c of choices)
     if (c.days !== null && Math.abs(c.days - days) < Math.abs((best.days as number) - days)) best = c;
   return best;
 }
 
 /** “after 3 quiet days”, “after a quiet day”, “after a quiet week”: how a thread settled by itself (`settledMeta`). */
-export function quietDaysWords(days: number): string {
-  if (days === 1) return 'after a quiet day';
-  if (days === 7) return 'after a quiet week';
-  return `after ${days} quiet days`;
+export function quietDaysWords(days: number, locale?: string | null): string {
+  const w = clientTree(locale, CHAT_AREA_WORDS).inbox;
+  if (days === 1) return w.quietDay;
+  if (days === 7) return w.quietWeek;
+  return interpolate(w.quietDays, { days });
 }
 
 /* Rows (CIB-01…CIB-04) --------------------------------------------------------------------------------------------- */
@@ -201,12 +225,14 @@ export interface InboxRowOptions {
   timeZone: string;
   /** The thread open on screen: never shown as new. */
   openRootId?: string | null;
+  /** The person's language (English when none). */
+  locale?: string | null;
 }
 
 function whoOf(id: string, o: InboxRowOptions): string {
-  if (id === o.me) return INBOX_WORDS.you;
+  if (id === o.me) return clientTree(o.locale, CHAT_AREA_WORDS).inbox.you;
   if (id === o.agentId) return o.agentName;
-  return o.nameOf?.(id) || 'Someone';
+  return o.nameOf?.(id) || clientTree(o.locale, CHAT_AREA_WORDS).inbox.someone;
 }
 
 /** The inbox's rows, in the threads' order (newest activity first, as `chats.threads` sends them). */
@@ -215,6 +241,7 @@ export function inboxRows(
   unread: ReadonlyMap<string, number>,
   o: InboxRowOptions,
 ): InboxRow[] {
+  const words = o.locale ? inboxWords(o.locale) : INBOX_WORDS;
   return threads.map((t) => {
     const last = t.last;
     let who: string | null;
@@ -224,16 +251,16 @@ export function inboxRows(
       line = plainLinks(last.text);
     } else if (t.authorId === o.me) {
       who = null;
-      line = t.working ? '' : INBOX_WORDS.noReply;
+      line = t.working ? '' : words.noReply;
     } else {
       who = null;
-      line = fromLine(whoOf(t.authorId, o));
+      line = fromLine(whoOf(t.authorId, o), o.locale);
     }
     // A title names the thread, never its state: a thread that starts with a card is called by the card (the server
     // and `threadOfMessage` put its title in `text`), and only an older server sends nothing at all.
     const title =
       plainLinks(threadTitle(t.text)) ||
-      (t.authorId === o.me ? INBOX_WORDS.yourMessage : messageFromTitle(whoOf(t.authorId, o)));
+      (t.authorId === o.me ? words.yourMessage : messageFromTitle(whoOf(t.authorId, o), o.locale));
     const split = splitRepoTitle(title, t.repo?.name);
     return {
       rootId: t.rootId,
@@ -241,7 +268,7 @@ export function inboxRows(
       title,
       who,
       line,
-      when: doneWhen(t.lastAt, o.now, o.timeZone),
+      when: doneWhen(t.lastAt, o.now, o.timeZone, o.locale),
       unread: t.rootId === o.openRootId ? 0 : (unread.get(t.rootId) ?? 0),
       waiting: !!t.waiting,
       working: t.working,
@@ -303,9 +330,11 @@ export function rowStep(
  */
 export function lastOfMessage(
   m: Pick<Message, 'authorId' | 'text' | 'attachments' | 'createdAt'>,
+  locale?: string | null,
 ): ChatThreadLast | null {
   const line = threadPreview(m.text, CHAT_THREAD_TEXT_MAX);
   const files = m.attachments?.length ?? 0;
-  const text = line ? line : files ? (files === 1 ? 'A file' : `${files} files`) : '';
+  const w = clientTree(locale, CHAT_AREA_WORDS).inbox;
+  const text = line ? line : files ? (files === 1 ? w.aFile : interpolate(w.files, { count: files })) : '';
   return text ? { authorId: m.authorId, text, at: m.createdAt } : null;
 }

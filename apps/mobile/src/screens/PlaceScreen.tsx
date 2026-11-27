@@ -28,8 +28,8 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { listPlaceOfScreen, type PhonePlaceRow } from '../data/places';
-import { parseThingRowPick, RENAME_COPY, thingRowMenu } from '../data/rename';
-import { OVERVIEW_TITLE, type Tab, tabWords } from '../data/shell';
+import { parseThingRowPick, renameCopy, thingRowMenu } from '../data/rename';
+import { overviewTitle, type Tab, tabWords } from '../data/shell';
 import { useLastInPlace, usePlaceLists } from '../data/usePlaceLists';
 import { type ThingRenaming, useThingRename } from '../data/useThingRename';
 import { useI18n } from '../i18n';
@@ -130,6 +130,8 @@ export function PlaceScreen({ navigation, route }: Props) {
     open(row);
   }, [role, beside, last, loading, rows]);
 
+  const overview = overviewTitle(rawLocale);
+  const renameWords = renameCopy(rawLocale);
   const summary = placeSummaryParts(place, rows, rawLocale);
   const empty = !rows.length && !loading;
   return (
@@ -138,8 +140,8 @@ export function PlaceScreen({ navigation, route }: Props) {
         // As the list, back goes to the tabs: it names the tab they show, not the screen this was opened from.
         label={
           role === 'list'
-            ? (tabWords(rawLocale)[lastTab as Tab] ?? OVERVIEW_TITLE)
-            : (route.params?.back ?? OVERVIEW_TITLE)
+            ? (tabWords(rawLocale)[lastTab as Tab] ?? overview)
+            : (route.params?.back ?? overview)
         }
         onPress={goBack}
         right={<PlacesButton current={place} here={words.title} />}
@@ -210,7 +212,7 @@ export function PlaceScreen({ navigation, route }: Props) {
                   selected={isBeside(beside, 'Thing', 'thingId', row.id)}
                   onPress={() => open(row)}
                   menu={target ? { onPick: (id) => pick(row, id), onOpen: () => setMenuFor(row) } : null}
-                  renaming={renameBox(row, name, rename)}
+                  renaming={renameBox(row, name, rename, rawLocale)}
                 />
               );
             })
@@ -229,9 +231,9 @@ export function PlaceScreen({ navigation, route }: Props) {
       </ScrollView>
       {hasNativeMenu ? null : (
         <MenuSheet
-          spec={menuFor ? thingRowMenu(rename.shown(menuFor.id, menuFor.name)) : null}
+          spec={menuFor ? thingRowMenu(rename.shown(menuFor.id, menuFor.name), rawLocale) : null}
           visible={menuFor !== null}
-          label={RENAME_COPY.rowMenu(menuFor ? rename.shown(menuFor.id, menuFor.name) : '')}
+          label={renameWords.rowMenu(menuFor ? rename.shown(menuFor.id, menuFor.name) : '')}
           onClose={() => setMenuFor(null)}
           onPick={(id) => menuFor && pick(menuFor, id)}
         />
@@ -261,16 +263,17 @@ function Summary({ parts }: { parts: readonly PlaceSummaryPart[] }) {
 }
 
 /** The box a row's name turns into while it is renamed, else null. */
-function renameBox(row: PhonePlaceRow, name: string, rename: ThingRenaming): ReactNode {
+function renameBox(row: PhonePlaceRow, name: string, rename: ThingRenaming, locale?: string): ReactNode {
   if (rename.editing !== row.id) return null;
   const target = thingRenameTarget({ id: row.id, name });
   if (!target) return null;
+  const copy = renameCopy(locale);
   return (
     <InlineRename
       value={name}
       maxLength={target.max}
-      label={RENAME_COPY.label(name)}
-      hint={target.kind === 'server' ? RENAME_COPY.serverHint : undefined}
+      label={copy.label(name)}
+      hint={target.kind === 'server' ? copy.serverHint : undefined}
       onSave={(typed) => rename.save(target, typed)}
       onClose={rename.stop}
       size={15}
@@ -385,7 +388,7 @@ function PlaceListRow({
       // Screen readers can't hold: Rename is the row's own action too.
       {...(menu
         ? {
-            accessibilityActions: [{ name: 'rename', label: RENAME_COPY.rename }],
+            accessibilityActions: [{ name: 'rename', label: renameCopy(rawLocale).rename }],
             onAccessibilityAction: (e: { nativeEvent: { actionName: string } }) =>
               menu.onPick(e.nativeEvent.actionName),
           }
@@ -404,7 +407,7 @@ function PlaceListRow({
   // The menu takes the row's own press (so a hold doesn't open it too): the Touchable is its only child.
   const pressable =
     menu && !renaming ? (
-      <NativeMenu spec={thingRowMenu(name)} onPick={menu.onPick}>
+      <NativeMenu spec={thingRowMenu(name, rawLocale)} onPick={menu.onPick}>
         {body}
       </NativeMenu>
     ) : (

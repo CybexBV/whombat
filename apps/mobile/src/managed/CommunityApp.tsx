@@ -17,9 +17,9 @@ import {
   joinWithLink,
   type KnownAppliance,
   knownSummaries,
-  LINK_TEXT,
   type LocalLinkParts,
   linkErrorText,
+  linkText,
   pairingFingerprint,
 } from '@whombat/client/managed';
 import { type ApplianceSession, type ConnectionState, createSecureSession } from '@whombat/client/session';
@@ -40,7 +40,7 @@ import {
   communityRecord,
   linkAddresses,
   onLocalNetwork,
-  PHONE_COMMUNITY_TEXT,
+  phoneCommunityText,
   readBoxAddress,
   scannedLocalLink,
 } from './community';
@@ -53,8 +53,6 @@ import { ScreenSignInSteps } from './ScreenSignInScreens';
 import { PairScreen } from './screens';
 import { Card, ErrorLine, Field, Frame, Note, Row } from './ui';
 import { useAppUpdate } from './useAppUpdate';
-
-const P = PHONE_COMMUNITY_TEXT;
 
 export type CommunityRoute =
   | { name: 'join'; note?: string | null }
@@ -242,12 +240,14 @@ export function JoinLinkScreen({
   onLink: (link: LocalLinkParts) => void;
   onBack: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
   const t = P.join;
   const [scanning, setScanning] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const go = () => {
-    const read = scannedLocalLink(text);
+    const read = scannedLocalLink(text, rawLocale);
     if ('link' in read) onLink(read.link);
     else setError(read.problem);
   };
@@ -296,7 +296,7 @@ export function JoinLinkScreen({
         closeLabel={t.scanClose}
         escapeLabel={t.pasteInstead}
         onScanned={(scanned) => {
-          const read = scannedLocalLink(scanned);
+          const read = scannedLocalLink(scanned, rawLocale);
           if (!('link' in read)) return t.scanWrong;
           setScanning(false);
           onLink(read.link);
@@ -364,6 +364,8 @@ function LinkJoinFlow({
   onBack: () => void;
   onJoined: (accountId: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
   const { session, reach, retry } = useLinkSession(env, keyPair, link);
   if (!session || reach === 'reaching')
     return (
@@ -397,6 +399,9 @@ function DeviceJoinScreen({
   onBack: () => void;
   onJoined: (accountId: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
+  const linkTextHere = linkText(rawLocale);
   const t = P.device;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -404,10 +409,13 @@ function DeviceJoinScreen({
     setBusy(true);
     setError(null);
     try {
-      const joined = await joinWithLink(session, link, { label: phoneLabel(), platform: PHONE_PLATFORM });
+      const joined = await joinWithLink(session, link, {
+        label: phoneLabel(rawLocale),
+        platform: PHONE_PLATFORM,
+      });
       onJoined(joined.accountId);
     } catch (e) {
-      setError(linkErrorText(e));
+      setError(linkErrorText(e, rawLocale));
       setBusy(false);
     }
   };
@@ -421,7 +429,7 @@ function DeviceJoinScreen({
     >
       <ErrorLine text={error} />
       <Button
-        label={busy ? LINK_TEXT.device.joining : LINK_TEXT.device.join}
+        label={busy ? linkTextHere.device.joining : linkTextHere.device.join}
         size="lg"
         busy={busy}
         onPress={() => void add()}
@@ -474,6 +482,8 @@ export function JoinStartScreen({
   onSignIn: () => void;
   onLookAround?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
   const { tClient } = useI18n();
   const t = P.start;
   const [scanning, setScanning] = useState(false);
@@ -548,7 +558,7 @@ export function JoinStartScreen({
         closeLabel={P.join.scanClose}
         escapeLabel={P.join.pasteInstead}
         onScanned={(scanned) => {
-          const read = scannedLocalLink(scanned);
+          const read = scannedLocalLink(scanned, rawLocale);
           if (!('link' in read)) return P.join.scanWrong;
           setScanning(false);
           onLink(read.link);
@@ -579,6 +589,8 @@ function AddressJoinFlow({
   onBack: () => void;
   onJoined: (record: KnownAppliance, accountId: string | null) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
   const t = P.address;
   const [attempt, setAttempt] = useState(0);
   const [found, setFound] = useState<DirectIdentity | 'failed' | null>(null);
@@ -659,6 +671,8 @@ function AddressPair({
   onBack: () => void;
   onJoined: (record: KnownAppliance, accountId: string | null) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const P = phoneCommunityText(rawLocale);
   const [session, setSession] = useState<ApplianceSession | null>(null);
   const [screen, setScreen] = useState(false);
   useEffect(() => {
@@ -694,7 +708,7 @@ function AddressPair({
         device={record.device}
         appliancePeerId={record.peerId}
         clientPeerId={keyPair.peerId}
-        endpoint={{ label: phoneLabel(), platform: PHONE_PLATFORM }}
+        endpoint={{ label: phoneLabel(rawLocale), platform: PHONE_PLATFORM }}
         onBack={() => setScreen(false)}
         onIn={(accountId) => onJoined(record, accountId)}
         onAlready={() => onJoined(record, null)}
@@ -703,7 +717,7 @@ function AddressPair({
   return (
     <PairScreen
       session={session}
-      label={phoneLabel()}
+      label={phoneLabel(rawLocale)}
       platform={PHONE_PLATFORM}
       fingerprint={pairingFingerprint(keyPair.peerId)}
       onApproved={(accountId) => onJoined(record, accountId)}

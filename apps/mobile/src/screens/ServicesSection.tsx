@@ -10,7 +10,8 @@ import type { Agent, AgentService } from '@whombat/core';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useBurrow, useNow } from '../data/BurrowProvider';
-import { SERVICES_TEXT, serviceRows } from '../data/services';
+import { serviceRows, servicesText } from '../data/services';
+import { useI18n, useMobileT } from '../i18n';
 import { useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -19,19 +20,22 @@ import { Button, Section, StatusDot, toneColor } from '../ui/primitives';
 import { showNotice } from './feedback';
 
 /** The server's sentence for a refusal, else “That didn’t work.” */
-function refusal(result: CommitResult<unknown> | null, error?: unknown): string {
-  if (error) return error instanceof ApiError && error.message ? error.message : SERVICES_TEXT.failed;
-  return result?.status === 'blocked' ? result.message : SERVICES_TEXT.failed;
+function refusal(failed: string, result: CommitResult<unknown> | null, error?: unknown): string {
+  if (error) return error instanceof ApiError && error.message ? error.message : failed;
+  return result?.status === 'blocked' ? result.message : failed;
 }
 
 export function ServicesSection({ agent, services }: { agent: Agent; services: readonly AgentService[] }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const copy = servicesText(rawLocale);
   const theme = useTheme();
   const { slug, timeZone } = useBurrow();
   const now = useNow();
   const openUrl = useOpenUrl();
   const stop = useStopService(slug);
   const [problem, setProblem] = useState<string | null>(null);
-  const rows = serviceRows(services, { now, timeZone });
+  const rows = serviceRows(services, { now, timeZone, locale: rawLocale });
 
   const stopNow = (id: string, name: string) => {
     setProblem(null);
@@ -39,23 +43,21 @@ export function ServicesSection({ agent, services }: { agent: Agent; services: r
       { id },
       {
         onSuccess: (result) =>
-          result.status === 'ok' ? showNotice(SERVICES_TEXT.stopped(name)) : setProblem(refusal(result)),
-        onError: (error) => setProblem(refusal(null, error)),
+          result.status === 'ok' ? showNotice(copy.stopped(name)) : setProblem(refusal(copy.failed, result)),
+        onError: (error) => setProblem(refusal(copy.failed, null, error)),
       },
     );
   };
   // Asked first, as on the web: it stays stopped, also after a restart.
   const press = (id: string, name: string) =>
-    Alert.alert(SERVICES_TEXT.stopTitle(name), SERVICES_TEXT.stopBody(agent.name), [
-      { text: SERVICES_TEXT.cancel, style: 'cancel' },
-      { text: SERVICES_TEXT.stop, style: 'destructive', onPress: () => stopNow(id, name) },
+    Alert.alert(copy.stopTitle(name), copy.stopBody(agent.name), [
+      { text: copy.cancel, style: 'cancel' },
+      { text: copy.stop, style: 'destructive', onPress: () => stopNow(id, name) },
     ]);
 
   return (
-    <Section title={SERVICES_TEXT.title}>
-      <CardLine
-        text={rows.length === 0 ? SERVICES_TEXT.empty(agent.name) : SERVICES_TEXT.intro(agent.name)}
-      />
+    <Section title={copy.title}>
+      <CardLine text={rows.length === 0 ? copy.empty(agent.name) : copy.intro(agent.name)} />
       {rows.map((row) => (
         <View
           key={row.id}
@@ -87,16 +89,16 @@ export function ServicesSection({ agent, services }: { agent: Agent; services: r
             <RowButtons>
               {row.url ? (
                 <Button
-                  label={SERVICES_TEXT.open}
+                  label={copy.open}
                   variant="secondary"
-                  accessibilityHint={`Opens ${row.url}`}
+                  accessibilityHint={tMobile('screens2.common.opensUrl', { url: row.url ?? '' })}
                   onPress={() => openUrl(row.url as string)}
                   style={{ paddingHorizontal: 18 }}
                 />
               ) : null}
               {row.canStop ? (
                 <Button
-                  label={SERVICES_TEXT.stop}
+                  label={copy.stop}
                   variant="secondary"
                   disabled={stop.isPending}
                   busy={stop.isPending && stop.variables?.id === row.id}

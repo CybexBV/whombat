@@ -17,7 +17,7 @@ import {
   setSecretBody,
   vaultFormText,
 } from '../data/vaultForm';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { FormField, FormMessage } from '../ui/formField';
@@ -54,6 +54,7 @@ export function ReplaceSecretSheet({
 }
 
 function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () => void }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
   const vaultCopyHere = vaultCopy(rawLocale);
 
@@ -62,7 +63,7 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const setSecret = useVaultWrite(api.vault.setSecret, slug);
-  const model = replaceSecretModel(target.auth);
+  const model = replaceSecretModel(target.auth, rawLocale);
   const [value, setValue] = useState('');
   const [username, setUsername] = useState(model.username);
   const [problems, setProblems] = useState<FieldProblems>({});
@@ -70,7 +71,7 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
 
   const save = async () => {
     if (setSecret.isPending) return;
-    if (!value) return setProblems({ secret: 'Paste the secret.' });
+    if (!value) return setProblems({ secret: tMobile('screens2.vault.pasteSecret') });
     setProblems({});
     setMessage(null);
     try {
@@ -79,7 +80,7 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
         body: setSecretBody(target.auth, value, username),
       });
       if (result.status !== 'ok') {
-        const text = outcomeText(result);
+        const text = outcomeText(result, rawLocale);
         if (text) Alert.alert(text.title, text.body);
         return;
       }
@@ -87,7 +88,7 @@ function ReplaceForm({ target, onClose }: { target: ReplaceTarget; onClose: () =
       showNotice(vaultFormTextHere.secretReplaced);
       onClose();
     } catch (error) {
-      const p = replaceProblemOf(error);
+      const p = replaceProblemOf(error, rawLocale);
       setProblems(p.fields);
       setMessage(p.message);
     }

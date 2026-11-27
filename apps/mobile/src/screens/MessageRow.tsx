@@ -9,7 +9,7 @@
 
 import type { MarkLike } from '@whombat/brand';
 import type { GuideActInput, ThreadStage, WorkLine } from '@whombat/client';
-import { authorStatus, FIND_MY_WATCH_WORDS, jobResultView, wordsUnderCard } from '@whombat/client';
+import { authorStatus, findMyWatchWords, jobResultView, wordsUnderCard } from '@whombat/client';
 import type { Message, Principal, Receipt } from '@whombat/core';
 import { Children, memo, type ReactNode, useCallback, useEffect, useMemo, useRef } from 'react';
 import { type AccessibilityActionEvent, Pressable, View } from 'react-native';
@@ -18,7 +18,7 @@ import { ReplyFace, type ReplyPlace } from '../avatars/ReplyFace';
 import { useBurrowBase, useNowLabel } from '../data/BurrowProvider';
 import type { FileAccess } from '../data/fileAccess';
 import type { GuideWeb } from '../data/guides';
-import { MESSAGE_A11Y_WORDS, messageA11y } from '../data/messageA11y';
+import { messageA11y, messageA11yWords } from '../data/messageA11y';
 import type { MessageSwipe } from '../data/messageActions';
 import {
   type AssessmentCardModel,
@@ -26,11 +26,11 @@ import {
   type ChatItem,
   sentFollowsClock,
   sentLabel,
-  UNREAD_MARKER_TEXT,
+  unreadMarkerText,
 } from '../data/messages';
 import type { NativeMenuSpec } from '../data/nativeMenu';
-import { LOAD_EARLIER_REPLIES, type MovedCardLink, THREAD_PAGE_SIZE } from '../data/threadPages';
-import { SETTLE_COPY } from '../data/threadSettle';
+import { loadEarlierReplies, type MovedCardLink, THREAD_PAGE_SIZE } from '../data/threadPages';
+import { settleCopy } from '../data/threadSettle';
 import type { MessageFileActions } from '../data/useFiles';
 import type { ThreadWorkView } from '../data/working';
 import { useI18n, useMobileT } from '../i18n';
@@ -84,9 +84,6 @@ import { LiveTaskCardView } from '../ui/taskCard';
 import { SettledMark } from '../ui/threadSettle';
 import { CouncilCard } from './CouncilCard';
 import { DelegationCard } from './DelegationCard';
-
-/** The approval card's one button: it opens the approval, where the answers are (server-asks-mobile.md AP-1747). */
-export const APPROVAL_DOOR = 'Review and answer ›';
 
 /** What a row asks of its screen. Stable for the screen's life (`useLatestHandlers`): they run its latest render's. */
 export interface RowHandlers {
@@ -260,6 +257,8 @@ export const MessageRow = memo(function MessageRow({
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const { rawLocale } = useI18n();
+  const findMyWatchWordsHere = findMyWatchWords(rawLocale);
+  const settleCopyHere = useMemo(() => settleCopy(rawLocale), [rawLocale]);
   // “just now” for its first minute, then its time: the row follows the clock only until then.
   const time = useNowLabel(
     (now) => sentLabel(item.sentAt, item.time, now, timeZone, rawLocale),
@@ -281,7 +280,7 @@ export const MessageRow = memo(function MessageRow({
     if (!swipe || !message) return null;
     const spec = menuSpec ? (JSON.parse(menuSpec) as NativeMenuSpec) : null;
     const more: SwipeAction = {
-      label: SETTLE_COPY.more,
+      label: settleCopyHere.more,
       icon: Ellipsis,
       tone: 'neutral',
       run: () => on.openMenu(message),
@@ -290,10 +289,15 @@ export const MessageRow = memo(function MessageRow({
     if (swipe === 'more') return [more];
     const edge: SwipeAction =
       swipe === 'settle'
-        ? { label: SETTLE_COPY.swipe, icon: Check, leaves: true, run: () => on.menuAction(message, 'settle') }
-        : { label: SETTLE_COPY.openAgain, icon: Undo2, run: () => on.menuAction(message, 'open_again') };
+        ? {
+            label: settleCopyHere.swipe,
+            icon: Check,
+            leaves: true,
+            run: () => on.menuAction(message, 'settle'),
+          }
+        : { label: settleCopyHere.openAgain, icon: Undo2, run: () => on.menuAction(message, 'open_again') };
     return [edge, more];
-  }, [swipe, message, menuSpec, on]);
+  }, [swipe, message, menuSpec, on, settleCopyHere]);
 
   // The assessor's card: its options while undecided (on a runtime with `feedback.decisions`), the full assessment folded.
   const assessmentCardProps = (card: AssessmentCardModel | undefined) => {
@@ -307,7 +311,7 @@ export const MessageRow = memo(function MessageRow({
         label: o.label,
         variant: o.recommended ? ('primary' as const) : ('secondary' as const),
         onPress: () => on.decideReport(card.reportId, option),
-        accessibilityHint: `${o.recommended ? 'Recommended. ' : ''}${o.hint}`,
+        accessibilityHint: o.recommended ? tMobile('screens2.message.recommended', { hint: o.hint }) : o.hint,
       })),
     };
   };
@@ -318,7 +322,7 @@ export const MessageRow = memo(function MessageRow({
     if (!run) return {};
     return {
       actions: [
-        { label: 'Watch run', onPress: () => on.openRun(run.runNumber) },
+        { label: tMobile('screens2.message.watchRun'), onPress: () => on.openRun(run.runNumber) },
         ...(run.prNumber !== null
           ? [
               {
@@ -328,17 +332,24 @@ export const MessageRow = memo(function MessageRow({
               },
             ]
           : []),
-        ...(branchRoomId ? [{ label: 'Branch room', onPress: () => on.openConversation(branchRoomId) }] : []),
+        ...(branchRoomId
+          ? [
+              {
+                label: tMobile('screens2.message.branchRoom'),
+                onPress: () => on.openConversation(branchRoomId),
+              },
+            ]
+          : []),
       ],
       ...(run.retry
         ? {
             buttons: [
               {
-                label: 'Try again',
+                label: tMobile('screens2.common.tryAgain'),
                 variant: 'secondary' as const,
                 busy: runRetrying,
                 onPress: () => on.tryRunAgain(run.runNumber, run.agentName),
-                accessibilityHint: `Asks ${run.agentName} to try this run again`,
+                accessibilityHint: tMobile('screens2.chat.retryRunHint', { name: run.agentName }),
               },
             ],
           }
@@ -353,8 +364,8 @@ export const MessageRow = memo(function MessageRow({
     const url = deploy.url;
     return {
       actions: [
-        ...(url ? [{ label: 'Open site', onPress: () => on.openUrl(url) }] : []),
-        { label: 'Deploys', onPress: on.openDeploys },
+        ...(url ? [{ label: tMobile('screens2.message.openSite'), onPress: () => on.openUrl(url) }] : []),
+        { label: tMobile('screens2.message.deploys'), onPress: on.openDeploys },
       ],
     };
   };
@@ -364,7 +375,12 @@ export const MessageRow = memo(function MessageRow({
     const task = card.task;
     if (!task) return {};
     return {
-      actions: [{ label: `Open ${task.server}`, onPress: () => on.openServer(task.serverId, task.server) }],
+      actions: [
+        {
+          label: tMobile('screens2.common.openName', { name: task.server }),
+          onPress: () => on.openServer(task.serverId, task.server),
+        },
+      ],
     };
   };
 
@@ -375,7 +391,7 @@ export const MessageRow = memo(function MessageRow({
     return {
       buttons: [
         {
-          label: FIND_MY_WATCH_WORDS.cancel,
+          label: findMyWatchWordsHere.cancel,
           variant: 'secondary' as const,
           busy: watchCancelling,
           onPress: () =>
@@ -399,7 +415,7 @@ export const MessageRow = memo(function MessageRow({
       action={
         card.planId
           ? {
-              label: 'Open plan',
+              label: tMobile('screens2.message.openPlan'),
               onPress: () => on.openPlan(card.planId ?? ''),
             }
           : undefined
@@ -412,7 +428,10 @@ export const MessageRow = memo(function MessageRow({
       {...(collapse ? { collapse } : {})}
       door={
         card.approvalDoor?.waiting && card.approvalNumber !== null
-          ? { label: APPROVAL_DOOR, onPress: () => on.openApproval(card.approvalNumber ?? 0) }
+          ? {
+              label: tMobile('screens2.message.reviewAnswer'),
+              onPress: () => on.openApproval(card.approvalNumber ?? 0),
+            }
           : null
       }
     />
@@ -510,8 +529,8 @@ export const MessageRow = memo(function MessageRow({
 
   // A job's result (job-result.md): T3 Code's report laid out under its name, in place of the words and their cards.
   const result = useMemo(
-    () => (message && !item.deleted ? jobResultView(message) : null),
-    [message, item.deleted],
+    () => (message && !item.deleted ? jobResultView(message, rawLocale) : null),
+    [message, item.deleted, rawLocale],
   );
   const failed = item.turnFailed;
   const opensThread = env.opensThreads && !!message && !item.sending;
@@ -605,7 +624,11 @@ export const MessageRow = memo(function MessageRow({
       ) : null}
       {settledCard()}
       {offersMore ? (
-        <QuickReplies suggestions={['More detail']} onPick={() => on.askMore(id)} disabled={moreBusy} />
+        <QuickReplies
+          suggestions={[tMobile('screens2.message.moreDetail')]}
+          onPick={() => on.askMore(id)}
+          disabled={moreBusy}
+        />
       ) : null}
       {quick ? <QuickReplies suggestions={quick} onPick={on.pickQuick} disabled={quickBusy} /> : null}
     </>
@@ -618,7 +641,7 @@ export const MessageRow = memo(function MessageRow({
   const bare = env.ownBare && item.mine && !item.deleted;
   const a11y = messageA11y(
     {
-      author: item.showAuthor ? (bare ? MESSAGE_A11Y_WORDS.yours : item.authorName) : null,
+      author: item.showAuthor ? (bare ? messageA11yWords(rawLocale).yours : item.authorName) : null,
       time: item.showAuthor
         ? [item.edited ? `${time} (edited)` : time, item.ranOn?.marked ? item.ranOn.label : null]
             .filter(Boolean)
@@ -632,6 +655,7 @@ export const MessageRow = memo(function MessageRow({
       reply: opensThread,
       settle: swipe === 'settle' || swipe === 'open_again' ? swipe : null,
       more: menu && !!message,
+      locale: rawLocale,
     },
   );
   const a11yActions = [
@@ -720,7 +744,7 @@ export const MessageRow = memo(function MessageRow({
               name={bare ? null : item.authorName}
               time={item.edited ? `${time} (edited)` : time}
               // An automation posts as itself: “Automation” beside its name, its mark for a face (AP-1000).
-              status={author ? authorStatus(author) : null}
+              status={author ? authorStatus(author, rawLocale) : null}
               // What answered the agent's reply in Chat (chat-runtime-android.md AP-2726); a settled thread shown in place
               // says so (chat-settle.md AP-6152).
               after={
@@ -828,7 +852,7 @@ export const MessageRow = memo(function MessageRow({
   const earlierRow =
     earlier !== 'none' ? (
       <LoadEarlierRow
-        label={LOAD_EARLIER_REPLIES}
+        label={loadEarlierReplies(rawLocale)}
         busy={earlier === 'busy'}
         onPress={on.loadEarlier}
         pageSize={THREAD_PAGE_SIZE}
@@ -868,7 +892,7 @@ export const MessageRow = memo(function MessageRow({
       <View style={{ gap: 14 }}>
         {continues ? <ContinueLine /> : null}
         {item.day ? <DayDivider label={item.day} /> : null}
-        {item.unread ? <UnreadLine label={UNREAD_MARKER_TEXT} tone={env.newTone} /> : null}
+        {item.unread ? <UnreadLine label={unreadMarkerText(rawLocale)} tone={env.newTone} /> : null}
         {switched && item.ranOn ? <RunSwitchDivider provider={item.ranOn.provider} text={switched} /> : null}
         {swiped}
         {earlierRow}

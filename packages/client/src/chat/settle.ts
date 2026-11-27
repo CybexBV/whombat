@@ -4,44 +4,53 @@
  * (they are in Settled) and what a settle or Open again does to a cached threads list. Pure; web and phone share it.
  */
 import type { ChatThread, Message, ThreadSettle } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { formatUpdated } from '@whombat/core/text';
 import { ApiError } from '../http/errors';
+import { clientTree } from '../i18n/catalog';
+import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
 import { quietDaysWords } from './inbox';
 import type { ThreadListScope } from './threads';
 
-/** The words of settling (AP-6150…AP-6156), verbatim. */
-export const SETTLE_WORDS = {
-  settleThread: 'Settle',
-  settle: 'Settle',
-  openAgain: 'Open again',
-  /** The room head's button and the list of the room's settled threads it opens (AP-6250). */
-  settled: 'Settled',
-  /** Beside a settled thread's time where it is shown in place. */
-  settledTag: 'Settled',
-  /** That list with nothing in it. */
-  noneSettled: 'Nothing is settled yet.',
-  settledToast: 'Settled.',
-  undo: 'Undo',
-  /** Under a settled thread's reply box. */
-  replyOpens: 'A reply opens it again.',
-  showMore: 'Show more',
-  merged: 'Settled when its pull request merged',
-  /** A thread where the assistant looked into a problem by itself, once the problem went away. */
-  resolved: 'Settled when the problem went away',
-  /** The sidebar's right-click menu of Chat and Feedback (AP-6155). */
-  settleFinished: 'Settle finished threads',
-  /** Feedback's entries in Chat's right-click menu (Feedback has no sidebar row of its own). */
-  openFeedback: 'Open Feedback',
-  feedbackSettled: 'Settled in Feedback',
-  settleFinishedFeedback: 'Settle finished feedback',
-  /** Settings → Profile → CHAT (AP-6156). */
-  chat: 'Chat',
-  quiet: 'Settle quiet threads',
-  quietHint: 'After 3 days without a message',
-  /** Plain words first; the hint names the pull request for the developer who connected GitHub. */
-  mergedSwitch: 'Settle when its code is merged',
-  mergedHint: 'When the pull request a thread asked for is merged on GitHub',
-} as const;
+/** The words of settling (AP-6150…AP-6156), in a locale (English when none). */
+export function settleWords(locale?: string | null) {
+  const w = clientTree(locale, CHAT_AREA_WORDS).settle;
+  return {
+    settleThread: w.settleThread,
+    settle: w.settle,
+    openAgain: w.openAgain,
+    /** The room head's button and the list of the room's settled threads it opens (AP-6250). */
+    settled: w.settled,
+    /** Beside a settled thread's time where it is shown in place. */
+    settledTag: w.settledTag,
+    /** That list with nothing in it. */
+    noneSettled: w.noneSettled,
+    settledToast: w.settledToast,
+    undo: w.undo,
+    /** Under a settled thread's reply box. */
+    replyOpens: w.replyOpens,
+    showMore: w.showMore,
+    merged: w.merged,
+    /** A thread where the assistant looked into a problem by itself, once the problem went away. */
+    resolved: w.resolved,
+    /** The sidebar's right-click menu of Chat and Feedback (AP-6155). */
+    settleFinished: w.settleFinished,
+    /** Feedback's entries in Chat's right-click menu (Feedback has no sidebar row of its own). */
+    openFeedback: w.openFeedback,
+    feedbackSettled: w.feedbackSettled,
+    settleFinishedFeedback: w.settleFinishedFeedback,
+    /** Settings → Profile → CHAT (AP-6156). */
+    chat: w.chat,
+    quiet: w.quiet,
+    quietHint: w.quietHint,
+    /** Plain words first; the hint names the pull request for the developer who connected GitHub. */
+    mergedSwitch: w.mergedSwitch,
+    mergedHint: w.mergedHint,
+  };
+}
+
+/** The words of settling, in English. */
+export const SETTLE_WORDS = settleWords();
 
 /** The quiet days the Settings switch turns on (CHS-12: on = 3, off = never). */
 export const SETTLE_QUIET_DAYS = 3;
@@ -51,28 +60,45 @@ export const SETTLE_UNDO_MS = 5000;
 export const SETTLED_PAGE = 10;
 
 /** The note under Settings' CHAT switches (AP-6156). */
-export function settleNote(agentName: string): string {
-  return `Never while ${agentName} is still working on it or waiting for your answer. A new message opens a thread again.`;
+export function settleNote(agentName: string, locale?: string | null): string {
+  return interpolate(clientTree(locale, CHAT_AREA_WORDS).settle.note, { agentName });
 }
 
 /** What Settle finished threads says when done (AP-6155). */
-export function settleFinishedToast(n: number): string {
-  if (n === 0) return 'Nothing to settle.';
-  return n === 1 ? 'Settled 1 thread.' : `Settled ${n} threads.`;
+export function settleFinishedToast(n: number, locale?: string | null): string {
+  const w = clientTree(locale, CHAT_AREA_WORDS).settle;
+  if (n === 0) return w.nothingToSettle;
+  return w.settledThreads(n);
 }
 
 /**
  * When a thread settled, after “Settled”: “2 hours ago”, “today”, “yesterday”, then “on Monday”, “last week”, “on 3
  * Mar” (core's `formatUpdated`, with “on” before a day or a date so the line reads as a sentence).
  */
-export function settledWhen(at: string, now: Date | number, timeZone: string): string {
-  const when = formatUpdated(at, now, timeZone);
-  return /ago$|^today$|^yesterday$|^just now$|^last week$/.test(when) ? when : `on ${when}`;
+export function settledWhen(
+  at: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const when = formatUpdated(at, now, timeZone, locale);
+  return /ago$|geleden$|^today$|^yesterday$|^just now$|^last week$|^vandaag$|^gisteren$|^zojuist$|^vorige week$/.test(
+    when,
+  )
+    ? when
+    : interpolate(clientTree(locale, CHAT_AREA_WORDS).settle.onWhen, { when });
 }
 
 /** “Settled 2 hours ago”: the line of a settled thread that is open (AP-6154) and a `person` row's meta. */
-export function settledLine(at: string, now: Date | number, timeZone: string): string {
-  return `Settled ${settledWhen(at, now, timeZone)}`;
+export function settledLine(
+  at: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  return interpolate(clientTree(locale, CHAT_AREA_WORDS).settle.settledLine, {
+    when: settledWhen(at, now, timeZone, locale),
+  });
 }
 
 /**
@@ -85,24 +111,28 @@ export function settledMeta(
   now: Date | number,
   timeZone: string,
   quietDays: number | null,
+  locale?: string | null,
 ): string {
-  if (settled.how === 'quiet') return `Settled by itself ${quietDaysWords(quietDays ?? SETTLE_QUIET_DAYS)}`;
-  if (settled.how === 'merged') return SETTLE_WORDS.merged;
-  if (settled.how === 'resolved') return SETTLE_WORDS.resolved;
-  return settledLine(settled.at, now, timeZone);
+  const w = clientTree(locale, CHAT_AREA_WORDS).settle;
+  if (settled.how === 'quiet')
+    return interpolate(w.byItself, { words: quietDaysWords(quietDays ?? SETTLE_QUIET_DAYS, locale) });
+  if (settled.how === 'merged') return w.merged;
+  if (settled.how === 'resolved') return w.resolved;
+  return settledLine(settled.at, now, timeZone, locale);
 }
 
 /**
  * Why a settle or Open again didn't happen, as a toast (AP-6151): the server's own words when it refused (“Neo is still
  * working on this.”, “This thread waits for your answer.”, CHS-03), else a plain retry.
  */
-export function settleRefusalText(outcome: unknown, settled: boolean): string {
+export function settleRefusalText(outcome: unknown, settled: boolean, locale?: string | null): string {
   if (outcome instanceof ApiError && outcome.status < 500 && outcome.message) return outcome.message;
   if (outcome && typeof outcome === 'object' && 'status' in outcome) {
     const o = outcome as { status: unknown; message?: unknown };
     if (o.status === 'blocked' && typeof o.message === 'string' && o.message) return o.message;
   }
-  return settled ? 'Couldn’t settle the thread. Try again.' : 'Couldn’t open the thread again. Try again.';
+  const w = clientTree(locale, CHAT_AREA_WORDS).settle;
+  return settled ? w.couldntSettle : w.couldntOpen;
 }
 
 /**

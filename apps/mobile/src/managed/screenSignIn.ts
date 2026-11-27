@@ -3,17 +3,24 @@
  * signin-at-box-android.md AP-3531, AP-3532): which letters stay in the field after a step, and where Android's back
  * goes. Pure.
  */
-import { COPY, type ScreenSignInStep, screenSignInStart } from '@whombat/client/managed';
+import { COPY, managedCopyText, type ScreenSignInStep, screenSignInStart } from '@whombat/client/managed';
 
 /**
  * The field after `prev` became `next`: emptied when the box shows other letters than the ones typed — a new code (from
  * “Show a code” or “Show a new code”) or a wrong guess, which turns them — and kept otherwise (a typo the box never shows,
  * the connection, a backoff), so they can be sent again.
  */
-export function lettersAfter(prev: ScreenSignInStep, next: ScreenSignInStep, typed: string): string {
+export function lettersAfter(
+  prev: ScreenSignInStep,
+  next: ScreenSignInStep,
+  typed: string,
+  locale?: string | null,
+): string {
   if (next.kind !== 'letters') return typed;
   if (prev.kind !== 'letters' || next.signinId !== prev.signinId) return '';
-  if (next.error === COPY.screen.errors.screen_code_invalid) return '';
+  // The step's error is in the person's language when the flow was given one.
+  const wrong = managedCopyText(locale ?? 'en').screen.errors.screen_code_invalid;
+  if (next.error === COPY.screen.errors.screen_code_invalid || next.error === wrong) return '';
   return typed;
 }
 

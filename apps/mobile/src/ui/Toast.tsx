@@ -11,7 +11,8 @@ import { AccessibilityInfo, Platform, useWindowDimensions, View } from 'react-na
 import { useKeyboardState } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { toastPlacement } from '../data/screenShape';
-import { ACTION_TOAST_MS, TOAST_COPY, toasts } from '../data/toast';
+import { ACTION_TOAST_MS, toastCopy, toasts } from '../data/toast';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { X } from './icons';
@@ -24,6 +25,7 @@ const ABOVE_TAB_BAR = 64;
 
 export function ToastHost() {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
   const insets = useSafeAreaInsets();
   const toast = useSyncExternalStore(toasts.subscribe, toasts.get, toasts.get);
   const shape = useScreenShape();
@@ -56,6 +58,7 @@ export function ToastHost() {
   }, [toast]);
   const stays = !!toast?.action && toasts.stays();
   if (!toast) return null;
+  const copy = toastCopy(rawLocale);
   const at = toastPlacement({
     shape,
     window,
@@ -104,7 +107,7 @@ export function ToastHost() {
             feedback="fade"
             ringRadius={10}
             accessibilityLabel={toast.action.label}
-            accessibilityHint={TOAST_COPY.undoHint(toast.text)}
+            accessibilityHint={copy.undoHint(toast.text)}
             style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 12, justifyContent: 'center' }}
           >
             <Text size={14} weight={700} color={theme.colors.btnfg}>
@@ -117,7 +120,7 @@ export function ToastHost() {
             onPress={() => toasts.dismiss(toast.id)}
             feedback="fade"
             ringRadius={10}
-            accessibilityLabel={TOAST_COPY.dismiss}
+            accessibilityLabel={copy.dismiss}
             style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }}
           >
             <X size={16} color={theme.colors.btnfg} strokeWidth={2} />

@@ -10,7 +10,6 @@
 
 import { HUMAN_TONES, initialsFor } from '@whombat/avatars';
 import {
-  FIND_MY_WORDS,
   type FindMyPersonRow,
   type FindMyRegion,
   findMyBackgroundLine,
@@ -20,6 +19,7 @@ import {
   findMyMapRegion,
   findMyPins,
   findMyView,
+  findMyWords,
   findMyZoom,
   hostErrorInfo,
   macScreenView,
@@ -50,6 +50,7 @@ const toneOf = (p: Pick<FindMyPersonRow, 'tone'>) => HUMAN_TONES[p.tone] ?? HUMA
 /** The tab of the Find My connection whose Mac is `serverId`: the Mac's page first, for its screen's switches. */
 export function FindMyPart({ serverId }: { serverId: string }) {
   const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
 
   const { slug } = useBurrowBase();
   const now = useNow().getTime();
@@ -60,7 +61,7 @@ export function FindMyPart({ serverId }: { serverId: string }) {
   return q.error ? (
     <ErrorState text={hostErrorInfo(q.error, rawLocale).message} onRetry={() => void q.refetch()} />
   ) : (
-    <CardSkeletons label={FIND_MY_WORDS.title} count={2} />
+    <CardSkeletons label={findMyWordsHere.title} count={2} />
   );
 }
 
@@ -76,12 +77,14 @@ function FindMyRead({
   now: number;
 }) {
   const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
 
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const clock = useNowStore();
   // The person may change their own servers; the server's switches decide the rest.
-  const screen = macScreenView(detail, { name: serverName, owner: true, now })?.screen ?? null;
+  const screen =
+    macScreenView(detail, { name: serverName, owner: true, now, locale: rawLocale })?.screen ?? null;
   // The app's clock, which is the demo world's own in the demo.
   const tab = useFindMyTab({
     burrow: slug,
@@ -91,7 +94,7 @@ function FindMyRead({
   });
   const [exactFor, setExactFor] = useState<FindMyPersonRow | null>(null);
   if (!screen) return null;
-  const view = findMyView(tab.state, { name: serverName, now, screen });
+  const view = findMyView(tab.state, { name: serverName, now, screen, locale: rawLocale });
   const status =
     tab.error && !tab.state
       ? { tone: 'bad' as const, text: hostErrorInfo(tab.error, rawLocale).message }
@@ -99,7 +102,7 @@ function FindMyRead({
 
   return (
     <>
-      <OneCard label={FIND_MY_WORDS.title} meta={view.readLine}>
+      <OneCard label={findMyWordsHere.title} meta={view.readLine}>
         {status ? (
           <View
             accessible
@@ -132,17 +135,17 @@ function FindMyRead({
           />
         ) : null}
         {/* How the box reads while nobody looks: only then, every few minutes, or for an automation. */}
-        {tab.state ? <CardQuiet>{findMyBackgroundLine(tab.state.background)}</CardQuiet> : null}
-        {view.anyLocated ? <CardQuiet>{FIND_MY_WORDS.note}</CardQuiet> : null}
+        {tab.state ? <CardQuiet>{findMyBackgroundLine(tab.state.background, rawLocale)}</CardQuiet> : null}
+        {view.anyLocated ? <CardQuiet>{findMyWordsHere.note}</CardQuiet> : null}
         <View style={{ flexDirection: 'row', padding: 14, paddingTop: view.anyLocated ? 0 : 4 }}>
           <Button
-            label={FIND_MY_WORDS.readAgain}
+            label={findMyWordsHere.readAgain}
             variant="secondary"
             disabled={!view.canRead}
             busy={tab.asking}
             onPress={() =>
               void tab.readNow().then((problem) => {
-                if (problem) showFailure(problem);
+                if (problem) showFailure(problem, rawLocale);
               })
             }
             style={{ flexGrow: 1 }}
@@ -151,7 +154,7 @@ function FindMyRead({
       </OneCard>
 
       {view.people.length > 0 || view.empty ? (
-        <OneCard label={FIND_MY_WORDS.people}>
+        <OneCard label={findMyWordsHere.people}>
           {view.empty ? (
             <CardQuiet>{view.empty}</CardQuiet>
           ) : (
@@ -166,7 +169,7 @@ function FindMyRead({
                   void tab.showExactly(p.id).then((problem) => {
                     if (problem) {
                       setExactFor(null);
-                      showFailure(problem);
+                      showFailure(problem, rawLocale);
                     }
                   });
                 }}
@@ -179,7 +182,7 @@ function FindMyRead({
       <Sheet
         visible={!!exactFor}
         onClose={() => setExactFor(null)}
-        label={exactFor ? FIND_MY_WORDS.exactTitle(exactFor.name) : FIND_MY_WORDS.showExactly}
+        label={exactFor ? findMyWordsHere.exactTitle(exactFor.name) : findMyWordsHere.showExactly}
         surface="sf"
       >
         {exactFor ? (
@@ -210,6 +213,8 @@ function PersonRow({
   canShow: boolean;
   onShow: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -226,7 +231,7 @@ function PersonRow({
     >
       <View
         accessible
-        accessibilityLabel={[p.name, p.line, p.nearby ? FIND_MY_WORDS.nearby : null]
+        accessibilityLabel={[p.name, p.line, p.nearby ? findMyWordsHere.nearby : null]
           .filter(Boolean)
           .join(', ')}
         style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}
@@ -247,7 +252,7 @@ function PersonRow({
                 }}
               >
                 <Text size={11.5} weight={500} color={theme.colors.ok}>
-                  {FIND_MY_WORDS.nearby}
+                  {findMyWordsHere.nearby}
                 </Text>
               </View>
             ) : null}
@@ -259,11 +264,11 @@ function PersonRow({
       </View>
       {p.placed ? (
         <Button
-          label={FIND_MY_WORDS.showExactly}
+          label={findMyWordsHere.showExactly}
           variant="secondary"
           disabled={!canShow}
           onPress={onShow}
-          accessibilityLabel={FIND_MY_WORDS.showExactlyLabel(p.name)}
+          accessibilityLabel={findMyWordsHere.showExactlyLabel(p.name)}
         />
       ) : null}
     </View>
@@ -285,6 +290,7 @@ function FindMyMap({
   people: readonly FindMyPersonRow[];
 }) {
   const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
 
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -330,7 +336,7 @@ function FindMyMap({
           source={{ uri: `data:image/${shown.map.format};base64,${shown.map.imageB64}` }}
           resizeMode="cover"
           accessible
-          accessibilityLabel={FIND_MY_WORDS.mapAlt(name)}
+          accessibilityLabel={findMyWordsHere.mapAlt(name)}
           style={{ width: '100%', height: '100%', opacity: map.drawing ? 0.75 : 1 }}
         />
       ) : (
@@ -365,7 +371,7 @@ function FindMyMap({
         <Touchable
           feedback="wash"
           ringRadius={12}
-          accessibilityLabel={FIND_MY_WORDS.zoomIn}
+          accessibilityLabel={findMyWordsHere.zoomIn}
           disabled={!drawn || !findMyCanZoom(drawn, 'in')}
           onPress={() => zoom('in')}
           style={control}
@@ -376,7 +382,7 @@ function FindMyMap({
         <Touchable
           feedback="wash"
           ringRadius={12}
-          accessibilityLabel={FIND_MY_WORDS.zoomOut}
+          accessibilityLabel={findMyWordsHere.zoomOut}
           disabled={!drawn || !findMyCanZoom(drawn, 'out')}
           onPress={() => zoom('out')}
           style={control}
@@ -388,7 +394,7 @@ function FindMyMap({
         <Touchable
           feedback="wash"
           ringRadius={999}
-          accessibilityLabel={FIND_MY_WORDS.fit}
+          accessibilityLabel={findMyWordsHere.fit}
           onPress={() => setRegion(null)}
           hitSlop={6}
           style={{
@@ -405,7 +411,7 @@ function FindMyMap({
           }}
         >
           <Text size={13} weight={500}>
-            {FIND_MY_WORDS.fit}
+            {findMyWordsHere.fit}
           </Text>
         </Touchable>
       ) : null}
@@ -474,9 +480,10 @@ function ExactPicture({
   onClose: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const findMyWordsHere = findMyWords(rawLocale);
 
   const theme = useTheme();
-  const view = findMyExactView(state, person.id, server, now);
+  const view = findMyExactView(state, person.id, server, now, rawLocale);
   const picture = useFindMyPicture({ burrow: slug, serverId, state, person: person.id });
   const shot = view.kind === 'ready' ? picture.data : undefined;
   const problem =
@@ -489,7 +496,7 @@ function ExactPicture({
     <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}>
       <View style={{ gap: 4 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-          {FIND_MY_WORDS.exactTitle(person.name)}
+          {findMyWordsHere.exactTitle(person.name)}
         </Text>
         <Text size={13.5} lh={1.4} color={theme.colors.mut} accessibilityLiveRegion="polite">
           {problem ?? view.text}
@@ -513,14 +520,14 @@ function ExactPicture({
             source={{ uri: `data:image/${shot.format};base64,${shot.imageB64}` }}
             resizeMode="cover"
             accessible
-            accessibilityLabel={FIND_MY_WORDS.exactAlt(person.name, server)}
+            accessibilityLabel={findMyWordsHere.exactAlt(person.name, server)}
             style={{ width: '100%', height: '100%' }}
           />
         ) : problem ? null : (
           <ActivityIndicator color={theme.colors.mut} />
         )}
       </View>
-      <Button label={FIND_MY_WORDS.close} variant="secondary" onPress={onClose} />
+      <Button label={findMyWordsHere.close} variant="secondary" onPress={onClose} />
     </View>
   );
 }

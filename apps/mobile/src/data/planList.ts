@@ -4,26 +4,33 @@
  * someone, else the first open one. Pure, so it is unit-tested; the screen renders these.
  */
 import { formatDue, type Plan, planProgress } from '@whombat/core';
-import { PLAN_MARKER_LABELS, PLAN_STATE_TONES, type PlanMarker, type PlanStateTone } from './plan';
+import { mobileTranslator } from '../i18n/translate';
+import { PLAN_STATE_TONES, type PlanMarker, type PlanStateTone, planMarkerLabels } from './plan';
 
 /** Open plans, or every plan (`plans.list`'s `status`). */
 export type PlanListFilter = 'open' | 'all';
 
-export const PLAN_FILTERS: readonly { value: PlanListFilter; label: string }[] = [
-  { value: 'open', label: 'Open' },
-  { value: 'all', label: 'All' },
-];
+export function planFilters(locale?: string): readonly { value: PlanListFilter; label: string }[] {
+  const { t } = mobileTranslator(locale);
+  return [
+    { value: 'open', label: t('data.planList.open') },
+    { value: 'all', label: t('data.planList.all') },
+  ];
+}
+export const PLAN_FILTERS = planFilters();
 
-export const PLANS_EMPTY_TEXT: Record<PlanListFilter, string> = {
-  open: 'No open plans. Make one from a message on the web, or ask your agent for a plan.',
-  all: 'No plans yet. Make one from a message on the web, or ask your agent for a plan.',
-};
+export function plansEmptyText(locale?: string): Record<PlanListFilter, string> {
+  const { t } = mobileTranslator(locale);
+  return { open: t('data.planList.emptyOpen'), all: t('data.planList.emptyAll') };
+}
+export const PLANS_EMPTY_TEXT = plansEmptyText();
 
 /** One conversation's plans, from its menu (work-removal-android.md AP-859). */
-export const PLANS_HERE_EMPTY_TEXT: Record<PlanListFilter, string> = {
-  open: 'No open plans here. Make one from a message on the web, or ask your agent for a plan.',
-  all: 'No plans here yet. Make one from a message on the web, or ask your agent for a plan.',
-};
+export function plansHereEmptyText(locale?: string): Record<PlanListFilter, string> {
+  const { t } = mobileTranslator(locale);
+  return { open: t('data.planList.hereEmptyOpen'), all: t('data.planList.hereEmptyAll') };
+}
+export const PLANS_HERE_EMPTY_TEXT = plansHereEmptyText();
 
 export interface PlanListRow {
   id: string;
@@ -54,16 +61,17 @@ function headline(plan: Plan) {
   );
 }
 
-export function planListRow(plan: Plan, where: string | null): PlanListRow {
+export function planListRow(plan: Plan, where: string | null, locale?: string): PlanListRow {
+  const { t } = mobileTranslator(locale);
   const { done, total } = planProgress(plan);
-  const progress = total === 0 ? 'No steps yet' : `${done} of ${total} done`;
-  const meta = [progress, plan.due ? formatDue(plan.due) : null].filter(Boolean).join(' · ');
+  const progress = total === 0 ? t('data.planList.noSteps') : t('data.messages.doneOf', { done, total });
+  const meta = [progress, plan.due ? formatDue(plan.due, locale) : null].filter(Boolean).join(' · ');
   const step = headline(plan);
   const next = step
     ? {
         title: step.title,
         marker: step.state,
-        markerLabel: PLAN_MARKER_LABELS[step.state],
+        markerLabel: planMarkerLabels(locale)[step.state],
         stateLabel: step.stateLabel,
         tone: PLAN_STATE_TONES[step.state],
       }
@@ -75,7 +83,12 @@ export function planListRow(plan: Plan, where: string | null): PlanListRow {
     where,
     next,
     done: total > 0 && done === total,
-    accessibilityLabel: [plan.title, where, meta, next ? `Next: ${next.title}, ${next.stateLabel}` : null]
+    accessibilityLabel: [
+      plan.title,
+      where,
+      meta,
+      next ? t('data.planList.next', { title: next.title, state: next.stateLabel }) : null,
+    ]
       .filter(Boolean)
       .join('. '),
   };
@@ -85,7 +98,8 @@ export function planListRow(plan: Plan, where: string | null): PlanListRow {
 export function planListRows(
   plans: readonly Plan[],
   whereOf: (conversationId: string) => string | undefined,
+  locale?: string,
 ): PlanListRow[] {
-  const rows = plans.map((p) => planListRow(p, whereOf(p.conversationId) ?? null));
+  const rows = plans.map((p) => planListRow(p, whereOf(p.conversationId) ?? null, locale));
   return [...rows.filter((r) => !r.done), ...rows.filter((r) => r.done)];
 }

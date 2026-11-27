@@ -16,6 +16,7 @@ import {
 } from '@whombat/client';
 import { useWhombat } from '@whombat/client/react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useI18n } from '../i18n';
 import { expoFileApi } from '../managed/expoFiles';
 import { fileChunkSource } from '../managed/files';
 import { type PickedFile, uploadRetryable } from './attachments';
@@ -25,6 +26,9 @@ const localId = () => `upl_${Date.now().toString(36)}_${(counter++).toString(36)
 
 export function useComposerUploads(burrow: string, conversationId: string | null) {
   const { client } = useWhombat();
+  const { rawLocale } = useI18n();
+  const locale = useRef(rawLocale);
+  locale.current = rawLocale;
   const [items, dispatch] = useReducer(uploadsReducer, []);
   // Chips whose failure a retry cannot fix (Remove only).
   const [final, setFinal] = useState<ReadonlySet<string>>(() => new Set());
@@ -59,7 +63,7 @@ export function useComposerUploads(burrow: string, conversationId: string | null
       aborts.current.set(id, controller);
       void (async () => {
         // Chunks read by offset through the session (AP-13).
-        const source = fileChunkSource(expoFileApi, file);
+        const source = fileChunkSource(expoFileApi, file, locale.current);
         try {
           const attachment = await uploadFile(client, {
             burrow,
@@ -73,7 +77,7 @@ export function useComposerUploads(burrow: string, conversationId: string | null
         } catch (err) {
           if (err instanceof UploadError && err.cancelled) return;
           markFinal(id, !uploadRetryable(err));
-          dispatch({ type: 'failed', localId: id, error: uploadErrorText(err) });
+          dispatch({ type: 'failed', localId: id, error: uploadErrorText(err, locale.current) });
         } finally {
           source?.close();
           if (aborts.current.get(id) === controller) aborts.current.delete(id);

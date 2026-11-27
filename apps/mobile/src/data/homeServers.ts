@@ -7,25 +7,30 @@
  */
 import { type OverviewServerRow, serverOsLine, serverRows } from '@whombat/client/hosts';
 import { type HostServer, thingId } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ServerFacts } from './places';
 
-export const HOME_SERVERS_COPY = {
-  title: 'Servers',
-  /** “Couldn’t refresh your servers.” */
-  yours: 'your servers',
-  addServer: 'Add a server',
-  addServerLine: 'Whombat puts a small helper on it.',
-  down: 'Servers aren’t reachable right now.',
-  looking: 'Looking for your servers…',
-  opens: 'Opens the server',
-  /** The dashed card after the servers while one ran the install command and waits, in the web's words. */
-  waiting: (n: number) =>
-    n === 1 ? 'A server is waiting to be added' : `${n} servers are waiting to be added`,
-  waitingLine: 'It ran the install command. Add it, or turn it away if you don’t know it.',
-  review: 'Review',
-  /** The word Search shows for a server that runs fine. */
-  running: 'Running',
-} as const;
+export function homeServersCopy(locale?: string) {
+  const { t, tp } = mobileTranslator(locale);
+  return {
+    title: t('data.homeServers.title'),
+    /** “Couldn’t refresh your servers.” */
+    yours: t('data.homeServers.yours'),
+    addServer: t('data.homeServers.addServer'),
+    addServerLine: t('data.homeServers.addServerLine'),
+    down: t('data.homeServers.down'),
+    looking: t('data.homeServers.looking'),
+    opens: t('data.homeServers.opens'),
+    /** The dashed card after the servers while one ran the install command and waits, in the web's words. */
+    waiting: (n: number) => tp('data.homeServers.waiting', n),
+    waitingLine: t('data.homeServers.waitingLine'),
+    review: t('data.homeServers.review'),
+    /** The word Search shows for a server that runs fine. */
+    running: t('data.homeServers.running'),
+  };
+}
+
+export const HOME_SERVERS_COPY = homeServersCopy();
 
 /**
  * The rows in groups: a top-level server followed by every server that runs on it (and on those). A live update keeps
@@ -42,15 +47,16 @@ export function serverGroups(rows: readonly OverviewServerRow[]): OverviewServer
 }
 
 /** What Search says of each server: its logo, its system and how it is. */
-export function serverFacts(servers: readonly HostServer[]): ServerFacts[] {
+export function serverFacts(servers: readonly HostServer[], locale?: string): ServerFacts[] {
   const byId = new Map(servers.map((s) => [s.id, s]));
-  return serverRows(servers).map((r) => {
+  const running = homeServersCopy(locale).running;
+  return serverRows(servers, locale).map((r) => {
     const s = byId.get(r.id) as HostServer;
     return {
       thingId: thingId('server', r.id),
       mark: r.mark,
-      osLine: serverOsLine(s),
-      status: r.tone === 'ok' && !r.offline ? HOME_SERVERS_COPY.running : r.statusLabel,
+      osLine: serverOsLine(s, locale),
+      status: r.tone === 'ok' && !r.offline ? running : r.statusLabel,
     };
   });
 }

@@ -11,7 +11,7 @@
  * foreground are injected, so the steps are unit-tested.
  */
 import type { AndroidDownload } from '@whombat/client/managed';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 
 export type InstallFailure = 'network' | 'verify' | 'signature' | 'failed';
 
@@ -155,7 +155,13 @@ export interface InstallView {
 }
 
 /** What the update buttons show for this step; `idleLabel` is “Update” on the card, “Update the app” elsewhere. */
-export function installView(state: InstallState, apk: AndroidDownload, idleLabel: string): InstallView {
+export function installView(
+  state: InstallState,
+  apk: AndroidDownload,
+  idleLabel: string,
+  locale?: string,
+): InstallView {
+  const COPY = managedCopy(locale);
   const s = installStateFor(state, apk);
   switch (s.step) {
     case 'idle':

@@ -16,7 +16,7 @@ import {
   packageOpOf,
   packageRows,
   packageTaskOutcomeText,
-  UPDATES_WORDS,
+  updatesWords,
 } from '@whombat/client/hosts';
 import {
   useHostInspect,
@@ -50,6 +50,7 @@ const INSET = 18;
 
 export function ServerUpdatesScreen({ route, navigation }: Props) {
   const { rawLocale, tClient } = useI18n();
+  const updatesWordsHere = updatesWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const bottomRoom = useBottomRoom();
@@ -119,14 +120,14 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
         onSuccess: (result) => {
           if (result.status !== 'ok') return close();
           close();
-          showNotice(`Restarting ${name}.`);
+          showNotice(tMobile('screens2.updates.restarting', { name }));
         },
         onError: (e) => setError(hostErrorInfo(e, rawLocale).message),
       },
     );
   };
 
-  const rows = list.data?.kind === 'updates' ? packageRows(list.data.items) : [];
+  const rows = list.data?.kind === 'updates' ? packageRows(list.data.items, rawLocale) : [];
   const showLog = () => {
     const t = d?.health?.system?.packageTask;
     if (running && t)
@@ -156,10 +157,10 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
           style={{ gap: 6 }}
           accessible
           accessibilityRole="header"
-          accessibilityLabel={`${UPDATES_WORDS.title} on ${name}`}
+          accessibilityLabel={`${updatesWordsHere.title} on ${name}`}
         >
           <Text size={28} weight={700} tracking={-0.02}>
-            {UPDATES_WORDS.title}
+            {updatesWordsHere.title}
           </Text>
           <Text size={13} mono color={theme.colors.mut} numberOfLines={1}>
             {name}
@@ -172,7 +173,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
             <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-updates')} />
           )
         ) : !view?.available ? (
-          <CardQuiet>{UPDATES_WORDS.noReport}</CardQuiet>
+          <CardQuiet>{updatesWordsHere.noReport}</CardQuiet>
         ) : (
           <>
             <View style={{ gap: 4 }}>
@@ -205,11 +206,11 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
             {view.running || view.install || view.check ? (
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                 {view.running ? (
-                  <Button label={UPDATES_WORDS.showLog} variant="secondary" onPress={showLog} />
+                  <Button label={updatesWordsHere.showLog} variant="secondary" onPress={showLog} />
                 ) : null}
                 {view.install ? (
                   <Button
-                    label={UPDATES_WORDS.install}
+                    label={updatesWordsHere.install}
                     variant="primary"
                     disabled={busy}
                     onPress={() => setSheet('install')}
@@ -217,7 +218,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
                 ) : null}
                 {view.check ? (
                   <Button
-                    label={UPDATES_WORDS.check}
+                    label={updatesWordsHere.check}
                     variant="secondary"
                     busy={busy && sheet === null}
                     disabled={busy}
@@ -227,7 +228,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
               </View>
             ) : null}
             {view.restart.tone === 'warn' ? (
-              <OneCard label={UPDATES_WORDS.restartTitle}>
+              <OneCard label={updatesWordsHere.restartTitle}>
                 <View style={{ paddingHorizontal: 14, paddingBottom: 14, gap: 12 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                     <Dot tone="warn" />
@@ -237,7 +238,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
                   </View>
                   {view.restart.button ? (
                     <Button
-                      label={UPDATES_WORDS.restartNow}
+                      label={updatesWordsHere.restartNow}
                       variant="secondary"
                       onPress={() => setSheet('restart')}
                     />
@@ -246,7 +247,11 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
               </OneCard>
             ) : null}
             <OneCard
-              label={rows.length ? `Waiting · ${rows.length}` : tClient('automations.runStatus.waiting')}
+              label={
+                rows.length
+                  ? tMobile('screens2.updates.waitingCount', { count: rows.length })
+                  : tClient('automations.runStatus.waiting')
+              }
             >
               {!lookOk ? (
                 <CardQuiet>
@@ -270,7 +275,7 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
                   />
                 ))
               ) : (
-                <CardQuiet>{UPDATES_WORDS.nothingWaiting}</CardQuiet>
+                <CardQuiet>{updatesWordsHere.nothingWaiting}</CardQuiet>
               )}
             </OneCard>
           </>
@@ -282,17 +287,17 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
           onClose={() => !busy && close()}
           badge={name}
           tone="warn"
-          title={UPDATES_WORDS.confirmTitle(view.count, name)}
-          body={UPDATES_WORDS.confirmBody(name)}
+          title={updatesWordsHere.confirmTitle(view.count, name)}
+          body={updatesWordsHere.confirmBody(name)}
           busy={busy ? 'install' : null}
           buttons={[
             {
               id: 'install',
-              label: UPDATES_WORDS.install,
+              label: updatesWordsHere.install,
               variant: 'primary',
               onPress: () => void start('install'),
             },
-            { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: close },
+            { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: close },
           ]}
           note={error}
         />
@@ -303,12 +308,12 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
           onClose={() => !restart.isPending && close()}
           badge={name}
           tone="bad"
-          title={`Restart ${name}?`}
-          body={hostPowerBody('host_reboot', hostsThisWhombat(d?.server))}
+          title={tMobile('screens2.guest.restartAsk2', { name })}
+          body={hostPowerBody('host_reboot', hostsThisWhombat(d?.server), rawLocale)}
           busy={restart.isPending ? 'restart' : null}
           buttons={[
-            { id: 'restart', label: 'Restart', variant: 'primary', onPress: reboot },
-            { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: close },
+            { id: 'restart', label: tMobile('screens2.common.restart'), variant: 'primary', onPress: reboot },
+            { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: close },
           ]}
           note={error}
         />
@@ -319,12 +324,12 @@ export function ServerUpdatesScreen({ route, navigation }: Props) {
           serverId={serverId}
           task={log}
           canStop={view?.may === true}
-          title={UPDATES_WORDS.what(packageOpOf(log.type) ?? 'install', name)}
+          title={updatesWordsHere.what(packageOpOf(log.type) ?? 'install', name)}
           body={(t) => {
             const op = packageOpOf(t.type) ?? packageOpOf(log.type) ?? 'install';
-            if (t.status === 'running') return UPDATES_WORDS.running[op];
-            if (t.code === 'busy') return UPDATES_WORDS.busy(name);
-            return packageTaskOutcomeText(op, t.packages, name);
+            if (t.status === 'running') return updatesWordsHere.running[op];
+            if (t.code === 'busy') return updatesWordsHere.busy(name);
+            return packageTaskOutcomeText(op, t.packages, name, rawLocale);
           }}
           onClose={() => setLog(null)}
         />

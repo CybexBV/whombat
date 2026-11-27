@@ -7,9 +7,10 @@
 import {
   HOST_ASKS_FIRST,
   HOST_ASKS_FIRST_DEFAULT,
-  HOST_ASKS_FIRST_WORDS,
   type HostAsksFirst,
+  hostAsksFirstWords,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface ServerAsksRow {
   /** “Asks you first” */
@@ -31,10 +32,11 @@ export function serverAsksRow(input: {
   asksFirst: HostAsksFirst | null | undefined;
   hostsThisWhombat: boolean | null | undefined;
   available: boolean;
+  locale?: string | undefined;
 }): ServerAsksRow | null {
   if (!input.available) return null;
   const value = input.asksFirst ?? HOST_ASKS_FIRST_DEFAULT;
-  const w = HOST_ASKS_FIRST_WORDS;
+  const w = hostAsksFirstWords(input.locale);
   return {
     label: w.label,
     value,
@@ -57,13 +59,19 @@ export function serverAsksChange(
   server: string,
   from: HostAsksFirst,
   to: HostAsksFirst,
+  locale?: string,
 ): ServerAsksStep | null {
   if (from === to) return null;
-  const w = HOST_ASKS_FIRST_WORDS;
+  const w = hostAsksFirstWords(locale);
   return {
     confirm:
       to === 'never'
-        ? { title: w.confirmTitle(server), body: w.confirmBody(server), confirm: w.confirm, cancel: 'Cancel' }
+        ? {
+            title: w.confirmTitle(server),
+            body: w.confirmBody(server),
+            confirm: w.confirm,
+            cancel: mobileTranslator(locale).t('data.common.cancel'),
+          }
         : null,
     toast: w.changed(server, to),
   };

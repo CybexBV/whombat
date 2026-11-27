@@ -20,7 +20,7 @@ import {
   parseRecentEmoji,
   recentAfter,
 } from '../data/reactions';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { STORAGE_KEYS } from '../lib/kv';
 import { secureStore } from '../lib/storage';
 import { Text } from '../theme/Text';
@@ -133,7 +133,9 @@ export function MessageMenuSheet({
               onPress={() => onReact(q.value, !q.mine)}
               feedback="wash"
               ringRadius={22}
-              accessibilityLabel={q.mine ? `Take back ${q.value}` : `React with ${q.value}`}
+              accessibilityLabel={tMobile(q.mine ? 'screens2.menu.takeBack' : 'screens2.menu.react', {
+                value: q.value,
+              })}
               accessibilityState={{ selected: q.mine }}
               style={{
                 width: 44,
@@ -271,9 +273,10 @@ export function EmojiSheet({
   recent: readonly string[];
 }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [query, setQuery] = useState('');
-  const sections = useMemo(() => emojiSections(query, recent), [query, recent]);
+  const sections = useMemo(() => emojiSections(query, recent, rawLocale), [query, recent, rawLocale]);
   // The sheet is its page's width, at most `SHEET_MAX_WIDTH` on a wide one; the grid wrapped across it less its 14dp
   // sides.
   const page = usePageFrame();

@@ -7,8 +7,13 @@
 import type { ChangeEntry } from '@whombat/core';
 import { chatHref } from '@whombat/core';
 import type { UndoChangeResponse } from '@whombat/core/contracts';
+import { interpolate } from '@whombat/core/i18n';
 import { toDate } from '@whombat/core/text';
+import { clientTree } from '../i18n/catalog';
+import { HOME_AREA_WORDS } from '../i18n/messages/chatWork/home';
 import { doneWhen } from './time';
+
+const words = (locale?: string | null) => clientTree(locale, HOME_AREA_WORDS).changes;
 
 export type DoneAction = 'undo' | 'review' | null;
 
@@ -62,8 +67,9 @@ export interface DoneRowsOptions {
 }
 
 /** The words of an Undo request on its row: “Asked Neo to undo this”. */
-export function undoRequestedText(assistantName?: string | null): string {
-  return `Asked ${assistantName?.trim() || 'your agent'} to undo this`;
+export function undoRequestedText(assistantName?: string | null, locale?: string | null): string {
+  const w = words(locale);
+  return interpolate(w.asked, { assistant: assistantName?.trim() || w.yourAgent });
 }
 
 /** The request for a change while it still holds: not undone yet, asked less than `UNDO_REQUEST_HOLD_MS` ago. */
@@ -91,20 +97,22 @@ export type UndoOutcome =
 export function undoOutcome(
   result: Pick<UndoChangeResponse, 'state' | 'approvalNumber' | 'conversationId'>,
   assistantName?: string | null,
+  locale?: string | null,
 ): UndoOutcome {
+  const w = words(locale);
   switch (result.state) {
     case 'undone':
-      return { kind: 'undone', message: 'Undone.' };
+      return { kind: 'undone', message: w.undone };
     case 'asked':
       return {
         kind: 'asked',
-        message: 'Undoing this needs an approval first.',
+        message: w.needsApproval,
         approvalNumber: result.approvalNumber ?? null,
       };
     case 'requested':
       return {
         kind: 'requested',
-        message: `${undoRequestedText(assistantName)}.`,
+        message: `${undoRequestedText(assistantName, locale)}.`,
         href: result.conversationId ? chatHref(result.conversationId) : null,
       };
   }
@@ -114,9 +122,10 @@ export function undoOutcome(
 export function changeBy(
   actor: Pick<ChangeEntry['actor'], 'kind' | 'id' | 'name'>,
   viewerId?: string | null,
+  locale?: string | null,
 ): string | null {
   if (actor.kind !== 'person') return null;
-  return viewerId && actor.id === viewerId ? 'You' : actor.name;
+  return viewerId && actor.id === viewerId ? words(locale).you : actor.name;
 }
 
 /** Whether Undo is still offered: available, and its window (`until`) not over. */
@@ -148,10 +157,10 @@ export function doneRows(
             : null,
       undone: c.undo.state === 'undone',
       href: c.link ?? null,
-      by: changeBy(c.actor, options.viewerId),
+      by: changeBy(c.actor, options.viewerId, options.locale),
       requested: request
         ? {
-            text: undoRequestedText(options.assistantName),
+            text: undoRequestedText(options.assistantName, options.locale),
             href: request.conversationId ? chatHref(request.conversationId) : (c.link ?? null),
           }
         : null,

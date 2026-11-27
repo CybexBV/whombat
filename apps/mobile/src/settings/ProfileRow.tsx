@@ -6,13 +6,14 @@
  */
 
 import { useQueryClient } from '@tanstack/react-query';
-import { AVATAR_COPY, avatarErrorText } from '@whombat/client';
+import { avatarCopy, avatarErrorText } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useWhombat } from '@whombat/client/react';
 import type { Person } from '@whombat/core';
 import { useState } from 'react';
 import { AccessibilityInfo, View } from 'react-native';
 import { PersonAvatar } from '../avatars/Avatars';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -21,6 +22,8 @@ import { pickPhoto } from './photo';
 
 export function ProfileRow({ me, demo }: { me: Person; demo: boolean }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const copy = avatarCopy(rawLocale);
   const { client } = useWhombat();
   const qc = useQueryClient();
   const photos = !demo;
@@ -42,9 +45,9 @@ export function ProfileRow({ me, demo }: { me: Person; demo: boolean }) {
       if (result.status !== 'ok') return;
       // You, in this burrow's bootstrap (the account is everywhere: `person.updated` follows).
       void qc.invalidateQueries({ queryKey: queryKeys.scope('conversations.bootstrap') });
-      say(remove ? AVATAR_COPY.removed : AVATAR_COPY.saved, false);
+      say(remove ? copy.removed : copy.saved, false);
     } catch (error) {
-      say(avatarErrorText(error), true);
+      say(avatarErrorText(error, rawLocale), true);
     } finally {
       setBusy(false);
     }
@@ -59,7 +62,7 @@ export function ProfileRow({ me, demo }: { me: Person; demo: boolean }) {
           // 44dp: the avatar is the touch target to a new photo, with its focus ring.
           <Touchable
             accessibilityRole="button"
-            accessibilityLabel={AVATAR_COPY.change}
+            accessibilityLabel={copy.change}
             accessibilityState={{ disabled: busy }}
             disabled={busy}
             onPress={() => void save(false)}
@@ -84,7 +87,7 @@ export function ProfileRow({ me, demo }: { me: Person; demo: boolean }) {
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: 'row', gap: 8 }}>
             <Button
-              label={AVATAR_COPY.change}
+              label={copy.change}
               variant="secondary"
               busy={busy}
               onPress={() => void save(false)}
@@ -92,7 +95,7 @@ export function ProfileRow({ me, demo }: { me: Person; demo: boolean }) {
             />
             {me.avatarUrl ? (
               <Button
-                label={AVATAR_COPY.remove}
+                label={copy.remove}
                 variant="quiet"
                 disabled={busy}
                 onPress={() => void save(true)}

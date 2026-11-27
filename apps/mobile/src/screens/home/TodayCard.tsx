@@ -11,19 +11,18 @@ import { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import {
-  ARRANGED_PHONE_WORDS,
+  arrangedPhoneWords,
   type TodayMoment,
   todayCounts,
   todayMoments,
   todayShown,
 } from '../../data/overviewArranged';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { openHref } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Touchable } from '../../ui/Touchable';
-
-const W = ARRANGED_PHONE_WORDS;
 
 export function TodayCard({
   overview,
@@ -34,6 +33,8 @@ export function TodayCard({
   onAll: () => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const W = arrangedPhoneWords(rawLocale);
   const { timeZone } = useBurrowBase();
   const now = useNow();
   const assistant = useAgentWords();
@@ -41,8 +42,8 @@ export function TodayCard({
   // The day's moments, read again when the day turns or Home changes (not every second).
   // biome-ignore lint/correctness/useExhaustiveDependencies: `day` stands for `now`
   const moments = useMemo(
-    () => todayMoments(overview, now, timeZone, assistant.name),
-    [overview, day, timeZone, assistant.name],
+    () => todayMoments(overview, now, timeZone, assistant.name, rawLocale),
+    [overview, day, timeZone, assistant.name, rawLocale],
   );
   const [all, setAll] = useState(false);
   if (!moments.length) return null;
@@ -118,6 +119,8 @@ export function TodayCard({
  * 12. One element for a screen reader; a link where it has a place to open.
  */
 function MomentChip({ moment }: { moment: TodayMoment }) {
+  const { rawLocale } = useI18n();
+  const W = arrangedPhoneWords(rawLocale);
   const theme = useTheme();
   const plan = moment.tone === 'plan';
   const dot = moment.tone === 'bad' ? theme.colors.bad : theme.colors.ok;

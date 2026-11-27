@@ -19,7 +19,7 @@
 
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BACKUP_FILE_TEXT } from '@whombat/client';
+import { backupFileText } from '@whombat/client';
 import {
   accountsText,
   ago,
@@ -395,7 +395,7 @@ function ManagedBackups({ route, navigation }: Props) {
               title={managedTextHere.backup[b.state]}
               meta={
                 b.state === 'unprotected'
-                  ? `${managedTextHere.backup.unprotectedMeta} ${backupBlocksText(status) ?? ''}`.trim()
+                  ? `${managedTextHere.backup.unprotectedMeta} ${backupBlocksText(status, rawLocale) ?? ''}`.trim()
                   : [
                       b.lastSuccessAt
                         ? managedTextHere.backup.last(ago(b.lastSuccessAt, rawLocale))
@@ -493,14 +493,15 @@ function BringBackLaterCard({ onPress }: { onPress: () => void }) {
  */
 function BackupFileCard({ onOpen }: { onOpen: () => void }) {
   const { rawLocale } = useI18n();
+  const backupFileTextHere = backupFileText(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
 
   return (
-    <Card label={BACKUP_FILE_TEXT.section}>
+    <Card label={backupFileTextHere.section}>
       <Row
         first
         title={managedCopyHere.backupFile.title}
-        meta={BACKUP_FILE_TEXT.when}
+        meta={backupFileTextHere.when}
         action={
           <Button
             label={managedCopyHere.backupFile.open}

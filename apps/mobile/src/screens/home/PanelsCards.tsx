@@ -5,9 +5,10 @@
  * title, the latest values, a finger picks a moment, the lines, where it came from), under its heading. On a phone each
  * takes the full width, whatever its width on a computer. While the page is arranged each card has its gear.
  */
-import { ARRANGE_WORDS, type OverviewSectionView } from '@whombat/client';
+import { arrangeWords, type OverviewSectionView } from '@whombat/client';
 import type { Widget } from '@whombat/core';
 import { View } from 'react-native';
+import { useI18n } from '../../i18n';
 import { OneCard } from '../../ui/assistant';
 import { WidgetBlock } from '../thing/Panels';
 import { GearButton } from './ArrangedParts';
@@ -24,6 +25,8 @@ export function PanelsCards({
   arranging?: boolean;
   onGear?: (id: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   return (
     <OverviewSection label={view.label} count={view.count} summary={view.summary}>
       <View style={{ gap: 12 }}>
@@ -35,7 +38,7 @@ export function PanelsCards({
                   <WidgetBlock widget={w} first />
                 </View>
                 <View style={{ paddingTop: 12, paddingRight: 12 }}>
-                  <GearButton label={ARRANGE_WORDS.changePin(w.title)} onPress={() => onGear?.(w.id)} />
+                  <GearButton label={arrangeWordsHere.changePin(w.title)} onPress={() => onGear?.(w.id)} />
                 </View>
               </View>
             ) : (

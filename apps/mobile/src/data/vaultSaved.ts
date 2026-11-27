@@ -4,6 +4,7 @@
  * not kept”), each opening its entry. The blanked text itself (`VAULT_BLANKED`, ••••••) is plain text in the message. Pure.
  */
 import { type MessageVaultSave, vaultSavedLine } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface VaultSavedRow {
   key: string;
@@ -15,12 +16,16 @@ export interface VaultSavedRow {
   hint: string;
 }
 
-export function vaultSavedRows(saves: readonly MessageVaultSave[] | null | undefined): VaultSavedRow[] {
+export function vaultSavedRows(
+  saves: readonly MessageVaultSave[] | null | undefined,
+  locale?: string,
+): VaultSavedRow[] {
+  const { t } = mobileTranslator(locale);
   return (saves ?? []).map((s, i) => ({
     key: `${s.entryId}:${s.how}:${i}`,
     entryId: s.entryId,
     name: s.name,
-    text: vaultSavedLine(s),
-    hint: `Opens ${s.name} in your Vault`,
+    text: vaultSavedLine(s, locale),
+    hint: t('data.vaultSaved.hint', { name: s.name }),
   }));
 }

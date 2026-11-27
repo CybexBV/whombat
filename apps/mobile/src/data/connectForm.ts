@@ -10,23 +10,23 @@
 import {
   addressReasonOf,
   addressReasonText,
-  CONNECT_FORM_TEXT,
-  CONNECTION_CONNECT_ERROR_TEXT,
   type ConnectionWords,
   type ConnectProblem,
   connectButtonText,
+  connectFormText,
+  connectionConnectErrorText,
   identifies,
-  NEXTCLOUD_WAIT_TEXT,
   type NextcloudPollStep,
   nextcloudEnds,
   nextcloudPollStep,
+  nextcloudWaitText,
   probedSignIn,
-  SERVICE_LOGIN_WAIT_TEXT,
   type SetupStep,
   type SignInChoice,
   serviceLoginCode,
   serviceLoginEnds,
   serviceLoginPollStep,
+  serviceLoginWaitText,
   setupSteps,
   setupStepTitle,
   switchText,
@@ -70,16 +70,18 @@ export function connectGate(input: {
   status: CatalogEntryStatus | undefined;
   /** False where the app doesn't offer Whombat Link (the iPhone): the secure-address line names Tailscale only. */
   offerLink?: boolean;
+  locale?: string;
 }): string | null {
-  const { entry, status } = input;
+  const { entry, status, locale } = input;
+  const { t } = mobileTranslator(locale);
   if (status?.available === false && status.reason === 'off')
-    return `${entry.name} is turned off on this Whombat.`;
+    return t('data.connectForm.off', { name: entry.name });
   // A link to a tracker nothing here can read: Add a connection doesn't offer it either.
   if (status?.available === false && status.reason === 'no_driver')
-    return `${entry.name} can’t be connected on this Whombat yet.`;
+    return t('data.connectForm.noDriver', { name: entry.name });
   const address = addressReasonOf(status);
-  if (address) return addressReasonText(address, { offerLink: input.offerLink });
-  if (appMissing(entry, status)) return `Set up the ${entry.name} app above first, then connect.`;
+  if (address) return addressReasonText(address, { offerLink: input.offerLink, locale });
+  if (appMissing(entry, status)) return t('data.connectForm.appMissing', { name: entry.name });
   return null;
 }
 
@@ -112,6 +114,7 @@ export function stepHeaders(
     revealed: boolean;
     words: Pick<ConnectionWords, 'mayDoQuestion'>;
     identified: Pick<IdentifyConnectionResponse, 'reachable' | 'catalogId'> | null;
+    locale?: string;
   },
 ): StepHeader[] {
   if (!options.steps) return [];
@@ -120,7 +123,7 @@ export function stepHeaders(
   return open.map((step, i) => ({
     step,
     number: i + 1,
-    title: step === 'access' ? options.words.mayDoQuestion : setupStepTitle(entry, step),
+    title: step === 'access' ? options.words.mayDoQuestion : setupStepTitle(entry, step, options.locale),
     done:
       step === 'where' &&
       !!options.identified?.reachable &&
@@ -130,8 +133,13 @@ export function stepHeaders(
 }
 
 /** The main button: Continue until the address is identified, then the sign-in's own words (the web's). */
-export function submitLabel(entry: CatalogEntry, choice: SignInChoice, revealed: boolean): string {
-  return revealed ? connectButtonText(entry, choice) : CONNECT_FORM_TEXT.continue;
+export function submitLabel(
+  entry: CatalogEntry,
+  choice: SignInChoice,
+  revealed: boolean,
+  locale?: string,
+): string {
+  return revealed ? connectButtonText(entry, choice, locale) : connectFormText(locale).continue;
 }
 
 /** A button a refusal brings (CX-41, CT-313, CS-09): what it does and its words. */
@@ -149,15 +157,17 @@ export function fixButtons(
   problem: ConnectProblem,
   choices: readonly SignInChoice[],
   current = -1,
+  locale?: string,
 ): FixButton[] {
+  const text = connectFormText(locale);
   const out: FixButton[] = [];
-  if (problem.network) out.push({ kind: 'network', label: CONNECT_FORM_TEXT.addNetwork });
+  if (problem.network) out.push({ kind: 'network', label: text.addNetwork });
   if (problem.certificate && entry.fields.some((f) => f.id === 'fingerprint'))
-    out.push({ kind: 'fingerprint', label: CONNECT_FORM_TEXT.useFingerprint });
+    out.push({ kind: 'fingerprint', label: text.useFingerprint });
   if (problem.switchTo) {
     const index = choices.findIndex((c) => c.kind === problem.switchTo);
     if (index >= 0 && index !== current)
-      out.push({ kind: 'switch', label: switchText(problem.switchTo, entry), index });
+      out.push({ kind: 'switch', label: switchText(problem.switchTo, entry, locale), index });
   }
   return out;
 }
@@ -249,26 +259,29 @@ export interface WaitWords {
   failed: string;
 }
 
-export function waitWords(login: PendingLogin): WaitWords {
-  if (login.kind === 'nextcloud')
+export function waitWords(login: PendingLogin, locale?: string): WaitWords {
+  if (login.kind === 'nextcloud') {
+    const w = nextcloudWaitText(locale);
     return {
-      title: NEXTCLOUD_WAIT_TEXT.title,
-      line: NEXTCLOUD_WAIT_TEXT.phone,
-      open: NEXTCLOUD_WAIT_TEXT.open,
-      cancel: NEXTCLOUD_WAIT_TEXT.cancel,
+      title: w.title,
+      line: w.phone,
+      open: w.open,
+      cancel: w.cancel,
       code: null,
-      tooLong: NEXTCLOUD_WAIT_TEXT.tooLong,
-      failed: NEXTCLOUD_WAIT_TEXT.failed,
+      tooLong: w.tooLong,
+      failed: w.failed,
     };
+  }
+  const w = serviceLoginWaitText(locale);
   const value = serviceLoginCode(login.flow);
   return {
-    title: SERVICE_LOGIN_WAIT_TEXT.title(login.name),
-    line: SERVICE_LOGIN_WAIT_TEXT.phone,
-    open: SERVICE_LOGIN_WAIT_TEXT.open(login.name),
-    cancel: SERVICE_LOGIN_WAIT_TEXT.cancel,
-    code: value ? { text: SERVICE_LOGIN_WAIT_TEXT.userCode(login.name), value } : null,
-    tooLong: SERVICE_LOGIN_WAIT_TEXT.tooLong,
-    failed: SERVICE_LOGIN_WAIT_TEXT.failed(login.name),
+    title: w.title(login.name),
+    line: w.phone,
+    open: w.open(login.name),
+    cancel: w.cancel,
+    code: value ? { text: w.userCode(login.name), value } : null,
+    tooLong: w.tooLong,
+    failed: w.failed(login.name),
   };
 }
 
@@ -278,8 +291,14 @@ export function waitEnds(login: PendingLogin, now: number): number {
 }
 
 /** What a poll's answer means for the wait: connected, failed (with why, in the service's name) or ask again. */
-export function waitStep(login: PendingLogin, r: PollNextcloudLoginResponse): NextcloudPollStep {
-  return login.kind === 'nextcloud' ? nextcloudPollStep(r) : serviceLoginPollStep(r, login.name);
+export function waitStep(
+  login: PendingLogin,
+  r: PollNextcloudLoginResponse,
+  locale?: string,
+): NextcloudPollStep {
+  return login.kind === 'nextcloud'
+    ? nextcloudPollStep(r, locale)
+    : serviceLoginPollStep(r, login.name, locale);
 }
 
 /**
@@ -291,16 +310,22 @@ export function opensItself(way: ElsewhereWay): boolean {
 }
 
 /** What a sign-in elsewhere's `connect_error=` means on the entry's form (the web's ConnectPage words); null for none. */
-export function catalogConnectErrorText(code: string | null | undefined): string | null {
+export function catalogConnectErrorText(code: string | null | undefined, locale?: string): string | null {
   if (!code) return null;
-  return CONNECTION_CONNECT_ERROR_TEXT[code as ConnectionConnectError] ?? 'That didn’t connect. Try again.';
+  return (
+    connectionConnectErrorText(locale)[code as ConnectionConnectError] ??
+    mobileTranslator(locale).t('data.connectForm.didntConnect')
+  );
 }
 
-/** What the screens under Connect {Name} and an account's screen are called, for “‹ …” (AP-1711's rule). */
-const SCREEN_WORDS: Record<string, string> = {
-  AddConnection: 'Add a connection',
-  Connections: 'Connections',
-};
+/** What the screens under Connect {Name} and an account's screen are called, for “‹ …”. */
+function screenWords(locale?: string): Record<string, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    AddConnection: t('data.connectForm.addConnection'),
+    Connections: t('data.connectForm.connections'),
+  };
+}
 
 /**
  * The “‹ …” label when a link opened the screen without one: where Back goes — a tab by its name, Add a connection,
@@ -310,25 +335,27 @@ const SCREEN_WORDS: Record<string, string> = {
 export function underLabel(
   under: { name: string; params?: unknown; state?: unknown } | undefined,
   tabWords: Readonly<Record<string, string>>,
+  locale?: string,
 ): string {
-  if (!under) return 'Back';
+  const back = mobileTranslator(locale).t('data.connectForm.back');
+  if (!under) return back;
   if (under.name === 'Tabs') {
     const tabs = under.state as { index?: number; routes?: { name: string }[] } | undefined;
     const tab =
       tabs?.routes?.[tabs.index ?? 0]?.name ?? (under.params as { screen?: string } | undefined)?.screen;
-    return (tab && tabWords[tab]) || 'Back';
+    return (tab && tabWords[tab]) || back;
   }
-  const named = SCREEN_WORDS[under.name];
+  const named = screenWords(locale)[under.name];
   if (named) return named;
   const params = under.params as { title?: unknown; catalogId?: unknown; page?: unknown } | undefined;
   if (under.name === 'Connect' && typeof params?.catalogId === 'string') {
     const entry = catalogEntry(params.catalogId);
-    if (entry) return CONNECT_SCREEN_TEXT.title(entry.name);
+    if (entry) return connectScreenText(locale).title(entry.name);
   }
   if (under.name === 'ConnectAccount' && typeof params?.page === 'string') {
     const entry = catalogEntry(params.page);
     if (entry) return entry.name;
   }
   const title = params?.title;
-  return typeof title === 'string' && title ? title : 'Back';
+  return typeof title === 'string' && title ? title : back;
 }

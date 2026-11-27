@@ -5,12 +5,12 @@
  */
 import {
   handoffMinutes,
-  JOB_RESULT_WORDS,
   type JobPointMark,
   type JobReportPoint,
   type JobResultPoint,
   type JobResultView,
   jobAnswersOf,
+  jobResultWords,
 } from '@whombat/client';
 import { formatClock } from '@whombat/core/text';
 
@@ -65,23 +65,32 @@ export const markedCount = (points: readonly JobResultPoint[], m: JobMarks): num
   jobAnswersOf(points, m.marks).length;
 
 /** What an answered point says in place of its choices; null while it is open. */
-export function answeredLine(p: Pick<JobResultPoint, 'answer'>): string | null {
+export function answeredLine(p: Pick<JobResultPoint, 'answer'>, locale?: string): string | null {
   if (!p.answer) return null;
-  return p.answer.choice ? JOB_RESULT_WORDS.left.chose(p.answer.choice) : JOB_RESULT_WORDS.left.wrote;
+  const left = jobResultWords(locale).left;
+  return p.answer.choice ? left.chose(p.answer.choice) : left.wrote;
 }
 
 /** The line in place of the send bar while T3 Code works on the answers: how many, and for how long. */
-export function sentLine(pending: NonNullable<JobResultView['pending']>, nowMs: number): string {
+export function sentLine(
+  pending: NonNullable<JobResultView['pending']>,
+  nowMs: number,
+  locale?: string,
+): string {
   const at = Date.parse(pending.at);
-  return JOB_RESULT_WORDS.left.sent(pending.answers, handoffMinutes(Number.isNaN(at) ? nowMs : at, nowMs));
+  return jobResultWords(locale).left.sent(
+    pending.answers,
+    handoffMinutes(Number.isNaN(at) ? nowMs : at, nowMs),
+  );
 }
 
 /** The one quiet line once T3 Code is done with the last answers sent: when, at the Whombat's clock, or how it ended. */
 export function doneLine(
   done: NonNullable<JobResultView['done']>,
   timeZone: string,
+  locale?: string,
 ): { text: string; tone: 'ok' | 'bad' | 'quiet' } {
-  const W = JOB_RESULT_WORDS.left;
+  const W = jobResultWords(locale).left;
   if (done.outcome === 'completed') return { text: W.done(formatClock(done.at, timeZone)), tone: 'ok' };
   if (done.outcome === 'failed') return { text: W.problem, tone: 'bad' };
   return { text: W.stopped, tone: 'quiet' };

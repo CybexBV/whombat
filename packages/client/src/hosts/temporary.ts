@@ -4,7 +4,8 @@
  * count, and a quiet “6 temporary machines hidden · Show” row brings them back. Pure.
  */
 import { isTemporaryGuest, type TemporaryFacts } from '@whombat/core';
-import { plural } from './format';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_TEMPORARY_WORDS } from '../i18n/messages/connectionsHosts/hostsBasics';
 
 /**
  * Whether a guest is a temporary machine: an Incus instance outside the `default` project, a CI job's machine, a leased
@@ -24,14 +25,19 @@ export function splitTemporary<T extends GuestFacts>(guests: readonly T[]): { ke
 }
 
 /** The row that brings them back (“6 temporary machines hidden”, then Show or Hide). */
-export const TEMPORARY_WORDS = {
-  hidden: (n: number) => `${plural(n, 'temporary machine')} hidden`,
-  shown: (n: number) => `${plural(n, 'temporary machine')} shown`,
-  show: 'Show',
-  hide: 'Hide',
-  /** What they are, for the row's tooltip and screen readers. */
-  about: 'Build and test machines that come and go by themselves.',
-} as const;
+export function temporaryWords(locale?: string | null) {
+  const w = clientTree(locale, HOSTS_TEMPORARY_WORDS);
+  return {
+    hidden: (n: number) => w.hidden(n),
+    shown: (n: number) => w.shown(n),
+    show: w.show,
+    hide: w.hide,
+    /** What they are, for the row's tooltip and screen readers. */
+    about: w.about,
+  };
+}
+
+export const TEMPORARY_WORDS = temporaryWords('en');
 
 /** The guests a list shows: all of them while the temporary ones are asked for, else the others. */
 export function shownGuests<T extends GuestFacts>(

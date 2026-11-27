@@ -19,9 +19,9 @@
 import {
   handleTheseView,
   keepHereQuestion,
-  LIMIT_WORDS,
   type LimitView,
   limitNow,
+  limitWords,
   noticeGroups,
   overviewWords,
   thingImageInitial,
@@ -54,7 +54,7 @@ import {
 import type { ChartSwatch, HostReadout } from '../../data/hostStatus';
 import { monitoringCopy } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
-import { LINE_PICTURE_WIDTH, SERVICE_COPY } from '../../data/servicePanels';
+import { LINE_PICTURE_WIDTH, serviceCopy } from '../../data/servicePanels';
 import { panelAsk } from '../../data/serviceSettings';
 import { HINGE_GAP, halfWidths, isSlotPage, isStrip, slotColumns } from '../../data/serviceSlots';
 import {
@@ -73,7 +73,7 @@ import {
   thingPageCopy,
 } from '../../data/thingPage';
 import { useAgentWords } from '../../data/useAgent';
-import { useI18n } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { LineChart, Meter, Readout, SmallLine, swatchColor } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -355,7 +355,8 @@ export function Panel({
 }) {
   // A card's Ask (service-settings.md SST-08) in its head, whatever its kind; a settings group draws its own.
   const assistant = useAgentWords().name;
-  const ask = panel.ask && panel.kind !== 'settings' ? panelAsk(panel, assistant) : null;
+  const { rawLocale } = useI18n();
+  const ask = panel.ask && panel.kind !== 'settings' ? panelAsk(panel, assistant, rawLocale) : null;
   const card = <PanelCard panel={panel} ctx={ctx} figures={figures} />;
   if (!ask || !('title' in panel) || !panel.title) return card;
   return (
@@ -489,7 +490,10 @@ function FigureCard({
   const overviewWordsHere = overviewWords(rawLocale);
 
   const theme = useTheme();
-  const tiles = useMemo(() => figureTiles(panel.items, ctx.range), [panel.items, ctx.range]);
+  const tiles = useMemo(
+    () => figureTiles(panel.items, ctx.range, rawLocale),
+    [panel.items, ctx.range, rawLocale],
+  );
   const presses = useMemo(
     () =>
       Object.fromEntries(panel.items.map((k) => [k.key, figurePress(k, figures?.charts ?? null, ctx.tabs)])),
@@ -583,11 +587,14 @@ function FigureCard({
 }
 
 /** What TalkBack adds to a figure that opens its charts, and the close button's words. */
-const FIGURE_WORDS = {
-  opens: 'Shows its charts',
-  closes: 'Hides its charts',
-  close: (label: string) => `Close ${label}`,
-} as const;
+function figureWords(locale?: string | null) {
+  const tr = mobileTranslator(locale);
+  return {
+    opens: tr.t('screens2.panels.opens'),
+    closes: tr.t('screens2.panels.closes'),
+    close: (label: string) => tr.t('screens2.panels.close', { label }),
+  };
+}
 
 function FigureCell({
   tile: t,
@@ -610,6 +617,8 @@ function FigureCell({
   blocks?: boolean;
   onPress: (() => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const figureWordsHere = figureWords(rawLocale);
   const theme = useTheme();
   const color = swatchColor(theme, t.swatch);
   const Chevron = opens ? (open ? ChevronUp : ChevronDown) : ChevronRight;
@@ -699,7 +708,9 @@ function FigureCell({
       feedback="wash"
       accessibilityRole="button"
       accessibilityLabel={t.spoken}
-      accessibilityHint={opens ? (open ? FIGURE_WORDS.closes : FIGURE_WORDS.opens) : (link ?? undefined)}
+      accessibilityHint={
+        opens ? (open ? figureWordsHere.closes : figureWordsHere.opens) : (link ?? undefined)
+      }
       {...(opens ? { accessibilityState: { expanded: open } } : {})}
       style={{ ...style, minHeight: 44 }}
     >
@@ -728,6 +739,8 @@ function OpenFigure({
   shown: HostSeriesRange;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const figureWordsHere = figureWords(rawLocale);
   const theme = useTheme();
   const title = charts.length === 1 ? (charts[0]?.title ?? tile.label) : tile.label;
   return (
@@ -750,7 +763,7 @@ function OpenFigure({
           feedback="fade"
           ringRadius={9}
           accessibilityRole="button"
-          accessibilityLabel={FIGURE_WORDS.close(title)}
+          accessibilityLabel={figureWordsHere.close(title)}
           hitSlop={hitSlopFor(30)}
           style={{
             width: 30,
@@ -794,20 +807,20 @@ function NoticesCard({
   const quiet = ctx.quiet ?? null;
   const agent = useAgentWords();
   const rows = useMemo(
-    () => noticeRows(panel, ctx.tabs, { quiet: !!quiet, askLabel: agent.ask }),
-    [panel, ctx.tabs, quiet, agent.ask],
+    () => noticeRows(panel, ctx.tabs, { quiet: !!quiet, askLabel: agent.ask, locale: rawLocale }),
+    [panel, ctx.tabs, quiet, agent.ask, rawLocale],
   );
   const [open, setOpen] = useState(false);
   const [unfolded, setUnfolded] = useState(false);
   const [menuFor, setMenuFor] = useState<QuietMenuTarget | null>(null);
   // What asks first, every heads-up and the quiet lines folded under one row, uncounted (the web's Worth a look too).
-  const groups = useMemo(() => foldHeadsUps(panel.items), [panel.items]);
-  const asking = useMemo(() => noticeGroups(panel.items).asking, [panel.items]);
+  const groups = useMemo(() => foldHeadsUps(panel.items, rawLocale), [panel.items, rawLocale]);
+  const asking = useMemo(() => noticeGroups(panel.items, rawLocale).asking, [panel.items, rawLocale]);
   const byId = useMemo(() => new Map(rows.map((r) => [r.id, r])), [rows]);
   const pick = (items: readonly { id: string }[]) =>
     items.map((n) => byId.get(n.id)).filter((r): r is NoticeRowView => !!r);
   const { shown, more } = foldNotices(pick(groups.shown), open);
-  const all = handleTheseView(asking, ctx.research, ctx.thing.name, agent.name);
+  const all = handleTheseView(asking, ctx.research, ctx.thing.name, agent.name, rawLocale);
   const handOver = () => {
     if (!all) return;
     if (ctx.onHandle) return ctx.onHandle(all.fallback.question);
@@ -923,6 +936,7 @@ function NoticeLine({
   onMenu: ((row: NoticeRowView) => void) | null;
 }) {
   const { rawLocale } = useI18n();
+  const limitWordsHere = limitWords(rawLocale);
   const monitoringCopyHere = monitoringCopy(rawLocale);
   const quietLineCopyHere = quietLineCopy(rawLocale);
   const thingPageCopyHere = thingPageCopy(rawLocale);
@@ -939,7 +953,7 @@ function NoticeLine({
       ? quietLineMenu(
           row.menu,
           row.line.title,
-          limit ? { label: LIMIT_WORDS.menu, words: limitNow(limit) } : null,
+          limit ? { label: limitWordsHere.menu, words: limitNow(limit, rawLocale) } : null,
         )
       : null;
   const pick = (id: string) => {
@@ -1166,6 +1180,8 @@ function TableRow({
   onButton: (() => void) | null;
   act: ControlActions | null;
 }) {
+  const { rawLocale } = useI18n();
+  const SERVICE_COPY = serviceCopy(rawLocale);
   const theme = useTheme();
   const dotTone = row.dot === 'off' ? null : row.dot;
   const content = (
@@ -1285,7 +1301,8 @@ function TableRow({
 }
 
 function TableCard({ panel, ctx }: { panel: Extract<ThingPagePanel, { kind: 'table' }>; ctx: PanelContext }) {
-  const rows = useMemo(() => tableRows(panel), [panel]);
+  const { rawLocale } = useI18n();
+  const rows = useMemo(() => tableRows(panel, rawLocale), [panel, rawLocale]);
   const { shown, more } = useFirstRows(rows);
   const link = panelLink(panel.link, ctx);
   return (
@@ -1465,10 +1482,11 @@ function PersonBar({ row, initial }: { row: BarRowView; initial: string }) {
 /* List ------------------------------------------------------------------------------------------------------------ */
 
 function ListCard({ panel, ctx }: { panel: Extract<ThingPagePanel, { kind: 'list' }>; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
-  const rows = useMemo(() => listRows(panel, now, timeZone), [panel, now, timeZone]);
+  const rows = useMemo(() => listRows(panel, now, timeZone, rawLocale), [panel, now, timeZone, rawLocale]);
   const { shown, more } = useFirstRows(rows);
   // When any line has a mark, the others keep its room, so the titles line up (a stopped VM beside a running one).
   const marked = rows.some((r) => r.icon || (r.tone && r.tone !== 'info'));
@@ -1534,6 +1552,8 @@ function LineMark({ row, marked }: { row: ListRowView; marked: boolean }) {
  * reaches each.
  */
 function ListLine({ row, ctx, marked }: { row: ListRowView; ctx: PanelContext; marked: boolean }) {
+  const { rawLocale } = useI18n();
+  const SERVICE_COPY = serviceCopy(rawLocale);
   const theme = useTheme();
   // A mark (or its empty room when other lines have one); a picture takes its place.
   const hasMark =
@@ -1690,7 +1710,7 @@ function AccessCard({
   const thingPageCopyHere = thingPageCopy(rawLocale);
 
   const theme = useTheme();
-  const rows = useMemo(() => accessRows(panel), [panel]);
+  const rows = useMemo(() => accessRows(panel, rawLocale), [panel, rawLocale]);
   return (
     <OneCard
       label={panel.title}
@@ -1773,6 +1793,7 @@ function WidgetsCard({
 
 /** A suggestion: a 36dp outlined pill (padded to 44dp) with a plus, that opens the ask sheet. */
 function SuggestionChip({ label, onPress }: { label: string; onPress: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
@@ -1780,7 +1801,7 @@ function SuggestionChip({ label, onPress }: { label: string; onPress: () => void
       feedback="wash"
       ringRadius={18}
       accessibilityLabel={label}
-      accessibilityHint={`Asks to keep ${label.toLowerCase()} on this page`}
+      accessibilityHint={tMobile('screens2.panels.keepHint', { what: label.toLowerCase() })}
       hitSlop={hitSlopFor(36)}
       style={{
         minHeight: 36,

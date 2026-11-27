@@ -5,32 +5,41 @@
  */
 import { ApiError } from '@whombat/client';
 import { type CanvasContentResponse, formatAgo } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ViewContext } from './people';
 
-export const CANVAS_TEXT = {
-  kicker: 'CANVAS',
-  gone: 'This canvas isn’t here any more, or you can’t read it.',
-  loadFailed: 'The canvas didn’t load.',
-  openOnWeb: 'Open on the web',
-  readOnly: 'Read-only on the phone. Edit it on the web.',
-  empty: 'This canvas is empty.',
-} as const;
+export function canvasText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    kicker: t('data.canvas.kicker'),
+    gone: t('data.canvas.gone'),
+    loadFailed: t('data.canvas.loadFailed'),
+    openOnWeb: t('data.canvas.openOnWeb'),
+    readOnly: t('data.canvas.readOnly'),
+    empty: t('data.canvas.empty'),
+  } as const;
+}
+export const CANVAS_TEXT = canvasText();
 
 /** “Started by Toffee · updated 2 h ago”. */
 export function canvasMeta(
   content: Pick<CanvasContentResponse, 'canvas' | 'updatedAt'>,
-  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone'>,
+  ctx: Pick<ViewContext, 'people' | 'now' | 'timeZone' | 'locale'>,
 ): string {
+  const { t } = mobileTranslator(ctx.locale);
   const by = ctx.people.get(content.canvas.provenance.createdById);
-  const updated = `updated ${formatAgo(content.updatedAt, ctx.now, ctx.timeZone)}`;
-  return by ? `Started by ${by.name} · ${updated}` : `${updated.charAt(0).toUpperCase()}${updated.slice(1)}`;
+  const ago = formatAgo(content.updatedAt, ctx.now, ctx.timeZone, ctx.locale);
+  return by
+    ? t('data.canvas.startedBy', { name: by.name, updated: t('data.canvas.updated', { ago }) })
+    : t('data.canvas.updatedAlone', { ago });
 }
 
 /** Why a canvas didn't load: gone (no Try again) or anything else. */
-export function canvasProblem(error: unknown): { text: string; retry: boolean } {
+export function canvasProblem(error: unknown, locale?: string): { text: string; retry: boolean } {
+  const text = canvasText(locale);
   if (error instanceof ApiError && (error.status === 404 || error.status === 403))
-    return { text: CANVAS_TEXT.gone, retry: false };
-  return { text: CANVAS_TEXT.loadFailed, retry: true };
+    return { text: text.gone, retry: false };
+  return { text: text.loadFailed, retry: true };
 }
 
 /**

@@ -21,27 +21,26 @@ import { withBurrow } from '@whombat/client';
 import {
   addressReasonNote,
   addressReasonOf,
-  SETTINGS_CONNECTIONS_TEXT,
   sameNameKeys,
   settingsConnectionGroups,
+  settingsConnectionsText,
 } from '@whombat/client/connections';
 import {
   type Connection as AccountConnection,
-  ALWAYS_ASKS_LABEL,
   CATALOG,
   CATALOG_CATEGORIES,
-  CATALOG_CATEGORY_LABELS,
   type CatalogCategory,
   type CatalogConnectionState,
   type CatalogEntry,
   type CatalogEntryStatus,
-  CONNECTION_ACCESS_LABELS,
-  CONNECTION_TOOL_TIER_LABELS,
   type ConnectionToolTier,
   type ConnectionToolView,
   type ConnectionView,
+  catalogCategoryLabels,
   catalogEntry,
+  connectionAccessLabels,
   connectionHost,
+  connectionToolTierLabels,
   FEEDBACK_THING_ID,
   FOUND_SERVER_ID,
   type GatewayKind,
@@ -49,7 +48,6 @@ import {
   gatewayKindOf,
   isGatewayConnection,
   isVaultSyncConnection,
-  NEW_TOOL_LABEL,
   type Tone,
   thingId,
 } from '@whombat/core';
@@ -65,17 +63,18 @@ import { type AccountPage, isAccountPage } from '../navigation/connectionLinks';
 /* Words ------------------------------------------------------------------------------------------ */
 
 export function connectionsText(locale?: string) {
-  const { t } = mobileTranslator(locale);
+  const { t, tp } = mobileTranslator(locale);
+  const settings = settingsConnectionsText(locale);
   return {
     kicker: t('connections.connectionsText.kicker'),
     title: t('connections.connectionsText.title'),
     /** The same line as the web's Settings → Connections (sidebar-tabs.md). */
-    intro: SETTINGS_CONNECTIONS_TEXT.intro,
+    intro: settings.intro,
     /** The button under the intro, and the Add a connection screen's title (AP-1170). */
     add: t('connections.connectionsText.add'),
-    needsYou: SETTINGS_CONNECTIONS_TEXT.needsYou,
-    accounts: SETTINGS_CONNECTIONS_TEXT.accounts,
-    apps: SETTINGS_CONNECTIONS_TEXT.apps,
+    needsYou: settings.needsYou,
+    accounts: settings.accounts,
+    apps: settings.apps,
     connected: t('connections.connectionsText.connected'),
     nothingConnected: t('connections.connectionsText.nothingConnected'),
     /** A NEEDS YOU row's action word (AP-1171). */
@@ -85,7 +84,7 @@ export function connectionsText(locale?: string) {
     tools: t('connections.connectionsText.tools'),
     noTools: t('connections.connectionsText.noTools'),
     /** The guide's label: “FOR NEO”. */
-    guide: (assistant: string) => `FOR ${assistant.toUpperCase()}`,
+    guide: (assistant: string) => t('data.connections.guide', { name: assistant.toUpperCase() }),
     connection: t('connections.connectionsText.connection'),
     notChecked: t('connections.connectionsText.notChecked'),
     loadFailed: t('connections.connectionsText.loadFailed'),
@@ -95,11 +94,10 @@ export function connectionsText(locale?: string) {
     loadingDetail: t('connections.connectionsText.loadingDetail'),
     truncated: t('connections.connectionsText.truncated'),
     /** GitHub's row: how many of its repositories Whombat works in (the web's overview). */
-    reposOn: (n: number) => (n === 1 ? '1 repository on' : `${n} repositories on`),
+    reposOn: (n: number) => tp('data.connections.reposOn', n),
     /** Website feedback's row: its one site's name, else how many. */
-    sites: (n: number) => (n === 1 ? '1 site' : `${n} sites`),
-    reports: (n: number) =>
-      n === 0 ? 'No reports in the last 24 h' : `${n} ${n === 1 ? 'report' : 'reports'} in the last 24 h`,
+    sites: (n: number) => tp('data.connections.sites', n),
+    reports: (n: number) => (n === 0 ? t('data.connections.noReports') : tp('data.connections.reports', n)),
     /** Website feedback's state when it's fine: it takes reports. */
     on: t('connections.connectionsText.on'),
   } as const;
@@ -168,11 +166,16 @@ export interface ConnectionState {
   label: string;
 }
 
-export const CONNECTION_STATES: Record<CatalogConnectionState, ConnectionState> = {
-  active: { tone: 'ok', label: 'Connected' },
-  needs_reauth: { tone: 'warn', label: 'Needs you to sign in again' },
-  error: { tone: 'bad', label: 'Needs attention' },
-};
+export function connectionStates(locale?: string): Record<CatalogConnectionState, ConnectionState> {
+  const { t } = mobileTranslator(locale);
+  return {
+    active: { tone: 'ok', label: t('data.connections.state.active') },
+    needs_reauth: { tone: 'warn', label: t('data.connections.state.needsReauth') },
+    error: { tone: 'bad', label: t('data.connections.state.error') },
+  };
+}
+
+export const CONNECTION_STATES: Record<CatalogConnectionState, ConnectionState> = connectionStates();
 
 /* CONNECTED -------------------------------------------------------------------------------------- */
 
@@ -233,12 +236,12 @@ export function labelName(label: string, address: string | null): string {
     : label;
 }
 
-export function connectedRow(c: ConnectionView, slug: string): ConnectedRow {
+export function connectedRow(c: ConnectionView, slug: string, locale?: string): ConnectedRow {
   const entry = catalogEntry(c.catalogId);
   const meta = connectionMeta(c, entry);
-  const state = CONNECTION_STATES[c.status];
+  const state = connectionStates(locale)[c.status];
   const title = labelName(c.label, meta);
-  const lookOnly = c.status === 'active' && c.access === 'read' ? CONNECTION_ACCESS_LABELS.read : null;
+  const lookOnly = c.status === 'active' && c.access === 'read' ? connectionAccessLabels(locale).read : null;
   return {
     key: `catalog:${c.id}`,
     kind: 'catalog',
@@ -267,9 +270,9 @@ function accountOpens(page: AccountPage, thing: string, pages: boolean): RowOpen
 }
 
 /** Your Google / Microsoft 365 / Email account (CN-04), shown as a connection; it opens its page or its own screen. */
-export function accountRow(a: AccountConnection, slug: string, pages = false): ConnectedRow {
+export function accountRow(a: AccountConnection, slug: string, pages = false, locale?: string): ConnectedRow {
   const title = catalogEntry(a.provider)?.name ?? a.provider;
-  const state = CONNECTION_STATES[a.status];
+  const state = connectionStates(locale)[a.status];
   return {
     key: `account:${a.id}`,
     kind: 'account',
@@ -297,13 +300,15 @@ export function githubRow(
   repos: { connected: boolean; on: number } | null | undefined,
   slug: string,
   pages = false,
+  locale?: string,
 ): ConnectedRow | null {
   const connected = status?.connected ?? repos?.connected ?? false;
   if (!connected) return null;
   const title = catalogEntry('github')?.name ?? 'GitHub';
   const login = status?.login ? `@${status.login}` : null;
-  const state = status?.error ? CONNECTION_STATES.error : CONNECTION_STATES.active;
-  const line = joinLine([login, repos ? CONNECTIONS_TEXT.reposOn(repos.on) : null]);
+  const states = connectionStates(locale);
+  const state = status?.error ? states.error : states.active;
+  const line = joinLine([login, repos ? connectionsText(locale).reposOn(repos.on) : null]);
   return {
     key: 'account:github',
     kind: 'account',
@@ -334,17 +339,18 @@ export function feedbackRow(
     | undefined,
   slug: string,
   pages = false,
+  locale?: string,
 ): ConnectedRow | null {
   const list = integrations ?? [];
   if (!list.length) return null;
-  const title = catalogEntry('feedback')?.name ?? 'Website feedback';
-  const detail =
-    list.length === 1 ? (list[0]?.integration.name ?? null) : CONNECTIONS_TEXT.sites(list.length);
+  const text = connectionsText(locale);
+  const title = catalogEntry('feedback')?.name ?? mobileTranslator(locale).t('data.connections.feedback');
+  const detail = list.length === 1 ? (list[0]?.integration.name ?? null) : text.sites(list.length);
   const reports = list.reduce((n, { health }) => n + health.reportsLast24h, 0);
   const state = list.some(({ health }) => health.warnings.length > 0)
-    ? CONNECTION_STATES.error
-    : { tone: 'ok' as const, label: CONNECTIONS_TEXT.on };
-  const line = joinLine([detail, CONNECTIONS_TEXT.reports(reports)]);
+    ? connectionStates(locale).error
+    : { tone: 'ok' as const, label: text.on };
+  const line = joinLine([detail, text.reports(reports)]);
   return {
     key: 'account:feedback',
     kind: 'account',
@@ -367,6 +373,7 @@ export interface ConnectedExtras {
   pages?: boolean;
   /** GitHub's and Website feedback's rows, when they are connected (`githubRow`, `feedbackRow`). */
   builtins?: readonly (ConnectedRow | null)[];
+  locale?: string;
 }
 
 /**
@@ -381,9 +388,9 @@ export function connectedRows(
 ): ConnectedRow[] {
   const builtins = (extras.builtins ?? []).filter((r): r is ConnectedRow => r !== null);
   return [
-    ...accounts.map((a) => accountRow(a, slug, extras.pages ?? false)),
+    ...accounts.map((a) => accountRow(a, slug, extras.pages ?? false, extras.locale)),
     ...builtins,
-    ...connections.map((c) => connectedRow(c, slug)),
+    ...connections.map((c) => connectedRow(c, slug, extras.locale)),
   ];
 }
 
@@ -416,45 +423,53 @@ export interface ConnectionsOverview {
  * goes to NEEDS YOU, the rest to ACCOUNTS or APPS AND SERVICES, in the server's order. A row needing connecting again
  * says Sign in again; two rows that show the same name and place say so.
  */
-export function connectionsOverview(all: readonly ConnectedRow[]): ConnectionsOverview {
+export function connectionsOverview(all: readonly ConnectedRow[], locale?: string): ConnectionsOverview {
+  const text = connectionsText(locale);
+  const sameName = settingsConnectionsText(locale).sameName;
   const same = sameNameKeys(all.map((r) => ({ key: r.key, name: r.title, address: r.meta })));
-  const rows = all.map((r) =>
-    same.has(r.key) ? { ...r, line: joinLine([r.line, SETTINGS_CONNECTIONS_TEXT.sameName]) } : r,
-  );
+  const rows = all.map((r) => (same.has(r.key) ? { ...r, line: joinLine([r.line, sameName]) } : r));
   const groups = settingsConnectionGroups(
     rows.map((r) => ({ ...r, page: r.catalogId, ok: r.state.tone === 'ok' })),
   );
   const needsYou: NeedsYouRow[] = groups.needsYou.map((row) => ({
     ...row,
-    action:
-      row.state.label === CONNECTION_STATES.needs_reauth.label
-        ? CONNECTIONS_TEXT.connectAgain
-        : CONNECTIONS_TEXT.openRow,
-    reason: joinLine([row.meta, same.has(row.key) ? SETTINGS_CONNECTIONS_TEXT.sameName : null]),
+    // Only a connection that needs signing in again has the warn tone; the others that need you are bad.
+    action: row.state.tone === 'warn' ? text.connectAgain : text.openRow,
+    reason: joinLine([row.meta, same.has(row.key) ? sameName : null]),
   }));
   return {
     needsYou,
     accounts: groups.accounts,
     apps: groups.apps,
-    accountsTitle: `${CONNECTIONS_TEXT.accounts} · ${groups.accounts.length}`,
-    appsTitle: `${CONNECTIONS_TEXT.apps} · ${groups.apps.length}`,
+    accountsTitle: `${text.accounts} · ${groups.accounts.length}`,
+    appsTitle: `${text.apps} · ${groups.apps.length}`,
     empty: all.length === 0,
   };
 }
 
 /** Settings' Connections row (sidebar-tabs.md): what needs the viewer first, else how many are connected. */
-export function connectionsLine(rows: readonly ConnectedRow[]): {
+export function connectionsLine(
+  rows: readonly ConnectedRow[],
+  locale?: string,
+): {
   value: string;
   tone: 'warn' | 'bad' | null;
 } {
+  const { t } = mobileTranslator(locale);
   const off = rows.filter((r) => r.state.tone !== 'ok');
   const first = off[0];
   if (first) {
     const tone = off.some((r) => r.state.tone === 'bad') ? 'bad' : 'warn';
-    return { value: off.length === 1 ? `${first.title} needs you` : `${off.length} need you`, tone };
+    return {
+      value:
+        off.length === 1
+          ? t('data.connections.oneNeedsYou', { name: first.title })
+          : t('data.connections.manyNeedYou', { count: off.length }),
+      tone,
+    };
   }
-  if (rows.length === 0) return { value: CONNECTIONS_TEXT.nothingConnected, tone: null };
-  return { value: `${rows.length} connected`, tone: null };
+  if (rows.length === 0) return { value: connectionsText(locale).nothingConnected, tone: null };
+  return { value: t('data.connections.connectedCount', { count: rows.length }), tone: null };
 }
 
 /* Add a connection (AP-1173…AP-1176) ------------------------------------------------------------------------------- */
@@ -462,7 +477,7 @@ export function connectionsLine(rows: readonly ConnectedRow[]): {
 export function addConnectionText(locale?: string) {
   const { t } = mobileTranslator(locale);
   return {
-    title: CONNECTIONS_TEXT.add,
+    title: connectionsText(locale).add,
     all: t('connections.addConnectionText.all'),
     connected: t('connections.addConnectionText.connected'),
     setUp: t('connections.addConnectionText.setUp'),
@@ -477,13 +492,13 @@ export function addConnectionText(locale?: string) {
 export const ADD_CONNECTION_TEXT = addConnectionText();
 
 /** “Search 31 services”: the field's placeholder and label, with how many entries are offered here. */
-export function addSearchPlaceholder(count: number): string {
-  return `Search ${count} ${count === 1 ? 'service' : 'services'}`;
+export function addSearchPlaceholder(count: number, locale?: string): string {
+  return mobileTranslator(locale).tp('data.connections.search', count);
 }
 
 /** “No connection matches “mail”.” */
-export function addNoMatch(query: string): string {
-  return `No connection matches “${query.trim()}”.`;
+export function addNoMatch(query: string, locale?: string): string {
+  return mobileTranslator(locale).t('data.connections.noMatch', { query: query.trim() });
 }
 
 export interface AvailableRow {
@@ -527,6 +542,7 @@ export interface AddConnectionOptions {
    * mailbox over IMAP; false or absent (an older Whombat, or the status didn't answer) leaves Email (IMAP) out.
    */
   imap?: boolean;
+  locale?: string;
 }
 
 /**
@@ -548,6 +564,8 @@ export function addConnectionRows(
 ): AvailableRow[] {
   const byId = new Map((statuses ?? []).map((s) => [s.catalogId, s]));
   const has = new Set(connected);
+  const locale = options.locale;
+  const text = addConnectionText(locale);
   return CATALOG.flatMap((entry): AvailableRow[] => {
     if (PROVISIONED_CATALOG_IDS.has(entry.id)) return [];
     if (isGatewayConnection(entry) && !options.gateway) return [];
@@ -558,14 +576,14 @@ export function addConnectionRows(
     if (status && !status.available && (status.reason === 'off' || status.reason === 'no_driver')) return [];
     const address = addressReasonOf(status);
     const note = address
-      ? addressReasonNote(address)
+      ? addressReasonNote(address, locale)
       : status && !status.available
-        ? CONNECTIONS_TEXT.notSetUp
+        ? connectionsText(locale).notSetUp
         : null;
     const tag = has.has(entry.id)
-      ? { text: ADD_CONNECTION_TEXT.connected, tone: 'ok' as const }
+      ? { text: text.connected, tone: 'ok' as const }
       : note && !address
-        ? { text: ADD_CONNECTION_TEXT.setUp, tone: 'neutral' as const }
+        ? { text: text.setUp, tone: 'neutral' as const }
         : null;
     return [
       {
@@ -599,10 +617,11 @@ export function addConnectionRows(
 export function matchesConnectionSearch(
   row: Pick<AvailableRow, 'title' | 'description' | 'category'>,
   query: string,
+  locale?: string,
 ): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
-  const text = `${row.title} ${row.description} ${CATALOG_CATEGORY_LABELS[row.category]}`.toLowerCase();
+  const text = `${row.title} ${row.description} ${catalogCategoryLabels(locale)[row.category]}`.toLowerCase();
   return words.every((w) => text.includes(w));
 }
 
@@ -614,12 +633,13 @@ export interface AddChip {
 }
 
 /** The chips (AP-1174): All, then each category with an entry here in the catalog's order, Custom left out (the footer). */
-export function addConnectionChips(rows: readonly AvailableRow[]): AddChip[] {
+export function addConnectionChips(rows: readonly AvailableRow[], locale?: string): AddChip[] {
+  const labels = catalogCategoryLabels(locale);
   return [
-    { value: 'all', label: ADD_CONNECTION_TEXT.all },
+    { value: 'all', label: addConnectionText(locale).all },
     ...CATALOG_CATEGORIES.filter((c) => c !== 'custom' && rows.some((r) => r.category === c)).map((c) => ({
       value: c,
-      label: CATALOG_CATEGORY_LABELS[c],
+      label: labels[c],
     })),
   ];
 }
@@ -632,16 +652,18 @@ export function addConnectionGroups(
   rows: readonly AvailableRow[],
   category: AddCategory,
   query: string,
+  locale?: string,
 ): AvailableGroup[] {
+  const labels = catalogCategoryLabels(locale);
   const searching = query.trim() !== '';
   const shown = rows.filter(
     (r) =>
       (category === 'all' ? r.category !== 'custom' || searching : r.category === category) &&
-      matchesConnectionSearch(r, query),
+      matchesConnectionSearch(r, query, locale),
   );
   return CATALOG_CATEGORIES.flatMap((c) => {
     const list = shown.filter((r) => r.category === c);
-    return list.length ? [{ category: c, title: CATALOG_CATEGORY_LABELS[c].toUpperCase(), rows: list }] : [];
+    return list.length ? [{ category: c, title: labels[c].toUpperCase(), rows: list }] : [];
   });
 }
 
@@ -677,11 +699,12 @@ export interface ConnectionToolRow {
 const TIER_TONES: Record<ConnectionToolTier, Tone> = { can: 'ok', ask: 'warn', off: 'neutral' };
 
 /** A tool as the connection page lists it (CX-72): a sensitive one that would be Allowed shows Asks. */
-export function connectionToolRow(t: ConnectionToolView): ConnectionToolRow {
+export function connectionToolRow(t: ConnectionToolView, locale?: string): ConnectionToolRow {
+  const tr = mobileTranslator(locale);
   const tier: ConnectionToolTier = t.sensitive && t.tier === 'can' ? 'ask' : t.tier;
-  const tierLabel = CONNECTION_TOOL_TIER_LABELS[tier];
-  const alwaysAsks = t.sensitive ? ALWAYS_ASKS_LABEL : null;
-  const isNew = t.isNew ? NEW_TOOL_LABEL : null;
+  const tierLabel = connectionToolTierLabels(locale)[tier];
+  const alwaysAsks = t.sensitive ? tr.t('data.connections.alwaysAsks') : null;
+  const isNew = t.isNew ? tr.t('data.connections.newTool') : null;
   const description = t.description.trim() || null;
   return {
     name: t.name,
@@ -747,9 +770,12 @@ export function connectionDetail(
   now: Date,
   timeZone: string,
   slug: string,
+  locale?: string,
 ): ConnectionDetail {
+  const { t } = mobileTranslator(locale);
+  const text = connectionsText(locale);
   const c = response.connection;
-  const row = connectedRow(c, slug);
+  const row = connectedRow(c, slug, locale);
   const entry = catalogEntry(c.catalogId);
   const kind = gatewayKindOf(c.catalogId);
   const gateway = kind ? { kind } : null;
@@ -757,26 +783,26 @@ export function connectionDetail(
   // Neither the gateway nor the Vault's sync is the agent's: no tools, nothing it is told.
   const agents = !gateway && !vaultSync;
   const checked = c.checkedAt
-    ? `Checked ${formatAgo(c.checkedAt, now, timeZone)}`
-    : CONNECTIONS_TEXT.notChecked;
+    ? t('data.connections.checked', { ago: formatAgo(c.checkedAt, now, timeZone, locale) })
+    : text.notChecked;
   return {
     id: c.id,
     catalogId: c.catalogId,
     title: c.label,
     meta: entry?.name ?? '',
     detail: row.meta,
-    access: CONNECTION_ACCESS_LABELS[c.access ?? 'manage'],
+    access: connectionAccessLabels(locale)[c.access ?? 'manage'],
     state: row.state,
     checked,
-    connectedBy: `Connected by ${c.connectedBy.name}`,
+    connectedBy: t('data.connections.connectedBy', { name: c.connectedBy.name }),
     gateway,
     vaultSync,
     checks: c.checks.flatMap((k) =>
       k.state !== 'ok' && k.message ? [{ id: k.id, tone: CHECK_TONES[k.state], message: k.message }] : [],
     ),
-    tools: agents ? response.tools.map(connectionToolRow) : [],
+    tools: agents ? response.tools.map((tool) => connectionToolRow(tool, locale)) : [],
     guide: agents ? response.guide.trim() || null : null,
-    truncated: response.truncated && agents ? CONNECTIONS_TEXT.truncated : null,
+    truncated: response.truncated && agents ? text.truncated : null,
     logo: row.logo,
     webPath: row.webPath,
     stateLabel: [`${row.state.label}`, checked].join(' · '),

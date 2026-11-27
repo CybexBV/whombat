@@ -17,7 +17,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { WhombatAvatar } from '../avatars/Avatars';
 import { agentLoadProblem, contractMismatchLine } from '../data/agentLoad';
-import { AGENT_PAGE_TEXT, type AgentPart, agentKeyParam, agentParts } from '../data/agentPage';
+import { type AgentPart, agentKeyParam, agentPageText, agentParts } from '../data/agentPage';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useI18n } from '../i18n';
@@ -45,6 +45,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
   const settingsTextHere = settingsText(rawLocale);
 
   const agentStatusCopyHere = agentStatusCopy(rawLocale);
+  const agentPageTextHere = agentPageText(rawLocale);
 
   const theme = useTheme();
   const { slug, mode } = useBurrow();
@@ -69,7 +70,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
   }, [elsewhere, navigation]);
 
   const name = profile?.agent.name ?? words.name;
-  const parts = agentParts(name, { looksAhead: hasLooksAhead(useSessionProtocol()) });
+  const parts = agentParts(name, { looksAhead: hasLooksAhead(useSessionProtocol()) }, rawLocale);
   // A part this Whombat doesn't have (Looks ahead on an older one) opens Name and face.
   const part: AgentPart = parts.some((p) => p.key === chosen) ? chosen : 'profile';
   const partLabel = parts.find((p) => p.key === part)?.label ?? '';
@@ -88,7 +89,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
     navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs', { screen: 'Settings' });
 
   if (!profile) {
-    const problem = query.error ? agentLoadProblem(query.error) : null;
+    const problem = query.error ? agentLoadProblem(query.error, rawLocale) : null;
     return (
       <Screen>
         <BackBar label={settingsTextHere.title} onPress={goBack} />
@@ -99,7 +100,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
         ) : problem ? (
           <ErrorState text={problem.text} onRetry={() => void query.refetch()} />
         ) : (
-          <View style={{ paddingTop: 10 }} accessibilityLabel={AGENT_PAGE_TEXT.loading(words.name)}>
+          <View style={{ paddingTop: 10 }} accessibilityLabel={agentPageTextHere.loading(words.name)}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 22 }}>
               <Skeleton width={56} height={56} radius={28} />
               <Skeleton width={140} height={20} />
@@ -145,7 +146,7 @@ export function AgentSettingsScreen({ route, navigation }: Props) {
           tabs={parts}
           value={part}
           onChange={open}
-          label={AGENT_PAGE_TEXT.parts(agent.name)}
+          label={agentPageTextHere.parts(agent.name)}
           bleed={16}
         />
       </View>

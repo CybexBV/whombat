@@ -5,11 +5,11 @@
  */
 import {
   ApiError,
-  COUNCIL_WORDS,
   type CouncilCardView,
   councilCardView,
-  PROBLEM_WORDS,
+  councilWords,
   problemText,
+  problemWords,
 } from '@whombat/client';
 import type { Attachment, CouncilCard } from '@whombat/core';
 import { nextElapsedTick, TASK_SECONDS_BELOW_MS } from '../lib/elapsed';
@@ -33,14 +33,15 @@ export function councilItem(
   card: CouncilCard,
   attachments: readonly Attachment[],
   nowMs: number,
+  locale?: string,
 ): CouncilItem {
   return {
     councilId: card.councilId,
     card,
-    view: councilCardView(card, nowMs),
+    view: councilCardView(card, nowMs, locale),
     plan: card.plan?.trim() ? card.plan : null,
     // The pictures are the final card's: those its tasks sent.
-    pictures: card.live ? [] : cardPictures(card.shots, attachments, COUNCIL_WORDS.picturesHint),
+    pictures: card.live ? [] : cardPictures(card.shots, attachments, councilWords(locale).picturesHint),
     ticking: card.live && card.members.some((m) => m.state === 'working'),
   };
 }
@@ -65,9 +66,9 @@ export function councilNextTick(card: CouncilCard, nowMs: number): number | null
  * What a toast says when Stop (or a council of Settings) didn't go through: a Whombat from before the council
  * (`unknown_op`) needs an update; otherwise the server's own words or the usual sentence.
  */
-export function councilActionProblem(error: unknown): string {
-  if (olderWhombat(error)) return PROBLEM_WORDS.whombatUpdate;
-  return problemText(error);
+export function councilActionProblem(error: unknown, locale?: string): string {
+  if (olderWhombat(error)) return problemWords(locale).whombatUpdate;
+  return problemText(error, undefined, locale);
 }
 
 /** The box answered that it has no such operation: a Whombat from before it, which needs an update. */

@@ -26,8 +26,8 @@ import {
   needsYouListRow,
   needsYouSettledText,
   needsYouWords,
-  ONEPASSWORD_APP_TEXT,
   onePasswordAnsweredText,
+  onePasswordAppText,
   onePasswordSetChanged,
   threadToOpen,
   withNeedsYouListItem,
@@ -78,7 +78,7 @@ import {
 } from '../data/needsYou';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useBackupPasskeyTap } from '../managed/backupPasskey';
 import { navigateTo, openHref, useAppNavigation } from '../navigation/hooks';
 import type { RootStackParamList, Route } from '../navigation/routes';
@@ -115,7 +115,9 @@ function useLeaveHome(): (ref: HomeRef) => () => void {
  * answer (Whombat onepassword-sync.md); resolves true when the sheet may close.
  */
 function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Promise<boolean> {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
+  const onepasswordAppTextHere = onePasswordAppText(rawLocale);
   const approvalCardWordsHere = approvalCardWords(rawLocale);
 
   const needsYouTabHere = needsYouTab(rawLocale);
@@ -180,10 +182,10 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
           }
           showNotice(
             intent.type === 'approveLater'
-              ? `Approved. It runs at ${formatClock(intent.executeAt, timeZone)}.`
+              ? tMobile('screens2.approval.runsAt', { time: formatClock(intent.executeAt, timeZone) })
               : intent.type === 'decline'
-                ? 'Declined.'
-                : 'Approved. It runs now.',
+                ? tMobile('screens2.approval.declined')
+                : tMobile('screens2.approval.runsNow'),
           );
           return true;
         }
@@ -213,12 +215,12 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
             back();
             // The set changed since the card was drawn: nothing was removed, and the card comes back with the new set.
             if (onePasswordSetChanged(error)) {
-              showNotice(ONEPASSWORD_APP_TEXT.changed);
+              showNotice(onepasswordAppTextHere.changed);
               return false;
             }
             throw error;
           }
-          showNotice(onePasswordAnsweredText(intent.answer));
+          showNotice(onePasswordAnsweredText(intent.answer, rawLocale));
           return true;
         }
         default:
@@ -237,6 +239,7 @@ function useServerAction(): (item: NeedsYouItem, intent: NeedsYouIntent) => Prom
  * the sheet may close.
  */
 export function useNeedsYouSettle(): (item: NeedsYouItem) => Promise<boolean> {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrowBase();
   const feedback = useDecisionFeedback();
   const settle = useIgnoreNeedsYou(slug);
@@ -248,7 +251,8 @@ export function useNeedsYouSettle(): (item: NeedsYouItem) => Promise<boolean> {
         return false;
       }
       haptic('success');
-      showToast(needsYouSettledText(item.ref), {
+      showToast(needsYouSettledText(item.ref, rawLocale), {
+        locale: rawLocale,
         undo: () =>
           void settle.mutateAsync({ ref: item.ref, ignored: false }).then(
             (back) => {
@@ -272,6 +276,7 @@ export function useNeedsYouSettle(): (item: NeedsYouItem) => Promise<boolean> {
 export function useNeedsYouPress(
   open?: (route: Route) => void,
 ): (item: NeedsYouItem, button: NeedsYouButton) => Promise<boolean> {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
   const needsYouTabHere = needsYouTab(rawLocale);
 
@@ -296,7 +301,7 @@ export function useNeedsYouPress(
   const backupPasskey = useBackupPasskeyTap();
   const fix = useFixLook(slug, (outcome) => {
     const text = lookFixOutcomeText(outcome);
-    if (text) showLookFix(outcome, text);
+    if (text) showLookFix(outcome, text, rawLocale);
   });
   const show = (route: Route) => (open ? open(route) : navigateTo(navigation, route));
   // Handed over: the thread the work happens in (backup-places.md BPL-15); true when it opened.
@@ -317,7 +322,7 @@ export function useNeedsYouPress(
   };
   return async (item, button) => {
     const now = clock();
-    const intent = needsYouListIntent(item, button, now, timeZone);
+    const intent = needsYouListIntent(item, button, now, timeZone, rawLocale);
     if (!intent) return true;
     try {
       switch (intent.type) {
@@ -347,7 +352,7 @@ export function useNeedsYouPress(
           if (outcome === 'ask') return ask(intent.text, intent.subject);
           if (outcome === 'ok' && showThread(thread)) return true;
           if (outcome === 'ok') showNotice(needsYouWordsHere.handling(words));
-          else showFailure(needsYouWordsHere.failed);
+          else showFailure(needsYouWordsHere.failed, rawLocale);
           return outcome === 'ok';
         }
         case 'talk': {
@@ -362,7 +367,7 @@ export function useNeedsYouPress(
           } catch (error) {
             // An older Whombat, or an item that just left: the question in the thing's thread instead.
             if (error instanceof ApiError && error.status === 404)
-              return ask(askText(item), item.subject ?? null);
+              return ask(askText(item, rawLocale), item.subject ?? null);
             throw error;
           }
         }
@@ -389,7 +394,9 @@ export function useNeedsYouPress(
             feedback.onResult(result);
             return false;
           }
-          showNotice(`I’ll remind you ${atText(intent.until, now, timeZone, rawLocale)}.`);
+          showNotice(
+            tMobile('screens2.approval.remind', { when: atText(intent.until, now, timeZone, rawLocale) }),
+          );
           return true;
         }
         case 'back': {
@@ -430,6 +437,7 @@ export function useNeedsYouPress(
             showNotice(aheadWordsHere.stoppedMatterToast);
           } else {
             showToast(aheadWordsHere.stoppedKindToast(intent.kind), {
+              locale: rawLocale,
               undo: () =>
                 void updateLooksAhead.mutateAsync({ kind: intent.kind, on: true }).then(
                   (back) => {
@@ -451,6 +459,7 @@ export function useNeedsYouPress(
           }
           haptic('approve');
           showToast(needsYouWordsHere.stopped(watch.name), {
+            locale: rawLocale,
             undo: () =>
               void stopWatching.mutateAsync({ ref: item.ref, watch, watched: true }).then(
                 (back) => {
@@ -569,6 +578,7 @@ function useNeedsYouCard(
     timeZone,
     assistant: words.name,
     things: home.data?.things ?? [],
+    locale: rawLocale,
   });
   const now = clock().getTime();
   const view = phoneSheet(phoneInboxRow(row, words, now, timeZone, rawLocale), words, {

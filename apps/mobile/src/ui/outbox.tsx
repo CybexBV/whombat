@@ -6,7 +6,7 @@
 import { View } from 'react-native';
 import { useOutbox } from '../data/OutboxProvider';
 import { outboxLabel } from '../data/outbox';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { MessageBody } from './chat';
@@ -21,6 +21,7 @@ export function OutboxRows({
   threadRootId?: string | null;
 }) {
   const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { items, retry, remove } = useOutbox(conversationId, threadRootId);
   if (items.length === 0) return null;
@@ -28,7 +29,7 @@ export function OutboxRows({
     <View style={{ gap: 14, paddingHorizontal: CHAT_GUTTER, paddingTop: 6, paddingBottom: 10 }}>
       {items.map((item) => {
         const failed = item.state === 'failed';
-        const label = outboxLabel(item);
+        const label = outboxLabel(item, rawLocale);
         return (
           <MessageBody key={item.id} text={item.text} sending>
             <View accessible accessibilityLabel={label} accessibilityLiveRegion="polite">

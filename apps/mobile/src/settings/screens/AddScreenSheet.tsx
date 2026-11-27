@@ -28,7 +28,7 @@ import { Button, SectionLabel } from '../../ui/primitives';
 import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/sheet';
 import { lettersProblem, popupOptions, screenLetters, screenName } from './screensList';
-import { PHONE_SCREENS_TEXT } from './tiles';
+import { phoneScreensText } from './tiles';
 
 export function AddScreenSheet({
   api,
@@ -66,7 +66,7 @@ export function AddScreenSheet({
     if (problem === 'short') return setError(T.needLetters);
     const clean = screenName(name);
     if (!clean) return setError(T.needName);
-    if (problem === 'io') return setError(PHONE_SCREENS_TEXT.lettersIo);
+    if (problem === 'io') return setError(phoneScreensText(rawLocale).lettersIo);
     setBusy(true);
     setError(null);
     actions.add({ code: letters, name: clean, popups, start }).then(
@@ -104,7 +104,7 @@ export function AddScreenSheet({
           <LetterBoxes value={letters} onChange={(v) => setLetters(screenLetters(v))} />
           {demoLetters ? (
             <Text size={12.5} color={theme.colors.mut} style={{ paddingHorizontal: 2 }}>
-              {fillDeskWords(PHONE_SCREENS_TEXT.demoLetters, {
+              {fillDeskWords(phoneScreensText(rawLocale).demoLetters, {
                 letters: `${demoLetters.slice(0, 3)} · ${demoLetters.slice(3)}`,
               })}
             </Text>

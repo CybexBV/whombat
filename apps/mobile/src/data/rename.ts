@@ -6,32 +6,39 @@
  * imports) so it is unit-tested in Node.
  */
 import { renameValue, type ThingRenameTarget } from '@whombat/client';
+import { mobileTranslator } from '../i18n/translate';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
 
-export const RENAME_COPY = {
-  open: 'Open',
-  rename: 'Rename',
-  /** The box's name for TalkBack and VoiceOver. */
-  label: (name: string) => `Rename ${name}`,
-  /** Under a server's box: what an empty box does. */
-  serverHint: 'Leave it empty to use its id again.',
-  cancel: 'Cancel',
-  failed: 'That didn’t work. Try again in a moment.',
-  /** What TalkBack calls a row's menu sheet. */
-  rowMenu: (name: string) => `${name}: what to do`,
-  /** The server page's ⋯ button. */
-  more: (name: string) => `More for ${name}`,
-} as const;
+export function renameCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    open: t('data.rename.open'),
+    rename: t('data.rename.rename'),
+    /** The box's name for TalkBack and VoiceOver. */
+    label: (name: string) => t('data.rename.label', { name }),
+    /** Under a server's box: what an empty box does. */
+    serverHint: t('data.rename.serverHint'),
+    cancel: t('data.common.cancel'),
+    failed: t('data.rename.failed'),
+    /** What TalkBack calls a row's menu sheet. */
+    rowMenu: (name: string) => t('data.rename.rowMenu', { name }),
+    /** The server page's ⋯ button. */
+    more: (name: string) => t('data.rename.more', { name }),
+  };
+}
+
+export const RENAME_COPY = renameCopy();
 
 export type ThingRowPick = 'open' | 'rename';
 
 /** A server's or connection's row held: Open, then Rename, under its name. */
-export function thingRowMenu(name: string): NativeMenuSpec {
+export function thingRowMenu(name: string, locale?: string): NativeMenuSpec {
+  const copy = renameCopy(locale);
   return plainMenu(
     [
       [
-        { id: 'open', title: RENAME_COPY.open, icon: 'arrow.up.right.square' },
-        { id: 'rename', title: RENAME_COPY.rename, icon: 'pencil' },
+        { id: 'open', title: copy.open, icon: 'arrow.up.right.square' },
+        { id: 'rename', title: copy.rename, icon: 'pencil' },
       ],
     ],
     name,
@@ -39,8 +46,8 @@ export function thingRowMenu(name: string): NativeMenuSpec {
 }
 
 /** A server page's ⋯: Rename first. */
-export function serverHeadMenu(): NativeMenuSpec {
-  return plainMenu([[{ id: 'rename', title: RENAME_COPY.rename, icon: 'pencil' }]]);
+export function serverHeadMenu(locale?: string): NativeMenuSpec {
+  return plainMenu([[{ id: 'rename', title: renameCopy(locale).rename, icon: 'pencil' }]]);
 }
 
 export function parseThingRowPick(id: string): ThingRowPick | null {

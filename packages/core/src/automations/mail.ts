@@ -7,7 +7,7 @@ import type {
   MissingMailAttachment,
   MissingMailAttachmentReason,
 } from '../domain/automation.js';
-import { type CoreMessageKey, type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
+import { type CoreMessageKey, type CoreTranslator, coreTranslator, tCore, tpCore } from '../i18n/catalog.js';
 
 /** Fallback name when a mail connection's address isn't available to the viewer. */
 export const UNKNOWN_MAIL_CONNECTION = 'a mail account';
@@ -406,36 +406,33 @@ export function mailRecipeName(
 }
 
 /** Short plain-English reason why a mail attachment couldn't be handed over to an automation run. */
-export function missingAttachmentReasonText(reason: MissingMailAttachmentReason): string {
-  switch (reason) {
-    case 'too_large':
-      return 'too large';
-    case 'unsupported_type':
-      return 'unknown file type';
-    case 'download_failed':
-      return 'couldn’t be downloaded';
-    case 'too_many':
-      return 'attachment limit reached';
-  }
+export function missingAttachmentReasonText(
+  reason: MissingMailAttachmentReason,
+  locale?: string | null,
+): string {
+  return tCore(locale, `mailMissing.reason.${reason}`);
 }
 
-/** Plain-English notice for mail attachments that didn't come along with a run (for the run page and summaries). */
+/** Notice for mail attachments that didn't come along with a run (for the run page and summaries). */
 export function missingAttachmentsText(
   missing: readonly MissingMailAttachment[],
   omittedCount = 0,
   maxListed = 10,
+  locale?: string | null,
 ): string {
   const omitted = Math.max(0, Math.trunc(omittedCount));
   const limit = Math.max(1, Math.trunc(maxListed));
   if (missing.length === 0 && omitted === 0) return '';
-  if (missing.length === 0) {
-    return omitted === 1
-      ? '1 more attachment didn’t come along (attachment limit reached).'
-      : `${omitted} more attachments didn’t come along (attachment limit reached).`;
-  }
-  const items = missing.slice(0, limit).map((m) => `“${m.name}” (${missingAttachmentReasonText(m.reason)})`);
+  if (missing.length === 0) return tpCore(locale, 'mailMissing.omitted', omitted);
+  const items = missing.slice(0, limit).map((m) =>
+    tCore(locale, 'mailMissing.item', {
+      name: m.name,
+      reason: missingAttachmentReasonText(m.reason, locale),
+    }),
+  );
   const more = Math.max(0, missing.length - limit) + omitted;
-  const extra = more > 0 ? ` and ${more} more` : '';
-  if (missing.length === 1 && more === 0) return `Attachment didn’t come along: ${items[0]}.`;
-  return `These attachments didn’t come along: ${items.join(', ')}${extra}.`;
+  if (missing.length === 1 && more === 0) return tCore(locale, 'mailMissing.one', { item: items[0] ?? '' });
+  return more > 0
+    ? tCore(locale, 'mailMissing.manyMore', { items: items.join(', '), more })
+    : tCore(locale, 'mailMissing.many', { items: items.join(', ') });
 }

@@ -6,6 +6,7 @@
  */
 import { byRecentActivity } from '@whombat/client';
 import type { Bootstrap, ConversationLink } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import { type Route, routeForLink } from '../navigation/routes';
 
 export interface ShareTarget {
@@ -31,12 +32,19 @@ const words = (s: string) =>
 export function shareTargets(
   sidebar: Pick<Bootstrap['sidebar'], 'dms' | 'branchRooms'>,
   agentName: string,
+  locale?: string,
 ): ShareTarget[] {
+  const { t } = mobileTranslator(locale);
   const rooms: ShareTarget[] = [...sidebar.dms, ...sidebar.branchRooms].map((c) => ({
     id: c.id,
     kind: c.kind === 'branch' ? 'branch' : 'dm',
     title: c.title,
-    meta: c.kind === 'branch' ? (c.prNumber ? `PR #${c.prNumber}` : 'Branch') : `With ${agentName}`,
+    meta:
+      c.kind === 'branch'
+        ? c.prNumber
+          ? `PR #${c.prNumber}`
+          : t('data.shareTargets.branch')
+        : t('data.shareTargets.with', { name: agentName }),
     link: c.link as ConversationLink,
     lastMessageAt: c.lastMessageAt,
     keys: [c.slug.toLowerCase(), ...words(c.title), ...words(c.slug)],

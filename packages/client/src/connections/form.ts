@@ -7,6 +7,7 @@
 import {
   CONNECTION_ERROR_MESSAGES,
   type ConnectionConnectError,
+  type ConnectionErrorCode,
   ConnectionErrorDetails,
   destinationRefusedText,
 } from '@whombat/core/contracts';
@@ -25,7 +26,10 @@ import {
   isVaultSyncConnection,
   SignInKind,
 } from '@whombat/core/domain';
+import { interpolate, resolveLanguage } from '@whombat/core/i18n';
 import { ApiError, InvalidRequestError } from '../http/errors';
+import { clientTree } from '../i18n/catalog';
+import { CONN_FORM_WORDS } from '../i18n/messages/connectionsHosts/connectForm';
 
 type Field = ReturnType<typeof fieldsFor>[number];
 
@@ -34,11 +38,19 @@ type Field = ReturnType<typeof fieldsFor>[number];
 export type StateTone = 'ok' | 'warn' | 'bad';
 
 /** A connection's state on its row and its page: “Connected”, “Needs connecting again”, “Needs attention”. */
-export const CONNECTION_STATE: Record<CatalogConnectionState, { text: string; tone: StateTone }> = {
-  active: { text: 'Connected', tone: 'ok' },
-  needs_reauth: { text: 'Needs you to sign in again', tone: 'warn' },
-  error: { text: 'Needs attention', tone: 'bad' },
-};
+export function connectionStates(
+  locale?: string | null,
+): Record<CatalogConnectionState, { text: string; tone: StateTone }> {
+  const w = clientTree(locale, CONN_FORM_WORDS).state;
+  return {
+    active: { text: w.active, tone: 'ok' },
+    needs_reauth: { text: w.needs_reauth, tone: 'warn' },
+    error: { text: w.error, tone: 'bad' },
+  };
+}
+
+export const CONNECTION_STATE: Record<CatalogConnectionState, { text: string; tone: StateTone }> =
+  connectionStates('en');
 
 /**
  * A connection's state as its row and page say it: `CONNECTION_STATE`, except that a connection only automations use
@@ -46,16 +58,18 @@ export const CONNECTION_STATE: Record<CatalogConnectionState, { text: string; to
  */
 export function connectionState(
   c: Pick<ConnectionView, 'catalogId' | 'status' | 'signIn' | 'reauthReason'>,
+  locale?: string | null,
 ): { text: string; tone: StateTone } {
+  const w = clientTree(locale, CONN_FORM_WORDS).state;
   const refused =
     c.status === 'needs_reauth' &&
     c.signIn === 'token' &&
     (c.reauthReason === null || c.reauthReason === 'token_invalid');
-  if (refused && usedByAutomations(c.catalogId)) return { text: 'Needs a new token', tone: 'warn' };
+  if (refused && usedByAutomations(c.catalogId)) return { text: w.newToken, tone: 'warn' };
   // A session sign-in's password was refused (Whombat connections-more.md CM-11): “Needs a new password”.
   const session = sessionSecret(catalogEntry(c.catalogId));
-  if (refused && session) return { text: `Needs a new ${session}`, tone: 'warn' };
-  return CONNECTION_STATE[c.status];
+  if (refused && session) return { text: interpolate(w.newSecret, { secret: session }), tone: 'warn' };
+  return connectionStates(locale)[c.status];
 }
 
 /**
@@ -74,18 +88,20 @@ export function reauthText(
   name: string,
   token: boolean,
   secret = 'token',
+  locale?: string | null,
 ): string {
+  const w = clientTree(locale, CONN_FORM_WORDS).reauth;
   switch (reason) {
     case 'revoked':
-      return `${name} signed Whombat out. Sign in again to keep using it.`;
+      return interpolate(w.revoked, { name });
     case 'app_removed':
-      return `This Whombat’s ${name} app was removed. Sign in again once it’s set up.`;
+      return interpolate(w.app_removed, { name });
     case 'expired':
-      return `The sign-in to ${name} expired. Sign in again to keep using it.`;
+      return interpolate(w.expired, { name });
     default:
       return token
-        ? `${name} no longer accepts the ${secret}. Replace it to keep using it.`
-        : `${name} no longer accepts the sign-in. Sign in again to keep using it.`;
+        ? interpolate(w.secret, { name, secret: secret === 'token' ? w.token : secret })
+        : interpolate(w.signIn, { name });
   }
 }
 
@@ -197,20 +213,22 @@ export function visibleFields(
 export function connectButtonText(
   entry: CatalogEntry,
   choice: Pick<SignInChoice, 'kind' | 'method'>,
+  locale?: string | null,
 ): string {
+  const w = clientTree(locale, CONN_FORM_WORDS).button;
   switch (choice.kind) {
     case 'token':
     case 'none':
     case 'client_credentials':
-      return 'Connect';
+      return w.connect;
     case 'password':
-      return 'Sign in and connect';
+      return w.password;
     case 'nextcloud_login':
-      return 'Sign in with Nextcloud';
+      return w.nextcloud;
     case 'service_login':
       return choice.method.label;
     default:
-      return `Continue to ${entry.name}`;
+      return interpolate(w.continueTo, { name: entry.name });
   }
 }
 
@@ -223,18 +241,20 @@ export function httpWarning(
   kind?: SignInKind,
   method?: CatalogSignIn,
   _entryId?: string,
+  locale?: string | null,
 ): string | null {
   if (!/^http:\/\//i.test(fields.url?.trim() ?? '')) return null;
+  const w = clientTree(locale, CONN_FORM_WORDS).http;
   // Signing in on the service's own page (Plex's, SG-04) happens over https there: only the token it gives uses this
   // address, which the last line says (AP-3902; Plex's sign in once, CM-06, is gone).
   if (kind === 'password')
     return method?.kind === 'password' && method.secret
-      ? `This address uses http: the ${lowerFirst(method.secret.label)} and Whombat’s key cross your network unencrypted.`
-      : 'This address uses http: your password and Whombat’s key cross your network unencrypted.';
+      ? interpolate(w.secret, { secret: lowerFirst(method.secret.label) })
+      : w.password;
   // A session sign-in (contracts 0.97 CT-470: Pi-hole, Nginx Proxy Manager) sends the password itself.
   if (method?.kind === 'token' && method.auth.type === 'session')
-    return `This address uses http: the ${lowerFirst(method.secretLabel)} crosses your network unencrypted.`;
-  return 'This address uses http: the token crosses your network unencrypted.';
+    return interpolate(w.session, { secret: lowerFirst(method.secretLabel) });
+  return w.token;
 }
 
 /** “App password” → “app password”; an initialism stays (“API key”). */
@@ -306,9 +326,13 @@ function firstOf(fields: Record<string, string[]>): Record<string, string> {
  */
 export function connectProblem(
   error: unknown,
-  fallback = 'That didn’t work. Try again in a moment.',
+  fallback?: string,
   signIn?: CatalogSignIn,
+  locale?: string | null,
 ): ConnectProblem {
+  const w = clientTree(locale, CONN_FORM_WORDS);
+  const errors = connectionErrorMessages(locale);
+  if (fallback === undefined) fallback = w.fallback;
   if (error instanceof InvalidRequestError) return { ...NO_PROBLEM, fields: firstOf(error.fields) };
   if (!(error instanceof ApiError)) return { ...NO_PROBLEM, message: fallback };
   const details = ConnectionErrorDetails.safeParse(error.details);
@@ -321,33 +345,35 @@ export function connectProblem(
       if (d.cidr && d.port)
         return {
           ...NO_PROBLEM,
-          message: destinationRefusedText(d.cidr, d.port),
+          message: english(locale)
+            ? destinationRefusedText(d.cidr, d.port)
+            : interpolate(w.errors.destinationOnNetwork, { cidr: d.cidr, port: d.port }),
           network: { cidr: d.cidr, port: d.port },
         };
       return {
         ...NO_PROBLEM,
-        fields: { url: error.message || CONNECTION_ERROR_MESSAGES.destination_refused },
+        fields: { url: error.message || errors.destination_refused },
       };
     case 'field_choice_needed':
       return {
         ...NO_PROBLEM,
-        message: error.message || CONNECTION_ERROR_MESSAGES.field_choice_needed,
+        message: error.message || errors.field_choice_needed,
         choice: d.field && d.options?.length ? { field: d.field, options: d.options } : null,
       };
     case 'check_failed':
       return {
         ...NO_PROBLEM,
-        message: checkFailedText(error.message, d.status, signIn ? signsInForSession(signIn) : false),
+        message: checkFailedText(error.message, d.status, signIn ? signsInForSession(signIn) : false, locale),
         certificate: d.certificateSha256 ?? null,
       };
     case 'second_factor_needed':
       return {
         ...NO_PROBLEM,
-        secondFactor: error.message || CONNECTION_ERROR_MESSAGES.second_factor_needed,
+        secondFactor: error.message || errors.second_factor_needed,
         challenge: d.challenge ?? null,
       };
     case 'sign_in_refused': {
-      const message = error.message || signInRefusedText(d.reason, signIn);
+      const message = error.message || signInRefusedText(d.reason, signIn, locale);
       // A wrong or expired code belongs under the code (with the new challenge UniFi made, SG-07); the rest above the
       // button, with the way out where there is one.
       if (d.reason === 'code')
@@ -355,7 +381,7 @@ export function connectProblem(
       return { ...NO_PROBLEM, message, switchTo: signInInstead(d.reason, d.method) };
     }
     default:
-      return { ...NO_PROBLEM, message: error.message || CONNECTION_ERROR_MESSAGES[d.code] };
+      return { ...NO_PROBLEM, message: error.message || errors[d.code] };
   }
 }
 
@@ -365,26 +391,26 @@ type RefusalReason = NonNullable<ConnectionErrorDetails['reason']>;
  * What a refused sign in once means when the server sends no sentence of its own (CT-314); `signIn`, the sign-in tried:
  * a secret with its own name is refused by that name (“That pairing code didn’t work.”).
  */
-export function signInRefusedText(reason: RefusalReason | undefined, signIn?: CatalogSignIn): string {
+export function signInRefusedText(
+  reason: RefusalReason | undefined,
+  signIn?: CatalogSignIn,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, CONN_FORM_WORDS).refused;
   switch (reason) {
     case 'password':
       return signIn?.kind === 'password' && signIn.secret
-        ? `That ${lowerFirst(signIn.secret.label)} didn’t work. Make a new one and try again.`
-        : 'Wrong username or password.';
+        ? interpolate(w.secret, { secret: lowerFirst(signIn.secret.label) })
+        : w.password;
     case 'code':
-      return 'That code didn’t work. Enter the newest one.';
     case 'rights':
-      return 'This account may not make keys. Sign in with an admin account.';
     case 'locked':
-      return 'The service paused sign-ins after too many tries. Wait a few minutes, then try again.';
     case 'single_sign_on':
-      return 'This account signs in somewhere else. Make a token by hand instead.';
     case 'unsupported':
-      return 'This version or setting can’t make keys this way. Make a token by hand instead.';
     case 'second_factor':
-      return 'This account uses two-step sign-in, which this way can’t do.';
+      return w[reason];
     default:
-      return CONNECTION_ERROR_MESSAGES.sign_in_refused;
+      return connectionErrorMessages(locale).sign_in_refused;
   }
 }
 
@@ -398,19 +424,20 @@ function signInInstead(reason: RefusalReason | undefined, method: string | undef
 }
 
 /** The button that switches to another sign-in after a refusal (CS-09). */
-export function switchText(kind: SignInKind, entry: CatalogEntry): string {
+export function switchText(kind: SignInKind, entry: CatalogEntry, locale?: string | null): string {
+  const w = clientTree(locale, CONN_FORM_WORDS).switch;
   switch (kind) {
     case 'nextcloud_login':
-      return 'Sign in with Nextcloud instead';
+      return w.nextcloud;
     case 'token':
-      return 'Make a token by hand instead';
+      return w.token;
     case 'ha_oauth':
     case 'mcp_oauth':
     case 'app_oauth':
     case 'service_login':
-      return `Sign in with ${entry.name} instead`;
+      return interpolate(w.named, { name: entry.name });
     default:
-      return 'Use another way';
+      return w.other;
   }
 }
 
@@ -420,16 +447,31 @@ export function switchText(kind: SignInKind, entry: CatalogEntry): string {
  * server's sentence, which says why in the person's words — wrong name or password, account disabled, two-step sign-in
  * on, too many tries, password expired (Whombat desk-found.md NS-04; AP-3805) — and never names a token.
  */
-export function checkFailedText(message: string, status: number | undefined, session = false): string {
-  if (session) return message || SESSION_CHECK_FAILED;
-  if (status === 401 || status === 403)
-    return 'The service didn’t accept that token. Check that you copied all of it and that it may read.';
-  return message || CONNECTION_ERROR_MESSAGES.check_failed;
+export function checkFailedText(
+  message: string,
+  status: number | undefined,
+  session = false,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, CONN_FORM_WORDS);
+  if (session) return message || w.sessionCheckFailed;
+  if (status === 401 || status === 403) return w.tokenRefused;
+  return message || connectionErrorMessages(locale).check_failed;
 }
 
-/** A session's refusal without a sentence of the server's (AP-3805). */
-export const SESSION_CHECK_FAILED =
-  'Whombat couldn’t sign in with that. Check the address, the account and the password.';
+/** A session's refusal without a sentence of the server's. */
+export const SESSION_CHECK_FAILED: string = clientTree('en', CONN_FORM_WORDS).sessionCheckFailed;
+
+/** The words for a refusal the server sent without a sentence: the contract's in English, the catalog's otherwise. */
+export function connectionErrorMessages(locale?: string | null): Record<ConnectionErrorCode, string> {
+  if (english(locale)) return CONNECTION_ERROR_MESSAGES;
+  const { destinationOnNetwork: _onNetwork, ...words } = clientTree(locale, CONN_FORM_WORDS).errors;
+  return words;
+}
+
+function english(locale: string | null | undefined): boolean {
+  return resolveLanguage(locale) === 'en';
+}
 
 /** A token sign-in whose secret is a password Whombat signs in with for a session (CT-470): Pi-hole, Synology, QNAP. */
 export function signsInForSession(signIn: CatalogSignIn): boolean {
@@ -437,13 +479,9 @@ export function signsInForSession(signIn: CatalogSignIn): boolean {
 }
 
 /** What `connect_error=` means after an OAuth sign-in (CX-15), with what to do. */
-export const CONNECTION_CONNECT_ERROR_TEXT: Record<ConnectionConnectError, string> = {
-  access_denied: 'The service didn’t connect: access wasn’t allowed. Try again and choose Allow.',
-  invalid_state: 'That sign-in expired or was already used. Try signing in again.',
-  exchange_failed: 'The service didn’t finish the sign-in. Try again in a moment.',
-  no_app: 'This service isn’t set up on this Whombat. Set it up in Settings → Connections first.',
-  issuer_mismatch: 'The sign-in came back from a different server than it started at. Try again.',
-  check_failed: 'Signed in, but Whombat couldn’t reach the service with it. Check the address and try again.',
-  destination_refused: 'That address isn’t allowed. Check the address, or add it to the home network list.',
-  limit_reached: 'That’s as many connections as there can be. Remove one first.',
-};
+export function connectionConnectErrorText(locale?: string | null): Record<ConnectionConnectError, string> {
+  return { ...clientTree(locale, CONN_FORM_WORDS).connectError };
+}
+
+export const CONNECTION_CONNECT_ERROR_TEXT: Record<ConnectionConnectError, string> =
+  connectionConnectErrorText('en');

@@ -5,11 +5,10 @@
  * beneath and **Send a test**, **Change**, **Remove** (asked once). Set up and Change open a sheet: server, port,
  * security, user name, password (never shown again: “Saved. Leave it empty to keep it.”), from address and name, with
  * Send a test (of what is typed, without saving) and Save. A server set in the box's configuration is read-only. Every
- * word is the client's `MAIL_TEXT`; `mailView` decides the row and `mailDraft` checks the form. Every target 44dp.
+ * word is the client's `mailTextHere`; `mailView` decides the row and `mailDraft` checks the form. Every target 44dp.
  */
 import {
   type HostMailOutput,
-  MAIL_TEXT,
   type MailAction,
   type MailApi,
   type MailForm,
@@ -19,11 +18,13 @@ import {
   mailForm,
   mailPortFor,
   mailTestText,
+  mailText,
   mailView,
 } from '@whombat/client';
 import { useMe } from '@whombat/client/react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -31,8 +32,6 @@ import { Segmented } from '../ui/Segmented';
 import { Sheet } from '../ui/sheet';
 import { useManaged } from './context';
 import { Card, ErrorLine, Field, Note, Row } from './ui';
-
-const T = MAIL_TEXT;
 
 /** The mail server's ops on a community box's session; null anywhere else. */
 export function useMailHere(): { api: MailApi; email: string } | null {
@@ -48,7 +47,8 @@ export function useMailHere(): { api: MailApi; email: string } | null {
   );
 }
 
-function label(action: MailAction): string {
+function label(action: MailAction, locale?: string | null): string {
+  const T = mailText(locale);
   switch (action) {
     case 'set_up':
       return T.setUp;
@@ -62,6 +62,8 @@ function label(action: MailAction): string {
 }
 
 export function MailSection({ here }: { here: { api: MailApi; email: string } | null }) {
+  const { rawLocale } = useI18n();
+  const T = mailText(rawLocale);
   const theme = useTheme();
   const [answer, setAnswer] = useState<HostMailOutput | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,7 +74,7 @@ export function MailSection({ here }: { here: { api: MailApi; email: string } | 
     api?.get().then(setAnswer, () => setAnswer(null));
   }, [api]);
   useEffect(read, [read]);
-  const v = mailView(answer);
+  const v = mailView(answer, rawLocale);
   if (!here || !api || !v || !answer) return null;
   const mail = api;
 
@@ -84,7 +86,7 @@ export function MailSection({ here }: { here: { api: MailApi; email: string } | 
       // The row's last test says how it went (a test of the stored settings is kept as theirs).
       read();
     } catch (error) {
-      setNote({ text: mailErrorText(error), bad: true });
+      setNote({ text: mailErrorText(error, rawLocale), bad: true });
     } finally {
       setBusy(false);
     }
@@ -104,7 +106,7 @@ export function MailSection({ here }: { here: { api: MailApi; email: string } | 
                 setAnswer(r);
                 setNote({ text: T.removed, bad: false });
               },
-              (error) => setNote({ text: mailErrorText(error), bad: true }),
+              (error) => setNote({ text: mailErrorText(error, rawLocale), bad: true }),
             ),
         },
       ]);
@@ -121,7 +123,7 @@ export function MailSection({ here }: { here: { api: MailApi; email: string } | 
         action={
           main ? (
             <Button
-              label={label(main)}
+              label={label(main, rawLocale)}
               variant={main === 'set_up' ? 'primary' : 'secondary'}
               disabled={busy}
               busy={busy && main === 'test'}
@@ -157,7 +159,7 @@ export function MailSection({ here }: { here: { api: MailApi; email: string } | 
           {rest.map((action) => (
             <Button
               key={action}
-              label={label(action)}
+              label={label(action, rawLocale)}
               variant="secondary"
               disabled={busy}
               onPress={() => act(action)}
@@ -199,6 +201,8 @@ function MailSheet({
   onClose: () => void;
   onSaved: (r: HostMailOutput) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = mailText(rawLocale);
   const theme = useTheme();
   const [form, setForm] = useState<MailForm>(() => mailForm(answer.mail, email));
   const [problem, setProblem] = useState<string | null>(null);
@@ -228,7 +232,7 @@ function MailSheet({
     try {
       onSaved(await api.set(input));
     } catch (error) {
-      setProblem(mailErrorText(error));
+      setProblem(mailErrorText(error, rawLocale));
     } finally {
       setBusy(null);
     }
@@ -240,9 +244,9 @@ function MailSheet({
     setTested(null);
     try {
       const r = await api.test(input);
-      setTested({ text: mailTestText(r.test), bad: r.test.state !== 'sent' });
+      setTested({ text: mailTestText(r.test, rawLocale), bad: r.test.state !== 'sent' });
     } catch (error) {
-      setTested({ text: mailErrorText(error), bad: true });
+      setTested({ text: mailErrorText(error, rawLocale), bad: true });
     } finally {
       setBusy(null);
     }

@@ -13,6 +13,7 @@ import {
   type Principal,
   shortNameOf,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export type AgentPrincipal = Extract<Principal, { kind: 'agent' }>;
 
@@ -26,13 +27,14 @@ export interface People {
   byHandle(handle: string): Principal | undefined;
 }
 
-export function peopleFrom(principals: readonly Principal[]): People {
+export function peopleFrom(principals: readonly Principal[], locale?: string): People {
+  const someone = mobileTranslator(locale).t('data.approval.someone');
   const byId = new Map(principals.map((p) => [p.id, p]));
   const byHandle = new Map(principals.map((p) => [p.handle, p]));
   return {
     byId,
     get: (id) => (id ? byId.get(id) : undefined),
-    name: (id) => (id ? (byId.get(id)?.name ?? 'Someone') : 'Someone'),
+    name: (id) => (id ? (byId.get(id)?.name ?? someone) : someone),
     agent: theAgentOf(principals),
     byHandle: (handle) => byHandle.get(handle),
   };
@@ -76,9 +78,9 @@ export function approvalContext(
     const p = ctx.people.get(id);
     return p ? { name: p.name, shortName: shortNameOf(p) } : undefined;
   };
-  const asker = automationAsker(approval, ctx.people.get(approval.requesterId));
+  const asker = automationAsker(approval, ctx.people.get(approval.requesterId), ctx.locale);
   return {
-    names: namesWithAsker(names, approval.requesterId, asker),
+    names: namesWithAsker(names, approval.requesterId, asker, ctx.locale),
     viewer: ctx.viewer,
     now: ctx.now,
     timeZone: ctx.timeZone,

@@ -10,6 +10,7 @@
  *   listed network whose ports include the port; http allowed) — `vaultDestinationProblem`. With the local network
  *   open (`lan`, Whombat local-network.md LN-01) every private address passes on any port, listed or not.
  */
+import { coreTranslator } from '../i18n/catalog.js';
 import {
   VAULT_NETWORK_MIN_PREFIX_V4,
   VAULT_NETWORK_MIN_PREFIX_V6,
@@ -305,20 +306,19 @@ export const VAULT_NETWORK_PROBLEMS = [
 ] as const;
 export type VaultNetworkProblemCode = (typeof VAULT_NETWORK_PROBLEMS)[number];
 
-export const VAULT_NETWORK_PROBLEM_TEXT: Record<VaultNetworkProblemCode, string> = {
-  invalid: 'That isn’t a network. Write it like 192.168.1.0/24.',
-  mapped: 'Write an IPv4 network as IPv4, like 192.168.1.0/24.',
-  too_wide: 'That network is too wide. Use a /16 or narrower (a /48 or narrower for IPv6).',
-  public: 'That’s a public network. Entries reach public addresses over https without being on this list.',
-  loopback: 'Loopback addresses can’t be on this list.',
-  link_local: 'Link-local addresses can’t be on this list.',
-  metadata: 'That network holds a cloud metadata address, so it can’t be on this list.',
-  multicast: 'Multicast addresses can’t be on this list.',
-  unspecified: 'That address can’t be on this list.',
-  reserved: 'Reserved addresses can’t be on this list.',
-  documentation: 'Documentation addresses can’t be on this list.',
-  ports: `List 1–${VAULT_NETWORK_PORTS_MAX} different ports between 1 and 65535.`,
-};
+export const VAULT_NETWORK_PROBLEM_TEXT: Record<VaultNetworkProblemCode, string> =
+  vaultNetworkProblemText('en');
+
+/** `VAULT_NETWORK_PROBLEM_TEXT` in a locale. */
+export function vaultNetworkProblemText(locale?: string | null): Record<VaultNetworkProblemCode, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(
+    VAULT_NETWORK_PROBLEMS.map((code) => [
+      code,
+      tr.t(`vaultNet.problem.${code}`, { max: VAULT_NETWORK_PORTS_MAX }),
+    ]),
+  ) as Record<VaultNetworkProblemCode, string>;
+}
 
 export interface VaultNetworkProblem {
   code: VaultNetworkProblemCode;
@@ -327,20 +327,23 @@ export interface VaultNetworkProblem {
   message: string;
 }
 
-const networkProblem = (code: VaultNetworkProblemCode): VaultNetworkProblem => ({
+const networkProblem = (code: VaultNetworkProblemCode, locale?: string | null): VaultNetworkProblem => ({
   code,
   field: code === 'ports' ? 'ports' : 'cidr',
-  message: VAULT_NETWORK_PROBLEM_TEXT[code],
+  message: coreTranslator(locale).t(`vaultNet.problem.${code}`, { max: VAULT_NETWORK_PORTS_MAX }),
 });
 
 /** Why a port list can't be listed, or null: 1–16 different integers 1–65535. */
-export function vaultPortsProblem(ports: readonly number[]): VaultNetworkProblem | null {
+export function vaultPortsProblem(
+  ports: readonly number[],
+  locale?: string | null,
+): VaultNetworkProblem | null {
   const ok =
     ports.length >= 1 &&
     ports.length <= VAULT_NETWORK_PORTS_MAX &&
     ports.every((p) => Number.isInteger(p) && p >= 1 && p <= 65535) &&
     new Set(ports).size === ports.length;
-  return ok ? null : networkProblem('ports');
+  return ok ? null : networkProblem('ports', locale);
 }
 
 /**
@@ -348,18 +351,22 @@ export function vaultPortsProblem(ports: readonly number[]): VaultNetworkProblem
  * address space or unique local), at most a /16 (IPv4) or /48 (IPv6) wide, holding no metadata address, with 1–16
  * ports. The appliance validates the same again on its privileged side (VT-59).
  */
-export function vaultNetworkProblem(cidr: string, ports: readonly number[]): VaultNetworkProblem | null {
+export function vaultNetworkProblem(
+  cidr: string,
+  ports: readonly number[],
+  locale?: string | null,
+): VaultNetworkProblem | null {
   const parsed = parseCidr(cidr);
-  if (!parsed) return networkProblem('invalid');
-  if (ipv4MappedOf(parsed) && parsed.prefix >= 96) return networkProblem('mapped');
+  if (!parsed) return networkProblem('invalid', locale);
+  if (ipv4MappedOf(parsed) && parsed.prefix >= 96) return networkProblem('mapped', locale);
   const minPrefix = parsed.family === 4 ? VAULT_NETWORK_MIN_PREFIX_V4 : VAULT_NETWORK_MIN_PREFIX_V6;
-  if (parsed.prefix < minPrefix) return networkProblem('too_wide');
+  if (parsed.prefix < minPrefix) return networkProblem('too_wide', locale);
   if (!LISTABLE.some((range) => networkWithin(parsed, range))) {
     const cls = classifyAddress(parsed);
-    return networkProblem(cls === 'private' ? 'reserved' : cls);
+    return networkProblem(cls === 'private' ? 'reserved' : cls, locale);
   }
-  if (METADATA.some((m) => networksOverlap(parsed, m))) return networkProblem('metadata');
-  return vaultPortsProblem(ports);
+  if (METADATA.some((m) => networksOverlap(parsed, m))) return networkProblem('metadata', locale);
+  return vaultPortsProblem(ports, locale);
 }
 
 /**
@@ -437,15 +444,16 @@ export const VAULT_URL_PROBLEMS = [
 ] as const;
 export type VaultUrlProblemCode = (typeof VAULT_URL_PROBLEMS)[number];
 
-export const VAULT_URL_PROBLEM_TEXT: Record<VaultUrlProblemCode, string> = {
-  invalid: 'That isn’t a web address. Write it like https://api.example.com.',
-  scheme: 'Use an address that starts with https:// (or http:// on your home network).',
-  credentials: 'Leave the username and password out of the address; the Vault keeps them.',
-  query: 'Leave ?… and #… out of the address.',
-  host: 'That address has no valid host name.',
-  port: 'That address has no valid port.',
-  path: 'That address has a path Whombat can’t use (no “..”, “//” or encoded slashes).',
-};
+export const VAULT_URL_PROBLEM_TEXT: Record<VaultUrlProblemCode, string> = vaultUrlProblemText('en');
+
+/** `VAULT_URL_PROBLEM_TEXT` in a locale. */
+export function vaultUrlProblemText(locale?: string | null): Record<VaultUrlProblemCode, string> {
+  const tr = coreTranslator(locale);
+  return Object.fromEntries(VAULT_URL_PROBLEMS.map((code) => [code, tr.t(`vaultNet.url.${code}`)])) as Record<
+    VaultUrlProblemCode,
+    string
+  >;
+}
 
 /** Characters a path may hold (RFC 3986 pchar and `/`), percent-escapes checked separately. */
 const PATH_CHARS = /^[A-Za-z0-9\-._~!$&'()*+,;=:@/%]*$/;
@@ -551,9 +559,10 @@ export function parseUrlAuthority(
  */
 export function parseVaultUrl(
   raw: string,
+  locale?: string | null,
 ): { ok: true; url: ParsedVaultUrl } | { ok: false; code: VaultUrlProblemCode; message: string } {
   const fail = (code: VaultUrlProblemCode) =>
-    ({ ok: false, code, message: VAULT_URL_PROBLEM_TEXT[code] }) as const;
+    ({ ok: false, code, message: coreTranslator(locale).t(`vaultNet.url.${code}`) }) as const;
   const text = raw.trim();
   if (text.length === 0 || text.length > VAULT_URL_MAX) return fail('invalid');
   const m = /^([A-Za-z][A-Za-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(.*)$/.exec(text);

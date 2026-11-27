@@ -7,7 +7,6 @@
 import { CONNECTIONS_HREF } from '@whombat/core';
 import {
   HOST_CONTROL_LEVEL_DEFAULT,
-  HOST_CONTROL_LEVEL_WORDS,
   HOST_CONTROL_LEVELS,
   type HostControlLevel,
   type HostInstall,
@@ -15,16 +14,24 @@ import {
   type HostInstallErrorCode,
   type HostInstallState,
   type HostPendingEnrollment,
+  hostControlLevelWords,
   hostInstallErrorText,
   parseHostInstallAddress,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_INSTALL_WORDS } from '../i18n/messages/connectionsHosts/install';
 import { isMacInstallText } from './macos';
 import { SERVERS_HREF } from './model';
 
 /* Control levels (SI-06): `HOST_CONTROL_LEVELS`, `HOST_CONTROL_LEVEL_WORDS` and the default are the contracts' ------ */
 
 /** The question above the three levels. */
-export const HOST_CONTROL_QUESTION = 'What may Whombat do on it?';
+export function hostControlQuestion(locale?: string | null): string {
+  return clientTree(locale, HOSTS_INSTALL_WORDS).question;
+}
+
+export const HOST_CONTROL_QUESTION = hostControlQuestion('en');
 
 export function hostControlLevelOf(value: unknown): HostControlLevel | null {
   return typeof value === 'string' && (HOST_CONTROL_LEVELS as readonly string[]).includes(value)
@@ -148,21 +155,21 @@ export function signInFormForRetry(f: SignInForm): SignInForm {
 const SERVER_NAME = /^[a-zA-Z0-9][a-zA-Z0-9.-]{0,62}$/;
 
 /** What is wrong with the form, per field (empty: it can be sent). */
-export function signInFormErrors(f: SignInForm): SignInErrors {
+export function signInFormErrors(f: SignInForm, locale?: string | null): SignInErrors {
+  const w = clientTree(locale, HOSTS_INSTALL_WORDS).errors;
   const e: SignInErrors = {};
   const address = f.address.trim();
-  if (!address) e.address = 'Type the server’s address.';
-  else if (address.length > 255 || !parseHostInstallAddress(address))
-    e.address = 'That isn’t an address. Try a name or IP, like 10.100.0.14.';
+  if (!address) e.address = w.address;
+  else if (address.length > 255 || !parseHostInstallAddress(address)) e.address = w.notAddress;
   const user = f.username.trim();
-  if (!user) e.username = 'Type a user name.';
-  else if (user.length > 64 || /[\s:@/]/.test(user)) e.username = 'That isn’t a user name.';
+  if (!user) e.username = w.username;
+  else if (user.length > 64 || /[\s:@/]/.test(user)) e.username = w.notUsername;
   if (f.method === 'password') {
-    if (!f.password) e.password = 'Type its password.';
-    else if (f.password.length > 1024) e.password = 'That password is too long.';
-  } else if (!f.entryId) e.entryId = 'Pick a key.';
+    if (!f.password) e.password = w.password;
+    else if (f.password.length > 1024) e.password = w.passwordTooLong;
+  } else if (!f.entryId) e.entryId = w.key;
   const name = f.name.trim();
-  if (name && !SERVER_NAME.test(name)) e.name = 'Letters, digits, dots and dashes.';
+  if (name && !SERVER_NAME.test(name)) e.name = w.name;
   return e;
 }
 
@@ -241,37 +248,18 @@ export function withKeyDefaults(f: SignInForm, keys: readonly SshKeyChoice[]): S
 }
 
 /** The form's words (shared by the web and the phone). */
-export const SIGN_IN_COPY = {
-  tab: 'Sign in once',
-  address: 'Address',
-  addressPlaceholder: '10.100.0.14',
-  username: 'User name',
-  password: 'Password',
-  passwordHint: 'Used once to put Whombat’s helper on it, then forgotten.',
-  useKey: 'use a key from the Vault',
-  key: 'Key from your Vault',
-  noKeys: 'Your Vault has no SSH keys yet.',
-  usePassword: 'Use a password instead',
-  sudoPassword: 'Password for sudo (only if it asks)',
-  keepKey: 'Leave a Vault key on it, so Whombat can sign in later without a password.',
-  keepKeyWhich: 'Key to leave on it',
-  newKey: 'Make a new key',
-  newKeyHint: 'A new key named “Servers” in your Vault.',
-  name: 'Name in Whombat',
-  add: 'Add server',
-  adding: 'Adding…',
-} as const;
+export function signInCopy(locale?: string | null) {
+  return { ...clientTree(locale, HOSTS_INSTALL_WORDS).signIn };
+}
 
-/** The Run a command words (SI-01's fallback). */
-export const COMMAND_COPY = {
-  tab: 'Run a command',
-  lead: 'Run this on the server as root. It shows up as soon as it has run, with the control you chose.',
-  making: 'Making the command…',
-  copy: 'Copy the command',
-  copied: 'Command copied.',
-  valid: 'Works for an hour, on one server. Linux, as root.',
-  waiting: 'Waiting for you',
-} as const;
+export const SIGN_IN_COPY = signInCopy('en');
+
+/** The Run a command words (the fallback when signing in once can't be used). */
+export function commandCopy(locale?: string | null) {
+  return { ...clientTree(locale, HOSTS_INSTALL_WORDS).command };
+}
+
+export const COMMAND_COPY = commandCopy('en');
 
 /* The install job (SI-02, SI-04, SI-07, SI-08, SI-11) ------------------------------------------------------------- */
 
@@ -332,7 +320,9 @@ const AT: Record<Exclude<HostInstallState, 'failed'>, number> = {
 };
 
 /** The four steps of SI-02, each done, under way, still to come or where it stopped. */
-export function installSteps(i: HostInstall): InstallStep[] {
+export function installSteps(i: HostInstall, locale?: string | null): InstallStep[] {
+  const w = clientTree(locale, HOSTS_INSTALL_WORDS).steps;
+  const address = i.address;
   const stop = i.state === 'failed' ? ORDER.indexOf(failedAt(i)) : AT[i.state];
   const late = installLate(i);
   return ORDER.map((key, n) => {
@@ -344,38 +334,32 @@ export function installSteps(i: HostInstall): InstallStep[] {
         return {
           key,
           state,
-          label: done ? `Signed in to ${i.address}` : `Signing in to ${i.address}`,
+          label: interpolate(done ? w.signedIn : w.signingIn, { address }),
           sub: null,
         };
       case 'install':
         return {
           key,
           state,
-          label: done
-            ? i.already
-              ? 'Updated Whombat’s helper'
-              : 'Installed Whombat’s helper'
-            : i.already
-              ? 'Updating Whombat’s helper'
-              : 'Installing Whombat’s helper',
+          label: done ? (i.already ? w.updated : w.installed) : i.already ? w.updating : w.installing,
           sub: i.system,
         };
       case 'report':
         return {
           key,
           state,
-          label: done ? 'Its first report came in' : 'Waiting for its first report',
+          label: done ? w.reported : w.waiting,
           sub: null,
         };
       default:
-        return { key, state, label: 'Ready', sub: null };
+        return { key, state, label: w.ready, sub: null };
     }
   });
 }
 
 /** What the job is called above its steps: the server's name once Whombat has one, else the address. */
-export function installTitle(i: Pick<HostInstall, 'serverName' | 'address'>): string {
-  return `Adding ${i.serverName ?? i.address}`;
+export function installTitle(i: Pick<HostInstall, 'serverName' | 'address'>, locale?: string | null): string {
+  return interpolate(clientTree(locale, HOSTS_INSTALL_WORDS).title, { name: i.serverName ?? i.address });
 }
 
 /**
@@ -384,18 +368,15 @@ export function installTitle(i: Pick<HostInstall, 'serverName' | 'address'>): st
  */
 export function installHostKeyNote(
   i: Pick<HostInstall, 'hostKey' | 'hostKeyNew' | 'keptKey'> & Partial<Pick<HostInstall, 'error'>>,
+  locale?: string | null,
 ): { before: string; fingerprint: string; after: string } | null {
   if (!i.hostKey) return null;
+  const w = clientTree(locale, HOSTS_INSTALL_WORDS).hostKey;
   const fingerprint = i.hostKey.fingerprint;
   // A changed key (connect-in-chat.md): the key it shows now, the one “Trust the new one” trusts.
-  if (i.error?.code === 'host_key_changed')
-    return { before: 'It shows a new key now: ', fingerprint, after: '.' };
-  if (!i.hostKeyNew) return { before: 'It showed key ', fingerprint, after: ', the one your Vault trusts.' };
-  return {
-    before: 'First time on this server: it showed key ',
-    fingerprint,
-    after: i.keptKey ? '. Whombat remembers it and warns you if it ever changes.' : '.',
-  };
+  if (i.error?.code === 'host_key_changed') return { before: w.changed, fingerprint, after: '.' };
+  if (!i.hostKeyNew) return { before: w.known, fingerprint, after: w.knownAfter };
+  return { before: w.first, fingerprint, after: i.keptKey ? w.remembers : '.' };
 }
 
 export type InstallOutcome =
@@ -414,15 +395,20 @@ function takenName(name: string, serverId: string, fleetNames: readonly string[]
  * How a finished job ended (null while it runs): added, updated in place (SI-08), added under a free name (SI-07),
  * installed but not reporting yet, or the refusal in words (SI-11). `fleetNames`: the servers' names and ids now.
  */
-export function installOutcome(i: HostInstall, fleetNames: readonly string[] = []): InstallOutcome | null {
+export function installOutcome(
+  i: HostInstall,
+  fleetNames: readonly string[] = [],
+  locale?: string | null,
+): InstallOutcome | null {
   if (installRunning(i)) return null;
+  const w = clientTree(locale, HOSTS_INSTALL_WORDS).outcome;
   const name = i.serverName ?? i.serverId ?? i.address;
   if (i.state === 'ready' && i.serverId) {
-    const level = HOST_CONTROL_LEVEL_WORDS[i.control].title;
+    const level = hostControlLevelWords(locale)[i.control].title;
     if (i.already)
       return {
         kind: 'already',
-        text: `${name} was already added. Whombat’s helper on it is updated and set to ${level}.`,
+        text: interpolate(w.already, { name, level }),
         serverId: i.serverId,
         serverName: name,
       };
@@ -430,16 +416,18 @@ export function installOutcome(i: HostInstall, fleetNames: readonly string[] = [
     if (base)
       return {
         kind: 'renamed',
-        text: `Added as ${name}. An older ${base} isn’t reporting; remove it if it’s the same server.`,
+        text: interpolate(w.renamed, { name, base }),
         serverId: i.serverId,
         serverName: name,
       };
-    return { kind: 'added', text: `${name} is added.`, serverId: i.serverId, serverName: name };
+    return { kind: 'added', text: interpolate(w.added, { name }), serverId: i.serverId, serverName: name };
   }
   if (installLate(i) && i.serverId)
     return {
       kind: 'late',
-      text: i.error?.message || hostInstallErrorText('timed_out', { address: i.address, installed: true }),
+      text:
+        i.error?.message ||
+        hostInstallErrorText('timed_out', { address: i.address, installed: true }, locale),
       serverId: i.serverId,
       serverName: name,
     };
@@ -447,7 +435,7 @@ export function installOutcome(i: HostInstall, fleetNames: readonly string[] = [
   return {
     kind: 'failed',
     // The server words every refusal (SI-11); its message is shown as it comes.
-    text: i.error?.message || hostInstallErrorText(code, { address: i.address, name: i.serverName }),
+    text: i.error?.message || hostInstallErrorText(code, { address: i.address, name: i.serverName }, locale),
     code,
     detail: i.detail?.trim() ? i.detail : null,
   };
@@ -473,8 +461,11 @@ export interface InstallFailureCard {
 }
 
 /** When “Trust the new one” finds yet another key (the Vault reads it again first). */
-export const INSTALL_KEY_CHANGED_AGAIN =
-  'Its key changed again while Whombat looked. Try again from the start.';
+export function installKeyChangedAgain(locale?: string | null): string {
+  return clientTree(locale, HOSTS_INSTALL_WORDS).keyChangedAgain;
+}
+
+export const INSTALL_KEY_CHANGED_AGAIN = installKeyChangedAgain('en');
 
 /**
  * A failed install as one card (pure): a plain sentence, what to do, and the one step that helps. `server` the server's
@@ -483,63 +474,54 @@ export const INSTALL_KEY_CHANGED_AGAIN =
 export function installFailureCard(
   i: Pick<HostInstall, 'address' | 'serverName' | 'hostKey' | 'pins'>,
   outcome: Pick<Extract<InstallOutcome, { kind: 'failed' }>, 'code' | 'text'>,
+  locale?: string | null,
 ): InstallFailureCard {
+  const w = clientTree(locale, HOSTS_INSTALL_WORDS).failure;
   const server = i.serverName || i.address;
+  const address = i.address;
   const retry = (title: string, text: string | null = null): InstallFailureCard => ({
     title,
     text,
     step: 'retry',
-    label: 'Try again',
+    label: w.tryAgain,
   });
   switch (outcome.code) {
     case 'cant_reach_whombat':
       return {
-        title: `${server} can’t reach your Whombat this way.`,
-        text: 'Run one line on it instead, which fetches Whombat’s helper itself. If it’s on another network, it can’t reach your Whombat either way.',
+        title: interpolate(w.cantReachTitle, { server }),
+        text: w.cantReachText,
         step: 'command',
-        label: 'Run this one line on it instead',
+        label: w.cantReachLabel,
       };
     case 'host_key_changed':
       return i.hostKey && i.pins?.length
         ? {
-            title: 'Its key changed since last time. Trust the new one?',
-            text: `That happens when ${server} is reinstalled. Whombat sent it nothing.`,
+            title: w.keyTrustTitle,
+            text: interpolate(w.keyTrustText, { server }),
             step: 'trust',
-            label: 'Trust the new one',
+            label: w.keyTrustLabel,
           }
-        : retry(
-            'Its key changed since last time.',
-            'That happens when it’s reinstalled. Trust its new key on its Vault entry, then try again.',
-          );
+        : retry(w.keyChangedTitle, w.keyChangedText);
     case 'sign_in_failed':
-      return retry(`The user name or password for ${i.address} isn’t right.`);
+      return retry(interpolate(w.signInFailed, { address }));
     case 'unreachable':
-      return retry(`Nothing answers at ${i.address}.`, 'Check the address, and that the server is on.');
+      return retry(interpolate(w.unreachableTitle, { address }), w.unreachableText);
     case 'sudo_password_needed':
-      return retry(
-        `${i.address} asks for a password to install as root.`,
-        'Type it under “Password for sudo” and try again.',
-      );
+      return retry(interpolate(w.sudoNeededTitle, { address }), w.sudoNeededText);
     case 'sudo_refused':
       // A Mac's words are the server's own (sign in as an administrator of the Mac; macos-servers.md).
       if (isMacInstallText(outcome.text)) return retry(...sentences(outcome.text));
-      return retry(`This user may not install things as root on ${i.address}.`, 'Sign in as root instead.');
+      return retry(interpolate(w.sudoRefusedTitle, { address }), w.sudoRefusedText);
     case 'no_downloader':
-      return retry(
-        `${i.address} has no way to download Whombat’s helper.`,
-        'It needs curl or wget, small download tools most Linux systems have. Add one, then try again.',
-      );
+      return retry(interpolate(w.noDownloaderTitle, { address }), w.noDownloaderText);
     case 'unsupported':
       // A Mac too old, or one whose macOS couldn't be read: the server says which, in Mac words.
       if (isMacInstallText(outcome.text)) return retry(...sentences(outcome.text));
-      return retry(
-        `Whombat’s helper can’t run on ${i.address}.`,
-        'It needs Linux on a 64-bit Intel, AMD or ARM processor. “More detail” says what was missing.',
-      );
+      return retry(interpolate(w.unsupportedTitle, { address }), w.unsupportedText);
     case 'other_whombat':
-      return retry('This server reports to another Whombat.', 'Remove Whombat’s helper there first.');
+      return retry(w.otherWhombatTitle, w.otherWhombatText);
     case 'timed_out':
-      return retry(`${i.address} took too long to answer, so Whombat stopped.`);
+      return retry(interpolate(w.timedOut, { address }));
     default:
       // The destination rule's own words (`not_allowed`) and the installer's (`failed`) say it best.
       return retry(outcome.text);
@@ -558,8 +540,12 @@ function sentences(text: string): [string, string | null] {
 export function commandOutcome(
   enrollmentId: string | null,
   items: readonly Pick<HostPendingEnrollment, 'id' | 'state' | 'serverId' | 'hostname'>[],
+  locale?: string | null,
 ): { serverId: string; text: string } | null {
   const e = enrollmentId ? items.find((x) => x.id === enrollmentId) : undefined;
   if (e?.state !== 'approved' || !e.serverId) return null;
-  return { serverId: e.serverId, text: `${e.serverId} is added.` };
+  return {
+    serverId: e.serverId,
+    text: interpolate(clientTree(locale, HOSTS_INSTALL_WORDS).outcome.added, { name: e.serverId }),
+  };
 }

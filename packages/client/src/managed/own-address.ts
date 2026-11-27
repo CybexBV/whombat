@@ -8,6 +8,7 @@
  * box with the shared route refuses it (`claim_local_unavailable`). The start keeps nothing but a claim id in the box's
  * memory, so asking costs nothing (`probeOwnClaim`).
  */
+import { formatLocaleOf, interpolate } from '@whombat/core/i18n';
 import { DEFAULT_PUBLIC_URL } from '@whombat/core/text';
 import {
   OWN_ADDRESS_CLAIM_PATH,
@@ -17,9 +18,11 @@ import {
 } from '@whombat/protocol';
 import { DIRECT_PATH } from '@whombat/protocol/direct';
 import { AccountLinkCode, type DirectRoute } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { OWN_ADDRESS_WORDS } from '../i18n/messages/hostManaged/ownAddress';
 import { OperationError, type OwnAddressSummary, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
-import { operationReason, PASSKEY_COPY, passkeyErrorOf } from './passkeys';
+import { operationReason, passkeyCopy, passkeyErrorOf } from './passkeys';
 
 /** The own-address host this page is on (`<name>.whombat.app`, `<label>.box.whombat.app`, `<name>.dev.whombat.app`), or null. */
 export function ownAddressOfPage(hostname: string): string | null {
@@ -185,8 +188,8 @@ export function normalizeLinkCode(typed: string): string | null {
 }
 
 /** What a refused link code says. */
-export function accountLinkErrorText(error: unknown): string {
-  const t = OWN_ADDRESS_TEXT.link.errors;
+export function accountLinkErrorText(error: unknown, locale?: string | null): string {
+  const t = ownAddressWords(locale).link.errors;
   if (!(error instanceof OperationError)) return t.failed;
   const reason = (error.details as { code?: unknown } | undefined)?.code ?? error.code;
   switch (reason) {
@@ -232,10 +235,14 @@ export async function readOwnAddress(session: ApplianceSession): Promise<OwnAddr
   }
 }
 
-const day = (iso: string, locale?: string) =>
-  new Date(iso).toLocaleDateString(locale ?? 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-const dayTime = (iso: string, locale?: string) =>
-  new Date(iso).toLocaleString(locale ?? 'en-GB', {
+const day = (iso: string, locale?: string | null) =>
+  new Date(iso).toLocaleDateString(formatLocaleOf(locale), {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+const dayTime = (iso: string, locale?: string | null) =>
+  new Date(iso).toLocaleString(formatLocaleOf(locale), {
     day: 'numeric',
     month: 'short',
     hour: '2-digit',
@@ -243,19 +250,21 @@ const dayTime = (iso: string, locale?: string) =>
   });
 
 /** When the box tries for its certificate again: the time today, the day and the time later, null once it passed. */
-function retryWhen(iso: string, now: number, locale?: string): string | null {
+function retryWhen(iso: string, now: number, locale?: string | null): string | null {
   const at = Date.parse(iso);
   if (!Number.isFinite(at) || at <= now) return null;
-  const time = new Date(at).toLocaleTimeString(locale ?? 'en-GB', { hour: '2-digit', minute: '2-digit' });
-  const sameDay = (ms: number) => new Date(ms).toLocaleDateString(locale ?? 'en-GB');
-  if (sameDay(at) === sameDay(now)) return `at ${time}`;
-  const date = new Date(at).toLocaleDateString(locale ?? 'en-GB', { day: 'numeric', month: 'short' });
-  return `on ${date} at ${time}`;
+  const tag = formatLocaleOf(locale);
+  const t = ownAddressWords(locale).settings;
+  const time = new Date(at).toLocaleTimeString(tag, { hour: '2-digit', minute: '2-digit' });
+  const sameDay = (ms: number) => new Date(ms).toLocaleDateString(tag);
+  if (sameDay(at) === sameDay(now)) return t.retryAt(time);
+  const date = new Date(at).toLocaleDateString(tag, { day: 'numeric', month: 'short' });
+  return t.retryOn(date, time);
 }
 
 /** The state line while the box can't get its certificate: why, and when it tries again. */
-function failingState(a: OwnAddressSummary, now: number, locale?: string) {
-  const t = OWN_ADDRESS_TEXT.settings;
+function failingState(a: OwnAddressSummary, now: number, locale?: string | null) {
+  const t = ownAddressWords(locale).settings;
   const f = a.failure;
   const when = f?.retryAt ? retryWhen(f.retryAt, now, locale) : null;
   if (f?.reason === 'rate_limited') return { state: t.busy(when), tone: 'warn' as const };
@@ -283,9 +292,9 @@ export interface OwnAddressView {
 export function ownAddressView(
   a: OwnAddressSummary,
   now: number = Date.now(),
-  locale?: string,
+  locale?: string | null,
 ): OwnAddressView {
-  const t = OWN_ADDRESS_TEXT.settings;
+  const t = ownAddressWords(locale).settings;
   const foreign = a.watch.foreign.filter((f) => Date.parse(f.notAfter) > now).length;
   const state = !a.reachable
     ? { state: t.off, tone: 'mut' as const }
@@ -315,189 +324,96 @@ export function ownAddressView(
 export const PRIVACY_PAGE_PATH = '/legal/privacy-policy';
 export const PRIVACY_PAGE_URL = `${DEFAULT_PUBLIC_URL}${PRIVACY_PAGE_PATH}`;
 
-export const OWN_ADDRESS_TEXT = {
-  /** An unclaimed box opened at its address without the claim link. */
-  openOnScreen: {
-    kicker: 'THIS WHOMBAT',
-    title: 'Set up your Whombat',
-    sub: 'Open the address on your Whombat’s screen to set it up.',
-    /** The form on that page: the six letters after `/c/` in the address on its screen. */
-    typeSub: 'Your Whombat’s screen shows its address. Type the six letters after /c/ to set it up.',
-    label: 'Letters after /c/',
-    placeholder: 'abcdef',
-    next: 'Continue',
-    checking: 'Checking…',
-    notLetters: 'Type the six letters after /c/ on its screen.',
-    wrong: 'That’s not it. Check the letters after /c/ on its screen.',
-  },
-  steps: {
-    claim: { t: 'Claim your Whombat', d: 'The letters on its screen' },
-    link: { t: 'Link your account', d: 'The code from your Whombat account' },
-    passkey: { t: 'Make its passkey', d: 'For this Whombat only' },
-  },
-  stepLabel: (i: number, of: number) => `STEP ${i + 1} OF ${of}`,
-  claim: {
-    title: 'Claim your Whombat',
-    sub: 'Your Whombat shows four letters on its screen. Type them here to make it yours.',
-    tip: 'No screen on it? Plug one in, or open its window if it runs in a virtual machine.',
-  },
-  account: {
-    title: 'Who are you?',
-    sub: 'Your name is how your agent greets you.',
-    tip: 'Your name and email stay on this Whombat.',
-  },
-  link: {
-    title: 'Type the code from your Whombat account',
-    sub: 'Sign in at app.whombat.com and choose “Link a Whombat”. It shows a code for 10 minutes.',
-    tip: 'Linking lets your phone reach this Whombat from anywhere. Your account gets nothing on it.',
-    label: 'CODE',
-    placeholder: 'ABCD-EFGH',
-    next: 'Continue',
-    checking: 'Checking…',
-    confirmTitle: (email: string) => `Link to ${email}?`,
-    confirmSub: 'This Whombat will belong to that Whombat account. Only link an account that’s yours.',
-    confirm: 'Link',
-    linking: 'Linking…',
-    other: 'Use another code',
-    later: 'Later',
-    linked: (email: string) => `Linked to ${email}.`,
-    errors: {
-      code: 'Enter the 8 letters of the code.',
-      invalid: 'That code doesn’t work. Check it, or make a new one.',
-      expired: 'That code ran out. Make a new one.',
-      used: 'That code was used already. Make a new one.',
-      otherAccount: 'This Whombat is linked to another account already.',
-      devicesAllowed: 'Your plan has room for no more Whombats. Change it at app.whombat.com.',
-      terms: 'Accept the Whombat terms at app.whombat.com first, then make a new code.',
-      unreachable: 'Whombat’s service didn’t answer. Try again in a moment.',
-      rateLimited: 'Too many tries. Wait a few minutes, then try again.',
-      failed: 'That didn’t work. Try again.',
+/**
+ * The words of the setup at the address, joining there, Settings → This Whombat → About and app.whombat.com's link
+ * codes, in the person's language. The passkey words follow design §7.5.
+ */
+export function ownAddressWords(locale?: string | null) {
+  const w = clientTree(locale, OWN_ADDRESS_WORDS);
+  const s = w.settings;
+  return {
+    /** An unclaimed box opened at its address without the claim link; its form takes the six letters after `/c/`. */
+    openOnScreen: w.openOnScreen,
+    steps: w.steps,
+    stepLabel: (i: number, of: number) => interpolate(w.stepLabel, { n: i + 1, of }),
+    claim: w.claim,
+    account: w.account,
+    link: {
+      ...w.link,
+      confirmTitle: (email: string) => interpolate(w.link.confirmTitle, { email }),
+      linked: (email: string) => interpolate(w.link.linked, { email }),
     },
-  },
-  passkey: {
-    title: 'Make a passkey for this Whombat',
-    // Two prompts, on purpose: the second checks that the key the passkey gave when it was made is the one it gives
-    // when it is used, so the backups really open with it later.
-    sub: 'It opens this Whombat and its backups. Your device asks for it twice: first to make it, then to check it works.',
-    /** Design §7.5, at setup, making the box passkey: verbatim. */
-    words:
-      'This passkey is for your Whombat only. Our website can’t use it to open your Whombat or its backups.',
-    why: 'Why?',
-    make: 'Make the passkey',
-    making: 'Making the passkey…',
-    unlock: 'Touch your passkey again to unlock your backups.',
-    check: 'Touch your passkey once more to check it opens your backups.',
-    skip: 'Later',
-    done: 'Your passkey opens this Whombat and its backups.',
-    madeNoBackups:
-      'Your passkey opens this Whombat. Your backups use their paper copy: this passkey can’t unlock them.',
-    saving: 'Your passkey is made. Your backups will use it once they’re set up.',
-    noBackups:
-      'Your passkey is made and opens this Whombat. Backups aren’t set up here yet, so there’s nothing for it to unlock.',
-    notArmed:
-      'Your passkey is made and opens this Whombat. It doesn’t unlock your backups yet: touch it again in Settings → Devices.',
-    next: 'Continue',
-    /** It wasn't made: the way on is Later, and the passkey waits in Settings → Devices. */
-    failed: 'The passkey wasn’t made. Try again, or choose Later and make it in Settings → Devices.',
-    unsupported:
-      'This browser can’t make the passkey. Choose Later and make it in Settings → Devices in another browser.',
-    moved:
-      'Your Whombat’s address changed. Choose Later, then open it at its new address to make the passkey.',
-  },
-  /** Joining at the address with a box passkey (design §7.3). */
-  join: {
-    use: 'Sign in with this Whombat’s passkey',
-    signingIn: 'Signing in…',
-    or: 'or',
-    failed: 'That passkey didn’t open this Whombat. Try another way in.',
-    none: 'There’s no passkey for this Whombat on this device. Try another way in.',
-  },
-  /** Device links and screen sign-in at an A3 box (design §7.3). */
-  onlyContinue: (address: string) =>
-    `Only continue if you started this at ${address} or in your Whombat app.`,
-  /** Settings → This Whombat → About. */
-  settings: {
-    section: 'ADDRESS',
-    title: 'Your Whombat’s address',
-    copy: 'Copy',
-    copied: 'Copied.',
-    reach: 'Reach my Whombat’s page from anywhere',
-    reachMeta: 'Off: only your apps, your home network and Tailscale reach this Whombat.',
-    ready: 'Works from anywhere',
-    starting: 'Getting its certificate…',
-    failing: 'Can’t get its certificate. Check that this Whombat is online.',
-    failingRetry: (when: string) =>
-      `Can’t get its certificate yet. It tries again by itself ${when}. Check that this Whombat is online.`,
-    /** Let's Encrypt asked it to wait: nothing for the person to do. */
-    busy: (when: string | null) =>
-      `Many new Whombats are getting their addresses right now. Yours ${when ? `tries again by itself ${when}` : 'is trying again'}.`,
-    off: 'Switched off',
-    foreign: 'Someone got a certificate for this address that your Whombat didn’t ask for.',
-    certificate: (date: string) => `Certificate ends ${date}.`,
-    lastCheck: (when: string) => `Certificates last checked ${when}.`,
-    notChecked: 'Certificates not checked yet.',
-    missed: (from: string, to: string) => `Whombat couldn’t check certificates from ${from} to ${to}.`,
-    failed: 'That didn’t work. Try again.',
-    /** Devices → PASSKEYS on a box with its own address: its own passkeys. */
-    passkeys: 'PASSKEYS',
-    passkeyNone: 'Make a passkey for this Whombat',
-    passkeyReady: 'Your passkey opens this Whombat',
-    passkeyElsewhere: 'Make it at this Whombat’s address:',
-    passkeyAdd: 'Add a passkey',
-    passkeyAdding: 'Making the passkey…',
-    passkeyNoWebAuthn: 'This browser can’t make passkeys.',
-    link: 'Link to your Whombat account',
-    linkMeta: 'With a code from app.whombat.com, so your phone reaches this Whombat from anywhere.',
-    linkAction: 'Link',
-    cancel: 'Cancel',
-  },
-  /** At app.whombat.com. */
-  hosted: {
-    linkEntry: 'Link a Whombat',
-    linkTitle: 'Link a Whombat',
-    linkSub: 'Type this code on your Whombat’s page, at the address on its screen.',
-    making: 'Making a code…',
-    left: (time: string) => `Works for ${time} more.`,
-    over: 'This code ran out.',
-    again: 'New code',
-    done: 'Done',
-    /** Design §7.5, at app.whombat.com, making the account passkey: verbatim. */
-    accountPasskeyWords:
-      'This passkey signs you in to your Whombat account and can bring your Whombat back on new hardware. It doesn’t open your Whombat, which has a passkey of its own.',
-    accountPasskey: 'Make an account passkey',
-    accountPasskeyMaking: 'Making the passkey…',
-    accountPasskeyMade: 'Your account passkey is made.',
-    accountPasskeyExists: 'This device already has a passkey for your account.',
-    why: 'Why?',
-    /** The list of Whombats for one set up at its own address. */
-    addressElsewhere: 'Its address is in your Whombat app and on your Whombat’s screen.',
-    errors: {
-      terms: 'Accept the Whombat terms first.',
-      rateLimited: 'Too many codes. Wait a few minutes, then try again.',
-      failed: 'That didn’t work. Try again.',
+    // The passkey step asks twice on purpose: the second checks that the key the passkey gave when it was made is the
+    // one it gives when it is used, so the backups really open with it later.
+    passkey: w.passkey,
+    /** Joining at the address with a box passkey (design §7.3). */
+    join: w.join,
+    /** Device links and screen sign-in at a box with its own address (design §7.3). */
+    onlyContinue: (address: string) => interpolate(w.onlyContinue, { address }),
+    /** Settings → This Whombat → About, and Devices → PASSKEYS on a box with its own address. */
+    settings: {
+      section: s.section,
+      title: s.title,
+      copy: s.copy,
+      copied: s.copied,
+      reach: s.reach,
+      reachMeta: s.reachMeta,
+      ready: s.ready,
+      starting: s.starting,
+      failing: s.failing,
+      failingRetry: (when: string) => interpolate(s.failingRetry, { when }),
+      /** Let's Encrypt asked it to wait: nothing for the person to do. */
+      busy: (when: string | null) => (when ? interpolate(s.busyWhen, { when }) : s.busyNow),
+      /** When it tries again: today at a time, or on a later day. */
+      retryAt: (time: string) => interpolate(s.retryAt, { time }),
+      retryOn: (date: string, time: string) => interpolate(s.retryOn, { date, time }),
+      off: s.off,
+      foreign: s.foreign,
+      certificate: (date: string) => interpolate(s.certificate, { date }),
+      lastCheck: (when: string) => interpolate(s.lastCheck, { when }),
+      notChecked: s.notChecked,
+      missed: (from: string, to: string) => interpolate(s.missed, { from, to }),
+      failed: s.failed,
+      passkeys: s.passkeys,
+      passkeyNone: s.passkeyNone,
+      passkeyReady: s.passkeyReady,
+      passkeyElsewhere: s.passkeyElsewhere,
+      passkeyAdd: s.passkeyAdd,
+      passkeyAdding: s.passkeyAdding,
+      passkeyNoWebAuthn: s.passkeyNoWebAuthn,
+      link: s.link,
+      linkMeta: s.linkMeta,
+      linkAction: s.linkAction,
+      cancel: s.cancel,
     },
-  },
-} as const;
+    /** At app.whombat.com; `addressElsewhere` is the list of Whombats for one set up at its own address. */
+    hosted: { ...w.hosted, left: (time: string) => interpolate(w.hosted.left, { time }) },
+  } as const;
+}
+
+export type OwnAddressWords = ReturnType<typeof ownAddressWords>;
+
+export const OWN_ADDRESS_TEXT: OwnAddressWords = ownAddressWords('en');
 
 /**
  * What the setup's passkey step says when the passkey wasn't made; null for a dismissed prompt. Each says the way on,
  * because the setup goes on without it (Later) and the passkey can be made in Settings → Devices.
  */
-export function boxPasskeySetupProblem(error: unknown): string | null {
-  const t = OWN_ADDRESS_TEXT.passkey;
+export function boxPasskeySetupProblem(error: unknown, locale?: string | null): string | null {
+  const t = ownAddressWords(locale).passkey;
   if (error instanceof OperationError && operationReason(error) === 'address_moved') return t.moved;
   const code = passkeyErrorOf(error);
   if (!code) return null;
   if (code === 'unsupported') return t.unsupported;
   // These say what happened and what to do already; the rest (“didn’t open your Whombat”, …) are about signing in.
   if (code === 'exists' || code === 'limit' || code === 'rate_limited' || code === 'unreachable')
-    return PASSKEY_COPY.errors[code];
+    return passkeyCopy(locale).errors[code];
   return t.failed;
 }
 
 /** What the page says once the box's passkey is made, by what came of its backup key. */
-export function boxPasskeyOutcome(made: { backups: string }): string {
-  const t = OWN_ADDRESS_TEXT.passkey;
+export function boxPasskeyOutcome(made: { backups: string }, locale?: string | null): string {
+  const t = ownAddressWords(locale).passkey;
   switch (made.backups) {
     case 'verified':
       return t.done;

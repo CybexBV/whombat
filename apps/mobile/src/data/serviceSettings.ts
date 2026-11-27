@@ -13,28 +13,36 @@ import type {
   ThingSettingChoice,
   ThingSettingChoose,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export type ThingSettingsPanel = Extract<ThingPagePanel, { kind: 'settings' }>;
 
-export const SETTINGS_COPY = {
-  changeIt: 'Change it',
-  askInstead: (assistant: string) => `Ask ${assistant} instead`,
-  putBack: 'Put it back',
-  putBackDone: 'Put back.',
-  now: 'Now',
-  cancel: 'Cancel',
-  /** What “Ask {assistant} instead” starts with (SST-09). */
-  helpChoose: (setting: string, service: string) => `Help me choose ${setting} for ${service}.`,
-  /** A card's Ask (SST-08). */
-  ask: 'Ask',
-  askTitle: (assistant: string, title: string) => `Ask ${assistant} about ${title}`,
-  askElse: 'Or ask something else…',
-  askHint: (title: string) => `Questions about ${title}`,
-  /** TalkBack's hints on a row. */
-  opensChoices: 'Shows its choices',
-  opensElsewhere: (where: string) => `Opens ${where.replace(/^In /, '')} in your browser`,
-  pickHint: 'Pick one, then Change it',
-} as const;
+export function settingsCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    changeIt: t('data.serviceSettings.changeIt'),
+    askInstead: (assistant: string) => t('data.serviceSettings.askInstead', { assistant }),
+    putBack: t('data.serviceSettings.putBack'),
+    putBackDone: t('data.serviceSettings.putBackDone'),
+    now: t('data.serviceSettings.now'),
+    cancel: t('data.common.cancel'),
+    /** What “Ask {assistant} instead” starts with (SST-09). */
+    helpChoose: (setting: string, service: string) =>
+      t('data.serviceSettings.helpChoose', { setting, service }),
+    /** A card's Ask (SST-08). */
+    ask: t('data.serviceSettings.ask'),
+    askTitle: (assistant: string, title: string) => t('data.serviceSettings.askTitle', { assistant, title }),
+    askElse: t('data.serviceSettings.askElse'),
+    askHint: (title: string) => t('data.serviceSettings.askHint', { title }),
+    /** TalkBack's hints on a row. */
+    opensChoices: t('data.serviceSettings.opensChoices'),
+    // The service's tag reads “In Plex” in both languages; the hint names only the service.
+    opensElsewhere: (where: string) =>
+      t('data.serviceSettings.opensElsewhere', { where: where.replace(/^In /, '') }),
+    pickHint: t('data.serviceSettings.pickHint'),
+  } as const;
+}
+export const SETTINGS_COPY = settingsCopy();
 
 /** How a row looks on the right. */
 export type SettingRowLook = 'switch' | 'choose' | 'elsewhere' | 'value';
@@ -163,9 +171,10 @@ export interface SettingSheetView {
   reason: string | null;
 }
 
-export function settingSheet(row: ThingSetting): SettingSheetView | null {
+export function settingSheet(row: ThingSetting, locale?: string): SettingSheetView | null {
   const choose = row.choose;
   if (!choose) return null;
+  const nowWord = settingsCopy(locale).now;
   const choices = choose.choices.map((c) => {
     const now = sameChoice(c.value, choose.current);
     return {
@@ -174,7 +183,7 @@ export function settingSheet(row: ThingSetting): SettingSheetView | null {
       label: c.label,
       note: c.note?.trim() || null,
       now,
-      spoken: [c.label, c.note?.trim(), now ? SETTINGS_COPY.now : null].filter(Boolean).join(', '),
+      spoken: [c.label, c.note?.trim(), now ? nowWord : null].filter(Boolean).join(', '),
     };
   });
   return {
@@ -207,16 +216,17 @@ export interface PanelAskView {
 }
 
 /** A panel's Ask, when it has one and a title to name it by. */
-export function panelAsk(panel: ThingPagePanel, assistant: string): PanelAskView | null {
+export function panelAsk(panel: ThingPagePanel, assistant: string, locale?: string): PanelAskView | null {
   const questions = panel.ask?.questions.filter((q) => q.trim()) ?? [];
   const title = 'title' in panel && typeof panel.title === 'string' ? panel.title.trim() : '';
   if (!questions.length || !title) return null;
-  return { title: SETTINGS_COPY.askTitle(assistant, title), questions, other: SETTINGS_COPY.askElse };
+  const copy = settingsCopy(locale);
+  return { title: copy.askTitle(assistant, title), questions, other: copy.askElse };
 }
 
 /* Put it back in the toast (SST-03) -------------------------------------------------------------------------------- */
 
 /** The press toast's button when the change can be put back. */
-export function putBackAction(run: () => void): { label: string; onPress: () => void } {
-  return { label: SETTINGS_COPY.putBack, onPress: run };
+export function putBackAction(run: () => void, locale?: string): { label: string; onPress: () => void } {
+  return { label: settingsCopy(locale).putBack, onPress: run };
 }

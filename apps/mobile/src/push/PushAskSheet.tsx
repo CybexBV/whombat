@@ -8,6 +8,7 @@
 import { useSyncExternalStore } from 'react';
 import { View } from 'react-native';
 import { useTheAgentHere } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { IconTile } from '../managed/ui';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -20,7 +21,8 @@ import { pushPrompt } from './promptStore';
 export function PushAskSheet() {
   const theme = useTheme();
   const state = useSyncExternalStore(pushPrompt.subscribe, pushPrompt.state);
-  const copy = pushPromptCopy(useTheAgentHere()?.name);
+  const { rawLocale } = useI18n();
+  const copy = pushPromptCopy(useTheAgentHere()?.name, rawLocale);
   return (
     <Sheet visible={state.shown} onClose={() => void pushPrompt.notNow()} label={copy.title} surface="sf">
       <View style={{ paddingHorizontal: 22, paddingTop: 4, paddingBottom: 8, gap: 18 }}>

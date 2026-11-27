@@ -5,6 +5,8 @@
  */
 import type { GuideAnswer, GuideCard } from '@whombat/core/domain';
 import { ApiError, InvalidRequestError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { GUIDES_WORDS } from './i18n/messages/connectionsHosts/connections';
 import { appErrorOf } from './signins/errors';
 
 /** What `guides.act` sends: a button, a choice (single or the ticked multi) or a form. */
@@ -16,7 +18,8 @@ export interface GuideActInput {
 }
 
 /** The label a locked card shows while the server's own answer is on its way (`answer.label`). */
-export function optimisticGuideLabel(card: GuideCard, input: GuideActInput): string {
+export function optimisticGuideLabel(card: GuideCard, input: GuideActInput, locale?: string | null): string {
+  const sending = clientTree(locale, GUIDES_WORDS).sending;
   for (const block of card.blocks) {
     if (block.type === 'choices' && block.id === input.actionId) {
       const titles = block.options.filter((o) => input.optionIds?.includes(o.id)).map((o) => o.title);
@@ -26,17 +29,22 @@ export function optimisticGuideLabel(card: GuideCard, input: GuideActInput): str
       const action = block.actions.find((a) => a.id === input.actionId);
       if (action) return action.label;
     }
-    if (block.type === 'form' && block.id === input.actionId) return 'Sending…';
+    if (block.type === 'form' && block.id === input.actionId) return sending;
   }
-  return 'Sending…';
+  return sending;
 }
 
 /** The card as it looks once acted on: locked, with the answer. */
-export function answeredGuideCard(card: GuideCard, input: GuideActInput, at: string): GuideCard {
+export function answeredGuideCard(
+  card: GuideCard,
+  input: GuideActInput,
+  at: string,
+  locale?: string | null,
+): GuideCard {
   const answer: GuideAnswer = {
     actionId: input.actionId,
     optionIds: input.optionIds?.length ? input.optionIds : null,
-    label: optimisticGuideLabel(card, input),
+    label: optimisticGuideLabel(card, input, locale),
     at,
   };
   return { ...card, state: 'done', answer };
@@ -52,20 +60,25 @@ export interface GuideRefusal {
   fields?: Record<string, string>;
 }
 
-export const GUIDE_NETWORK_TEXT = 'Couldn’t reach Whombat. Nothing changed, try again.';
+/** The words when Whombat couldn't be reached, in a locale (English when none is given). */
+export function guideNetworkText(locale?: string | null): string {
+  return clientTree(locale, GUIDES_WORDS).network;
+}
+
+export const GUIDE_NETWORK_TEXT = guideNetworkText('en');
 
 /** Reads a `guides.act` failure: the refusal code, the server's words and, for a form, the field errors by id. */
-export function guideRefusalOf(error: unknown): GuideRefusal | null {
+export function guideRefusalOf(error: unknown, locale?: string | null): GuideRefusal | null {
   // The body didn't pass the contract here (a value too long): nothing was sent.
   if (error instanceof InvalidRequestError)
     return {
       code: 'invalid_values',
-      message: 'Check the fields and try again.',
+      message: clientTree(locale, GUIDES_WORDS).checkFields,
       fields: firstByField(error.fields),
     };
   const e = appErrorOf(error);
   if (!(error instanceof ApiError)) {
-    return e.code === 'unknown' ? null : { code: e.code, message: e.message ?? GUIDE_NETWORK_TEXT };
+    return e.code === 'unknown' ? null : { code: e.code, message: e.message ?? guideNetworkText(locale) };
   }
   const message = e.message ?? error.message;
   if (e.code === 'guide_closed') return { code: 'guide_closed', message: '' };
@@ -84,9 +97,9 @@ function firstByField(fields: Record<string, string[]>): Record<string, string> 
 }
 
 /** The toast for a failed act: nothing for `guide_closed` (the card just shows as it is), else the server's words. */
-export function guideFailureText(error: unknown): string | null {
-  const refusal = guideRefusalOf(error);
-  if (!refusal) return GUIDE_NETWORK_TEXT;
+export function guideFailureText(error: unknown, locale?: string | null): string | null {
+  const refusal = guideRefusalOf(error, locale);
+  if (!refusal) return guideNetworkText(locale);
   if (refusal.code === 'guide_closed') return null;
   return refusal.message;
 }

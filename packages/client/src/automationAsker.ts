@@ -5,13 +5,26 @@
  * or, where that principal isn't known yet, as “SOMEONE IS ASKING”. Pure.
  */
 import type { Approval, ApprovalViewContext, Principal } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from './i18n/catalog';
+import { AUTOMATIONS_AREA_WORDS } from './i18n/messages/chatWork/automations';
+
+const words = (locale?: string | null) => clientTree(locale, AUTOMATIONS_AREA_WORDS).asker;
+
+/** An automation asking, in a locale (English when none): its kicker, short name and tag. */
+export function automationAskerWords(locale?: string | null) {
+  const w = words(locale);
+  return { asking: w.asking, shortName: w.shortName, tag: w.tag };
+}
 
 /** The approval's kicker while it waits. */
-export const AUTOMATION_ASKING = 'AN AUTOMATION IS ASKING';
+export const AUTOMATION_ASKING = automationAskerWords().asking;
+
 /** How the approval's sentences name it: “The automation won’t go ahead without a person.” */
-export const AUTOMATION_SHORT_NAME = 'The automation';
+export const AUTOMATION_SHORT_NAME = automationAskerWords().shortName;
+
 /** The word beside an automation's name where a status would show. */
-export const AUTOMATION_TAG = 'Automation';
+export const AUTOMATION_TAG = automationAskerWords().tag;
 
 /** An automation's own principal. */
 export const isAutomationPrincipal = (p: Principal | null | undefined): boolean =>
@@ -39,34 +52,35 @@ function continued(action: Approval['action']): { name: string | null } | null {
 export function automationAsker(
   approval: Pick<Approval, 'action'>,
   requester: Principal | null | undefined,
+  locale?: string | null,
 ): AutomationAsker | null {
   const action = continued(approval.action);
   if (!isAutomationPrincipal(requester) && !(action && !requester)) return null;
   const name = action?.name ?? requester?.name ?? null;
-  return { name, label: automationLabel(name) };
+  return { name, label: automationLabel(name, locale) };
 }
 
 /** The accessible label of an automation's mark. */
-export const automationLabel = (name: string | null | undefined): string =>
-  name ? `Automation “${name}”` : 'An automation';
+export const automationLabel = (name: string | null | undefined, locale?: string | null): string =>
+  name ? interpolate(words(locale).label, { name }) : words(locale).anAutomation;
 
 /** The names core's `approvalView` reads, with the asking automation as “The automation”. */
 export function namesWithAsker(
   names: ApprovalViewContext['names'],
   requesterId: string,
   asker: AutomationAsker | null,
+  locale?: string | null,
 ): ApprovalViewContext['names'] {
   if (!asker) return names;
+  const w = words(locale);
   return (id) =>
-    id === requesterId
-      ? { name: asker.name ?? 'An automation', shortName: AUTOMATION_SHORT_NAME }
-      : names(id);
+    id === requesterId ? { name: asker.name ?? w.anAutomation, shortName: w.shortName } : names(id);
 }
 
 /**
  * The word beside an author's name in a message row: “Automation” for an automation's principal, nothing for the
  * person and the agent.
  */
-export function authorStatus(p: Principal): string | null {
-  return isAutomationPrincipal(p) ? AUTOMATION_TAG : null;
+export function authorStatus(p: Principal, locale?: string | null): string | null {
+  return isAutomationPrincipal(p) ? words(locale).tag : null;
 }

@@ -18,13 +18,13 @@
  */
 import { ELDER_VIEWBOX, elderSvg } from '@whombat/avatars';
 import {
-  CARD_FRAME_WORDS,
-  COUNCIL_WORDS,
   type CouncilMemberView,
   type CouncilScoreTable,
+  cardFrameWords,
   councilFrame,
   councilStepIndex,
   councilSteps,
+  councilWords,
 } from '@whombat/client';
 import { type CouncilKind, type CouncilMark, type CouncilStage, formatClock } from '@whombat/core';
 import { type ReactNode, useContext, useEffect, useId, useRef, useState } from 'react';
@@ -41,6 +41,7 @@ import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop, SvgXml }
 import type { CouncilItem } from '../data/council';
 import type { FileAccess } from '../data/fileAccess';
 import type { MessageFileActions } from '../data/useFiles';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BrandMark } from './BrandMark';
@@ -196,6 +197,8 @@ export function WorkingRing({ working: live, children }: { working: boolean; chi
 }
 
 function MemberRow({ member, openUrl }: { member: CouncilMemberView; openUrl: (url: string) => void }) {
+  const { rawLocale } = useI18n();
+  const councilWordsHere = councilWords(rawLocale);
   // A copy of the card as it was (card-moves.md) shows no clocks (they would count on from long ago) and opens no
   // answers (the newest card has them).
   const still = useContext(CardStillContext);
@@ -243,7 +246,7 @@ function MemberRow({ member, openUrl }: { member: CouncilMemberView; openUrl: (u
               }}
             >
               <Text size={11} weight={600} color={theme.colors.ink2}>
-                {COUNCIL_WORDS.builder}
+                {councilWordsHere.builder}
               </Text>
             </View>
           ) : null}
@@ -278,9 +281,9 @@ function MemberRow({ member, openUrl }: { member: CouncilMemberView; openUrl: (u
     <View>
       {row}
       <Button
-        label={open ? COUNCIL_WORDS.hideAnswer : COUNCIL_WORDS.readAnswer}
+        label={open ? councilWordsHere.hideAnswer : councilWordsHere.readAnswer}
         variant="quiet"
-        accessibilityLabel={`${open ? COUNCIL_WORDS.hideAnswer : COUNCIL_WORDS.readAnswer}: ${member.name}`}
+        accessibilityLabel={`${open ? councilWordsHere.hideAnswer : councilWordsHere.readAnswer}: ${member.name}`}
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen((o) => !o)}
         style={{ alignSelf: 'flex-start', marginLeft: INDENT - 12, marginTop: -6, borderWidth: 0 }}
@@ -537,6 +540,8 @@ function Plaque({
   open: boolean;
   onRead: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const councilWordsHere = councilWords(rawLocale);
   const theme = useTheme();
   const room = theme.room;
   const elapsed = m.working && !still ? m.elapsed : null;
@@ -601,7 +606,7 @@ function Plaque({
             }}
           >
             <Text size={10.5} weight={600} color={room.plaqueInk}>
-              {COUNCIL_WORDS.builder}
+              {councilWordsHere.builder}
             </Text>
           </View>
         ) : null}
@@ -621,7 +626,7 @@ function Plaque({
               <Text
                 size={small}
                 weight={600}
-                color={m.verdict === COUNCIL_WORDS.verdicts.agree ? room.plaqueOk : room.plaqueWarn}
+                color={m.verdict === councilWordsHere.verdicts.agree ? room.plaqueOk : room.plaqueWarn}
               >
                 {m.verdict}
               </Text>
@@ -655,7 +660,7 @@ function Plaque({
           feedback="wash"
           ringRadius={theme.radii.tagLarge}
           accessibilityRole="button"
-          accessibilityLabel={`${open ? COUNCIL_WORDS.hideAnswer : COUNCIL_WORDS.readAnswer}: ${m.name}`}
+          accessibilityLabel={`${open ? councilWordsHere.hideAnswer : councilWordsHere.readAnswer}: ${m.name}`}
           accessibilityState={{ expanded: open }}
           style={{ minHeight: 44, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }}
         >
@@ -665,7 +670,7 @@ function Plaque({
             color={room.plaqueInk}
             style={{ textAlign: 'center', textDecorationLine: 'underline' }}
           >
-            {open ? COUNCIL_WORDS.hideAnswer : COUNCIL_WORDS.readAnswer}
+            {open ? councilWordsHere.hideAnswer : councilWordsHere.readAnswer}
           </Text>
         </Touchable>
       ) : null}
@@ -675,6 +680,8 @@ function Plaque({
 
 /** Under an answer cut short: its T3 Code thread, where the rest is. */
 function RestInT3({ url, open }: { url: string; open: (url: string) => void }) {
+  const { rawLocale } = useI18n();
+  const councilWordsHere = councilWords(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -682,7 +689,7 @@ function RestInT3({ url, open }: { url: string; open: (url: string) => void }) {
       feedback="wash"
       ringRadius={theme.radii.button}
       accessibilityRole="link"
-      accessibilityLabel={COUNCIL_WORDS.restInT3}
+      accessibilityLabel={councilWordsHere.restInT3}
       accessibilityHint={url}
       style={{
         alignSelf: 'flex-start',
@@ -694,7 +701,7 @@ function RestInT3({ url, open }: { url: string; open: (url: string) => void }) {
       }}
     >
       <Text size={14} weight={600} color={theme.colors.brand}>
-        {COUNCIL_WORDS.restInT3}
+        {councilWordsHere.restInT3}
       </Text>
     </Touchable>
   );
@@ -702,6 +709,8 @@ function RestInT3({ url, open }: { url: string; open: (url: string) => void }) {
 
 /** The plan in the app's message text, folded under “The plan”, which opens it whole. */
 function CouncilPlan({ plan }: { plan: string }) {
+  const { rawLocale } = useI18n();
+  const councilWordsHere = councilWords(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (
@@ -712,7 +721,7 @@ function CouncilPlan({ plan }: { plan: string }) {
         ringRadius={theme.radii.button}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={COUNCIL_WORDS.plan}
+        accessibilityLabel={councilWordsHere.plan}
         style={{
           minHeight: 44,
           flexDirection: 'row',
@@ -724,7 +733,7 @@ function CouncilPlan({ plan }: { plan: string }) {
         }}
       >
         <Text size={14} weight={600} style={{ flex: 1 }}>
-          {COUNCIL_WORDS.plan}
+          {councilWordsHere.plan}
         </Text>
         {open ? (
           <ChevronUp size={18} color={theme.colors.mut} strokeWidth={2} />
@@ -943,10 +952,13 @@ export function CouncilCardPanel({
   /** The person's zone, for the status line's time. */
   timeZone: string;
 }) {
+  const { rawLocale } = useI18n();
+  const cardFrameWordsHere = cardFrameWords(rawLocale);
+  const councilWordsHere = councilWords(rawLocale);
   const theme = useTheme();
   const { view } = item;
   const live = item.card.live;
-  const head = councilHead(item.card, timeZone);
+  const head = councilHead(item.card, timeZone, rawLocale);
   const [open, setOpen] = useState(false);
   // Live, every member at the table in the card itself; once it ended, those whose answers can still be read, under
   // Details too.
@@ -956,7 +968,7 @@ export function CouncilCardPanel({
   const details = (
     <>
       {rows.length ? (
-        <CardSection title={CARD_FRAME_WORDS.answers}>
+        <CardSection title={cardFrameWordsHere.answers}>
           <View style={{ gap: 4 }}>
             {rows.map((m) => (
               <MemberRow key={m.id} member={m} openUrl={actions.openUrl} />
@@ -981,10 +993,10 @@ export function CouncilCardPanel({
       {!live && view.table.columns.length ? <ScoreTable table={view.table} /> : null}
       {item.plan ? <CouncilPlan plan={item.plan} /> : null}
       {item.pictures.length ? (
-        <CardSection title={COUNCIL_WORDS.pictures}>
+        <CardSection title={councilWordsHere.pictures}>
           <CardPictures
             pictures={item.pictures}
-            hint={COUNCIL_WORDS.picturesHint}
+            hint={councilWordsHere.picturesHint}
             access={access}
             files={files}
           />
@@ -1011,7 +1023,7 @@ export function CouncilCardPanel({
           main={
             rows.some((m) => m.answer)
               ? {
-                  label: open ? CARD_FRAME_WORDS.hideAnswers : CARD_FRAME_WORDS.readAnswers,
+                  label: open ? cardFrameWordsHere.hideAnswers : cardFrameWordsHere.readAnswers,
                   onPress: () => setOpen((o) => !o),
                 }
               : null
@@ -1026,8 +1038,8 @@ export function CouncilCardPanel({
       endAction={
         stop ? (
           <CardStopButton
-            label={COUNCIL_WORDS.stop}
-            spoken={COUNCIL_WORDS.stopAsk.title.replace(/\?$/, '')}
+            label={councilWordsHere.stop}
+            spoken={councilWordsHere.stopAsk.title.replace(/\?$/, '')}
             busy={actions.busy === 'stop'}
             disabled={actions.busy !== null}
             onPress={stop}
@@ -1041,7 +1053,7 @@ export function CouncilCardPanel({
 }
 
 /** The council's head with its time in the person's zone. */
-export function councilHead(card: CouncilItem['card'], timeZone: string): CardHead {
-  const frame = councilFrame(card);
+export function councilHead(card: CouncilItem['card'], timeZone: string, locale?: string | null): CardHead {
+  const frame = councilFrame(card, locale);
   return { ...frame, time: frame.at ? formatClock(frame.at, timeZone) : null };
 }

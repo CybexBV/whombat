@@ -12,8 +12,8 @@ import mermaidRuntime from 'mermaid/dist/mermaid.min.js';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, ScrollView, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { COPIED_TEXT } from '../data/messageActions';
-import { PAGES_COPY } from '../data/pageSets';
+import { copiedText } from '../data/messageActions';
+import { pagesCopy } from '../data/pageSets';
 import { keepPageHeight, keptPage, keptPageHeight } from '../data/previewPages';
 import {
   afterPreviewGone,
@@ -24,7 +24,7 @@ import {
   pageHeight,
   withPreviewPolicy,
 } from '../data/richPreview';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from './clipboard';
@@ -41,6 +41,7 @@ import { hitSlopFor } from './touchTarget';
  * on the code surface. Copy puts the code on the clipboard and says “Copied” for two seconds (MX-04, the web's AP-322).
  */
 export function CodeBlockView({ label, text }: { label: string | null; text: string }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
@@ -67,7 +68,11 @@ export function CodeBlockView({ label, text }: { label: string | null; text: str
           {label?.trim() || tMobile('ui.code')}
         </Text>
         <Touchable
-          onPress={() => void copyToClipboard(text, COPIED_TEXT.code).then((ok) => ok && setCopied(true))}
+          onPress={() =>
+            void copyToClipboard(text, copiedText(rawLocale).code, rawLocale).then(
+              (ok) => ok && setCopied(true),
+            )
+          }
           accessibilityLabel={copied ? tMobile('ui.copied') : tMobile('ui.copy-the-code')}
           feedback="fade"
           ringRadius={8}
@@ -111,6 +116,8 @@ export function CodeBlockView({ label, text }: { label: string | null; text: str
  * reports through the WebView's one message (docs/decisions/visual-replies.md); full screen it fills the screen.
  */
 function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boolean; pageKey: string }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const source = useMemo(() => ({ html: page }), [page]);
   // The height the page last said it was, also from before its row left the list's window: it comes back at that size.
@@ -195,10 +202,10 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
           accessibilityLiveRegion="polite"
           style={{ textAlign: 'center' }}
         >
-          {PREVIEW_GONE_TEXT}
+          {tMobile('screens2.html.gone')}
         </Text>
         <Button
-          label={PAGES_COPY.tryAgain}
+          label={pagesCopy(rawLocale).tryAgain}
           variant="secondary"
           onPress={() => {
             setRestarts(0);
@@ -238,9 +245,6 @@ function PreviewPage({ page, fit = false, pageKey }: { page: string; fit?: boole
     </KeepsSideways>
   );
 }
-
-/** Where a preview's browser stopped again and again: the page set viewer's words, for one page. */
-const PREVIEW_GONE_TEXT = 'Couldn’t open this page.';
 
 /** How long a page stays live after its row left the screen (and the two rows either side). */
 const PREVIEW_RELEASE_MS = 20_000;
@@ -415,7 +419,8 @@ export function HtmlPreviewCard({
   meta?: string;
   actions?: ReactNode;
 }) {
-  const title = useMemo(() => htmlTitle(html), [html]) ?? fallbackTitle ?? 'HTML page';
+  const { t: tMobile } = useMobileT();
+  const title = useMemo(() => htmlTitle(html), [html]) ?? fallbackTitle ?? tMobile('screens2.html.page');
   const themeName = useTheme().name;
   // The app's theme as the page's first style: a new theme is a new page.
   const page = useMemo(() => withPreviewPolicy(html, pageThemeCss(themeName)), [html, themeName]);
@@ -424,7 +429,7 @@ export function HtmlPreviewCard({
     <PreviewCard
       icon={Globe}
       title={title}
-      meta={meta ?? 'HTML page'}
+      meta={meta ?? tMobile('screens2.html.page')}
       source={html}
       sourceLabel="html"
       page={<PreviewPage key={themeName} page={page} pageKey={pageKey} fit />}
@@ -440,13 +445,15 @@ export function HtmlPreviewCard({
  */
 export function DiagramPreview({
   source,
-  title = 'Diagram',
+  title: givenTitle,
   meta,
 }: {
   source: string;
   title?: string;
   meta?: string;
 }) {
+  const { t: tMobile } = useMobileT();
+  const title = givenTitle ?? tMobile('screens2.attach.diagram');
   const theme = useTheme();
   const pageKey = `mermaid|${theme.name}|${source}`;
   // Each page carries the whole runtime (megabytes): made once per diagram and theme, kept for the next time its row

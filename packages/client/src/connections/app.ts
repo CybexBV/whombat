@@ -4,72 +4,56 @@
  * the setup the web's `AppOAuthSetup` and the phone's app form share. Pure.
  */
 import type { CatalogAppStatus, CatalogEntry, CatalogSignIn } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CONN_APP_WORDS } from '../i18n/messages/connectionsHosts/connections';
 
 export type AppMethod = Extract<CatalogSignIn, { kind: 'app_oauth' }>;
 
 /** The provider's words for the client id and secret: Dropbox says app key and app secret. */
-export function appWords(entry: CatalogEntry) {
+export function appWords(entry: CatalogEntry, locale?: string | null) {
+  const w = clientTree(locale, CONN_APP_WORDS);
   return entry.id === 'dropbox'
-    ? { id: 'App key', secret: 'App secret', console: 'the Dropbox App Console' }
-    : { id: 'Client ID', secret: 'Client secret', console: `${entry.name}’s developer console` };
+    ? { ...w.dropbox }
+    : { ...w.other, console: interpolate(w.other.console, { name: entry.name }) };
 }
 
 /** The app's status line: set in the config, set up (with its key's hint), or what to do. */
-export function appSummary(entry: CatalogEntry, app: CatalogAppStatus): string {
-  const words = appWords(entry);
-  if (app.source === 'config') return `Set in this Whombat’s config · ${words.id} ${app.clientIdHint ?? ''}`;
-  if (app.configured) return `Set up · ${words.id} ${app.clientIdHint ?? ''}`;
-  return `Set up ${entry.name} once, then you can connect. Four steps, about five minutes.`;
+export function appSummary(entry: CatalogEntry, app: CatalogAppStatus, locale?: string | null): string {
+  const words = appWords(entry, locale);
+  const w = clientTree(locale, CONN_APP_WORDS).summary;
+  const hint = app.clientIdHint ?? '';
+  if (app.source === 'config') return interpolate(w.config, { id: words.id, hint });
+  if (app.configured) return interpolate(w.configured, { id: words.id, hint });
+  return interpolate(w.todo, { name: entry.name });
 }
 
 /** The setup's words (the web's, its bold parts as plain text). */
-export const APP_SETUP_TEXT = {
-  section: (name: string) => `${name.toUpperCase()} APP`,
-  forThisWhombat: 'For this Whombat',
-  setUp: 'Set up',
-  notSetUp: 'Not set up',
-  showSteps: 'Show setup steps',
-  hideSteps: 'Hide setup steps',
-  stepCreate: 'Create the app',
-  createDropbox: (consoleName: string) =>
-    `In ${consoleName}, create an app with Scoped access and Full Dropbox (or App folder, to keep your agent to one folder). Name it after this Whombat.`,
-  createOther: (consoleName: string) =>
-    `In ${consoleName}, create an OAuth app for this Whombat. Name it after this Whombat.`,
-  openConsole: (consoleName: string) => `Open ${consoleName}`,
-  stepPermissions: 'Give it permissions',
-  /** Before signing in: a permission added later needs signing in again (SG-22, AP-3909). */
-  permissions: 'On the app’s Permissions tab, tick these and click Submit before you sign in:',
-  stepRedirect: 'Add the redirect URI',
-  redirect: 'On the Settings tab, under OAuth 2 → Redirect URIs, add this URI exactly:',
-  /** Dropbox's Settings tab, after the redirect URI (SG-22): Whombat signs in with PKCE, without the secret. */
-  dropboxPublicClients: 'Leave Allow public clients (Implicit Grant & PKCE) on Allow.',
-  /** A new Dropbox app links only its owner until this (SG-22). */
-  dropboxMoreUsers:
-    'Under Development users, click Enable additional users, so people other than you can connect.',
-  redirectLabel: 'Redirect URI',
-  redirectCopied: 'Redirect URI copied.',
-  stepPaste: (idLabel: string) => `Paste the ${idLabel.toLowerCase()}`,
-  copyThem: 'Copy them from the app’s Settings tab.',
-  optionalSecret: (secretLabel: string) =>
-    ` The ${secretLabel.toLowerCase()} is optional: Whombat signs in with PKCE without it.`,
-  optional: ' · OPTIONAL',
-  keepId: 'Leave empty to keep the saved one',
-  keepSecret: 'Leave empty to keep the saved secret',
-  save: 'Save',
-  cancel: 'Cancel',
-  replace: 'Replace',
-  remove: 'Remove',
-  removeApp: 'Remove the app',
-  saved: (name: string) => `${name} app saved. Connect below to test it.`,
-  removed: (name: string) => `${name} app removed. Your ${name} connections need you to sign in again.`,
-  confirmRemove: (name: string) =>
-    `Remove the ${name} app? Your ${name} connections stop working until it’s set up again.`,
-} as const;
+export function appSetupText(locale?: string | null) {
+  const w = clientTree(locale, CONN_APP_WORDS).setup;
+  return {
+    ...w,
+    section: (name: string) => interpolate(w.section, { NAME: name.toUpperCase() }),
+    createDropbox: (consoleName: string) => interpolate(w.createDropbox, { console: consoleName }),
+    createOther: (consoleName: string) => interpolate(w.createOther, { console: consoleName }),
+    openConsole: (consoleName: string) => interpolate(w.openConsole, { console: consoleName }),
+    stepPaste: (idLabel: string) => interpolate(w.stepPaste, { id: idLabel.toLowerCase() }),
+    optionalSecret: (secretLabel: string) =>
+      interpolate(w.optionalSecret, { secret: secretLabel.toLowerCase() }),
+    saved: (name: string) => interpolate(w.saved, { name }),
+    removed: (name: string) => interpolate(w.removed, { name }),
+    confirmRemove: (name: string) => interpolate(w.confirmRemove, { name }),
+  };
+}
+
+export const APP_SETUP_TEXT = appSetupText('en');
 
 /** “Saved · App key abc… · app secret saved · 2 days ago” without the time (each form adds its own). */
-export function appSavedLine(entry: CatalogEntry, app: CatalogAppStatus): string {
-  const words = appWords(entry);
-  return `Saved · ${words.id} ${app.clientIdHint ?? ''}${app.secretSet ? ` · ${words.secret.toLowerCase()} saved` : ''}`;
+export function appSavedLine(entry: CatalogEntry, app: CatalogAppStatus, locale?: string | null): string {
+  const words = appWords(entry, locale);
+  const w = clientTree(locale, CONN_APP_WORDS);
+  const secret = app.secretSet ? interpolate(w.secretSaved, { secret: words.secret.toLowerCase() }) : '';
+  return `${interpolate(w.savedLine, { id: words.id, hint: app.clientIdHint ?? '' })}${secret}`;
 }
 
 /**
@@ -81,13 +65,16 @@ export function appSaveProblem(
   method: AppMethod,
   app: Pick<CatalogAppStatus, 'configured' | 'secretSet'>,
   typed: { clientId: string; secret: string },
+  locale?: string | null,
 ): string | 'unchanged' | null {
-  const words = appWords(entry);
+  const words = appWords(entry, locale);
+  const w = clientTree(locale, CONN_APP_WORDS).problem;
   const id = typed.clientId.trim();
   const key = typed.secret.trim();
-  if (!id && !app.configured) return `Paste the ${words.id.toLowerCase()} from ${words.console}.`;
+  if (!id && !app.configured)
+    return interpolate(w.pasteId, { id: words.id.toLowerCase(), console: words.console });
   if (!key && !method.clientSecretOptional && !app.secretSet)
-    return `Paste the ${words.secret.toLowerCase()} too.`;
+    return interpolate(w.pasteSecret, { secret: words.secret.toLowerCase() });
   if (!id && !key) return 'unchanged';
   return null;
 }

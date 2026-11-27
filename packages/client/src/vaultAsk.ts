@@ -12,14 +12,19 @@ import {
   type GuideVaultAsk,
   type GuideVaultServerWay,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { type DateInput, formatAgo } from '@whombat/core/text';
 import {
   VAULT_ASK_FIELDS,
-  VAULT_ASK_TEXT,
   VAULT_ASK_WAY_FIELDS,
+  vaultAskText,
   vaultAskWay,
   vaultTotpProblem,
 } from '@whombat/core/vault';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
+
+const words = (locale?: string | null) => clientTree(locale, SETTINGS_AREA_WORDS).vault;
 
 /** A sign-in card's ask: what it asks for and where it goes, or null for any other card. */
 export function vaultAskOf(card: Pick<GuideCard, 'guide' | 'vaultAsk'>): GuideVaultAsk | null {
@@ -34,11 +39,12 @@ export interface VaultAskWayView {
 }
 
 /** A `server` card's three ways, `key_once` first (it is the one chosen when the card opens), with the assistant's name. */
-export function vaultAskWays(assistant: string): VaultAskWayView[] {
+export function vaultAskWays(assistant: string, locale?: string | null): VaultAskWayView[] {
+  const text = vaultAskText(locale);
   return GUIDE_VAULT_SERVER_WAYS.map((id) => ({
     id,
-    label: VAULT_ASK_TEXT.ways[id](assistant),
-    detail: VAULT_ASK_TEXT.wayDetails[id](assistant),
+    label: text.ways[id](assistant),
+    detail: text.wayDetails[id](assistant),
   }));
 }
 
@@ -69,8 +75,8 @@ export function vaultAskShownFields(
 }
 
 /** The words for a needed field left empty, core's for each (`VAULT_ASK_TEXT.empty`). */
-function emptyText(ask: Pick<GuideVaultAsk, 'kind'>, field: GuideField): string {
-  const e = VAULT_ASK_TEXT.empty;
+function emptyText(ask: Pick<GuideVaultAsk, 'kind'>, field: GuideField, locale?: string | null): string {
+  const e = vaultAskText(locale).empty;
   switch (field.id) {
     case VAULT_ASK_FIELDS.username:
       return e.username;
@@ -95,12 +101,13 @@ export function vaultAskProblems(
   ask: Pick<GuideVaultAsk, 'kind'>,
   shown: readonly GuideField[],
   values: Readonly<Record<string, string>>,
+  locale?: string | null,
 ): Record<string, string> {
   const out: Record<string, string> = {};
   for (const f of shown) {
     const value = values[f.id] ?? '';
     if (!value.trim()) {
-      if (!f.optional) out[f.id] = emptyText(ask, f);
+      if (!f.optional) out[f.id] = emptyText(ask, f, locale);
       continue;
     }
     if (f.id === VAULT_ASK_FIELDS.totp) {
@@ -148,18 +155,23 @@ export function vaultAskKept(
 }
 
 /** The line that stands for a private key once it's in (it is never shown again): pasted, or the file's name. */
-export const VAULT_ASK_KEY_IN = {
-  pasted: 'Private key pasted',
-  file: (name: string) => name,
-  remove: 'Remove',
-  pick: 'Pick the file',
-  paste: 'Paste',
-  /** The file is far bigger than any private key: not read at all. */
-  tooBig: 'That file is too big to be a private key.',
-  unreadable: 'That file couldn’t be read. Try again.',
-  /** The clipboard had nothing to paste. */
-  nothing: 'There’s nothing to paste. Copy the private key first.',
-} as const;
+export function vaultAskKeyIn(locale?: string | null) {
+  const w = words(locale).keyIn;
+  return {
+    pasted: w.pasted,
+    file: (name: string) => name,
+    remove: w.remove,
+    pick: w.pick,
+    paste: w.paste,
+    /** The file is far bigger than any private key: not read at all. */
+    tooBig: w.tooBig,
+    unreadable: w.unreadable,
+    /** The clipboard had nothing to paste. */
+    nothing: w.nothing,
+  };
+}
+
+export const VAULT_ASK_KEY_IN = vaultAskKeyIn();
 
 /* The entry page ------------------------------------------------------------------------------------------------ */
 
@@ -167,27 +179,33 @@ export const VAULT_ASK_KEY_IN = {
  * A website login's AUTHENTICATOR KEY on its page (VLT-46, CT-1663): whether one is set, never the key; Add, Replace
  * and Remove through `vault.setTotp`, a setup key or `otpauth://` link pasted. The assistant's name is a parameter.
  */
-export const VAULT_TOTP_TEXT = {
-  label: 'AUTHENTICATOR KEY',
-  field: VAULT_ASK_TEXT.fields.totp,
-  notSet: (assistant: string) => `Not set. Add it and ${assistant} types the two-step codes itself.`,
-  hint: 'Paste the setup key the site shows beside its QR code, or the otpauth:// link.',
-  placeholder: 'JBSW Y3DP EHPK 3PXP or otpauth://…',
-  add: 'Add',
-  replace: 'Replace',
-  remove: 'Remove',
-  saved: 'Authenticator key saved.',
-  removed: 'Authenticator key removed.',
-} as const;
+export function vaultTotpText(locale?: string | null) {
+  const w = words(locale).totp;
+  return {
+    label: w.label,
+    field: vaultAskText(locale).fields.totp,
+    notSet: (assistant: string) => interpolate(w.notSet, { assistant }),
+    hint: w.hint,
+    placeholder: w.placeholder,
+    add: w.add,
+    replace: w.replace,
+    remove: w.remove,
+    saved: w.saved,
+    removed: w.removed,
+  };
+}
+
+export const VAULT_TOTP_TEXT = vaultTotpText();
 
 /** “Set · added 2 days ago”, or null when none is set. */
 export function vaultTotpLine(
   totp: { set: boolean; setAt: string | null },
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string | null {
   if (!totp.set || !totp.setAt) return null;
-  return `Set · added ${formatAgo(totp.setAt, now, timeZone)}`;
+  return interpolate(words(locale).totp.line, { when: formatAgo(totp.setAt, now, timeZone, locale) });
 }
 
 /**
@@ -198,11 +216,13 @@ export function vaultKeptPasswordLine(
   password: { set: boolean; setAt: string | null } | undefined,
   now: DateInput,
   timeZone: string,
+  locale?: string | null,
 ): string | null {
   if (!password?.set) return null;
+  const w = words(locale);
   return password.setAt
-    ? `Signs in with a kept password · ${formatAgo(password.setAt, now, timeZone)}`
-    : 'Signs in with a kept password';
+    ? interpolate(w.keptPasswordWhen, { when: formatAgo(password.setAt, now, timeZone, locale) })
+    : w.keptPassword;
 }
 
 /* Connections ------------------------------------------------------------------------------------------------- */
@@ -212,8 +232,9 @@ export function vaultEntryStaysMcp(entry: { moveToConnections?: boolean }): bool
   return entry.moveToConnections === true;
 }
 
-export const VAULT_MCP_MOVE_TEXT = {
-  title: 'Move it to Connections',
-  body: 'MCP servers are connected in Connections now, as a Custom MCP server. Add it there and remove it here.',
-  link: 'Open Custom MCP server',
-} as const;
+/** What an entry that stays an MCP server says on its page, in a locale (English when none). */
+export function vaultMcpMoveText(locale?: string | null) {
+  return words(locale).mcp;
+}
+
+export const VAULT_MCP_MOVE_TEXT = vaultMcpMoveText();

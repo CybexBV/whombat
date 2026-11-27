@@ -8,11 +8,11 @@
 
 import {
   hostErrorInfo,
-  MAC_WORDS,
   type MacLine,
   macAccountProblem,
   macScreenView,
   macStepText,
+  macWords,
 } from '@whombat/client/hosts';
 import { useHostScreenLook, useHostScreenStep } from '@whombat/client/hosts/react';
 import { HOST_SCREEN_LIMITS, type HostScreenBody, type HostServerDetail } from '@whombat/core';
@@ -74,12 +74,13 @@ export function MacScreenPart({
   now: number;
 }) {
   const { rawLocale } = useI18n();
+  const macWordsHere = macWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   // The person may change their own servers; the server's switches decide the rest.
-  const view = macScreenView(detail, { name: serverName, owner: true, now });
+  const view = macScreenView(detail, { name: serverName, owner: true, now, locale: rawLocale });
   const { step, busy } = useHostScreenStep(slug, serverId, serverName);
   const [looking, setLooking] = useState(false);
   const look = useHostScreenLook(
@@ -97,7 +98,7 @@ export function MacScreenPart({
       if (out.text) showNotice(out.text);
       // What the screen shows now, when a picture is up.
       if (looking && (body.op === 'unlock' || body.op === 'ui.open')) void look.refetch();
-    } else if (out.text) showFailure(out.text);
+    } else if (out.text) showFailure(out.text, rawLocale);
     return out;
   };
 
@@ -106,12 +107,12 @@ export function MacScreenPart({
   const lookProblem = look.error
     ? hostErrorInfo(look.error, rawLocale).message
     : shot && !shot.ok
-      ? macStepText({ op: 'look' }, shot, serverName).text
+      ? macStepText({ op: 'look' }, shot, serverName, rawLocale).text
       : null;
 
   return (
     <>
-      <OneCard label={MAC_WORDS.screenTitle}>
+      <OneCard label={macWordsHere.screenTitle}>
         {looking && view.screen.can ? (
           <View style={{ padding: 14, paddingBottom: 6 }}>
             {picture ? (
@@ -119,7 +120,7 @@ export function MacScreenPart({
                 source={{ uri: `data:image/${picture.format ?? 'png'};base64,${picture.imageB64}` }}
                 resizeMode="contain"
                 accessible
-                accessibilityLabel={MAC_WORDS.lookAlt(serverName)}
+                accessibilityLabel={macWordsHere.lookAlt(serverName)}
                 style={{
                   width: '100%',
                   aspectRatio: picture.w && picture.h ? picture.w / picture.h : 16 / 9,
@@ -154,7 +155,7 @@ export function MacScreenPart({
         <Lines lines={view.lines} first={!looking} />
         <Buttons>
           <Button
-            label={looking ? MAC_WORDS.lookAgain : MAC_WORDS.look}
+            label={looking ? macWordsHere.lookAgain : macWordsHere.look}
             variant={looking ? 'secondary' : 'primary'}
             disabled={!view.screen.can}
             busy={look.isFetching}
@@ -163,7 +164,7 @@ export function MacScreenPart({
           />
           {view.maybeLocked && view.unlock.can ? (
             <Button
-              label={MAC_WORDS.unlock}
+              label={macWordsHere.unlock}
               variant="secondary"
               busy={busy === 'unlock'}
               disabled={busy !== null}
@@ -173,18 +174,18 @@ export function MacScreenPart({
           ) : null}
         </Buttons>
         <CardQuiet>
-          {[view.screen.can ? MAC_WORDS.phoneNoLive : view.screen.why, view.sharingHow, view.fileVaultNote]
+          {[view.screen.can ? macWordsHere.phoneNoLive : view.screen.why, view.sharingHow, view.fileVaultNote]
             .filter(Boolean)
             .join(' ')}
         </CardQuiet>
       </OneCard>
 
-      <OneCard label={MAC_WORDS.passwordTitle}>
+      <OneCard label={macWordsHere.passwordTitle}>
         <Lines lines={[{ ...view.account, title: tMobile('screens.screen-sign-in') }]} first />
         {view.password.can ? (
           <Buttons>
             <Button
-              label={view.hasAccount ? tMobile('screens.change-it') : MAC_WORDS.setPassword}
+              label={view.hasAccount ? tMobile('screens.change-it') : macWordsHere.setPassword}
               variant={view.account.tone === 'ok' ? 'secondary' : 'primary'}
               disabled={busy !== null}
               onPress={() => setAsking('password')}
@@ -193,7 +194,7 @@ export function MacScreenPart({
             {view.hasAccount ? (
               <>
                 <Button
-                  label={MAC_WORDS.check}
+                  label={macWordsHere.check}
                   variant="secondary"
                   busy={busy === 'account.check'}
                   disabled={busy !== null}
@@ -201,7 +202,7 @@ export function MacScreenPart({
                   style={half}
                 />
                 <Button
-                  label={MAC_WORDS.forget}
+                  label={macWordsHere.forget}
                   variant="secondary"
                   disabled={busy !== null}
                   onPress={() => setAsking('forget')}
@@ -211,15 +212,15 @@ export function MacScreenPart({
             ) : null}
           </Buttons>
         ) : null}
-        <CardQuiet>{view.password.can ? MAC_WORDS.passwordHint : (view.password.why ?? '')}</CardQuiet>
+        <CardQuiet>{view.password.can ? macWordsHere.passwordHint : (view.password.why ?? '')}</CardQuiet>
       </OneCard>
 
-      <OneCard label={MAC_WORDS.helperTitle}>
+      <OneCard label={macWordsHere.helperTitle}>
         <Lines lines={view.helper} first />
         {view.needsAccess && view.helperStep.can ? (
           <Buttons>
             <Button
-              label={MAC_WORDS.openSetting}
+              label={macWordsHere.openSetting}
               variant="secondary"
               busy={busy === 'ui.open'}
               disabled={busy !== null}
@@ -250,20 +251,25 @@ export function MacScreenPart({
         onClose={() => busy === null && setAsking(null)}
         badge={serverName}
         tone="bad"
-        title={MAC_WORDS.forgetTitle(serverName)}
-        body={MAC_WORDS.forgetBody(serverName)}
+        title={macWordsHere.forgetTitle(serverName)}
+        body={macWordsHere.forgetBody(serverName)}
         busy={busy === 'account.clear' ? 'go' : null}
         buttons={[
           {
             id: 'go',
-            label: MAC_WORDS.forgetConfirm,
+            label: macWordsHere.forgetConfirm,
             variant: 'primary',
             onPress: () =>
               void run({ op: 'account.clear' }).then((out) => {
                 if (out.ok) setAsking(null);
               }),
           },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: () => setAsking(null) },
+          {
+            id: 'cancel',
+            label: tMobile('screens2.common.cancel'),
+            variant: 'quiet',
+            onPress: () => setAsking(null),
+          },
         ]}
       />
     </>
@@ -290,8 +296,10 @@ function PasswordSheet({
   onSave: (user: string, password: string) => Promise<string | null>;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const macWordsHere = macWords(rawLocale);
   return (
-    <Sheet visible={visible} onClose={() => !busy && onClose()} label={MAC_WORDS.setPassword}>
+    <Sheet visible={visible} onClose={() => !busy && onClose()} label={macWordsHere.setPassword}>
       {visible ? (
         <PasswordForm serverName={serverName} user={user} busy={busy} onSave={onSave} onClose={onClose} />
       ) : null}
@@ -312,14 +320,16 @@ function PasswordForm({
   onSave: (user: string, password: string) => Promise<string | null>;
   onClose: () => void;
 }) {
-  const { tClient } = useI18n();
+  const { t: tMobile } = useMobileT();
+  const { rawLocale, tClient } = useI18n();
+  const macWordsHere = macWords(rawLocale);
   const theme = useTheme();
   const [user, setUser] = useState(initialUser);
   const [password, setPassword] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const save = async () => {
     const u = user.trim();
-    const wrong = macAccountProblem(u, password);
+    const wrong = macAccountProblem(u, password, rawLocale);
     if (wrong) return setProblem(wrong);
     const typed = password;
     // The sheet doesn't keep it once it is on its way (nor does the step: `useHostScreenStep`).
@@ -331,14 +341,14 @@ function PasswordForm({
     <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}>
       <View style={{ gap: 4 }}>
         <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-          {MAC_WORDS.setPassword}
+          {macWordsHere.setPassword}
         </Text>
         <Text size={13.5} lh={1.4} color={theme.colors.mut}>
-          {`The password of a user who may sign in at ${serverName}. Whombat keeps it on the Mac only, to open and unlock its screen.`}
+          {tMobile('screens2.mac.passwordNote', { name: serverName })}
         </Text>
       </View>
       <FormField
-        label={MAC_WORDS.user}
+        label={macWordsHere.user}
         value={user}
         onChangeText={setUser}
         mono
@@ -348,7 +358,7 @@ function PasswordForm({
         importantForAutofill="no"
       />
       <FormField
-        label={MAC_WORDS.password}
+        label={macWordsHere.password}
         value={password}
         onChangeText={(v) => {
           setPassword(v);
@@ -368,7 +378,7 @@ function PasswordForm({
           onPress={onClose}
           style={{ flex: 1 }}
         />
-        <Button label={MAC_WORDS.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
+        <Button label={macWordsHere.save} busy={busy} onPress={() => void save()} style={{ flex: 1 }} />
       </View>
     </View>
   );

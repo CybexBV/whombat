@@ -5,11 +5,12 @@
  * button and at most two others in a fixed place, then the long part folded under “Show more” (it opens the same card in
  * place) and every technical word under one Details.
  */
-import { CARD_FRAME_WORDS, type CardFrame, type CardMark, MOVED_CARD_WORDS } from '@whombat/client';
+import { type CardFrame, type CardMark, cardFrameWords, movedCardWords } from '@whombat/client';
 import { createContext, type ReactNode, useContext, useState } from 'react';
 import { Platform, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import type { CardHeadModel } from '../data/messages';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ChevronDown, ChevronRight } from './icons';
@@ -98,12 +99,14 @@ function wordColor(theme: ReturnType<typeof useTheme>, mark: CardMark): string {
 export const CardStillContext = createContext(false);
 
 export function CardStatusLine({ head }: { head: CardHead }) {
+  const { rawLocale } = useI18n();
+  const movedCardWordsHere = movedCardWords(rawLocale);
   const theme = useTheme();
   if (useContext(CardStillContext))
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text size={12.5} weight={500} color={theme.colors.ink2} style={{ flexShrink: 1 }}>
-          {MOVED_CARD_WORDS.earlierWord}
+          {movedCardWordsHere.earlierWord}
           <Text size={12.5} color={theme.colors.mut}>{` · ${head.kind}`}</Text>
         </Text>
         {head.time ? (
@@ -316,6 +319,8 @@ export function CardFrameView({
   /** It waits for the person: a stronger frame. */
   loud?: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const cardFrameWordsHere = cardFrameWords(rawLocale);
   const theme = useTheme();
   // The card as it was earlier: what it said, without anything to press.
   const still = useContext(CardStillContext);
@@ -334,7 +339,7 @@ export function CardFrameView({
   };
   const disclosure =
     details && detailsToggle ? (
-      <CardDisclosure label={CARD_FRAME_WORDS.details} open={showDetails} onPress={toggleDetails} />
+      <CardDisclosure label={cardFrameWordsHere.details} open={showDetails} onPress={toggleDetails} />
     ) : null;
   const detailsPart =
     details || endAction ? (
@@ -400,10 +405,10 @@ export function CardFrameView({
       ) : foldable ? (
         <View style={{ gap: 10 }}>
           <CardDisclosure
-            label={unfolded ? CARD_FRAME_WORDS.showLess : CARD_FRAME_WORDS.showMore}
+            label={unfolded ? cardFrameWordsHere.showLess : cardFrameWordsHere.showMore}
             open={unfolded}
             onPress={() => setUnfolded((o) => !o)}
-            spoken={`${unfolded ? CARD_FRAME_WORDS.showLess : CARD_FRAME_WORDS.showMore}: ${head.title}`}
+            spoken={`${unfolded ? cardFrameWordsHere.showLess : cardFrameWordsHere.showMore}: ${head.title}`}
           />
           {unfolded ? (
             <View style={{ gap: 12, borderTopWidth: 1, borderTopColor: theme.colors.line, paddingTop: 12 }}>

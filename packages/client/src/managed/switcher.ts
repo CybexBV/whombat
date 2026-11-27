@@ -5,9 +5,12 @@
  * ones this device remembers, AP-695). Web and phone draw the same rows.
  */
 
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { SWITCHER_WORDS } from '../i18n/messages/hostManaged/switcher';
 import type { ApplianceSession } from '../session/types';
 import type { ApplianceSummary } from './control';
-import { agoText, COPY } from './copy';
+import { agoText, managedCopyText } from './copy';
 import type { KnownAppliance } from './registry';
 import { isRetired } from './retired';
 import { knownBoxRows } from './whombat-link';
@@ -15,15 +18,23 @@ import { knownBoxRows } from './whombat-link';
 /** Seen by control within this long: online (the list's rule, AP-64). */
 export const SWITCHER_ONLINE_S = 120;
 
-export const SWITCHER_COPY = {
-  kicker: COPY.appliances.kicker,
-  here: 'This Whombat',
-  setUp: COPY.setup.title,
-  all: 'All Whombats',
-  claim: COPY.appliances.claim,
-  /** The burrow name's button: what it is and that it opens the list. */
-  label: (name: string) => `${name}. Your Whombats`,
-} as const;
+/** The switcher's words, in a locale (English when none is given). */
+export function switcherCopy(locale?: string | null) {
+  const w = clientTree(locale, SWITCHER_WORDS);
+  const copy = managedCopyText(locale);
+  return {
+    kicker: copy.appliances.kicker,
+    here: w.here,
+    setUp: copy.setup.title,
+    all: w.all,
+    claim: copy.appliances.claim,
+    /** The burrow name's button: what it is and that it opens the list. */
+    label: (name: string) => interpolate(w.label, { name }),
+  } as const;
+}
+
+/** The switcher's words in English. */
+export const SWITCHER_COPY = switcherCopy('en');
 
 export interface SwitcherRow {
   device: string;
@@ -47,27 +58,34 @@ export function switcherRows(
     now?: number;
     /** The list is the boxes this device knows (LNK-43): no last-seen from a directory, so each says where it opens. */
     local?: boolean;
+    /** The language of the lines (English when none is given). */
+    locale?: string | null;
   },
 ): SwitcherRow[] {
+  const { locale } = input;
   const now = input.now ?? Date.now();
+  const words = switcherCopy(locale);
+  const copy = managedCopyText(locale);
   const rows = list
     .filter((a) => !isRetired(a))
     .map((a): SwitcherRow => {
       const here = a.device === input.current;
       const online = a.lastSeenAt !== null && now / 1000 - a.lastSeenAt < SWITCHER_ONLINE_S;
       const setUp = !here && !input.known(a.device)?.enrolled;
-      const local = input.local ? knownBoxRows([input.known(a.device) ?? localStandIn(a)], '')[0] : null;
+      const local = input.local
+        ? knownBoxRows([input.known(a.device) ?? localStandIn(a)], '', locale)[0]
+        : null;
       const meta = here
-        ? SWITCHER_COPY.here
+        ? words.here
         : setUp
-          ? SWITCHER_COPY.setUp
+          ? words.setUp
           : local
             ? local.meta
             : online
-              ? COPY.appliances.online
+              ? copy.appliances.online
               : a.lastSeenAt !== null
-                ? COPY.appliances.offline(agoText(a.lastSeenAt, now))
-                : COPY.appliances.neverSeen;
+                ? copy.appliances.offline(agoText(a.lastSeenAt, now, locale))
+                : copy.appliances.neverSeen;
       return { device: a.device, name: a.name ?? a.device, here, online, setUp, meta, appliance: a };
     });
   return rows.sort((a, b) => Number(b.here) - Number(a.here) || a.name.localeCompare(b.name));

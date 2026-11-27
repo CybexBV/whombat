@@ -8,27 +8,31 @@ import { endsText } from '@whombat/client';
 import {
   type ConversationKind,
   type DateInput,
-  DND_PRESET_LABELS,
   type DndPreset,
   defaultNotifyLevel,
+  dndPresetLabels,
   formatClock,
   isDndActive,
-  NOTIFY_LEVEL_LABELS,
   type NotificationPreferences,
   type NotifyLevel,
+  notifyLevelLabels,
   notifyLevelOf,
   toDate,
   zonedInstant,
   zonedParts,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /* A conversation's level --------------------------------------------------------------------------------------------- */
 
-const LEVEL_DETAILS: Record<NotifyLevel, string> = {
-  all: 'Every new message',
-  mentions: 'Mentions and replies in your threads',
-  none: 'Only what needs you',
-};
+function levelDetails(locale?: string): Record<NotifyLevel, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    all: t('data.notify.level.all'),
+    mentions: t('data.notify.level.mentions'),
+    none: t('data.notify.level.none'),
+  };
+}
 
 export interface NotifyOption {
   level: NotifyLevel;
@@ -41,13 +45,19 @@ export interface NotifyOption {
 export const NOTIFY_LEVELS: readonly NotifyLevel[] = ['all', 'mentions', 'none'];
 
 /** The header menu's three choices for a conversation, the one in effect selected. */
-export function notifyOptions(c: { kind: ConversationKind; notify?: NotifyLevel | null }): NotifyOption[] {
+export function notifyOptions(
+  c: { kind: ConversationKind; notify?: NotifyLevel | null },
+  locale?: string,
+): NotifyOption[] {
   const current = notifyLevelOf(c);
   const fallback = defaultNotifyLevel(c.kind);
+  const labels = notifyLevelLabels(locale);
+  const details = levelDetails(locale);
+  const { t } = mobileTranslator(locale);
   return NOTIFY_LEVELS.map((level) => ({
     level,
-    label: NOTIFY_LEVEL_LABELS[level],
-    detail: level === fallback ? `${LEVEL_DETAILS[level]} · default` : LEVEL_DETAILS[level],
+    label: labels[level],
+    detail: level === fallback ? t('data.notify.isDefault', { detail: details[level] }) : details[level],
     selected: level === current,
   }));
 }
@@ -67,17 +77,23 @@ export function dndStateText(
   prefs: Pick<NotificationPreferences, 'dndUntil'>,
   now: DateInput,
   timeZone: string,
+  locale?: string,
 ): string {
-  if (!isDndActive(prefs, now) || !prefs.dndUntil) return 'Off';
-  return `On until ${endsText(prefs.dndUntil, now, timeZone)}`;
+  const { t } = mobileTranslator(locale);
+  if (!isDndActive(prefs, now) || !prefs.dndUntil) return t('data.notify.off');
+  return t('data.notify.onUntil', { when: endsText(prefs.dndUntil, now, timeZone, locale) });
 }
 
-export const DND_PRESETS: readonly { preset: DndPreset; label: string }[] = (
-  ['30m', '1h', 'tomorrow'] as const
-).map((preset) => ({ preset, label: DND_PRESET_LABELS[preset] }));
+export function dndPresets(locale?: string): readonly { preset: DndPreset; label: string }[] {
+  const labels = dndPresetLabels(locale);
+  return (['30m', '1h', 'tomorrow'] as const).map((preset) => ({ preset, label: labels[preset] }));
+}
+export const DND_PRESETS = dndPresets();
 
-export const DND_HINT =
-  'Holds back push and email notifications until then. Your inbox still fills, and it ends on time.';
+export function dndHint(locale?: string): string {
+  return mobileTranslator(locale).t('data.notify.dndHint');
+}
+export const DND_HINT = dndHint();
 
 /** `7:30`, `0730`, `07:30` → `07:30`; null for anything that isn't a time of day. */
 export function parseClock(value: string): string | null {
@@ -97,9 +113,10 @@ export function dndUntilClock(
   value: string,
   now: DateInput,
   timeZone: string,
+  locale?: string,
 ): { ok: true; until: string } | { ok: false; error: string } {
   const clock = parseClock(value);
-  if (!clock) return { ok: false, error: 'Type a time such as 18:30.' };
+  if (!clock) return { ok: false, error: mobileTranslator(locale).t('data.notify.typeTime') };
   const n = toDate(now);
   const today = zonedParts(n, timeZone);
   let at = zonedInstant(today, clock, timeZone);
@@ -115,12 +132,19 @@ export function nextWholeHour(now: DateInput, timeZone: string): string {
 
 /* Quiet hours --------------------------------------------------------------------------------------------------------- */
 
-export const QUIET_HOURS_HINT =
-  'Push and email wait during these hours, in your time zone. Your inbox still fills.';
+export function quietHoursHint(locale?: string): string {
+  return mobileTranslator(locale).t('data.notify.quietHoursHint');
+}
+export const QUIET_HOURS_HINT = quietHoursHint();
 
 /* Previews ------------------------------------------------------------------------------------------------------------ */
 
 /** Settings → Notifications' message-text switch (CT-286, AP-809), the web's words. */
-export const PREVIEWS_TITLE = 'Show message text in notifications';
-export const PREVIEWS_HINT =
-  'Notifications show who wrote and the start of the message. Off: they only say what kind of notification it is.';
+export function previewsTitle(locale?: string): string {
+  return mobileTranslator(locale).t('data.notify.previewsTitle');
+}
+export function previewsHint(locale?: string): string {
+  return mobileTranslator(locale).t('data.notify.previewsHint');
+}
+export const PREVIEWS_TITLE = previewsTitle();
+export const PREVIEWS_HINT = previewsHint();

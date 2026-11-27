@@ -3,7 +3,7 @@
  * phone width): the web's parts stacked. Before it's on, one card to tick whose days to keep; when it's on, the day's
  * bar with Day | Week, everyone's strips (avatars only, as the mockup's narrow layout), one person's day on the Mac's
  * map with the stops numbered and as a list whose durations follow the street, the week with its totals, and the
- * timeline's settings. The words and numbers are the web's (`FIND_MY_TIMELINE_WORDS`, `findMyListRows`, …); days are
+ * timeline's settings. The words and numbers are the web's (`findMyTimelineWords`, `findMyListRows`, …); days are
  * cut in the phone's time zone on the app's clock (the demo world's own in the demo).
  */
 
@@ -33,6 +33,7 @@ import {
   findMyTimelineMarks,
   findMyTimelineOn,
   findMyTimelinePace,
+  findMyTimelineWords,
   findMyToday,
   findMyTones,
   findMyWeekDay,
@@ -40,7 +41,6 @@ import {
   findMyWeekTotals,
   findMyWhoseAfter,
   hostErrorInfo,
-  FIND_MY_TIMELINE_WORDS as W,
 } from '@whombat/client/hosts';
 import {
   useFindMyTimeline,
@@ -117,6 +117,7 @@ interface Ctx {
 /** The tab of the Find My connection `connectionId`, whose Mac is `serverId`. */
 export function FindMyTimelinePart({ connectionId, serverId }: { connectionId: string; serverId: string }) {
   const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
 
   const { slug } = useBurrowBase();
   const tz = useMemo(findMyDeviceTimeZone, []);
@@ -239,9 +240,11 @@ function DayBar({
   onStep: (n: number) => void;
   onMode: (m: Mode) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const week = mode === 'week';
-  const title = findMyDayTitle(date, today);
+  const title = findMyDayTitle(date, today, rawLocale);
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <StepButton
@@ -295,8 +298,9 @@ function Strip({
   ctx: Ctx;
   label: string;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const parts = findMyStrip(segments, day, ctx.order, ctx.tz);
+  const parts = findMyStrip(segments, day, ctx.order, ctx.tz, rawLocale);
   const nowAt = findMyNowAt(day, ctx.now);
   return (
     <View
@@ -453,11 +457,13 @@ function Everyone({
   picked: string | null;
   onPick: (id: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const change = useFindMyTimelineChange(ctx.slug, ctx.connectionId);
   if (!day) return null;
   const isToday = day.date === ctx.today;
-  const title = findMyDayTitle(day.date, ctx.today).title;
+  const title = findMyDayTitle(day.date, ctx.today, rawLocale).title;
   const segmentsOf = (id: string) => day.people.find((p) => p.person === id)?.segments ?? [];
   const legend = findMyLegend(
     ctx.order,
@@ -472,7 +478,7 @@ function Everyone({
     </View>
   );
   return (
-    <OneCard label={W.everyone} meta={findMyEveryoneMeta(ctx.timeline, isToday, ctx.tz)}>
+    <OneCard label={W.everyone} meta={findMyEveryoneMeta(ctx.timeline, isToday, ctx.tz, rawLocale)}>
       <View style={{ paddingHorizontal: PAD - 6 }}>
         {ctx.who.map((w) => {
           if (!w.person.kept)
@@ -516,7 +522,7 @@ function Everyone({
                           kind: 'set',
                           people: findMyWhoseAfter(ctx.timeline.people, w.person.id, true),
                         })
-                        .then((problem) => problem && showFailure(problem))
+                        .then((problem) => problem && showFailure(problem, rawLocale))
                     }
                   >
                     <Text size={12.5} weight={500} color={theme.colors.brand}>
@@ -578,6 +584,8 @@ function Everyone({
 /* One person's day ------------------------------------------------------------------------------------- */
 
 function PersonDay({ ctx, day, id }: { ctx: Ctx; day: FindMyTimelineDay; id: string }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const w = ctx.who.find((x) => x.person.id === id);
   if (!w) return null;
@@ -588,6 +596,7 @@ function PersonDay({ ctx, day, id }: { ctx: Ctx; day: FindMyTimelineDay; id: str
     person: w.person,
     mac: ctx.mac,
     order: ctx.order,
+    locale: rawLocale,
   });
   const pace = findMyTimelinePace(ctx.timeline.paceMinutes);
   return (
@@ -614,7 +623,7 @@ function PersonDay({ ctx, day, id }: { ctx: Ctx; day: FindMyTimelineDay; id: str
           </Text>
         </View>
         <Text size={13} color={theme.colors.mut}>
-          {findMyDayMeta(segments, w.person)}
+          {findMyDayMeta(segments, w.person, rawLocale)}
         </Text>
       </View>
       <DayMap ctx={ctx} who={w} date={day.date} segments={segments} />
@@ -623,7 +632,7 @@ function PersonDay({ ctx, day, id }: { ctx: Ctx; day: FindMyTimelineDay; id: str
           {W.linesNote(w.first)}
         </Text>
         <Text size={12.5} lh={1.45} color={theme.colors.mut}>
-          {W.spotsNote(findMyMinutes(pace))}
+          {W.spotsNote(findMyMinutes(pace, rawLocale))}
         </Text>
       </View>
       {rows.length === 0 ? (
@@ -767,6 +776,7 @@ function DayMap({
   segments: readonly FindMyTimelineSegment[];
 }) {
   const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
 
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -921,13 +931,15 @@ function Week({
   onPick: (id: string) => void;
   onDay: (date: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const kept = ctx.who.filter((w) => w.person.kept);
   const w = kept.find((x) => x.person.id === picked) ?? kept[0];
   if (!w) return null;
   const days = ctx.timeline.days;
   const segmentsOf = (d: FindMyTimelineDay) => d.people.find((p) => p.person === w.person.id)?.segments ?? [];
-  const totals = findMyWeekTotals(days.map(segmentsOf), ctx.order);
+  const totals = findMyWeekTotals(days.map(segmentsOf), ctx.order, rawLocale);
   const first = days[0];
   const last = days.at(-1);
   return (
@@ -967,12 +979,12 @@ function Week({
       </View>
       <OneCard
         label={W.weekTitle(w.first)}
-        meta={first && last ? findMyWeekRange(first.date, last.date) : null}
+        meta={first && last ? findMyWeekRange(first.date, last.date, rawLocale) : null}
       >
         <View style={{ paddingHorizontal: PAD - 6 }}>
           {days.map((d) => {
             const isToday = d.date === ctx.today;
-            const name = isToday ? W.today : findMyWeekDay(d.date);
+            const name = isToday ? W.today : findMyWeekDay(d.date, rawLocale);
             return (
               <Touchable
                 key={d.date}
@@ -1068,6 +1080,8 @@ function TickRow({
   onChange: (checked: boolean) => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   return (
     <Touchable
       feedback="wash"
@@ -1110,10 +1124,12 @@ function TickRow({
 /* Before it's on --------------------------------------------------------------------------------------- */
 
 function BeforeItsOn({ ctx }: { ctx: Ctx }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const change = useFindMyTimelineChange(ctx.slug, ctx.connectionId);
   const [ticked, setTicked] = useState<ReadonlySet<string>>(new Set());
-  const every = findMyEvery(findMyTimelinePace(ctx.timeline.paceMinutes));
+  const every = findMyEvery(findMyTimelinePace(ctx.timeline.paceMinutes), rawLocale);
   return (
     <View
       style={{
@@ -1173,7 +1189,7 @@ function BeforeItsOn({ ctx }: { ctx: Ctx }) {
               kind: 'set',
               people: ctx.who.filter((w) => ticked.has(w.person.id)).map((w) => w.person.id),
             })
-            .then((problem) => problem && showFailure(problem))
+            .then((problem) => problem && showFailure(problem, rawLocale))
         }
       />
       <Text size={13} color={theme.colors.mut}>
@@ -1186,6 +1202,8 @@ function BeforeItsOn({ ctx }: { ctx: Ctx }) {
 /* Settings --------------------------------------------------------------------------------------------- */
 
 function Settings({ ctx, picked }: { ctx: Ctx; picked: string | null }) {
+  const { rawLocale } = useI18n();
+  const W = findMyTimelineWords(rawLocale);
   const theme = useTheme();
   const change = useFindMyTimelineChange(ctx.slug, ctx.connectionId);
   const assistant = useFindMyTimelineAssistant(ctx.slug, ctx.connectionId);
@@ -1211,7 +1229,7 @@ function Settings({ ctx, picked }: { ctx: Ctx; picked: string | null }) {
         style: 'destructive',
         onPress: () =>
           void go().then((problem) => {
-            if (problem) showFailure(problem);
+            if (problem) showFailure(problem, rawLocale);
             else if (done) showNotice(done);
           }),
       },
@@ -1257,7 +1275,7 @@ function Settings({ ctx, picked }: { ctx: Ctx; picked: string | null }) {
                   key={w.person.id}
                   who={w}
                   checked={asked ?? w.person.kept}
-                  note={w.person.keptSince ? findMyKeptSince(w.person.keptSince, ctx.tz) : null}
+                  note={w.person.keptSince ? findMyKeptSince(w.person.keptSince, ctx.tz, rawLocale) : null}
                   disabled={change.pending}
                   onChange={(on) => {
                     if (on)
@@ -1266,7 +1284,7 @@ function Settings({ ctx, picked }: { ctx: Ctx; picked: string | null }) {
                           kind: 'set',
                           people: findMyWhoseAfter(ctx.timeline.people, w.person.id, true),
                         })
-                        .then((problem) => problem && showFailure(problem));
+                        .then((problem) => problem && showFailure(problem, rawLocale));
                     if (keptCount <= 1) return stop();
                     ask(
                       W.untickAsk(w.first),
@@ -1297,7 +1315,7 @@ function Settings({ ctx, picked }: { ctx: Ctx; picked: string | null }) {
               disabled={assistant.pending}
               accessibilityLabel={W.assistantLabel(words.Name)}
               onValueChange={(on) =>
-                void assistant.set(on).then((problem) => problem && showFailure(problem))
+                void assistant.set(on).then((problem) => problem && showFailure(problem, rawLocale))
               }
               {...switchColors(theme, reads)}
             />

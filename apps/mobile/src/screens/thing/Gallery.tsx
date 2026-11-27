@@ -13,6 +13,7 @@ import { type ReactNode, useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { type GalleryItemView, galleryItems, galleryLayout, rowsOf } from '../../data/servicePanels';
+import { useI18n } from '../../i18n';
 import { Meter } from '../../managed/HostCharts';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -25,9 +26,13 @@ import { CardQuiet, PanelLink } from './parts';
 import { ItemButtons, PanelButtons } from './ThingButton';
 
 export function GalleryCard({ panel, ctx }: { panel: ThingGalleryPanel; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
   const { timeZone } = useBurrowBase();
   const now = useNow();
-  const items = useMemo(() => galleryItems(panel, now, timeZone), [panel, now, timeZone]);
+  const items = useMemo(
+    () => galleryItems(panel, now, timeZone, rawLocale),
+    [panel, now, timeZone, rawLocale],
+  );
   const layout = galleryLayout(panel.shape);
   return (
     <OneCard

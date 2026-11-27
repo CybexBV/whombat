@@ -3,6 +3,7 @@
  * copy helpers so wording matches the web. Pure.
  */
 import { type SpendAgentWeek, spendLine } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * A branch room's mono line: its number, and the repository's name when the rooms span several (CT-170, AP-514). The
@@ -21,8 +22,10 @@ export function branchRoomMeta(
  * about $3.40”, “This week: 1.2M tokens” when no turn reported a cost. Null while it loads or when the server won't say
  * (the line is hidden).
  */
-export function agentSpendLine(spend: SpendAgentWeek | undefined): string | null {
+export function agentSpendLine(spend: SpendAgentWeek | undefined, locale?: string): string | null {
   // “tasks”, not the contract's “turns”, like the web (web-efficiency.md WE-16).
   if (!spend) return null;
-  return spend.week.turns === 0 ? 'This week: no tasks' : spendLine(spend.week);
+  return spend.week.turns === 0
+    ? mobileTranslator(locale).t('data.lists.noTasks')
+    : spendLine(spend.week, locale);
 }

@@ -23,7 +23,8 @@ import {
   runLiveActivity,
   runLiveActivityAudience,
 } from '@whombat/core';
-import type { Db } from '../db/client';
+import type { Database, Db } from '../db/client';
+import { burrowLocale } from '../i18n/locale';
 import { devicesForActivity } from '../push/devices';
 import type { PushSender } from '../push/sender';
 import { loadPrincipalRow, shortName } from '../read/principals';
@@ -55,17 +56,24 @@ async function runAudience(db: Db, run: Run): Promise<string[]> {
   });
 }
 
+/** The burrow owner's language: what an activity's words are written in, read when it is sent. */
+function ownerLocale(db: Database, burrowId: string): Promise<string> {
+  return burrowLocale({ db }, burrowId);
+}
+
 /** Database lookups, overridable for tests (the throttling and lifecycle rules need no Postgres). */
 export interface LiveActivityLookups {
   devices: typeof devicesForActivity;
   name: (db: Db, principalId: string) => Promise<string>;
   runAudience: (db: Db, run: Run) => Promise<string[]>;
+  locale: (db: Database, burrowId: string) => Promise<string>;
 }
 
 /** What to send for one change; the state is built when it is sent (a throttled update, when its window closes). */
 interface Pending {
-  build: () => Promise<LiveActivityState>;
+  build: (locale: string) => Promise<LiveActivityState>;
   recipients: () => Promise<readonly string[]>;
+  burrowId: string;
   burrowSlug: string;
 }
 
@@ -79,18 +87,25 @@ export class LiveActivityBroadcaster {
   private readonly lookups: LiveActivityLookups;
 
   constructor(
-    private readonly db: Db,
+    private readonly db: Database,
     private readonly push: PushSender,
     private readonly clock: () => Date = () => new Date(),
     lookups: Partial<LiveActivityLookups> = {},
   ) {
-    this.lookups = { devices: devicesForActivity, name: principalName, runAudience, ...lookups };
+    this.lookups = {
+      devices: devicesForActivity,
+      name: principalName,
+      runAudience,
+      locale: ownerLocale,
+      ...lookups,
+    };
   }
 
   async onRunChanged(run: Run, agentName: string, burrowSlug: string): Promise<void> {
     await this.handle(`run:${run.id}`, isRunActivityEnded(run), {
-      build: async () => runLiveActivity(run, agentName),
+      build: async (locale) => runLiveActivity(run, agentName, locale),
       recipients: () => this.lookups.runAudience(this.db, run),
+      burrowId: run.burrowId,
       burrowSlug,
     });
   }
@@ -98,9 +113,10 @@ export class LiveActivityBroadcaster {
   async onApprovalChanged(approval: Approval, burrowSlug: string): Promise<void> {
     await this.handle(`approval:${approval.id}`, isApprovalActivityEnded(approval), {
       // The requester's name is looked up only when something is sent.
-      build: async () =>
-        approvalLiveActivity(approval, await this.lookups.name(this.db, approval.requesterId)),
+      build: async (locale) =>
+        approvalLiveActivity(approval, await this.lookups.name(this.db, approval.requesterId), locale),
       recipients: async () => approverIdsOf(approval),
+      burrowId: approval.burrowId,
       burrowSlug,
     });
   }
@@ -128,11 +144,12 @@ export class LiveActivityBroadcaster {
       this.lastSent.set(ref, now);
     }
     this.cancelTrailing(ref);
-    const state = await pending.build();
+    const locale = await this.lookups.locale(this.db, pending.burrowId);
+    const state = await pending.build(locale);
     const { activity } = state;
     const refId = activity.kind === 'run' ? activity.runId : activity.approvalId;
     const recipients = await pending.recipients();
-    const payload = liveActivityPush(state, event, pending.burrowSlug);
+    const payload = liveActivityPush(state, event, pending.burrowSlug, locale);
     // Managed: no wake through control (NT-13). A content-free wake can't show progress, only “A run has news” on
     // every start and update; what needs the person (an approval, a question) is its own inbox notification.
     const devices = await this.lookups.devices(this.db, activity.kind, refId, recipients);

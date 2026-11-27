@@ -3,11 +3,12 @@
  * thing's status dot (from Connections' read, already cached by the tab bar) and its name in mono, on a hairline pill.
  * On a thread's first message in the room, and at the right of the thread screen's header.
  */
-import { STATUS_LEVEL_WORDS, thingStatusLevel } from '@whombat/client';
+import { statusLevelWords, thingStatusLevel } from '@whombat/client';
 import { useHomeOverview } from '@whombat/client/react';
 import { type ChatSubject, type ThingStatus, thingId } from '@whombat/core';
 import type { StyleProp, ViewStyle } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { mobileTranslator, useI18n } from '../i18n';
 import { openHref } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -19,12 +20,18 @@ import { hitSlopFor } from './touchTarget';
  * What a screen reader hears for the chip: the thing and how it is (“pve-02, Needs a look”), or “About pve-02” while
  * its status isn't known.
  */
-export function subjectLabel(subject: Pick<ChatSubject, 'name'>, status?: ThingStatus | null): string {
-  if (!status || status === 'unknown') return `About ${subject.name}`;
-  return `${subject.name}, ${STATUS_LEVEL_WORDS[thingStatusLevel(status)]}`;
+export function subjectLabel(
+  subject: Pick<ChatSubject, 'name'>,
+  status?: ThingStatus | null,
+  locale?: string | null,
+): string {
+  if (!status || status === 'unknown')
+    return mobileTranslator(locale).t('screens2.ui.aboutSubject', { name: subject.name });
+  return `${subject.name}, ${statusLevelWords(locale)[thingStatusLevel(status)]}`;
 }
 
 export function SubjectChip({ subject, style }: { subject: ChatSubject; style?: StyleProp<ViewStyle> }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const home = useHomeOverview({ params: { burrow: slug } }, { retry: false });
@@ -39,7 +46,7 @@ export function SubjectChip({ subject, style }: { subject: ChatSubject; style?: 
       disabled={!href}
       feedback="wash"
       accessibilityRole="button"
-      accessibilityLabel={subjectLabel(subject, status)}
+      accessibilityLabel={subjectLabel(subject, status, rawLocale)}
       ringRadius={999}
       hitSlop={hitSlopFor(22)}
       style={[

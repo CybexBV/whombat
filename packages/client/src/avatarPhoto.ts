@@ -6,18 +6,17 @@
  */
 import { AVATAR_MAX_BYTES, AVATAR_MIN_PIXELS, AVATAR_PIXELS } from '@whombat/core';
 import { ApiError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** What Settings says about a photo, on the web and the phone. */
-export const AVATAR_COPY = {
-  change: 'Change photo',
-  remove: 'Remove photo',
-  saved: 'Photo saved.',
-  removed: 'Photo removed.',
-  unreadable: 'Couldn’t read that image.',
-  tooSmall: 'That image is too small. Pick one at least 32 pixels across.',
-  tooLarge: 'Couldn’t make that image small enough. Try another one.',
-  failed: 'Couldn’t save your photo. Try again in a moment.',
-} as const;
+const settings = (locale?: string | null) => clientTree(locale, SETTINGS_AREA_WORDS);
+
+/** What Settings says about a photo, on the web and the phone, in a locale (English when none). */
+export function avatarCopy(locale?: string | null) {
+  return settings(locale).avatar;
+}
+
+export const AVATAR_COPY = avatarCopy();
 
 export type AvatarImageProblem = 'unreadable' | 'too_small' | 'too_large';
 
@@ -106,9 +105,15 @@ export function base64DecodedBytes(b64: string): number {
  * What to tell the person when choosing or saving a photo failed: why the image can't be used, the Whombat's own words
  * when it refused the photo (a 4xx in the contract's shape, e.g. a type it doesn't take), else to try again.
  */
-export function avatarErrorText(error: unknown): string {
-  if (error instanceof AvatarImageError) return error.message;
+export function avatarErrorText(error: unknown, locale?: string | null): string {
+  const copy = avatarCopy(locale);
+  if (error instanceof AvatarImageError)
+    return error.problem === 'too_small'
+      ? copy.tooSmall
+      : error.problem === 'too_large'
+        ? copy.tooLarge
+        : copy.unreadable;
   if (error instanceof ApiError && error.status >= 400 && error.status < 500 && error.code !== 'unknown')
     return error.message;
-  return AVATAR_COPY.failed;
+  return copy.failed;
 }

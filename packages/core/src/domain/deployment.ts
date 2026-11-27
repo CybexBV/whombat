@@ -8,6 +8,7 @@
  * service and environment that succeeded before it. The summary is the deployer's own words.
  */
 import { z } from 'zod';
+import { coreWords, tCore } from '../i18n/catalog.js';
 import { ConversationId, DeploymentId, MessageId, PrincipalId, RunId } from '../ids.js';
 import { shortSha } from '../text/format.js';
 import { RepoFullName, Timestamp } from './common.js';
@@ -54,18 +55,20 @@ export type DeploymentStatus = z.infer<typeof DeploymentStatus>;
 export const DeploymentHow = z.enum(['github_actions', 'ssh', 'cli', 'other']);
 export type DeploymentHow = z.infer<typeof DeploymentHow>;
 
-/** Mono pills on the board and the card. */
-export const DEPLOYMENT_STATUS_PILLS: Readonly<Record<DeploymentStatus, string>> = {
-  succeeded: 'DEPLOYED',
-  failed: 'FAILED',
-};
+/** Mono pills on the board and the card, in a locale. */
+export function deploymentStatusPills(locale?: string | null): Readonly<Record<DeploymentStatus, string>> {
+  return coreWords(locale, 'deployment.status', DeploymentStatus.options);
+}
 
-export const DEPLOYMENT_HOW_LABELS: Readonly<Record<DeploymentHow, string>> = {
-  github_actions: 'GitHub Actions',
-  ssh: 'SSH',
-  cli: 'Command line',
-  other: 'Other',
-};
+export const DEPLOYMENT_STATUS_PILLS: Readonly<Record<DeploymentStatus, string>> =
+  deploymentStatusPills('en');
+
+/** How a deploy was done, in a locale. */
+export function deploymentHowLabels(locale?: string | null): Readonly<Record<DeploymentHow, string>> {
+  return coreWords(locale, 'deployment.how', DeploymentHow.options);
+}
+
+export const DEPLOYMENT_HOW_LABELS: Readonly<Record<DeploymentHow, string>> = deploymentHowLabels('en');
 
 /**
  * One recorded deploy. Optional facts are null when the deployer didn't say.
@@ -132,11 +135,15 @@ export function deployGroupKey(name: string): string {
  * The one line a deploy says (the settled card, the board's history, notifications): “Deployed api to production ·
  * 3f9c2a”, “Deploy of api to production failed · 3f9c2a”.
  */
-export function deployLine(d: Pick<DeployCard, 'service' | 'environment' | 'status' | 'sha'>): string {
-  const what =
-    d.status === 'succeeded'
-      ? `Deployed ${d.service} to ${d.environment}`
-      : `Deploy of ${d.service} to ${d.environment} failed`;
+export function deployLine(
+  d: Pick<DeployCard, 'service' | 'environment' | 'status' | 'sha'>,
+  locale?: string | null,
+): string {
+  const tag = typeof locale === 'string' ? locale : null;
+  const what = tCore(tag, d.status === 'succeeded' ? 'deployment.line.succeeded' : 'deployment.line.failed', {
+    service: d.service,
+    environment: d.environment,
+  });
   return d.sha ? `${what} · ${shortSha(d.sha.toLowerCase())}` : what;
 }
 

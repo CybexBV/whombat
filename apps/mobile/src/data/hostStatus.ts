@@ -15,7 +15,7 @@ import {
   splitLead,
   type ThingSeriesToken,
 } from '@whombat/client';
-import { HOST_RANGE_LABELS, HOST_STATUS_COPY } from '@whombat/core/text';
+import { hostRangeLabels, hostStatusCopy } from '@whombat/core/text';
 import { HOST_METRICS_RANGES, type HostMetricsRange } from '@whombat/protocol/session';
 
 /* The section ------------------------------------------------------------------------------------------------------ */
@@ -36,16 +36,25 @@ export function hostSectionKind(state: Pick<HostPollState, 'metrics' | 'reason'>
 /** The charts, one at a time (BS-12), in the web's order, named by the contracts' titles. */
 export type HostChartKey = 'processor' | 'network' | 'days' | 'disk';
 
-export const HOST_CHARTS: readonly { value: HostChartKey; label: string }[] = [
-  { value: 'processor', label: HOST_STATUS_COPY.processor },
-  { value: 'network', label: HOST_STATUS_COPY.networkSpeed },
-  { value: 'days', label: HOST_STATUS_COPY.perDay },
-  { value: 'disk', label: HOST_STATUS_COPY.disk },
-];
+export function hostCharts(locale?: string): readonly { value: HostChartKey; label: string }[] {
+  const copy = hostStatusCopy(locale);
+  return [
+    { value: 'processor', label: copy.processor },
+    { value: 'network', label: copy.networkSpeed },
+    { value: 'days', label: copy.perDay },
+    { value: 'disk', label: copy.disk },
+  ];
+}
+
+export const HOST_CHARTS: readonly { value: HostChartKey; label: string }[] = hostCharts();
 
 /** The range control's options, shortest first. */
-export const HOST_RANGE_OPTIONS: readonly { value: HostMetricsRange; label: string }[] =
-  HOST_METRICS_RANGES.map((value) => ({ value, label: HOST_RANGE_LABELS[value] }));
+export function hostRangeOptions(locale?: string): readonly { value: HostMetricsRange; label: string }[] {
+  const labels = hostRangeLabels(locale);
+  return HOST_METRICS_RANGES.map((value) => ({ value, label: labels[value] }));
+}
+
+export const HOST_RANGE_OPTIONS: readonly { value: HostMetricsRange; label: string }[] = hostRangeOptions();
 
 /* Readouts --------------------------------------------------------------------------------------------------------- */
 
@@ -112,27 +121,35 @@ export const cpuMeasured = (p: HostChartPoint) => p.cpuPct !== null;
 export const speedMeasured = (p: HostChartPoint) => p.downBps !== null || p.upBps !== null;
 
 /** `14:25` · `4 % busy`. */
-export function processorReadout(p: HostChartPoint, range: HostMetricsRange, timeZone: string): HostReadout {
+export function processorReadout(
+  p: HostChartPoint,
+  range: HostMetricsRange,
+  timeZone: string,
+  locale?: string,
+): HostReadout {
   return {
-    title: hostPointLabel(p.at, range, timeZone),
-    lines: [lead('chart1', HOST_STATUS_COPY.busy(p.cpuPct ?? 0))],
+    title: hostPointLabel(p.at, range, timeZone, locale),
+    lines: [lead('chart1', hostStatusCopy(locale).busy(p.cpuPct ?? 0))],
   };
 }
 
 /** `14:25` · `12 Mbit/s down` · `0.4 Mbit/s up`. */
-export function networkReadout(p: HostChartPoint, range: HostMetricsRange, timeZone: string): HostReadout {
+export function networkReadout(
+  p: HostChartPoint,
+  range: HostMetricsRange,
+  timeZone: string,
+  locale?: string,
+): HostReadout {
+  const copy = hostStatusCopy(locale);
   return {
-    title: hostPointLabel(p.at, range, timeZone),
-    lines: [
-      lead('chart1', HOST_STATUS_COPY.speedDown(p.downBps ?? 0)),
-      lead('chart2', HOST_STATUS_COPY.speedUp(p.upBps ?? 0)),
-    ],
+    title: hostPointLabel(p.at, range, timeZone, locale),
+    lines: [lead('chart1', copy.speedDown(p.downBps ?? 0)), lead('chart2', copy.speedUp(p.upBps ?? 0))],
   };
 }
 
 /** `Today so far` · `2.2 GB received` · `41 MB sent`. */
-export function dayReadout(row: HostDayRow): HostReadout {
-  const t = hostDayLines(row);
+export function dayReadout(row: HostDayRow, locale?: string): HostReadout {
+  const t = hostDayLines(row, locale);
   return { title: row.title, lines: [lead('chart1', t.received), lead('chart2', t.sent)] };
 }
 

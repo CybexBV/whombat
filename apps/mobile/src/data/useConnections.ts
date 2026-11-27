@@ -17,11 +17,13 @@ import {
 } from '@whombat/client/react';
 import { ACCOUNT_PAGES_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useMemo } from 'react';
+import { useI18n } from '../i18n';
 import { useBurrow } from './BurrowProvider';
 import { addConnectionRows, connectedRows, feedbackRow, githubRow } from './connections';
 
 export function useConnections() {
   const { slug } = useBurrow();
+  const { rawLocale } = useI18n();
   // Fusebox and the AI gateway offered (AP-1123); the rows say only where a connection is (AP-1177).
   const list = useCatalogConnections({ params: { burrow: slug } });
   const catalog = useConnectionsCatalog({});
@@ -43,11 +45,16 @@ export function useConnections() {
           : null,
         slug,
         pages,
+        rawLocale,
       ),
-      feedbackRow(feedback.data?.integrations, slug, pages),
+      feedbackRow(feedback.data?.integrations, slug, pages, rawLocale),
     ];
-    return connectedRows(list.data?.connections ?? [], connectedAccounts, slug, { pages, builtins });
-  }, [list.data, connectedAccounts, slug, pages, github.data, repos.data, feedback.data]);
+    return connectedRows(list.data?.connections ?? [], connectedAccounts, slug, {
+      pages,
+      builtins,
+      locale: rawLocale,
+    });
+  }, [list.data, connectedAccounts, slug, pages, github.data, repos.data, feedback.data, rawLocale]);
   const offered = useMemo(
     () =>
       addConnectionRows(
@@ -55,9 +62,9 @@ export function useConnections() {
         rows.map((r) => r.catalogId),
         slug,
         // Email (IMAP) where this Whombat offers it (absent from an older one, CT-482; AP-2816).
-        { gateway: true, imap: accounts.data?.imap?.available === true },
+        { gateway: true, imap: accounts.data?.imap?.available === true, locale: rawLocale },
       ),
-    [catalog.data, rows, slug, accounts.data],
+    [catalog.data, rows, slug, accounts.data, rawLocale],
   );
   const refetch = () => {
     void list.refetch();

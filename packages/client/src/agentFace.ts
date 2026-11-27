@@ -32,13 +32,13 @@ export function agentFaceLabelIn(face: AgentFace, locale?: string | null): strin
  * The runtime's voices (Whombat `packages/agent-runtime/src/persona/voices.ts`) are the way of talking itself and
  * describe the same five: change them together.
  */
-export const AGENT_FACE_STYLES: Readonly<Record<AgentFace, string>> = {
-  dusty: 'Plain and friendly. Everyday words, no jargon.',
-  banjo: 'Technical. Talks like an engineer, with the exact terms and numbers.',
-  neo: 'Calm and a little mysterious, with the odd line from The Matrix.',
-  skipper: 'An upbeat captain. Decisive, with a touch of sailing talk.',
-  hazel: 'Accurate and direct. Short, friendly and straight to the point.',
-};
+export function agentFaceStyles(locale?: string | null): Readonly<Record<AgentFace, string>> {
+  return Object.fromEntries(
+    AGENT_CHARACTERS.map((c) => [c.face, agentFaceStyleIn(c.face, locale)]),
+  ) as Record<AgentFace, string>;
+}
+
+export const AGENT_FACE_STYLES: Readonly<Record<AgentFace, string>> = agentFaceStyles();
 
 /** What a face's character is like: “Calm and a little mysterious, with the odd line from The Matrix.” */
 export function agentFaceStyle(face: AgentFace): string {

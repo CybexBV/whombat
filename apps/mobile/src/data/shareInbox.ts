@@ -9,6 +9,7 @@
  * replaced by a newer one, and when the scope guard wipes what the phone keeps (MX-07) — only files directly in that
  * folder, never a file the other app shared by its own path.
  */
+import { mobileTranslator } from '../i18n/translate';
 import { type PickedFile, photoName } from './attachments';
 
 /** One file of a share, as expo-share-intent parses it (Android copies it into the app's cache first). */
@@ -71,6 +72,7 @@ export function shareText(intent: Pick<ShareIntentIn, 'text' | 'meta'>): string 
 export function sharedFiles(
   files: readonly SharedFileIn[],
   now: Date = new Date(),
+  locale?: string,
 ): Pick<SharedPayload, 'files' | 'dropped' | 'unreadable'> {
   const readable = files.filter((f) => !!f.path && !!f.size && f.size > 0);
   const kept = readable.slice(0, MAX_SHARED_FILES);
@@ -82,7 +84,9 @@ export function sharedFiles(
         : '';
       return {
         uri: f.path ?? '',
-        name: ext ? photoName(f.fileName, ext, i, now) : f.fileName?.trim() || 'file',
+        name: ext
+          ? photoName(f.fileName, ext, i, now, locale)
+          : f.fileName?.trim() || mobileTranslator(locale).t('data.shareInbox.fileName'),
         type,
         size: f.size ?? 0,
       };
@@ -96,35 +100,38 @@ export function sharedFiles(
 export function sharePayload(
   intent: ShareIntentIn,
   now: Date = new Date(),
+  locale?: string,
 ): Omit<SharedPayload, 'id'> | null {
   const text = shareText(intent);
-  const files = sharedFiles(intent.files ?? [], now);
+  const files = sharedFiles(intent.files ?? [], now, locale);
   if (!text && !files.files.length && !files.unreadable) return null;
   return { text, ...files };
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const LINK = /^https?:\/\/\S+$/i;
 
 /** The share screen's line under its title: “2 photos · A link”, “1 file · Text”. */
-export function shareSummary(payload: Pick<SharedPayload, 'text' | 'files'>): string {
+export function shareSummary(payload: Pick<SharedPayload, 'text' | 'files'>, locale?: string): string {
+  const { t, tp } = mobileTranslator(locale);
   const photos = payload.files.filter((f) => f.type.startsWith('image/')).length;
   const others = payload.files.length - photos;
   const parts = [
-    photos ? plural(photos, 'photo', 'photos') : null,
-    others ? plural(others, 'file', 'files') : null,
-    payload.text ? (LINK.test(payload.text) ? 'A link' : 'Text') : null,
+    photos ? tp('data.shareInbox.photos', photos) : null,
+    others ? tp('data.shareInbox.files', others) : null,
+    payload.text ? (LINK.test(payload.text) ? t('data.shareInbox.link') : t('data.shareInbox.text')) : null,
   ].filter((p): p is string => p !== null);
-  return parts.join(' · ') || 'Nothing to send';
+  return parts.join(' · ') || t('data.shareInbox.nothing');
 }
 
 /** A quiet note for files that were left out, or null. */
-export function shareNote(payload: Pick<SharedPayload, 'dropped' | 'unreadable'>): string | null {
+export function shareNote(
+  payload: Pick<SharedPayload, 'dropped' | 'unreadable'>,
+  locale?: string,
+): string | null {
+  const { t, tp } = mobileTranslator(locale);
   const notes = [
-    payload.dropped ? `Only the first ${MAX_SHARED_FILES} files are added.` : null,
-    payload.unreadable
-      ? `${plural(payload.unreadable, 'file', 'files')} couldn’t be read from the other app.`
-      : null,
+    payload.dropped ? t('data.shareInbox.dropped', { max: MAX_SHARED_FILES }) : null,
+    payload.unreadable ? tp('data.shareInbox.unreadable', payload.unreadable) : null,
   ].filter((n): n is string => n !== null);
   return notes.length ? notes.join(' ') : null;
 }

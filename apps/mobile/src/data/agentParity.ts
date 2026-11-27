@@ -8,37 +8,53 @@ import {
   AGENT_NOTES_MAX,
   type AgentNotes,
   AgentNotesText,
-  COMMAND_ALLOWANCES_COPY,
   type CommandAllowance,
   commandAllowanceLine,
+  commandAllowancesCopy,
   formatDate,
   memoryUsageText,
   notesCopy,
 } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
+import { mobileTranslator } from '../i18n/translate';
 
 /* Notes (HE-39, CT-1205) ------------------------------------------------------------------------------------------ */
 
 /** “Changed 20 Oct”: when the notes were changed last; null while never changed. */
-export function notesMeta(notes: Pick<AgentNotes, 'updatedAt'>, timeZone: string, now: Date): string | null {
+export function notesMeta(
+  notes: Pick<AgentNotes, 'updatedAt'>,
+  timeZone: string,
+  now: Date,
+  locale?: string,
+): string | null {
   if (!notes.updatedAt) return null;
-  return `Changed ${formatDate(notes.updatedAt, timeZone, { now })}`;
+  return mobileTranslator(locale).t('data.agentParity.changed', {
+    date: formatDate(notes.updatedAt, timeZone, { now }, locale),
+  });
 }
 
 /** What the editor would save: the text as the server keeps it (trimmed), or why not. */
 export function notesEdit(
   before: string,
   typed: string,
+  locale?: string,
 ): { kind: 'save'; text: string } | { kind: 'unchanged' } | { kind: 'too_long'; problem: string } {
   const parsed = AgentNotesText.safeParse(typed);
+  // The schema's own message is English; the phone says it in the person's words.
   if (!parsed.success)
-    return { kind: 'too_long', problem: parsed.error.issues[0]?.message ?? 'That’s too long.' };
+    return {
+      kind: 'too_long',
+      problem: mobileTranslator(locale).t('data.agentParity.tooLong', {
+        max: new Intl.NumberFormat(formatLocaleOf(locale)).format(AGENT_NOTES_MAX),
+      }),
+    };
   if (parsed.data === before) return { kind: 'unchanged' };
   return { kind: 'save', text: parsed.data };
 }
 
 /** “240 of 1,500 characters” under the editor (the usage line's words). */
-export function notesCount(typed: string): string {
-  return memoryUsageText([...typed.replace(/\r\n?/g, '\n').trim()].length, AGENT_NOTES_MAX);
+export function notesCount(typed: string, locale?: string): string {
+  return memoryUsageText([...typed.replace(/\r\n?/g, '\n').trim()].length, AGENT_NOTES_MAX, locale);
 }
 
 export { notesCopy };
@@ -55,11 +71,12 @@ export interface AllowanceRow {
   removeLabel: string;
 }
 
-export function allowanceRows(allowances: readonly CommandAllowance[]): AllowanceRow[] {
+export function allowanceRows(allowances: readonly CommandAllowance[], locale?: string): AllowanceRow[] {
+  const remove = commandAllowancesCopy(locale).remove;
   return allowances.map((a) => ({
     id: a.id,
     command: a.command,
-    line: commandAllowanceLine(a),
-    removeLabel: `${COMMAND_ALLOWANCES_COPY.remove}: ${a.command}`,
+    line: commandAllowanceLine(a, locale),
+    removeLabel: `${remove}: ${a.command}`,
   }));
 }

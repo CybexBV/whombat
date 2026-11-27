@@ -1,5 +1,5 @@
 repository: github.com/CybexBV/whombat
-app: 3.177.0
+app: 3.179.0
 eae076407040e60b3e5175968e071677b80fcbcf packages/avatars
 f4597d24149983ebb9b1a87bacd4069dbca81a8f packages/brand
 6ecd9f0124f2a9fc4e512a16e3ed35bd0c7dfe28 packages/screen

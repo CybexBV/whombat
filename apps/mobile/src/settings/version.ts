@@ -6,44 +6,53 @@
  * then the Hermes Agent the assistant runs on where the Whombat's status was read (`ApplianceInfo.hermes`; Whombat
  * hermes-updates.md HU-02, chat-settle.md AP-6159). Pure.
  */
+import { mobileTranslator } from '../i18n/translate';
 import type { AppUpdateStatus } from '../managed/appUpdate';
 
-export const VERSION_TEXT = {
-  label: 'VERSION',
-  /** On This Whombat → About the card holds the updates too: what runs, how its updates stand and their settings. */
-  labelWithUpdates: 'VERSION & UPDATES',
-  app: 'This app',
-  whombat: 'Whombat',
-  unknown: 'Not known',
-  hermes: 'Hermes Agent',
-  hermesWhat: 'What your assistant runs on',
-  /** Before a runner said which Hermes it runs. */
-  hermesUnknown: 'Not known yet',
-  /** The “This app” row's button (AP-2972): asks for a newer app now; TalkBack reads `checkLabel`. */
-  check: 'Check',
-  checkLabel: 'Check for updates',
-  /** How Whombat handles personal data, inside the app (App Review 5.1.1): the site's privacy policy. */
-  privacy: 'Privacy',
-  privacyWhat: 'How Whombat handles your data',
-  privacyOpen: 'Read',
-  privacyLabel: 'Read the privacy policy',
-  /** Under the version, where the check stands (a newer build has its own row; nothing known, nothing said). */
-  status: {
-    checking: 'Checking…',
-    newest: 'Up to date',
-    failed: 'Couldn’t check just now',
-    newer: null,
-    unknown: null,
-  } satisfies Record<AppUpdateStatus, string | null>,
-} as const;
+export function versionText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    label: t('settings2.version.label'),
+    /** On This Whombat → About the card holds the updates too: what runs, how its updates stand and their settings. */
+    labelWithUpdates: t('settings2.version.labelWithUpdates'),
+    app: t('settings2.version.app'),
+    whombat: 'Whombat',
+    unknown: t('settings2.version.unknown'),
+    hermes: 'Hermes Agent',
+    hermesWhat: t('settings2.version.hermesWhat'),
+    /** Before a runner said which Hermes it runs. */
+    hermesUnknown: t('settings2.version.hermesUnknown'),
+    /** The “This app” row's button (AP-2972): asks for a newer app now; TalkBack reads `checkLabel`. */
+    check: t('settings2.version.check'),
+    checkLabel: t('settings2.version.checkLabel'),
+    /** How Whombat handles personal data, inside the app (App Review 5.1.1): the site's privacy policy. */
+    privacy: t('settings2.version.privacy'),
+    privacyWhat: t('settings2.version.privacyWhat'),
+    privacyOpen: t('settings2.version.privacyOpen'),
+    privacyLabel: t('settings2.version.privacyLabel'),
+    /** Under the version, where the check stands (a newer build has its own row; nothing known, nothing said). */
+    status: {
+      checking: t('settings2.version.checking'),
+      newest: t('settings2.version.newest'),
+      failed: t('settings2.version.failed'),
+      newer: null,
+      unknown: null,
+    } satisfies Record<AppUpdateStatus, string | null>,
+  } as const;
+}
+
+export const VERSION_TEXT = versionText();
 
 /** “0.36.0 · build 36000”; the version alone without a build number; null when the app doesn't know its own. */
 export function appVersionText(
   version: string | null | undefined,
   build: string | number | null | undefined,
+  locale?: string | null,
 ): string | null {
   if (!version) return null;
-  return build !== null && build !== undefined && build !== '' ? `${version} · build ${build}` : version;
+  return build !== null && build !== undefined && build !== ''
+    ? mobileTranslator(locale).t('settings2.version.build', { version, build: String(build) })
+    : version;
 }
 
 export interface VersionRow {
@@ -64,16 +73,18 @@ export function versionRows(
   runtime: string | null,
   update: AppUpdateStatus | null = null,
   hermes?: { version: string } | null,
+  locale?: string | null,
 ): VersionRow[] {
-  const said = update ? VERSION_TEXT.status[update] : null;
-  const own = app ?? VERSION_TEXT.unknown;
-  const rows: VersionRow[] = [{ title: VERSION_TEXT.app, meta: said ? `${own}\n${said}` : own }];
-  if (runtime) rows.push({ title: VERSION_TEXT.whombat, meta: runtime });
+  const text = versionText(locale);
+  const said = update ? text.status[update] : null;
+  const own = app ?? text.unknown;
+  const rows: VersionRow[] = [{ title: text.app, meta: said ? `${own}\n${said}` : own }];
+  if (runtime) rows.push({ title: text.whombat, meta: runtime });
   if (hermes !== undefined)
     rows.push({
-      title: VERSION_TEXT.hermes,
-      body: VERSION_TEXT.hermesWhat,
-      meta: hermes?.version ?? VERSION_TEXT.hermesUnknown,
+      title: text.hermes,
+      body: text.hermesWhat,
+      meta: hermes?.version ?? text.hermesUnknown,
     });
   return rows;
 }

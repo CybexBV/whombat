@@ -15,6 +15,7 @@ import {
   type ThreadStage,
   threadStage,
 } from '@whombat/client';
+import { clientTranslator } from '@whombat/client/i18n';
 import { type Message, type Principal, parseChatHref } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
 import type { ThreadWorkView } from './working';
@@ -97,7 +98,6 @@ export function threadRoute(
 }
 
 /** `threadWork`'s words while an agent only thinks in a thread. */
-const THINKING = 'is thinking';
 
 /**
  * The reply row's work in a room (CHT-02, AP-2458): while the agent thinks in a thread, the mock's “Looking into it”
@@ -110,16 +110,19 @@ export function roomWork(
   working: boolean,
   agent: Principal | undefined,
   w: AgentWords,
+  locale?: string,
 ): ThreadWorkView | null {
+  // The shared work line's own words for an agent that only thinks, in the same language as the line.
+  const isThinking = clientTranslator(locale).t('working.isThinking');
   const thinking = (base: Pick<ThreadWorkView, 'agent' | 'name'>): ThreadWorkView => ({
     ...base,
-    text: THINKING,
+    text: isThinking,
     progress: null,
     tone: 'live',
-    line: CHAT_COPY.working,
+    line: chatCopy(locale).working,
     spoken: w.lookingIntoIt,
   });
-  if (work && !work.by) return work.text === THINKING && work.progress === null ? thinking(work) : work;
+  if (work && !work.by) return work.text === isThinking && work.progress === null ? thinking(work) : work;
   // Its own turn there comes before what it handed to T3 Code (t3code-handoff.md AP-6612).
   return working ? thinking({ agent, name: w.Name }) : work;
 }
@@ -140,16 +143,23 @@ export function phoneThreadRows(
   rows: readonly ThreadRow[],
   people: { name: (id: string) => string },
   w: AgentWords,
+  locale?: string,
 ): PhoneThreadRow[] {
+  const { t } = mobileTranslator(locale);
+  const working = chatCopy(locale).working;
   return rows.map((r) => {
     const title = r.text || '…';
     const said = r.replies ? `${r.replies} · ${r.when}` : `${people.name(r.authorId)} · ${r.when}`;
     return {
       rootId: r.rootId,
       title,
-      line: r.working ? CHAT_COPY.working : said,
+      line: r.working ? working : said,
       subject: r.subject,
-      label: [title, r.subject ? `about ${r.subject.name}` : null, r.working ? w.lookingIntoIt : said]
+      label: [
+        title,
+        r.subject ? t('data.chatRoom.about', { name: r.subject.name }) : null,
+        r.working ? w.lookingIntoIt : said,
+      ]
         .filter(Boolean)
         .join(', '),
     };

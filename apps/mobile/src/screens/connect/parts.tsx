@@ -8,7 +8,7 @@
  */
 
 import {
-  CONNECT_FORM_TEXT,
+  connectFormText,
   filledText,
   guidedLink,
   guidedSteps,
@@ -16,7 +16,7 @@ import {
   type IdentifyNote,
   minutesLeftText,
   readPaste,
-  SERVICE_LOGIN_WAIT_TEXT,
+  serviceLoginWaitText,
   takesPaste,
   trustText,
 } from '@whombat/client/connections';
@@ -28,8 +28,8 @@ import { type ReactNode, type RefObject, useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, View } from 'react-native';
 import Reanimated from 'react-native-reanimated';
 import { type PendingLogin, underLabel, waitEnds, waitWords } from '../../data/connectForm';
-import { TAB_WORDS } from '../../data/shell';
-import { useMobileT } from '../../i18n';
+import { tabWords } from '../../data/shell';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { copyToClipboard } from '../../ui/clipboard';
@@ -45,9 +45,10 @@ export type GuidedMethod = Extract<CatalogSignIn, { kind: 'token' | 'client_cred
 export function backUnder(
   state: { routes: readonly { key: string; name: string; params?: unknown; state?: unknown }[] },
   key: string,
+  locale?: string,
 ): string {
   const at = state.routes.findIndex((r) => r.key === key);
-  return underLabel(state.routes[(at < 0 ? state.routes.length : at) - 1], TAB_WORDS);
+  return underLabel(state.routes[(at < 0 ? state.routes.length : at) - 1], tabWords(locale), locale);
 }
 
 /** No autofill, autocorrect or suggestions on an address, an account or a name (and no “save password?”). */
@@ -161,12 +162,13 @@ export function openOutside(url: string | null | undefined) {
 
 /** A step's header (PC-11: step titles as section headers): its number in a ring (filled once done) and its title. */
 export function StepHeader({ number, title, done }: { number: number; title: string; done: boolean }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <View
       accessible
       accessibilityRole="header"
-      accessibilityLabel={`Step ${number}: ${title}`}
+      accessibilityLabel={tMobile('screens2.connect.step', { n: number, title })}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}
     >
       <View
@@ -264,15 +266,17 @@ export function CertificateNote({
   onTrust: () => void;
   onUndo: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
   const theme = useTheme();
   if (pinned)
     return (
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <StatusDot color={theme.colors.ok} label={CONNECT_FORM_TEXT.trusted} size={7} />
+        <StatusDot color={theme.colors.ok} label={connectFormTextHere.trusted} size={7} />
         <Text size={13.5} lh={1.45} style={{ flex: 1 }}>
-          {CONNECT_FORM_TEXT.trusted}
+          {connectFormTextHere.trusted}
         </Text>
-        <Button label={CONNECT_FORM_TEXT.undo} variant="quiet" onPress={onUndo} />
+        <Button label={connectFormTextHere.undo} variant="quiet" onPress={onUndo} />
       </View>
     );
   return (
@@ -287,7 +291,7 @@ export function CertificateNote({
       }}
     >
       <Text size={13.5} lh={1.45} color={theme.colors.ink2}>
-        {canPin ? CONNECT_FORM_TEXT.ownCertificate : CONNECT_FORM_TEXT.unverifiable}
+        {canPin ? connectFormTextHere.ownCertificate : connectFormTextHere.unverifiable}
       </Text>
       <Text size={12} lh={1.5} mono selectable>
         {sha256}
@@ -295,9 +299,9 @@ export function CertificateNote({
       {canPin ? (
         <>
           <Text size={13} lh={1.4} color={theme.colors.mut}>
-            {trustText(entry)}
+            {trustText(entry, rawLocale)}
           </Text>
-          <Button label={CONNECT_FORM_TEXT.trust} variant="secondary" onPress={onTrust} />
+          <Button label={connectFormTextHere.trust} variant="secondary" onPress={onTrust} />
         </>
       ) : null}
     </View>
@@ -367,22 +371,24 @@ export function GuidedToken({
   /** Fills the form from a text; what it filled in words, or null when it found nothing. */
   onPaste: (text: string) => string | null;
 }) {
+  const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
   const theme = useTheme();
   const [note, setNote] = useState<PasteNote | null>(null);
   const steps = guidedSteps(entry, method, fields);
   const link = guidedLink(entry, method, access, fields);
 
   function take(text: string) {
-    if (!text.trim()) return setNote({ text: CONNECT_FORM_TEXT.pasteNothing, ok: false });
+    if (!text.trim()) return setNote({ text: connectFormTextHere.pasteNothing, ok: false });
     const filled = onPaste(text);
-    setNote(filled ? { text: filled, ok: true } : { text: CONNECT_FORM_TEXT.pasteNothing, ok: false });
+    setNote(filled ? { text: filled, ok: true } : { text: connectFormTextHere.pasteNothing, ok: false });
   }
 
   async function fromClipboard() {
     try {
       take(await Clipboard.getStringAsync());
     } catch {
-      setNote({ text: CONNECT_FORM_TEXT.pasteNothing, ok: false });
+      setNote({ text: connectFormTextHere.pasteNothing, ok: false });
     }
   }
 
@@ -396,10 +402,10 @@ export function GuidedToken({
     if (!asset) return;
     const file = new File(asset.uri);
     try {
-      if ((asset.size ?? 0) > 64_000) return setNote({ text: CONNECT_FORM_TEXT.fileTooBig, ok: false });
+      if ((asset.size ?? 0) > 64_000) return setNote({ text: connectFormTextHere.fileTooBig, ok: false });
       take(await file.text());
     } catch {
-      setNote({ text: CONNECT_FORM_TEXT.pasteNothing, ok: false });
+      setNote({ text: connectFormTextHere.pasteNothing, ok: false });
     } finally {
       // The picker's copy goes at once: a key never stays on the phone.
       try {
@@ -413,7 +419,7 @@ export function GuidedToken({
   if (!steps.length && !method.paste.length) return null;
   return (
     <View style={{ gap: 14 }}>
-      <GuideSteps label={guideLabel(method)} steps={steps} />
+      <GuideSteps label={guideLabel(method, rawLocale)} steps={steps} />
       {link ? (
         <Button label={`${openLabel} ↗`} variant="secondary" onPress={() => openOutside(link)} />
       ) : null}
@@ -422,7 +428,11 @@ export function GuidedToken({
       {takesPaste(method) ? (
         <View style={{ gap: 8 }}>
           <Button label={pasteLabel} variant="secondary" onPress={() => void fromClipboard()} />
-          <Button label={CONNECT_FORM_TEXT.chooseFile} variant="secondary" onPress={() => void fromFile()} />
+          <Button
+            label={connectFormTextHere.chooseFile}
+            variant="secondary"
+            onPress={() => void fromFile()}
+          />
           {note ? (
             <Text
               size={13}
@@ -441,6 +451,8 @@ export function GuidedToken({
 
 /** A value to copy in a guided step: its label, the value in mono, Copy. */
 function CopyRow({ label, value }: { label: string; value: string }) {
+  const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -464,10 +476,10 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         </Text>
       </View>
       <Touchable
-        onPress={() => void copyToClipboard(value, CONNECT_FORM_TEXT.copied(label))}
+        onPress={() => void copyToClipboard(value, connectFormTextHere.copied(label), rawLocale)}
         feedback="wash"
         ringRadius={10}
-        accessibilityLabel={`${CONNECT_FORM_TEXT.copy} ${label.toLowerCase()}`}
+        accessibilityLabel={`${connectFormTextHere.copy} ${label.toLowerCase()}`}
         style={{
           minHeight: 44,
           minWidth: 64,
@@ -477,7 +489,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
         }}
       >
         <Text size={14} weight={500} color={theme.colors.brand}>
-          {CONNECT_FORM_TEXT.copy}
+          {connectFormTextHere.copy}
         </Text>
       </Touchable>
     </View>
@@ -494,6 +506,8 @@ export function MoreToggle({
   summary: string;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectFormTextHere = connectFormText(rawLocale);
   const theme = useTheme();
   const Chevron = open ? ChevronUp : ChevronDown;
   return (
@@ -504,13 +518,13 @@ export function MoreToggle({
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
       accessibilityLabel={
-        open ? CONNECT_FORM_TEXT.moreOptions : `${CONNECT_FORM_TEXT.moreOptions}. ${summary}`
+        open ? connectFormTextHere.moreOptions : `${connectFormTextHere.moreOptions}. ${summary}`
       }
       style={{ minHeight: 44, justifyContent: 'center', gap: 2 }}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         <Text size={14} weight={600} color={theme.colors.brand}>
-          {CONNECT_FORM_TEXT.moreOptions}
+          {connectFormTextHere.moreOptions}
         </Text>
         <Chevron size={15} color={theme.colors.brand} strokeWidth={2} />
       </View>
@@ -530,11 +544,12 @@ export function MoreToggle({
  * (AP-3951). The words are the web's, with the browser.
  */
 export function LoginWaitView({ login, onCancel }: { login: PendingLogin; onCancel: () => void }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [now, setNow] = useState(() => Date.now());
   const [ends] = useState(() => waitEnds(login, Date.now()));
-  const words = waitWords(login);
+  const words = waitWords(login, rawLocale);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 15_000);
     return () => clearInterval(t);
@@ -548,7 +563,7 @@ export function LoginWaitView({ login, onCancel }: { login: PendingLogin; onCanc
             {words.title}
           </Text>
           <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-            {`${words.line} · ${minutesLeftText(ends, now)}`}
+            {`${words.line} · ${minutesLeftText(ends, now, rawLocale)}`}
           </Text>
         </View>
       </View>
@@ -566,6 +581,9 @@ export function LoginWaitView({ login, onCancel }: { login: PendingLogin; onCanc
 
 /** A code to type on the service's page (`userCode`, CT-738): what to do with it, the code large in mono, Copy. */
 function UserCode({ text, value }: { text: string; value: string }) {
+  const { rawLocale } = useI18n();
+  const serviceLoginWaitTextHere = serviceLoginWaitText(rawLocale);
+  const connectFormTextHere = connectFormText(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -588,22 +606,22 @@ function UserCode({ text, value }: { text: string; value: string }) {
         tracking={0.08}
         selectable
         // “Code: K 7 Q F …”, read a character at a time, as it is typed.
-        accessibilityLabel={`${SERVICE_LOGIN_WAIT_TEXT.codeLabel}: ${value.split('').join(' ')}`}
+        accessibilityLabel={`${serviceLoginWaitTextHere.codeLabel}: ${value.split('').join(' ')}`}
       >
         {value}
       </Text>
       <Button
-        label={CONNECT_FORM_TEXT.copy}
+        label={connectFormTextHere.copy}
         variant="secondary"
-        accessibilityLabel={`${CONNECT_FORM_TEXT.copy} ${value}`}
-        onPress={() => void copyToClipboard(value, SERVICE_LOGIN_WAIT_TEXT.codeCopied)}
+        accessibilityLabel={`${connectFormTextHere.copy} ${value}`}
+        onPress={() => void copyToClipboard(value, serviceLoginWaitTextHere.codeCopied, rawLocale)}
       />
     </View>
   );
 }
 
 /** Reads a paste with the method's patterns and says what it filled (CS-15). */
-export function pasteFill(entry: CatalogEntry, method: GuidedMethod, text: string) {
+export function pasteFill(entry: CatalogEntry, method: GuidedMethod, text: string, locale?: string | null) {
   const found = readPaste(entry, method, text);
-  return found ? { ...found, text: filledText(found.filled) } : null;
+  return found ? { ...found, text: filledText(found.filled, locale) } : null;
 }

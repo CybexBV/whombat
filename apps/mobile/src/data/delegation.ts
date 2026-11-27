@@ -6,14 +6,14 @@
  */
 import {
   type ChatModelRow,
-  DELEGATION_AI_WORDS,
-  DELEGATION_WORDS,
   type DelegationAiMenuView,
   type DelegationCardView,
   type DelegationTaskView,
+  delegationAiWords,
   delegationCardView,
-  PROBLEM_WORDS,
+  delegationWords,
   problemText,
+  problemWords,
 } from '@whombat/client';
 import type { Attachment, DelegationAi, DelegationCard } from '@whombat/core';
 import { nextElapsedTick, TASK_SECONDS_BELOW_MS } from '../lib/elapsed';
@@ -41,14 +41,15 @@ export function delegationItem(
   attachments: readonly Attachment[],
   nowMs: number,
   lead: string | null = null,
+  locale?: string,
 ): DelegationItem {
   const pictures: Record<string, CardPicture[]> = {};
-  for (const t of card.tasks)
-    if (t.shots?.length) pictures[t.id] = cardPictures(t.shots, attachments, DELEGATION_WORDS.picturesHint);
+  const hint = delegationWords(locale).picturesHint;
+  for (const t of card.tasks) if (t.shots?.length) pictures[t.id] = cardPictures(t.shots, attachments, hint);
   return {
     delegationId: card.delegationId,
     card,
-    view: delegationCardView(card, nowMs, lead),
+    view: delegationCardView(card, nowMs, lead, locale),
     lead,
     pictures,
     ticking: card.live && card.tasks.some((t) => t.state === 'working'),
@@ -65,15 +66,17 @@ export type DelegationTaskPick = 'open' | 'stop';
 export function delegationTaskMenu(
   task: Pick<DelegationTaskView, 'title' | 'url' | 'stoppable'>,
   stopping = false,
+  locale?: string,
 ): NativeMenuSpec | null {
+  const words = delegationWords(locale);
   const open: NativeMenuItem[] = task.url
-    ? [{ id: 'open', title: DELEGATION_WORDS.openThread, icon: 'arrow.up.forward.app' }]
+    ? [{ id: 'open', title: words.openThread, icon: 'arrow.up.forward.app' }]
     : [];
   const stop: NativeMenuItem[] = task.stoppable
     ? [
         {
           id: 'stop',
-          title: DELEGATION_WORDS.stopTask,
+          title: words.stopTask,
           icon: 'stop.circle',
           destructive: true,
           disabled: stopping,
@@ -88,9 +91,10 @@ export function parseDelegationTaskPick(id: string): DelegationTaskPick | null {
 }
 
 /** “After 1” for each task on the checklist that starts after another, by task id. */
-export function delegationAfter(card: DelegationCard): Readonly<Record<string, string>> {
+export function delegationAfter(card: DelegationCard, locale?: string): Readonly<Record<string, string>> {
   const out: Record<string, string> = {};
-  for (const t of card.tasks) if (t.after !== null) out[t.id] = DELEGATION_WORDS.after(t.after);
+  const words = delegationWords(locale);
+  for (const t of card.tasks) if (t.after !== null) out[t.id] = words.after(t.after);
   return out;
 }
 
@@ -152,7 +156,9 @@ export function withAiHolds(card: DelegationCard, holds: DelegationAiHolds): Del
 export function delegationAiHeading(
   view: Pick<DelegationCardView, 'tasks' | 'aiShared' | 'picked'>,
   target: string,
+  locale?: string,
 ): { title: string; subtitle: string | null; first: string } {
+  const DELEGATION_AI_WORDS = delegationAiWords(locale);
   const task = target === EVERY_TASK ? null : view.tasks.find((t) => t.id === target);
   if (task)
     return {
@@ -202,7 +208,7 @@ export function delegationNextTick(card: DelegationCard, nowMs: number): number 
  * What a toast says when a press on the card didn't go through: a Whombat from before delegations (`unknown_op`) needs
  * an update; otherwise the server's own words, or the card's sentence for that press.
  */
-export function delegationActionProblem(error: unknown, fallback: string): string {
-  if (olderWhombat(error)) return PROBLEM_WORDS.whombatUpdate;
-  return problemText(error, fallback);
+export function delegationActionProblem(error: unknown, fallback: string, locale?: string): string {
+  if (olderWhombat(error)) return problemWords(locale).whombatUpdate;
+  return problemText(error, fallback, locale);
 }

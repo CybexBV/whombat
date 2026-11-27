@@ -17,8 +17,8 @@ import {
   keepOnlyLivePasskeys,
   orderPasskeys,
   PAIRING_CODE,
-  PASSKEY_COPY,
   pairingErrorKey,
+  passkeyCopy,
   passkeyEnrolledDevices,
   passkeyErrorText,
   passkeyMeta,
@@ -36,7 +36,7 @@ import {
 import type { BackupBringBack } from '@whombat/protocol/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, type LayoutChangeEvent, ScrollView, Share, Switch, View } from 'react-native';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -93,6 +93,7 @@ function useScrollToSection(at: DevicesAt | undefined) {
 
 export function DevicesScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const managedTextHere = managedText(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -167,7 +168,7 @@ export function DevicesScreen({ route, navigation }: Props) {
 
   const remove = (d: EndpointSummary) =>
     Alert.alert(managedTextHere.remove, managedTextHere.removeConfirm, [
-      { text: 'Cancel', style: 'cancel' },
+      { text: mobileTranslator(rawLocale).t('managed2.cancel'), style: 'cancel' },
       {
         text: managedTextHere.remove,
         style: 'destructive',
@@ -241,7 +242,7 @@ export function DevicesScreen({ route, navigation }: Props) {
                       : d.revocation === 'applied'
                         ? managedTextHere.removedApplied
                         : byPasskey.has(d.endpointId)
-                          ? `${PASSKEY_COPY.newDeviceMeta} · ${managedTextHere.seen(ago(d.lastSeenAt, rawLocale))}`
+                          ? `${passkeyCopyHere.newDeviceMeta} · ${managedTextHere.seen(ago(d.lastSeenAt, rawLocale))}`
                           : managedTextHere.seen(ago(d.lastSeenAt, rawLocale))
                   }
                   action={
@@ -249,7 +250,9 @@ export function DevicesScreen({ route, navigation }: Props) {
                       <Button
                         label={managedTextHere.remove}
                         variant="secondary"
-                        accessibilityHint={`Removes ${d.label}`}
+                        accessibilityHint={mobileTranslator(rawLocale).t('managed2.removesHint', {
+                          name: d.label,
+                        })}
                         onPress={() => remove(d)}
                       />
                     ) : undefined
@@ -273,7 +276,7 @@ export function DevicesScreen({ route, navigation }: Props) {
                 <Row
                   first
                   dot="warn"
-                  title={`${asking.label} · ${platformName(asking.platform)}`}
+                  title={`${asking.label} · ${platformName(asking.platform, rawLocale)}`}
                   meta={managedTextHere.fingerprint(asking.fingerprint)}
                 />
                 <Note text={managedTextHere.checkFingerprint} />
@@ -351,6 +354,7 @@ function PasskeysCard({
   onChanged: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const passkeyCopyHere = passkeyCopy(rawLocale);
   const { session, control, appliancePeerId, connection } = useManagedOrThrow();
   const theme = useTheme();
   const tap = useBackupPasskeyTap();
@@ -382,7 +386,7 @@ function PasskeysCard({
   useEffect(() => {
     void refresh?.();
   }, [refresh, bringBack?.state, bringBack?.setup, bringBack?.passkeys]);
-  const t = PASSKEY_COPY;
+  const t = passkeyCopyHere;
   if (error instanceof NeedsNewerAppError)
     return (
       <Card label={t.section}>
@@ -398,12 +402,12 @@ function PasskeysCard({
       onChanged();
       load();
     } catch (e) {
-      setNote(passkeyErrorText(e));
+      setNote(passkeyErrorText(e, rawLocale));
     }
   };
   const remove = (id: string, accountId: string, name: string) =>
     Alert.alert(t.remove, t.removeConfirm(name), [
-      { text: 'Cancel', style: 'cancel' },
+      { text: mobileTranslator(rawLocale).t('managed2.cancel'), style: 'cancel' },
       {
         text: t.remove,
         style: 'destructive',
@@ -417,7 +421,7 @@ function PasskeysCard({
           })
             .then(
               () => setNote(t.removed),
-              (e: unknown) => setNote(passkeyErrorText(e)),
+              (e: unknown) => setNote(passkeyErrorText(e, rawLocale)),
             )
             .finally(() => {
               load();
@@ -431,7 +435,7 @@ function PasskeysCard({
       .passkeysPolicy(session, deviceBoundOnly)
       .then(
         () => setNote(deviceBoundOnly ? t.policyOn : t.policyOff),
-        (e: unknown) => setNote(passkeyErrorText(e)),
+        (e: unknown) => setNote(passkeyErrorText(e, rawLocale)),
       )
       .finally(load);
   const rows = list ? orderPasskeys(list.passkeys, me) : [];
@@ -482,12 +486,12 @@ function PasskeysCard({
               key={p.id}
               first={false}
               title={p.name}
-              meta={`${p.synced ? t.synced : t.thisDevice} · ${passkeyMeta(p, ago)}`}
+              meta={`${p.synced ? t.synced : t.thisDevice} · ${passkeyMeta(p, ago, rawLocale)}`}
               action={
                 <Button
                   label={t.remove}
                   variant="secondary"
-                  accessibilityHint={`Removes ${p.name}`}
+                  accessibilityHint={mobileTranslator(rawLocale).t('managed2.removesHint', { name: p.name })}
                   onPress={() => remove(p.id, p.accountId, p.name)}
                 />
               }

@@ -122,6 +122,47 @@ function fakeDeviceLookup(devices: PushDevice[], audience: string[][] = []) {
 }
 
 describe('LiveActivityBroadcaster', () => {
+  it('writes the activity in the burrow owner’s language, read when it is sent', async () => {
+    const sent: { devices: PushDevice[]; payload: PushPayload }[] = [];
+    const asked: string[] = [];
+    const broadcaster = new LiveActivityBroadcaster(null as never, fakePush(sent), () => new Date(0), {
+      ...fakeDeviceLookup([device]),
+      locale: async (_db, burrowId) => {
+        asked.push(burrowId);
+        return 'nl-NL';
+      },
+    });
+    const run = baseRun({
+      status: 'live',
+      steps: [{ title: 'Tests draaien', detail: '', at: '2026-09-23T09:01:00.000Z', state: 'active' }],
+    });
+    await broadcaster.onRunChanged(run, 'Dusty', 'burrow-hq');
+    const runPush = sent[0]?.payload;
+    expect(runPush?.title).toContain('Uitvoering #1907');
+    expect(runPush?.liveActivity?.display.text).toContain('Nu: Tests draaien');
+
+    const conditions = [...baseApproval().conditions, { ...checks, met: true }];
+    await broadcaster.onApprovalChanged(baseApproval({ conditions }), 'burrow-hq');
+    const approvalPush = sent[1]?.payload;
+    expect(approvalPush?.title).toContain('Goedkeuring #12');
+    expect(approvalPush?.approval?.label).toBe('1 van 2');
+    expect(approvalPush?.liveActivity?.display.text).toContain('1 van 2');
+    expect(asked).toEqual(['burrow_1', 'burrow_1']);
+  });
+
+  it('stays English when the owner has no language set', async () => {
+    const sent: { devices: PushDevice[]; payload: PushPayload }[] = [];
+    const broadcaster = new LiveActivityBroadcaster(
+      null as never,
+      fakePush(sent),
+      () => new Date(0),
+      fakeDeviceLookup([device]),
+    );
+    await broadcaster.onApprovalChanged(baseApproval(), 'burrow-hq');
+    expect(sent[0]?.payload.title).toContain('Approval #12');
+    expect(sent[0]?.payload.approval?.label).toBe('0 of 1');
+  });
+
   it('managed: never wakes the phone through control (NT-13)', async () => {
     const control = vi.fn(async () => {});
     const push = { sendAll: async () => [], control } as never;

@@ -38,13 +38,15 @@ export function GuestBackups({
   canChange: boolean;
   onBackUp: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     { params: { burrow: slug, serverId }, query: { op: 'backup.list', guestId: guest.id, platform: 'pve' } },
     { retry: false },
   );
   const [open, setOpen] = useState<Open | null>(null);
-  const rows = q.data?.op === 'backup.list' ? backupRows(q.data.items, now, timeZone) : [];
+  const rows =
+    q.data?.op === 'backup.list' ? backupRows(q.data.items, now, timeZone, undefined, rawLocale) : [];
   return (
     <>
       {canChange ? (
@@ -67,7 +69,7 @@ export function GuestBackups({
                 label={r.label}
                 {...(canChange
                   ? {
-                      hint: 'Restore it or keep it',
+                      hint: tMobile('screens2.backups.restoreOrKeep'),
                       onPress: () => setOpen({ backup: r.backup, step: 'choose' }),
                     }
                   : {})}
@@ -111,7 +113,7 @@ function BackupSheet({
   const b = open.backup;
   const when = b.created
     ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone, rawLocale)
-    : 'this backup';
+    : tMobile('screens2.backups.thisBackup');
   const { send, busy } = useManageChange(serverId);
   const [error, setError] = useState<string | null>(null);
   const [newId, setNewId] = useState('');
@@ -133,25 +135,25 @@ function BackupSheet({
       <OneSheet
         visible
         onClose={() => !busy && onClose()}
-        badge={`${b.storage}${b.protected ? ' · kept' : ''}`}
-        title={`The backup from ${when}`}
+        badge={`${b.storage}${b.protected ? ` · ${tMobile('screens2.backups.kept')}` : ''}`}
+        title={tMobile('screens2.backups.from', { when })}
         busy={busy ? 'keep' : null}
         buttons={[
           {
             id: 'new',
-            label: 'Restore as a new guest',
+            label: tMobile('screens2.backups.restoreNewGuest'),
             variant: 'secondary',
             onPress: () => onOpen({ ...open, step: 'new' }),
           },
           {
             id: 'over',
-            label: `Restore over ${guest.name}`,
+            label: tMobile('screens2.backups.restoreOver', { name: guest.name }),
             variant: 'secondary',
             onPress: () => onOpen({ ...open, step: 'over' }),
           },
           {
             id: 'keep',
-            label: b.protected ? 'Stop keeping it' : 'Keep it until I remove it',
+            label: tMobile(b.protected ? 'screens2.backups.stopKeeping' : 'screens2.backups.keepUntil'),
             variant: 'secondary',
             onPress: () =>
               void send({
@@ -159,11 +161,11 @@ function BackupSheet({
                 params: { platform: 'pve', volume: b.volume, protected: !b.protected },
                 name: guest.name,
                 done: b.protected
-                  ? 'The backup is no longer kept.'
-                  : 'The backup is kept until you remove it.',
+                  ? tMobile('screens2.backups.noLongerKept')
+                  : tMobile('screens2.backups.keptUntil'),
               }).then(done),
           },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+          { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
         ]}
         note={error}
       />
@@ -177,13 +179,13 @@ function BackupSheet({
         onClose={() => !busy && onClose()}
         badge={guest.name}
         tone="bad"
-        title={`Restore ${guest.name} from ${when}?`}
-        body={`${guest.name} goes back to how it was then. What changed since is lost.`}
+        title={tMobile('screens2.backups.restoreAsk', { name: guest.name, when })}
+        body={tMobile('screens2.backups.restoreBody', { name: guest.name })}
         busy={busy ? 'go' : null}
         buttons={[
           {
             id: 'go',
-            label: 'Restore',
+            label: tMobile('screens2.common.restore'),
             variant: 'primary',
             disabled: running,
             onPress: () =>
@@ -195,25 +197,25 @@ function BackupSheet({
                 name: guest.name,
               }).then(done),
           },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+          { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
         ]}
-        note={error ?? (running ? `Shut ${guest.name} down first.` : null)}
+        note={error ?? (running ? tMobile('screens2.backups.shutFirst', { name: guest.name }) : null)}
       />
     );
   }
 
-  const id = newIdCheck(newId, next);
+  const id = newIdCheck(newId, next, rawLocale);
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Restore ${guest.name} from ${when}`}
+      title={tMobile('screens2.backups.restoreFrom', { name: guest.name, when })}
       body={tMobile('screens.a-new-guest-is-made-from-the-backup')}
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Restore',
+          label: tMobile('screens2.common.restore'),
           variant: 'primary',
           disabled: id.id == null,
           onPress: () =>
@@ -224,7 +226,7 @@ function BackupSheet({
               name: guest.name,
             }).then(done),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
@@ -234,7 +236,7 @@ function BackupSheet({
           value={newId}
           onChangeText={setNewId}
           placeholder={next ? String(next) : undefined}
-          hint={next ? `Empty: ${next}, the next free one.` : null}
+          hint={next ? tMobile('screens2.guest.nextFree', { id: next }) : null}
           error={newId.trim() ? id.error : null}
           mono
           keyboardType="number-pad"

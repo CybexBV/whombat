@@ -11,8 +11,9 @@ import type { ChangeEntry } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { DONE_COPY } from '../../data/done';
+import { doneCopy } from '../../data/done';
 import { useTheAgentHere } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { openHref } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -26,6 +27,7 @@ import { showNotice, useDecisionFeedback } from '../feedback';
  * then says so, with its chat, for 10 minutes); a refusal in the server's words (“I’m already undoing this.”).
  */
 export function useUndo() {
+  const { rawLocale } = useI18n();
   const { slug } = useBurrowBase();
   const undo = useUndoChange(slug);
   const feedback = useDecisionFeedback();
@@ -38,7 +40,7 @@ export function useUndo() {
       .mutateAsync(change.id)
       .then((result) => {
         if (result.status !== 'ok') return feedback.onResult(result);
-        const outcome = undoOutcome(result.data, assistantName);
+        const outcome = undoOutcome(result.data, assistantName, rawLocale);
         showNotice(outcome.message);
         // The assistant puts it back in its chat: that opens, where it says so (backup-places.md BPL-15).
         if (outcome.kind === 'requested' && outcome.href) openHref(outcome.href);
@@ -53,13 +55,14 @@ export function useUndo() {
  * session asked of the assistant (`useUndoRequests`), which replaces Undo with “Asked Neo to undo this”.
  */
 export function useDoneRows(changes: readonly ChangeEntry[]): DoneRow[] {
+  const { rawLocale } = useI18n();
   const { slug, me, timeZone } = useBurrowBase();
   const now = useNow();
   const requests = useUndoRequests(slug);
   const assistantName = useTheAgentHere()?.name ?? null;
   return useMemo(
-    () => doneRows(changes, now, timeZone, { viewerId: me.id, requests, assistantName }),
-    [changes, now, timeZone, me.id, requests, assistantName],
+    () => doneRows(changes, now, timeZone, { viewerId: me.id, requests, assistantName, locale: rawLocale }),
+    [changes, now, timeZone, me.id, requests, assistantName, rawLocale],
   );
 }
 
@@ -79,6 +82,8 @@ export function DoneItem({
   first?: boolean;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const DONE_COPY = doneCopy(rawLocale);
   const meta = [row.when, row.by].filter(Boolean).join(' · ');
   const spoken = [row.title, row.requested?.text ?? row.detail, meta, row.undone ? DONE_COPY.undone : null]
     .filter(Boolean)

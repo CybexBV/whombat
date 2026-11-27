@@ -538,7 +538,12 @@ function Divider({
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={tMobile('navigation.page-widths')}
-      accessibilityValue={{ text: `Left page ${percent}%`, min: 0, max: 100, now: percent }}
+      accessibilityValue={{
+        text: tMobile('data.splitStack.leftPage', { percent }),
+        min: 0,
+        max: 100,
+        now: percent,
+      }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(e) =>
         step(e.nativeEvent.actionName === 'increment' ? DIVIDER_STEP : -DIVIDER_STEP)

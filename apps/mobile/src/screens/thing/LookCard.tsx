@@ -13,6 +13,7 @@ import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { thingLookCard } from '../../data/thingPage';
 import { useAgentWords } from '../../data/useAgent';
+import { useI18n } from '../../i18n';
 import { openHref } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -31,17 +32,18 @@ export function LookCard({
   /** Ask about the thing (its chat, or a new one) when the research has no thread. */
   onAsk: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const assistant = useAgentWords().name;
   // The go-ahead opens the look's thread, where the step is taken (backup-places.md BPL-15).
   const { mutate: fix, isPending } = useFixLook(slug, (outcome, thread) => {
     const text = lookFixOutcomeText(outcome);
-    if (text) showLookFix(outcome, text);
+    if (text) showLookFix(outcome, text, rawLocale);
     const open = threadToOpen(thread);
     if (open) openHref(open);
   });
-  const card = thingLookCard(page, assistant);
+  const card = thingLookCard(page, assistant, rawLocale);
   if (!card) return null;
   const { view, research, thread } = card;
   if (card.plan)

@@ -22,12 +22,12 @@ import {
   canChange,
   type PanelAskView,
   panelAsk,
-  SETTINGS_COPY,
   type SettingRowView,
   type SettingSheetView,
   sameChoice,
   settingRowView,
   settingSheet,
+  settingsCopy,
   type ThingSettingsPanel,
 } from '../../data/serviceSettings';
 import { thingPageCopy } from '../../data/thingPage';
@@ -52,6 +52,7 @@ import { CardQuiet } from './parts';
 export function usePutBack(thing: string): (changeId: string) => void {
   const { rawLocale } = useI18n();
   const thingPageCopyHere = thingPageCopy(rawLocale);
+  const SETTINGS_COPY = settingsCopy(rawLocale);
 
   const { slug } = useBurrowBase();
   const qc = useQueryClient();
@@ -63,7 +64,8 @@ export function usePutBack(thing: string): (changeId: string) => void {
       .mutateAsync(changeId)
       .then((result) => {
         if (result.status !== 'ok') return feedback.onResult(result);
-        if (result.data.state === 'requested') return showNotice(undoOutcome(result.data, assistant).message);
+        if (result.data.state === 'requested')
+          return showNotice(undoOutcome(result.data, assistant, rawLocale).message);
         showNotice(result.data.state === 'asked' ? thingPageCopyHere.undoAsked : SETTINGS_COPY.putBackDone);
       }, feedback.onError)
       .finally(() => {
@@ -79,7 +81,8 @@ const guessKey = (id: string) => `setting:${id}`;
 export function SettingsCard({ panel, ctx }: { panel: ThingSettingsPanel; ctx: PanelContext }) {
   const theme = useTheme();
   const assistant = useAgentWords();
-  const ask = useMemo(() => panelAsk(panel, assistant.name), [panel, assistant.name]);
+  const { rawLocale } = useI18n();
+  const ask = useMemo(() => panelAsk(panel, assistant.name, rawLocale), [panel, assistant.name, rawLocale]);
   const [open, setOpen] = useState<ThingSetting | null>(null);
   return (
     <View style={{ gap: 6 }}>
@@ -134,7 +137,8 @@ function SettingRow({
   ctx: PanelContext;
   onChoose: () => void;
 }) {
-  const { tClient } = useI18n();
+  const { tClient, rawLocale } = useI18n();
+  const SETTINGS_COPY = settingsCopy(rawLocale);
   const theme = useTheme();
   const act = ctx.act ?? null;
   const view = useMemo(() => settingRowView(row, act?.guesses[guessKey(row.id)]?.value), [row, act?.guesses]);
@@ -316,6 +320,8 @@ function SettingSheet({
   onClose: () => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const SETTINGS_COPY = settingsCopy(rawLocale);
   const assistant = useAgentWords();
   const after = useAfterSheet();
   // The row it was opened for stays drawn while the sheet goes down.
@@ -323,7 +329,10 @@ function SettingSheet({
   useEffect(() => {
     if (row) setShown(row);
   }, [row]);
-  const sheet = useMemo<SettingSheetView | null>(() => (shown ? settingSheet(shown) : null), [shown]);
+  const sheet = useMemo<SettingSheetView | null>(
+    () => (shown ? settingSheet(shown, rawLocale) : null),
+    [shown, rawLocale],
+  );
   const [picked, setPicked] = useState<ThingButtonValue | null>(null);
   useEffect(() => {
     if (row) setPicked(row.choose?.current ?? null);
@@ -492,6 +501,8 @@ function ChoiceCard({
   disabled: boolean;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const SETTINGS_COPY = settingsCopy(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -549,6 +560,8 @@ function ChoiceCard({
 
 /** The small “Ask” on a card's head: opens its questions. */
 export function AskLink({ ask, about, ctx }: { ask: PanelAskView; about: string; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
+  const SETTINGS_COPY = settingsCopy(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   return (

@@ -7,11 +7,11 @@
 
 import type { KnownAppliance, LocalLinkParts } from '@whombat/client/managed';
 import {
-  COMMUNITY_TEXT,
+  communityText,
   isOwnAddressHost,
-  LINK_TEXT,
+  linkText,
+  managedCopyText,
   readLocalLink,
-  COPY as SHARED_COPY,
 } from '@whombat/client/managed';
 import { DIRECT_PATH, DIRECT_PORT } from '@whombat/protocol/direct';
 import type { DirectAddresses, DirectRoute } from '@whombat/protocol/session';
@@ -158,17 +158,21 @@ export function addressRecord(address: BoxAddress, peerId: string): KnownApplian
 }
 
 /** What a scanned or pasted text is: a link the box made, or why not (in words). */
-export function scannedLocalLink(text: string): { link: LocalLinkParts } | { problem: string } {
+export function scannedLocalLink(
+  text: string,
+  locale?: string,
+): { link: LocalLinkParts } | { problem: string } {
   const link = readLocalLink(text);
-  return link ? { link } : { problem: PHONE_COMMUNITY_TEXT.join.bad };
+  return link ? { link } : { problem: phoneCommunityText(locale).join.bad };
 }
 
 /** The notifications row on a community box (AP-5475): no push to phones; the app looks when it opens. */
-export function communityNotificationsView() {
+export function communityNotificationsView(locale?: string | null) {
+  const text = communityText(locale);
   return {
     dot: 'mut' as const,
-    title: COMMUNITY_TEXT.push.phoneTitle,
-    meta: COMMUNITY_TEXT.push.phoneMeta,
+    title: text.push.phoneTitle,
+    meta: text.push.phoneMeta,
     action: null,
   };
 }
@@ -191,7 +195,7 @@ export function phoneCommunityText(locale?: string) {
       bad: t('community.phoneCommunityText.start.bad'),
       signIn: t('community.phoneCommunityText.start.signIn'),
       /** Opens the demo world (look-around.md): for anyone without a Whombat, App Review among them. */
-      lookAround: SHARED_COPY.lookAround.open,
+      lookAround: managedCopyText(locale).lookAround.open,
     },
     /** A cloud account with no Whombat yet: join one; nothing is set up or bought in the app. */
     noWhombat: {
@@ -243,7 +247,7 @@ export function phoneCommunityText(locale?: string) {
     device: {
       kicker: t('community.phoneCommunityText.device.kicker'),
       title: t('community.phoneCommunityText.device.title'),
-      sub: LINK_TEXT.device.sub,
+      sub: linkText(locale).device.sub,
       tip: t('community.phoneCommunityText.device.tip'),
     },
     reaching: t('community.phoneCommunityText.reaching'),

@@ -7,13 +7,16 @@
  * On the iPhone the app shows no price, no sign-up and no way to buy (`offerLink: false`): Link's state is said, but
  * turning it on, the price and the account site are left out.
  */
-import { LINK_OFFER_TEXT, type LinkState } from '@whombat/protocol';
+import { formatLocaleOf, interpolate } from '@whombat/core/i18n';
+import { type LinkState, linkOfferText } from '@whombat/protocol';
 import type {
   LinkSummary,
   ReachGetOutput,
   TailscaleStatus,
   UpdatesChannelOutput,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { WHOMBAT_LINK_WORDS } from '../i18n/messages/hostManaged/whombatLink';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import type { ApplianceSummary } from './control';
@@ -56,147 +59,113 @@ function reasonOf(error: unknown): string | null {
 /* Words ------------------------------------------------------------------------------------------------------------ */
 
 /**
- * Easy or Expert, the installer's words (Whombat one-environment.md): Whombat Link with what it gives and its one offer
- * sentence, or Tailscale or Headscale with what to know. Reach in Settings and the setup's Link card say the same; the
- * iPhone leaves out the price and anything to buy.
+ * Easy or Expert, the installer's words (Whombat one-environment.md), in a locale (English when none is given):
+ * Whombat Link with what it gives and its one offer sentence, or Tailscale or Headscale with what to know. Reach in
+ * Settings and the setup's Link card say the same; the iPhone leaves out the price and anything to buy.
  */
-export const REACH_CHOICE_TEXT = {
-  title: 'How will you reach this Whombat?',
-  sub: 'You can change this later in Settings.',
-  easy: {
-    kind: 'Easy',
-    name: 'Whombat Link',
-    label: 'Easy · Whombat Link',
-    tag: 'Recommended',
-    price: LINK_OFFER_TEXT,
-    more: 'What you get',
-    points: [
-      'Open your Whombat from anywhere, without port forwarding',
-      'Its own secure web address',
-      'Notifications on your iPhone and Android phone',
-      'The Whombat apps away from home',
-      'Sign-ins like Google work',
-      'Supports Whombat’s open-source work',
-    ],
-  },
-  expert: {
-    kind: 'Expert',
-    name: 'Tailscale or Headscale',
-    label: 'Expert · Tailscale or Headscale',
-    tag: 'Free',
-    line: 'You set up Tailscale on each of your devices.',
-    more: 'What to know',
-    points: [
-      'No notifications on your phone while the app is closed',
-      'Some sign-ins, like Google, aren’t available',
-    ],
-  },
-} as const;
-
-export const REACH_TEXT = {
-  section: 'REACH',
-  link: {
-    name: 'Whombat Link',
-    off: 'Whombat Link is off',
-    /** The iPhone: no way to buy, so only what is true now. */
-    offMetaPlain: 'This Whombat works at home and on Tailscale.',
-    turnOn: 'Turn on',
-    turningOn: 'Turning on…',
-    starting: 'Waiting for you to confirm',
-    /** Design LNK-13: “Open app.whombat.com/link and enter ABCD-EFGH”. */
-    enter: (where: string, code: string) => `Open ${where} and enter ${code}.`,
-    left: (time: string) => `The code works for ${time} more.`,
-    codeOver: 'The code ran out.',
-    newCode: 'New code',
-    startingPlain: 'Whombat Link is starting',
-    startingPlainMeta: 'Finish it where you turned it on.',
-    gettingCode: 'Getting a code…',
-    waitingAddress: 'Waiting for an address',
-    waitingAddressMeta: 'Your address usually comes within a few minutes. It arrives by itself.',
-    on: 'Whombat Link is on',
-    onMeta: 'Open this Whombat from anywhere, with notifications on your phones.',
-    trial: (date: string) => `Free month until ${date}.`,
-    account: (email: string) => `Linked to ${email}.`,
-    turnOff: 'Turn off',
-    turningOff: 'Turning off…',
-    cancel: 'Cancel',
-    grace: (date: string) => `Whombat Link ends on ${date}`,
-    graceMeta:
-      'After that, this Whombat works at home and on Tailscale. Turn on Tailscale now as a second way in.',
-    graceKeep: 'To keep it, subscribe at app.whombat.com.',
-    ended: 'Whombat Link ended',
-    endedMeta:
-      'This Whombat works at home and on Tailscale. Your data, agents, automations, backups and updates are all still here.',
-    endedBack: 'To turn it on again, subscribe at app.whombat.com.',
-    offConfirm: 'Turn off Whombat Link?',
-    offConfirmMeta:
-      'Your Whombat’s address and notifications on your phones stop. It keeps working at home and on Tailscale.',
-    errors: {
-      unavailable: 'Whombat Link isn’t available on this Whombat.',
-      busy: 'Whombat Link is changing. Try again in a moment.',
-      rateLimited: 'Too many tries. Wait a few minutes, then try again.',
-      unreachable: 'Whombat’s service didn’t answer. Try again in a moment.',
-      failed: 'That didn’t work. Try again.',
+export function reachChoiceText(locale?: string | null) {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).choice;
+  const e = w.easy.points;
+  const x = w.expert.points;
+  return {
+    title: w.title,
+    sub: w.sub,
+    easy: {
+      kind: w.easy.kind,
+      name: w.easy.name,
+      label: w.easy.label,
+      tag: w.easy.tag,
+      price: linkOfferText(locale),
+      more: w.easy.more,
+      points: [e.one, e.two, e.three, e.four, e.five, e.six],
     },
-  },
-  address: {
-    title: 'Its address',
-    none: 'No address yet',
-    noneMeta: 'It gets one when Whombat Link is on.',
-    coming: 'Getting its address…',
-    comingMeta: 'Its own web address shows here once it’s ready.',
-  },
-  tailscale: {
-    title: 'Tailscale',
-    on: (name: string) => `On as ${name}`,
-    off: 'Off',
-    signIn: 'Waiting for you to sign in',
-    turnOn: 'Turn on Tailscale',
-    /** LNK-14: one plain line with the reason. */
-    keyExpiry:
-      'In Tailscale’s admin console, turn off key expiry for this Whombat. Otherwise Tailscale signs it out after a few months and you can’t reach it away from home.',
-  },
-  /** The banner while Link ends or after (LNK-06): what still works, and the way back. */
-  banner: {
-    grace: (date: string) =>
-      `Whombat Link ends on ${date}. Turn on Tailscale so you can still reach this Whombat away from home.`,
-    graceTailscale: (date: string) =>
-      `Whombat Link ends on ${date}. You can still reach this Whombat at home and on Tailscale.`,
-    ended:
-      'Whombat Link ended. This Whombat still works at home. Turn on Tailscale to reach it away from home.',
-    endedTailscale: 'Whombat Link ended. This Whombat still works at home and on Tailscale.',
-  },
-  /** The one-time offer on the setup of a box reached without Link (LNK-40): a card, never a gate; Easy's words. */
-  offer: {
-    title: REACH_CHOICE_TEXT.easy.label,
-    tag: REACH_CHOICE_TEXT.easy.tag,
-    price: REACH_CHOICE_TEXT.easy.price,
-    points: REACH_CHOICE_TEXT.easy.points,
-    turnOn: 'Turn on Whombat Link',
-    notNow: 'Not now',
-  },
-} as const;
+    expert: {
+      kind: w.expert.kind,
+      name: w.expert.name,
+      label: w.expert.label,
+      tag: w.expert.tag,
+      line: w.expert.line,
+      more: w.expert.more,
+      points: [x.one, x.two],
+    },
+  } as const;
+}
 
-export const CHANNEL_TEXT = {
-  title: 'Updates from',
-  label: 'Update channel',
-  production: 'Production',
-  /** People see Beta; on the wire and in the update repository it stays `development`. */
-  development: 'Beta',
-  productionMeta: 'Tested versions. This is right for almost everyone.',
-  developmentMeta: 'New versions first, before they’re fully tested. Something may break.',
-  /** Beta → Production never downgrades (LNK-21). */
-  staysOn: (release: string) =>
-    `This Whombat keeps ${release} until Production has a newer version, then moves on by itself.`,
-  switched: (channel: 'production' | 'development') =>
-    channel === 'production' ? 'This Whombat takes Production updates.' : 'This Whombat takes Beta updates.',
-  unavailable: 'This Whombat can’t choose where its updates come from.',
-  failed: 'That didn’t work. Try again.',
-} as const;
+/** Easy or Expert in English. */
+export const REACH_CHOICE_TEXT = reachChoiceText('en');
+
+/** Reach's words, in a locale (English when none is given). */
+export function reachText(locale?: string | null) {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).reach;
+  const choice = reachChoiceText(locale);
+  return {
+    section: w.section,
+    link: {
+      ...w.link,
+      /** The iPhone: no way to buy, so only what is true now. */
+      offMetaPlain: w.link.offMetaPlain,
+      /** Design LNK-13: “Open app.whombat.com/link and enter ABCD-EFGH”. */
+      enter: (where: string, code: string) => interpolate(w.link.enter, { where, code }),
+      left: (time: string) => interpolate(w.link.left, { time }),
+      trial: (date: string) => interpolate(w.link.trial, { date }),
+      account: (email: string) => interpolate(w.link.account, { email }),
+      grace: (date: string) => interpolate(w.link.grace, { date }),
+    },
+    address: w.address,
+    tailscale: {
+      ...w.tailscale,
+      on: (name: string) => interpolate(w.tailscale.on, { name }),
+      /** LNK-14: one plain line with the reason. */
+      keyExpiry: w.tailscale.keyExpiry,
+    },
+    /** The banner while Link ends or after (LNK-06): what still works, and the way back. */
+    banner: {
+      grace: (date: string) => interpolate(w.banner.grace, { date }),
+      graceTailscale: (date: string) => interpolate(w.banner.graceTailscale, { date }),
+      ended: w.banner.ended,
+      endedTailscale: w.banner.endedTailscale,
+    },
+    /** The one-time offer on the setup of a box reached without Link (LNK-40): a card, never a gate; Easy's words. */
+    offer: {
+      title: choice.easy.label,
+      tag: choice.easy.tag,
+      price: choice.easy.price,
+      points: choice.easy.points,
+      turnOn: w.offer.turnOn,
+      notNow: w.offer.notNow,
+    },
+  } as const;
+}
+
+/** Reach's words in English. */
+export const REACH_TEXT = reachText('en');
+
+/** The update channel's words, in a locale (English when none is given). */
+export function channelText(locale?: string | null) {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).channel;
+  return {
+    title: w.title,
+    label: w.label,
+    production: w.production,
+    /** People see Beta; on the wire and in the update repository it stays `development`. */
+    development: w.development,
+    productionMeta: w.productionMeta,
+    developmentMeta: w.developmentMeta,
+    /** Beta → Production never downgrades (LNK-21). */
+    staysOn: (release: string) => interpolate(w.staysOn, { release }),
+    switched: (channel: 'production' | 'development') =>
+      channel === 'production' ? w.switchedProduction : w.switchedDevelopment,
+    unavailable: w.unavailable,
+    failed: w.failed,
+  } as const;
+}
+
+/** The update channel's words in English. */
+export const CHANNEL_TEXT = channelText('en');
 
 /** What a refused `link.on` or `link.off` says. */
-export function whombatLinkErrorText(error: unknown): string {
-  const t = REACH_TEXT.link.errors;
+export function whombatLinkErrorText(error: unknown, locale?: string | null): string {
+  const t = reachText(locale).link.errors;
   switch (reasonOf(error)) {
     case 'whombat_link_unavailable':
     case 'unknown_op':
@@ -215,14 +184,15 @@ export function whombatLinkErrorText(error: unknown): string {
 }
 
 /** What a refused `updates.channel.set` says. */
-export function channelErrorText(error: unknown): string {
-  return reasonOf(error) === 'update_channel_unavailable' ? CHANNEL_TEXT.unavailable : CHANNEL_TEXT.failed;
+export function channelErrorText(error: unknown, locale?: string | null): string {
+  const t = channelText(locale);
+  return reasonOf(error) === 'update_channel_unavailable' ? t.unavailable : t.failed;
 }
 
 /* Views ------------------------------------------------------------------------------------------------------------ */
 
-const day = (iso: string, locale?: string) =>
-  new Date(iso).toLocaleDateString(locale ?? 'en-GB', { day: 'numeric', month: 'short' });
+const day = (iso: string, locale?: string | null) =>
+  new Date(iso).toLocaleDateString(formatLocaleOf(locale), { day: 'numeric', month: 'short' });
 
 /** Minutes and seconds left (`9:59`), or null once it ran out. */
 export function timeLeft(expiresAt: string, now: number = Date.now()): string | null {
@@ -263,9 +233,9 @@ export interface LinkRowView {
  */
 export function linkRowView(
   link: LinkSummary,
-  options: { offerLink: boolean; now?: number; locale?: string },
+  options: { offerLink: boolean; now?: number; locale?: string | null },
 ): LinkRowView {
-  const t = REACH_TEXT.link;
+  const t = reachText(options.locale).link;
   const { offerLink, locale } = options;
   const now = options.now ?? Date.now();
   const base = { state: link.state, code: null, more: false };
@@ -275,7 +245,7 @@ export function linkRowView(
         ...base,
         tone: 'mut',
         title: t.off,
-        meta: offerLink ? REACH_CHOICE_TEXT.easy.price : t.offMetaPlain,
+        meta: offerLink ? linkOfferText(locale) : t.offMetaPlain,
         action: offerLink ? 'on' : null,
         more: true,
       };
@@ -333,9 +303,9 @@ export interface TailscaleRowView {
 }
 
 /** Reach's Tailscale line (the full controls stay in the Tailscale section). */
-export function tailscaleRowView(t: TailscaleStatus | null): TailscaleRowView | null {
+export function tailscaleRowView(t: TailscaleStatus | null, locale?: string | null): TailscaleRowView | null {
   if (!t) return null;
-  const r = REACH_TEXT.tailscale;
+  const r = reachText(locale).tailscale;
   if (t.state === 'on') return { tone: 'ok', title: r.on(t.name ?? ''), on: true };
   if (t.state === 'needs_sign_in' || t.state === 'needs_approval' || t.state === 'starting')
     return { tone: 'warn', title: r.signIn, on: false };
@@ -349,16 +319,14 @@ export function tailscaleRowView(t: TailscaleStatus | null): TailscaleRowView | 
  */
 export function addressRowView(
   reach: ReachGetOutput,
-  options: { offerLink?: boolean } = {},
+  options: { offerLink?: boolean; locale?: string | null } = {},
 ): { title: string; meta: string } | null {
-  if (reach.ownAddress)
-    return { title: ownAddressText(reach.ownAddress.url), meta: REACH_TEXT.address.title };
+  const a = reachText(options.locale).address;
+  if (reach.ownAddress) return { title: ownAddressText(reach.ownAddress.url), meta: a.title };
   if (!reach.link) return null;
   const coming = reach.link.state === 'starting' || reach.link.state === 'on' || reach.link.state === 'grace';
-  if (coming) return { title: REACH_TEXT.address.coming, meta: REACH_TEXT.address.comingMeta };
-  return options.offerLink === false
-    ? null
-    : { title: REACH_TEXT.address.none, meta: REACH_TEXT.address.noneMeta };
+  if (coming) return { title: a.coming, meta: a.comingMeta };
+  return options.offerLink === false ? null : { title: a.none, meta: a.noneMeta };
 }
 
 export interface LinkBannerView {
@@ -371,11 +339,11 @@ export interface LinkBannerView {
 /** The banner while Link ends (`grace`) or after (`ended`), or null (LNK-06, LNK-06a). */
 export function linkBannerView(
   reach: Pick<ReachGetOutput, 'link' | 'tailscale'> | null,
-  locale?: string,
+  locale?: string | null,
 ): LinkBannerView | null {
   const link = reach?.link;
   if (!link || (link.state !== 'grace' && link.state !== 'ended')) return null;
-  const b = REACH_TEXT.banner;
+  const b = reachText(locale).banner;
   const tailscaleOn = reach?.tailscale?.state === 'on';
   // A box without Tailscale (it isn't in this image) can't offer it.
   const canTailscale = reach?.tailscale !== null && reach?.tailscale !== undefined && !tailscaleOn;
@@ -400,15 +368,19 @@ export function linkPollMs(link: LinkSummary | null | undefined): number | null 
 }
 
 /** The channel row: which is chosen, its line, and the line when a switch to Production waits. */
-export function channelView(c: UpdatesChannelOutput): {
+export function channelView(
+  c: UpdatesChannelOutput,
+  locale?: string | null,
+): {
   channel: 'production' | 'development';
   meta: string;
 } {
+  const t = channelText(locale);
   const meta = c.staysOn
-    ? CHANNEL_TEXT.staysOn(c.staysOn)
+    ? t.staysOn(c.staysOn)
     : c.channel === 'development'
-      ? CHANNEL_TEXT.developmentMeta
-      : CHANNEL_TEXT.productionMeta;
+      ? t.developmentMeta
+      : t.productionMeta;
   return { channel: c.channel, meta };
 }
 
@@ -471,50 +443,39 @@ export const LINK_JOURNEY_STEPS: readonly BoxSetupStep[] = boxSetupSteps({
  * Connect your AI's kicker when it follows the box's setup on a box that already has a Whombat: Set up your AI's place
  * in the setup's count, the last.
  */
-export function boxSetupAiKicker(): string {
+export function boxSetupAiKicker(locale?: string | null): string {
   const steps = boxSetupSteps({ atAddress: false });
-  return BOX_SETUP_TEXT.stepLabel(steps.indexOf('ai'), steps.length);
+  return boxSetupText(locale).stepLabel(steps.indexOf('ai'), steps.length);
 }
 
 /**
  * The Whombat's name when the setup gives it one by itself: “Mara’s Whombat” from the person's first name, else “My
  * Whombat”. The person can change it in Settings.
  */
-export function defaultWhombatName(personName: string | null | undefined): string {
+export function defaultWhombatName(personName: string | null | undefined, locale?: string | null): string {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).defaultName;
   const first = (personName ?? '').trim().split(/\s+/)[0]?.slice(0, 60) ?? '';
-  return first ? `${first}’s Whombat` : 'My Whombat';
+  return first ? interpolate(w.named, { first }) : w.plain;
 }
 
-export const BOX_SETUP_TEXT = {
-  steps: {
-    link: { t: 'Add your Whombat', d: 'To your account' },
-    claim: { t: 'Claim your Whombat', d: 'The letters on its screen' },
-    account: { t: 'Who are you?', d: 'It stays on this Whombat' },
-    passkey: { t: 'Make its passkey', d: 'For this Whombat only' },
-    reach: { t: 'Reach it from anywhere', d: 'Tailscale or Whombat Link' },
-    ai: { t: 'Set up your AI', d: 'Pick and sign in' },
-  } satisfies Record<BoxSetupStep, { t: string; d: string }>,
-  stepLabel: (i: number, of: number) => `STEP ${i + 1} OF ${of}`,
-  account: {
-    title: 'Who are you?',
-    sub: 'This Whombat is yours alone. Your name is how your agent greets you.',
-    tip: 'Your name and email stay on this Whombat.',
-  },
-  /** The claim's own field when the account site sent the email but not the name. */
-  name: {
-    hint: 'How your agent greets you.',
-  },
-  reach: {
-    title: 'Reach it from anywhere',
-    sub: 'Use this Whombat away from home with Tailscale, or with Whombat Link.',
-    tip: 'You can change this later in Settings → This Whombat.',
-    onTailscale: (name: string) => `This Whombat is ${name} on your tailnet.`,
-  },
-  /** Set up your AI on the box's page: the names the setup gave, and where they change. */
-  named: (whombat: string, agent: string) =>
-    `Your Whombat is called ${whombat} and your agent is ${agent}. You can change both in Settings.`,
-  next: 'Continue',
-} as const;
+/** The setup on the box's page, in a locale (English when none is given). */
+export function boxSetupText(locale?: string | null) {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).boxSetup;
+  return {
+    steps: w.steps satisfies Record<BoxSetupStep, { t: string; d: string }>,
+    stepLabel: (i: number, of: number) => interpolate(w.stepLabel, { n: i + 1, of }),
+    account: w.account,
+    /** The claim's own field when the account site sent the email but not the name. */
+    name: w.name,
+    reach: { ...w.reach, onTailscale: (name: string) => interpolate(w.reach.onTailscale, { name }) },
+    /** Set up your AI on the box's page: the names the setup gave, and where they change. */
+    named: (whombat: string, agent: string) => interpolate(w.named, { whombat, agent }),
+    next: w.next,
+  } as const;
+}
+
+/** The setup on the box's page in English. */
+export const BOX_SETUP_TEXT = boxSetupText('en');
 
 /** The Tailscale page (`<name>.<tailnet>.ts.net`) this setup runs on, or null. */
 export function tailscalePageName(hostname: string): string | null {
@@ -533,20 +494,31 @@ export interface KnownBoxRow {
   meta: string;
 }
 
-export const KNOWN_BOXES_TEXT = {
-  here: 'This Whombat',
-  unnamed: 'Your Whombat',
-  notIn: 'Set up this device',
-  web: (host: string) => host,
-  noAddress: 'On this device',
-} as const;
+/** The boxes this device knows, in a locale (English when none is given). */
+export function knownBoxesText(locale?: string | null) {
+  const w = clientTree(locale, WHOMBAT_LINK_WORDS).knownBoxes;
+  return {
+    here: w.here,
+    unnamed: w.unnamed,
+    notIn: w.notIn,
+    web: (host: string) => host,
+    noAddress: w.noAddress,
+  } as const;
+}
+
+/** The boxes this device knows in English. */
+export const KNOWN_BOXES_TEXT = knownBoxesText('en');
 
 /**
  * The switcher's rows from the boxes this device remembers (its registry), not an account's list: the open one first,
  * then the others by name. Each says where it opens.
  */
-export function knownBoxRows(known: readonly KnownAppliance[], current: string): KnownBoxRow[] {
-  const t = KNOWN_BOXES_TEXT;
+export function knownBoxRows(
+  known: readonly KnownAppliance[],
+  current: string,
+  locale?: string | null,
+): KnownBoxRow[] {
+  const t = knownBoxesText(locale);
   const rows = known.map((a): KnownBoxRow => {
     const web = a.ownAddress ?? a.direct?.routes?.find((r) => r.web?.startsWith('https://'))?.web ?? null;
     const here = a.device === current;

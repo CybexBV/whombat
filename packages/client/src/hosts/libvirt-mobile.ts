@@ -15,13 +15,19 @@ import type {
   HostHint,
   HostLibvirtDetail,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_LIBVIRT_WORDS } from '../i18n/messages/connectionsHosts/libvirt';
 import { type ConfigDraft, currentValue, getProp, keysOf, parseProps, reviewRows, trimDraft } from './config';
-import { DASH, formatBytesBinary, formatRelativeDay, mibText, plural } from './format';
+import { DASH, formatBytesBinary, formatRelativeDay, mibText } from './format';
 import { hintGuest, type IncusPhoneTab, poolTone } from './incus-mobile';
 import { isLibvirtServer, libvirtNameError } from './libvirt';
 
 /** The web's checks, one source (stream WQ's `libvirt.ts`). */
 export { isLibvirtServer, libvirtNameError };
+
+const words = (locale?: string | null) => clientTree(locale, HOSTS_LIBVIRT_WORDS);
+const has = <T extends object>(o: T, k: string): k is Extract<keyof T, string> => Object.hasOwn(o, k);
 
 /* Tabs and header ------------------------------------------------------------------------------------------------- */
 
@@ -37,58 +43,25 @@ export function libvirtHeadLine(g: Pick<HostGuest, 'node' | 'serverId'>): string
 
 /* Values in words ------------------------------------------------------------------------------------------------- */
 
-const CPU_MODES: Record<string, string> = {
-  'host-passthrough': 'The host’s own processor',
-  'host-model': 'Like the host’s processor',
-  maximum: 'Everything QEMU can offer',
-};
-
-const ON_WORDS: Record<string, string> = {
-  destroy: 'Switch off',
-  restart: 'Start again',
-  preserve: 'Keep it as it is',
-  'rename-restart': 'Start a fresh copy',
-};
-
-const BOOT_WORDS: Record<string, string> = { hd: 'Disk', cdrom: 'CD/DVD', network: 'Network', fd: 'Floppy' };
-
 /** The file name of a path or `pool/volume`. */
 const fileName = (s: string) => s.split('/').pop() ?? s;
 
-const KEY_LABELS: Record<string, string> = {
-  name: 'Name',
-  title: 'Title',
-  description: 'Notes',
-  vcpus: 'vCPUs',
-  vcpus_max: 'Up to',
-  memory_mb: 'Memory',
-  memory_max_mb: 'Up to',
-  autostart: 'Start with the server',
-  boot: 'Boot order',
-  cpu_mode: 'Processor type',
-  on_poweroff: 'When it powers off',
-  on_reboot: 'When it restarts',
-  on_crash: 'When it crashes',
-  machine: 'Machine',
-  firmware: 'Firmware',
-  secure_boot: 'Secure Boot',
-  tpm: 'TPM',
-};
-
 /** A libvirt key in words (“vCPUs”, “CD/DVD (cdrom0)”). */
-export function libvirtKeyLabel(key: string): string {
-  if (/^cdrom\d+$/.test(key)) return `CD/DVD (${key})`;
-  if (/^disk\d+$/.test(key)) return `Disk (${key})`;
-  if (/^net\d+$/.test(key)) return `Network card (${key})`;
-  return KEY_LABELS[key] ?? key;
+export function libvirtKeyLabel(key: string, locale?: string | null): string {
+  const w = words(locale);
+  if (/^cdrom\d+$/.test(key)) return interpolate(w.keyCdrom, { key });
+  if (/^disk\d+$/.test(key)) return interpolate(w.keyDisk, { key });
+  if (/^net\d+$/.test(key)) return interpolate(w.keyNet, { key });
+  return has(w.keys, key) ? w.keys[key] : key;
 }
 
 /** A libvirt value as the phone shows it. */
-export function libvirtValueWords(key: string, v: string | undefined): string {
+export function libvirtValueWords(key: string, v: string | undefined, locale?: string | null): string {
+  const w = words(locale);
   const s = v?.trim() ?? '';
   if (/^cdrom\d+$/.test(key)) {
     const src = getProp(parseProps(s), 'source');
-    return !src || src === 'empty' ? 'Empty' : fileName(src);
+    return !src || src === 'empty' ? w.values.empty : fileName(src);
   }
   switch (key) {
     case 'memory_mb':
@@ -96,32 +69,34 @@ export function libvirtValueWords(key: string, v: string | undefined): string {
       return /^\d+$/.test(s) ? mibText(Number(s)) : s || DASH;
     case 'vcpus':
     case 'vcpus_max':
-      return /^\d+$/.test(s) ? plural(Number(s), 'vCPU') : s || DASH;
+      return /^\d+$/.test(s) ? w.values.vcpus(Number(s)) : s || DASH;
     case 'autostart':
-      return s === '1' ? 'Yes' : 'No';
+      return s === '1' ? w.values.yes : w.values.no;
     case 'cpu_mode':
-      return CPU_MODES[s] ?? (s.startsWith('custom:') ? s.slice(7) : s || DASH);
+      return has(w.cpuModes, s) ? w.cpuModes[s] : s.startsWith('custom:') ? s.slice(7) : s || DASH;
     case 'on_poweroff':
     case 'on_reboot':
     case 'on_crash':
-      return ON_WORDS[s] ?? (s || DASH);
-    case 'boot':
+      return has(w.on, s) ? w.on[s] : s || DASH;
+    case 'boot': {
+      const boot = w.boot;
       return (
         s
           .split(',')
           .filter(Boolean)
-          .map((b) => BOOT_WORDS[b] ?? b)
-          .join(', then ') || DASH
+          .map((b) => (b !== 'joiner' && has(boot, b) ? boot[b] : b))
+          .join(boot.joiner) || DASH
       );
+    }
     case 'firmware':
       return s === 'uefi' ? 'UEFI' : s === 'bios' ? 'BIOS' : s || DASH;
     case 'secure_boot':
     case 'tpm':
-      return s === '1' || s === 'true' ? 'On' : 'Off';
+      return s === '1' || s === 'true' ? w.values.on : w.values.off;
     case 'description':
-      return s || 'None';
+      return s || w.values.none;
     default:
-      return s || '(none)';
+      return s || w.values.unset;
   }
 }
 
@@ -148,30 +123,37 @@ export interface LibvirtSettingGroup {
 }
 
 /** Under a key only virt-manager or the VM's XML changes. */
-export const LIBVIRT_LOCKED = 'Change this with virt-manager or the VM’s XML';
+export const LIBVIRT_LOCKED = words('en').locked;
+/** The line and link at the bottom of a VM's Settings, in a locale (English when none is given). */
+export function libvirtWebOnly(locale?: string | null): string {
+  return words(locale).webOnly;
+}
 /** The line and link at the bottom of a VM's Settings (IU-13). */
-export const LIBVIRT_WEB_ONLY =
-  'Adding disks and network cards, the boot order and moving: on whombat on the web.';
+export const LIBVIRT_WEB_ONLY = libvirtWebOnly('en');
 
 /**
  * A libvirt VM's configuration in the phone's groups, read as it is (a change waiting for the next start after an
  * arrow), the everyday edits marked and what libvirt keeps to its XML locked.
  */
-export function libvirtSettingGroups(cfg: HostGuestConfig): LibvirtSettingGroup[] {
+export function libvirtSettingGroups(cfg: HostGuestConfig, locale?: string | null): LibvirtSettingGroup[] {
+  const all = words(locale);
+  const w = all.settings;
   const v = (k: string) => currentValue(cfg, k);
   const restricted = new Set(cfg.restricted ?? []);
   const later = (k: string) =>
-    cfg.pending && k in cfg.pending ? ` → ${libvirtValueWords(k, cfg.pending[k])} at the next start` : '';
+    cfg.pending && k in cfg.pending
+      ? interpolate(w.later, { value: libvirtValueWords(k, cfg.pending[k], locale) })
+      : '';
   const row = (id: string, key: string, edit?: LibvirtEditKind, extra: Partial<LibvirtSettingRow> = {}) => {
     const out: LibvirtSettingRow = {
       id,
-      label: libvirtKeyLabel(key),
-      value: `${libvirtValueWords(key, cfg.values[key] ?? v(key))}${later(key)}`,
+      label: libvirtKeyLabel(key, locale),
+      value: `${libvirtValueWords(key, cfg.values[key] ?? v(key), locale)}${later(key)}`,
       ...extra,
     };
     if (restricted.has(key)) {
       out.locked = true;
-      out.sub = LIBVIRT_LOCKED;
+      out.sub = all.locked;
     } else if (edit) out.edit = edit;
     return out;
   };
@@ -197,7 +179,7 @@ export function libvirtSettingGroups(cfg: HostGuestConfig): LibvirtSettingGroup[
     const disk = cfg.disks?.find((d) => d.key === k);
     return {
       id: k,
-      label: `Disk ${getProp(p, 'target') ?? k}`,
+      label: interpolate(w.disk, { target: getProp(p, 'target') ?? k }),
       value: [
         disk?.sizeBytes != null
           ? formatBytesBinary(disk.sizeBytes)
@@ -216,16 +198,18 @@ export function libvirtSettingGroups(cfg: HostGuestConfig): LibvirtSettingGroup[
 
   const network: LibvirtSettingRow[] = keysOf(cfg, /^net\d+$/).map((k) => {
     const p = parseProps(v(k) ?? '');
-    const on = getProp(p, 'network')
-      ? `network ${getProp(p, 'network')}`
-      : getProp(p, 'bridge')
-        ? `bridge ${getProp(p, 'bridge')}`
+    const net = getProp(p, 'network');
+    const bridge = getProp(p, 'bridge');
+    const on = net
+      ? interpolate(w.network, { name: net })
+      : bridge
+        ? interpolate(w.bridge, { name: bridge })
         : DASH;
     return {
       id: k,
       label: k,
       value: on,
-      sub: [getProp(p, 'model'), getProp(p, 'mac'), getProp(p, 'link') === 'down' ? 'link down' : null]
+      sub: [getProp(p, 'model'), getProp(p, 'mac'), getProp(p, 'link') === 'down' ? w.linkDown : null]
         .filter(Boolean)
         .join(' · '),
       mono: true,
@@ -245,21 +229,21 @@ export function libvirtSettingGroups(cfg: HostGuestConfig): LibvirtSettingGroup[
     .map((k) => ({ ...row(k, k), mono: k === 'machine' }));
 
   return [
-    { id: 'processors', title: 'Processors', rows: processors },
-    { id: 'memory', title: 'Memory', rows: memory },
-    ...(cdrom.length ? [{ id: 'cdrom' as const, title: 'CD/DVD', rows: cdrom }] : []),
+    { id: 'processors', title: w.processors, rows: processors },
+    { id: 'memory', title: w.memory, rows: memory },
+    ...(cdrom.length ? [{ id: 'cdrom' as const, title: w.cdrom, rows: cdrom }] : []),
     {
       id: 'disks',
-      title: 'Disks',
-      rows: disks.length ? disks : [{ id: 'none', label: 'No disk', value: '' }],
+      title: w.disks,
+      rows: disks.length ? disks : [{ id: 'none', label: w.noDisk, value: '' }],
     },
     {
       id: 'network',
-      title: 'Network',
-      rows: network.length ? network : [{ id: 'none', label: 'No network card', value: '' }],
+      title: w.networkTitle,
+      rows: network.length ? network : [{ id: 'none', label: w.noNic, value: '' }],
     },
-    { id: 'options', title: 'Options', rows: options },
-    ...(firmware.length ? [{ id: 'firmware' as const, title: 'Firmware', rows: firmware }] : []),
+    { id: 'options', title: w.options, rows: options },
+    ...(firmware.length ? [{ id: 'firmware' as const, title: w.firmware, rows: firmware }] : []),
   ];
 }
 
@@ -279,34 +263,32 @@ export interface LibvirtEditSpec {
   hint?: string;
 }
 
-export function libvirtEditSpec(kind: LibvirtEditKind, name: string, cfg?: HostGuestConfig): LibvirtEditSpec {
+export function libvirtEditSpec(
+  kind: LibvirtEditKind,
+  name: string,
+  cfg?: HostGuestConfig,
+  locale?: string | null,
+): LibvirtEditSpec {
+  const w = words(locale).edit;
+  const title = (t: string) => interpolate(t, { name });
   switch (kind) {
     case 'vcpus': {
       const max = cfg ? currentValue(cfg, 'vcpus_max') : undefined;
       return {
-        title: `vCPUs of ${name}`,
-        field: 'vCPUs',
+        title: title(w.vcpusTitle),
+        field: w.vcpusField,
         kind: 'number',
-        ...(max ? { hint: `While it runs, up to ${max}.` } : {}),
+        ...(max ? { hint: interpolate(w.vcpusHint, { max }) } : {}),
       };
     }
     case 'memory':
-      return {
-        title: `Memory of ${name}`,
-        field: 'Memory (MiB)',
-        kind: 'number',
-        hint: '1024 MiB is 1 GiB.',
-      };
+      return { title: title(w.memoryTitle), field: w.memoryField, kind: 'number', hint: w.memoryHint };
     case 'autostart':
-      return {
-        title: `Start ${name} with the server`,
-        field: 'Start it when the server starts',
-        kind: 'switch',
-      };
+      return { title: title(w.autostartTitle), field: w.autostartField, kind: 'switch' };
     case 'description':
-      return { title: `Notes of ${name}`, field: 'Notes', kind: 'multiline' };
+      return { title: title(w.notesTitle), field: w.notesField, kind: 'multiline' };
     case 'cdrom':
-      return { title: `CD/DVD of ${name}`, field: 'In the drive', kind: 'iso' };
+      return { title: title(w.cdromTitle), field: w.cdromField, kind: 'iso' };
   }
 }
 
@@ -339,15 +321,17 @@ export function libvirtEditDraft(
   kind: LibvirtEditKind,
   input: LibvirtEditInput,
   key?: string,
+  locale?: string | null,
 ): { draft: ConfigDraft | null; error: string | null } {
+  const w = words(locale).edit;
   const done = (d: ConfigDraft) => ({ draft: trimDraft(cfg, d), error: null });
   const text = input.text.trim();
   const whole = (min: number, max?: number) => {
-    if (!text) return 'Fill this in.';
-    if (!/^\d+$/.test(text)) return 'Use a whole number.';
+    if (!text) return w.fillIn;
+    if (!/^\d+$/.test(text)) return w.wholeNumber;
     const n = Number(text);
-    if (n < min) return `At least ${min}.`;
-    if (max != null && n > max) return `At most ${max}.`;
+    if (n < min) return interpolate(w.atLeast, { n: min });
+    if (max != null && n > max) return interpolate(w.atMost, { n: max });
     return null;
   };
   switch (kind) {
@@ -381,26 +365,36 @@ export interface LibvirtReviewLine {
 }
 
 /** The review's lines in libvirt's words (“Memory  4 GiB → 8 GiB”, “CD/DVD (cdrom0)  Empty → debian-13.iso”). */
-export function libvirtReviewLines(cfg: HostGuestConfig, draft: ConfigDraft): LibvirtReviewLine[] {
+export function libvirtReviewLines(
+  cfg: HostGuestConfig,
+  draft: ConfigDraft,
+  locale?: string | null,
+): LibvirtReviewLine[] {
+  const removed = words(locale).values.removed;
   return reviewRows(cfg, draft).map((r) => ({
     key: r.key,
-    label: libvirtKeyLabel(r.key),
-    old: libvirtValueWords(r.key, r.old),
-    new: r.op === 'delete' ? 'removed' : libvirtValueWords(r.key, r.new),
+    label: libvirtKeyLabel(r.key, locale),
+    old: libvirtValueWords(r.key, r.old, locale),
+    new: r.op === 'delete' ? removed : libvirtValueWords(r.key, r.new, locale),
   }));
 }
 
 /** A running VM takes more vCPUs or memory than its maximum at the next start: the review says so. */
-export function libvirtReviewNote(cfg: HostGuestConfig, draft: ConfigDraft): string | null {
+export function libvirtReviewNote(
+  cfg: HostGuestConfig,
+  draft: ConfigDraft,
+  locale?: string | null,
+): string | null {
   const set = draft.set ?? {};
   if (!cfg.running || !('vcpus' in set || 'memory_mb' in set)) return null;
-  return 'It’s running: what goes past its maximum applies at its next start.';
+  return words(locale).edit.reviewNote;
 }
 
 /** The ISOs a CD/DVD can take (`choices.isos`: `{volid, name, sizeBytes}`), empty first. */
 export function isoChoices(
   isos: readonly Record<string, unknown>[] | undefined,
   current: string,
+  locale?: string | null,
 ): { value: string; label: string }[] {
   const list = (isos ?? [])
     .map((i) => ({
@@ -408,7 +402,7 @@ export function isoChoices(
       label: String(i.name ?? fileName(String(i.volid ?? ''))),
     }))
     .filter((i) => i.value);
-  const out = [{ value: '', label: 'Empty' }, ...list];
+  const out = [{ value: '', label: words(locale).values.empty }, ...list];
   return current && !out.some((o) => o.value === current)
     ? [...out, { value: current, label: fileName(current) }]
     : out;
@@ -432,11 +426,12 @@ export function libvirtBackupRows(
   now: number,
   timeZone?: string,
   nameOf?: (b: HostBackupVolume) => string | null,
+  locale?: string | null,
 ): LibvirtBackupRow[] {
   return [...items]
     .sort((a, b) => (b.created ?? '').localeCompare(a.created ?? ''))
     .map((b) => {
-      const when = b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone) : DASH;
+      const when = b.created ? formatRelativeDay(Date.parse(b.created), now, timeZone, locale) : DASH;
       const who = nameOf?.(b) ?? null;
       const title = who ? `${who} · ${when}` : when;
       const line = [b.sizeBytes != null ? formatBytesBinary(b.sizeBytes) : null, b.notes || null]
@@ -449,7 +444,11 @@ export function libvirtBackupRows(
 /* A QEMU/KVM server ------------------------------------------------------------------------------------------------ */
 
 /** The libvirt card's facts: libvirt and QEMU, what new VMs can have, where backups go. */
-export function libvirtFacts(d: HostLibvirtDetail): { label: string; value: string }[] {
+export function libvirtFacts(
+  d: HostLibvirtDetail,
+  locale?: string | null,
+): { label: string; value: string }[] {
+  const w = words(locale).facts;
   const fw = [
     d.firmware.uefi ? 'UEFI' : null,
     d.firmware.secureBoot ? 'Secure Boot' : null,
@@ -459,10 +458,10 @@ export function libvirtFacts(d: HostLibvirtDetail): { label: string; value: stri
     .join(' · ');
   const out: { label: string; value: string }[] = [{ label: 'libvirt', value: d.version }];
   if (d.qemu) out.push({ label: 'QEMU', value: d.qemu });
-  out.push({ label: 'Firmware', value: fw || 'BIOS only' });
+  out.push({ label: w.firmware, value: fw || w.biosOnly });
   const nets = d.networks.filter((n) => n.active).map((n) => n.name);
-  if (nets.length) out.push({ label: 'Networks', value: nets.join(', ') });
-  if (d.backupsDir) out.push({ label: 'Backups to', value: d.backupsDir });
+  if (nets.length) out.push({ label: w.networks, value: nets.join(', ') });
+  if (d.backupsDir) out.push({ label: w.backupsTo, value: d.backupsDir });
   return out;
 }
 
@@ -477,30 +476,31 @@ export interface LibvirtPoolRow {
 }
 
 /** The storage pools with their use (warn from 85 %, `libvirt.pool_full`), or unRAID's VM folders. */
-export function libvirtPoolRows(d: HostLibvirtDetail): LibvirtPoolRow[] {
+export function libvirtPoolRows(d: HostLibvirtDetail, locale?: string | null): LibvirtPoolRow[] {
+  const w = words(locale).pools;
   if (!d.pools.length && d.folders)
     return [
       ...(d.folders.domains
         ? [
             {
-              name: 'VM disks',
+              name: w.vmDisks,
               line: d.folders.domains,
               usedText: '',
               pct: null,
               tone: null,
-              label: `VM disks in ${d.folders.domains}`,
+              label: interpolate(w.vmDisksIn, { folder: d.folders.domains }),
             },
           ]
         : []),
       ...(d.folders.isos
         ? [
             {
-              name: 'ISO images',
+              name: w.isos,
               line: d.folders.isos,
               usedText: '',
               pct: null,
               tone: null,
-              label: `ISO images in ${d.folders.isos}`,
+              label: interpolate(w.isosIn, { folder: d.folders.isos }),
             },
           ]
         : []),
@@ -508,8 +508,13 @@ export function libvirtPoolRows(d: HostLibvirtDetail): LibvirtPoolRow[] {
   return d.pools.map((p) => {
     const pct = p.totalBytes > 0 ? (p.usedBytes / p.totalBytes) * 100 : null;
     const usedText =
-      p.totalBytes > 0 ? `${formatBytesBinary(p.usedBytes)} of ${formatBytesBinary(p.totalBytes)} used` : '';
-    const line = p.active ? [p.type, plural(p.volumes, 'volume')].join(' · ') : 'Not active';
+      p.totalBytes > 0
+        ? interpolate(w.used, {
+            used: formatBytesBinary(p.usedBytes),
+            total: formatBytesBinary(p.totalBytes),
+          })
+        : '';
+    const line = p.active ? [p.type, w.volumes(p.volumes)].join(' · ') : w.notActive;
     return {
       name: p.name,
       line,
@@ -522,8 +527,11 @@ export function libvirtPoolRows(d: HostLibvirtDetail): LibvirtPoolRow[] {
 }
 
 /** Where a libvirt hint is fixed on the phone (IU-13): no recent backup → the VM's Backups. */
-export function libvirtHintWayOut(kind: string): { label: string; to: 'backups' } | null {
-  return kind === 'libvirt.no_backup' ? { label: 'Back it up', to: 'backups' } : null;
+export function libvirtHintWayOut(
+  kind: string,
+  locale?: string | null,
+): { label: string; to: 'backups' } | null {
+  return kind === 'libvirt.no_backup' ? { label: words(locale).backItUp, to: 'backups' } : null;
 }
 
 /** The VMs a server's “no recent backup” hints name, for its Backups segment. */

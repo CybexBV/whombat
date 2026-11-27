@@ -9,18 +9,21 @@ import {
   accessText,
   type CatalogEntry,
   type CatalogSignIn,
-  CONNECTION_ACCESS_LABELS,
   type ConnectionAccessLevel,
   catalogEntry,
+  connectionAccessLabels,
   FOUND_SERVER_ID,
-  FOUND_SERVER_TAGLINE,
   fillTemplate,
   foundServerName,
+  foundServerTagline,
   isAgentConnection,
   pasteValues,
   resolveTokenUrl,
 } from '@whombat/core/domain';
-import { CONNECT_FORM_TEXT } from './draft';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CONN_SETUP_WORDS } from '../i18n/messages/connectionsHosts/connectForm';
+import { connectFormText } from './draft';
 import type { SignInChoice } from './form';
 import { codeSignInOf, type SecretWords, secretWord } from './signInAgain';
 import { type ConnectionWords, connectionWords } from './words';
@@ -30,17 +33,18 @@ import { type ConnectionWords, connectionWords } from './words';
 export type SetupStep = 'where' | 'signIn' | 'access';
 
 /** The step titles, in the form's words. */
-export const SETUP_STEP_TITLES: Record<SetupStep, string> = {
-  where: 'Where is it?',
-  signIn: 'How should Whombat sign in?',
-  access: 'What may your agent do?',
-};
+export function setupStepTitles(locale?: string | null): Record<SetupStep, string> {
+  const w = clientTree(locale, CONN_SETUP_WORDS).steps;
+  return { where: w.where, signIn: w.signIn, access: w.access };
+}
+
+export const SETUP_STEP_TITLES: Record<SetupStep, string> = setupStepTitles('en');
 
 /** The sign-in step of an entry read through a Mac (Find My): nothing to sign in to, only how it reads. */
-export const READ_THROUGH_MAC_STEP_TITLE = 'How should Whombat read it?';
+export const READ_THROUGH_MAC_STEP_TITLE: string = clientTree('en', CONN_SETUP_WORDS).steps.readThroughMac;
 
 /** The sign-in step of an entry without an address and nothing to sign in to (“Website or address”): what it checks. */
-export const WHAT_TO_CHECK_STEP_TITLE = 'What should Whombat check?';
+export const WHAT_TO_CHECK_STEP_TITLE: string = clientTree('en', CONN_SETUP_WORDS).steps.whatToCheck;
 
 /**
  * A step's title for this entry: an entry checked through a Mac (Find My) has nothing to sign in to, so its sign-in
@@ -50,12 +54,14 @@ export const WHAT_TO_CHECK_STEP_TITLE = 'What should Whombat check?';
 export function setupStepTitle(
   entry: Pick<CatalogEntry, 'check' | 'signIn' | 'fields'>,
   step: Exclude<SetupStep, 'access'>,
+  locale?: string | null,
 ): string {
-  if (step !== 'signIn') return SETUP_STEP_TITLES[step];
-  if (entry.check?.kind === 'mac') return READ_THROUGH_MAC_STEP_TITLE;
+  const w = clientTree(locale, CONN_SETUP_WORDS).steps;
+  if (step !== 'signIn') return w[step];
+  if (entry.check?.kind === 'mac') return w.readThroughMac;
   const nothingToSignIn = entry.signIn.length > 0 && entry.signIn.every((m) => m.kind === 'none');
-  if (nothingToSignIn && !entry.fields.some((f) => f.id === 'url')) return WHAT_TO_CHECK_STEP_TITLE;
-  return SETUP_STEP_TITLES[step];
+  if (nothingToSignIn && !entry.fields.some((f) => f.id === 'url')) return w.whatToCheck;
+  return w[step];
 }
 
 /** Whether the entry is somewhere on the person's network or server (it has an address): cloud services have none. */
@@ -105,14 +111,15 @@ export function setupSteps(entry: CatalogEntry): SetupStep[] {
  */
 export function nameHelp(
   entry: CatalogEntry,
-  words: Pick<ConnectionWords, 'nameHelp'> = connectionWords(undefined),
+  words?: Pick<ConnectionWords, 'nameHelp'>,
+  locale?: string | null,
 ): string {
-  if (entry.use === 'gateway')
-    return 'How it’s listed here, in its switches and in Usage. You can change it later.';
-  if (entry.use === 'vault') return 'How it’s listed here. You can change it later.';
+  const w = clientTree(locale, CONN_SETUP_WORDS).nameHelp;
+  if (entry.use === 'gateway') return w.gateway;
+  if (entry.use === 'vault') return w.vault;
   return isAgentConnection(entry)
-    ? words.nameHelp
-    : 'How it’s listed here and in automations. You can change it later.';
+    ? (words ?? connectionWords(undefined, { locale })).nameHelp
+    : w.automations;
 }
 
 /* Where is it? (CS-13) ---------------------------------------------------------------------------- */
@@ -125,33 +132,39 @@ export interface IdentifyNote {
 }
 
 /** What `connections.identify` found, in two lines (CS-50): recognised, something else, or nothing answering. */
-export function identifyNote(entry: CatalogEntry, found: IdentifyConnectionResponse): IdentifyNote {
+export function identifyNote(
+  entry: CatalogEntry,
+  found: IdentifyConnectionResponse,
+  locale?: string | null,
+): IdentifyNote {
+  const w = clientTree(locale, CONN_SETUP_WORDS).identify;
   const server = found.message ? ` ${found.message}` : '';
+  const url = found.url;
   if (!found.reachable)
     return {
       tone: 'bad',
-      title: 'Nothing answered',
-      text: `Whombat couldn’t reach ${found.url}.${server || ' Check the address and that it’s switched on.'}`,
+      title: w.nothing,
+      text: `${interpolate(w.unreachable, { url })}${server || w.unreachableHint}`,
     };
   if (found.catalogId === entry.id)
     return {
       tone: 'ok',
       title: found.version ? `${entry.name} ${found.version}` : entry.name,
-      text: `Found at ${found.url}.`,
+      text: interpolate(w.foundAt, { url }),
     };
   const other = found.catalogId ? catalogEntry(found.catalogId) : null;
   if (other)
     return {
       tone: 'warn',
-      title: `This looks like ${other.name}`,
-      text: `${found.url} answers like ${other.name}, not ${entry.name}. Check the address and the port.`,
+      title: interpolate(w.looksLike, { other: other.name }),
+      text: interpolate(w.answersLike, { url, other: other.name, name: entry.name }),
     };
   // An entry Whombat has no probes for can't be recognised: that it answers is all there is to say.
-  if (!entry.discovery) return { tone: 'ok', title: 'It answers', text: `Whombat reaches ${found.url}.` };
+  if (!entry.discovery) return { tone: 'ok', title: w.answers, text: interpolate(w.reaches, { url }) };
   return {
     tone: 'warn',
-    title: 'Something else answers here',
-    text: `${found.url} doesn’t look like ${entry.name}.${server || ' Check the address and the port, or go on if you’re sure.'}`,
+    title: w.somethingElse,
+    text: `${interpolate(w.notLike, { url, name: entry.name })}${server || w.notLikeHint}`,
   };
 }
 
@@ -188,9 +201,12 @@ export function identifiedFields(
 }
 
 /** “Compare it with what Proxmox VE shows (Proxmox → node → System → Certificates), then trust it.” */
-export function trustText(entry: CatalogEntry): string {
+export function trustText(entry: CatalogEntry, locale?: string | null): string {
   const where = fingerprintWhere(entry);
-  return `Compare it with what ${entry.name} shows${where ? ` (${where})` : ''}, then trust it.`;
+  const w = clientTree(locale, CONN_SETUP_WORDS);
+  return where
+    ? interpolate(w.trustWhere, { name: entry.name, where })
+    : interpolate(w.trust, { name: entry.name });
 }
 
 /* How should Whombat sign in? (CS-15) ------------------------------------------------------------- */
@@ -214,35 +230,34 @@ export function elsewhereLevelNote(
   entry: CatalogEntry,
   choice: Pick<SignInChoice, 'kind'>,
   level: ConnectionAccessLevel,
+  locale?: string | null,
 ): string | null {
   if (level !== 'read' || asksAccess(choice)) return null;
-  return choice.kind === 'nextcloud_login'
-    ? 'Whombat sets it to Look only as soon as Nextcloud lets it in.'
-    : `Signing in at ${entry.name} connects it to manage: set it to Look only on its page afterwards.`;
+  const w = clientTree(locale, CONN_SETUP_WORDS).elsewhere;
+  return choice.kind === 'nextcloud_login' ? w.nextcloud : interpolate(w.other, { name: entry.name });
 }
 
 type GuidedMethod = Extract<CatalogSignIn, { kind: 'token' | 'client_credentials' }>;
 
 /** A sign-in's line on its radio card. */
-export function signInNote(entry: CatalogEntry, method: CatalogSignIn): string {
+export function signInNote(entry: CatalogEntry, method: CatalogSignIn, locale?: string | null): string {
+  const w = clientTree(locale, CONN_SETUP_WORDS).signInNote;
   switch (method.kind) {
     case 'password':
       return method.creates;
     case 'token':
-      return method.steps.length
-        ? `Make it in ${entry.name} with the steps below, then paste it here.`
-        : method.secretHelp;
+      return method.steps.length ? interpolate(w.tokenSteps, { name: entry.name }) : method.secretHelp;
     case 'client_credentials':
       return method.secretHelp;
     case 'nextcloud_login':
-      return 'Log in to Nextcloud in a new tab and grant access.';
+      return w.nextcloud;
     case 'service_login':
       // The entry's own sentence (SG-05): “Sign in to Plex in a new tab and allow Whombat.”
       return method.note;
     case 'none':
-      return 'The server needs no sign-in.';
+      return w.none;
     default:
-      return `Sign in at ${entry.name} and allow access.`;
+      return interpolate(w.other, { name: entry.name });
   }
 }
 
@@ -318,17 +333,18 @@ export function readPaste(entry: CatalogEntry, method: GuidedMethod, text: strin
 }
 
 /** “Filled in Token ID and Secret.” */
-export function filledText(labels: readonly string[]): string {
+export function filledText(labels: readonly string[], locale?: string | null): string {
+  const w = clientTree(locale, CONN_SETUP_WORDS);
   const list =
     labels.length <= 1
       ? (labels[0] ?? '')
-      : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
-  return `Filled in ${list}.`;
+      : interpolate(w.and, { items: labels.slice(0, -1).join(', '), last: labels[labels.length - 1] ?? '' });
+  return interpolate(w.filled, { list });
 }
 
-/** The paste box's label (CS-15): “Paste what Proxmox VE shows, or drop the file”. */
-export function pasteLabel(entry: CatalogEntry): string {
-  return `Paste what ${entry.name} shows, or drop the file`;
+/** The paste box's label: “Paste what Proxmox VE shows, or drop the file”. */
+export function pasteLabel(entry: CatalogEntry, locale?: string | null): string {
+  return interpolate(clientTree(locale, CONN_SETUP_WORDS).paste, { name: entry.name });
 }
 
 /**
@@ -341,10 +357,10 @@ export function takesPaste(method: GuidedMethod): boolean {
 }
 
 /** The guided steps' name for assistive technology: “Making the token secret”, or for a session “Making a user for Whombat”. */
-export function guideLabel(method: GuidedMethod): string {
+export function guideLabel(method: GuidedMethod, locale?: string | null): string {
   return method.kind === 'token' && method.auth.type === 'session'
-    ? 'Making a user for Whombat'
-    : CONNECT_FORM_TEXT.making(method.secretLabel);
+    ? clientTree(locale, CONN_SETUP_WORDS).makingUser
+    : connectFormText(locale).making(method.secretLabel);
 }
 
 /* What may agents do? (CS-10) --------------------------------------------------------------------- */
@@ -356,11 +372,12 @@ export interface AccessChoice {
 }
 
 /** Look only, then Manage, each with what it means for this service (`accessText`). */
-export function accessChoices(entry: CatalogEntry): AccessChoice[] {
+export function accessChoices(entry: CatalogEntry, locale?: string | null): AccessChoice[] {
+  const labels = connectionAccessLabels(locale);
   return (['read', 'manage'] as const).map((value) => ({
     value,
-    label: CONNECTION_ACCESS_LABELS[value],
-    text: accessText(entry, value),
+    label: labels[value],
+    text: accessText(entry, value, locale),
   }));
 }
 
@@ -371,23 +388,25 @@ export function accessChoices(entry: CatalogEntry): AccessChoice[] {
 export function limitNote(
   entry: CatalogEntry,
   method: CatalogSignIn,
-  words: Pick<ConnectionWords, 'limitNote'> = connectionWords(undefined),
+  words?: Pick<ConnectionWords, 'limitNote'>,
+  locale?: string | null,
 ): string | null {
   if (method.kind !== 'password' || method.serviceLimits) return null;
-  return words.limitNote(entry.name);
+  return (words ?? connectionWords(undefined, { locale })).limitNote(entry.name);
 }
 
 /**
  * Raising a connection to Manage (CS-11): where sign in once asks the service for a key at the level
  * (`serviceLimits`), a key made to look only stays that way. Null where Whombat alone keeps the level.
  */
-export function raiseNote(entry: CatalogEntry): string | null {
+export function raiseNote(entry: CatalogEntry, locale?: string | null): string | null {
   const once = entry.signIn.find((m) => m.kind === 'password');
   if (once?.kind !== 'password' || !once.serviceLimits) return null;
+  const w = clientTree(locale, CONN_SETUP_WORDS).raise;
   // A sign-in with a code signs this connection in again below (T3 Code's pairing code), never with a new connection.
   if (codeSignInOf(entry) === once)
-    return `If Whombat signed in at Look only, ${entry.name} itself keeps it to looking. Sign in again below with a new ${secretWord(once)} to manage.`;
-  return `If this key was made by signing in once at Look only, ${entry.name} itself keeps it to looking. Sign in again to make one that can manage.`;
+    return interpolate(w.code, { name: entry.name, secret: secretWord(once, locale) });
+  return interpolate(w.key, { name: entry.name });
 }
 
 /* Found on your network (CS-14, CS-51…CS-53) ------------------------------------------------------ */
@@ -406,11 +425,14 @@ export function groupDigits(n: number): string {
 }
 
 /** “Looking at 312 of 1 016 addresses…”; before it knows how many, “Looking around your network…”. */
-export function discoveryProgressText(d: Pick<ConnectionDiscovery, 'progress'>): string {
+export function discoveryProgressText(
+  d: Pick<ConnectionDiscovery, 'progress'>,
+  locale?: string | null,
+): string {
   const p = d.progress;
-  if (!p || p.total === 0) return 'Looking around your network…';
-  const total = groupDigits(p.total);
-  return `Looking at ${groupDigits(Math.min(p.done, p.total))} of ${total} ${p.total === 1 ? 'address' : 'addresses'}…`;
+  const w = clientTree(locale, CONN_SETUP_WORDS).discovery;
+  if (!p || p.total === 0) return w.around;
+  return w.progress(p.total, { done: groupDigits(Math.min(p.done, p.total)), total: groupDigits(p.total) });
 }
 
 /** One service found, as its row shows it. */
@@ -459,7 +481,7 @@ export function foundServerAddress(s: Pick<ConnectionDiscovery['found'][number],
  * left out (CS-52: the caller's connection of that entry on that host, or a Custom API on that host and port), hidden
  * or not; a hidden one that isn't connected goes to `hidden` (CS-53).
  */
-export function foundList(d: Pick<ConnectionDiscovery, 'found'>): FoundList {
+export function foundList(d: Pick<ConnectionDiscovery, 'found'>, locale?: string | null): FoundList {
   const list: FoundList = { rows: [], hidden: [], connected: 0 };
   for (const s of d.found) {
     const server = s.catalogId === FOUND_SERVER_ID;
@@ -475,8 +497,8 @@ export function foundList(d: Pick<ConnectionDiscovery, 'found'>): FoundList {
     const row: FoundRow = {
       key: `${s.catalogId}@${s.url}`,
       catalogId: s.catalogId,
-      name: entry ? entry.name : foundServerName(s.version),
-      tagline: entry ? taglineOf(entry) : FOUND_SERVER_TAGLINE,
+      name: entry ? entry.name : foundServerName(s.version, locale),
+      tagline: entry ? taglineOf(entry) : foundServerTagline(locale),
       // A server's system is its name already.
       version: server ? null : s.version,
       url: s.url,
@@ -499,35 +521,43 @@ export function taglineOf(entry: Pick<CatalogEntry, 'tagline'>): string | null {
  * The card's line when a done scan lists nothing new (null when it lists some): nothing it knows turned up, all of it is
  * connected, or all of it is connected or hidden.
  */
-export function foundEmptyText(list: FoundList): string | null {
+export function foundEmptyText(list: FoundList, locale?: string | null): string | null {
   if (list.rows.length > 0) return null;
-  if (list.hidden.length > 0) return 'Everything Whombat found on your network is connected or hidden.';
-  if (list.connected > 0) return 'Everything Whombat found on your network is connected already.';
-  return 'Nothing Whombat knows how to connect turned up on your network.';
+  const w = clientTree(locale, CONN_SETUP_WORDS).empty;
+  if (list.hidden.length > 0) return w.hidden;
+  if (list.connected > 0) return w.connected;
+  return w.nothing;
 }
 
 /** The footer's toggle for the hidden ones: “Show 2 hidden” / “Hide 2 hidden”. */
-export function hiddenToggleText(count: number, shown: boolean): string {
-  return `${shown ? 'Hide' : 'Show'} ${count} hidden`;
+export function hiddenToggleText(count: number, shown: boolean, locale?: string | null): string {
+  const w = clientTree(locale, CONN_SETUP_WORDS).hiddenToggle;
+  return interpolate(shown ? w.hide : w.show, { count });
 }
 
-/** “Couldn’t hide that just now.” or, for Unhide, “Couldn’t show that again just now.” (CS-53). */
-export function hideTroubleText(hidden: boolean): string {
-  return hidden
-    ? 'Couldn’t hide that just now. Try again in a moment.'
-    : 'Couldn’t show that again just now. Try again in a moment.';
+/** “Couldn’t hide that just now.” or, for Unhide, “Couldn’t show that again just now.”. */
+export function hideTroubleText(hidden: boolean, locale?: string | null): string {
+  const w = clientTree(locale, CONN_SETUP_WORDS).hideTrouble;
+  return hidden ? w.hide : w.show;
 }
 
 /** “Looked in 192.168.1.0/24 and 10.0.0.0/24.” */
-export function networksText(networks: readonly string[]): string | null {
+export function networksText(networks: readonly string[], locale?: string | null): string | null {
   if (networks.length === 0) return null;
+  const w = clientTree(locale, CONN_SETUP_WORDS);
   const list =
     networks.length === 1
       ? networks[0]
       : networks.length <= 3
-        ? `${networks.slice(0, -1).join(', ')} and ${networks[networks.length - 1]}`
-        : `${networks.slice(0, 2).join(', ')} and ${networks.length - 2} more networks`;
-  return `Looked in ${list}`;
+        ? interpolate(w.and, {
+            items: networks.slice(0, -1).join(', '),
+            last: networks[networks.length - 1] ?? '',
+          })
+        : interpolate(w.networks.more, {
+            first: networks.slice(0, 2).join(', '),
+            count: networks.length - 2,
+          });
+  return interpolate(w.networks.looked, { list: list ?? '' });
 }
 
 const PRIVATE = [
@@ -540,13 +570,14 @@ const PRIVATE = [
  * A network to look in (CS-14): an IPv4 CIDR in a private range with at most 1 024 addresses. Null when fine, else what
  * to fix. The server checks again.
  */
-export function cidrProblem(text: string): string | null {
+export function cidrProblem(text: string, locale?: string | null): string | null {
+  const w = clientTree(locale, CONN_SETUP_WORDS).cidr;
   const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/.exec(text.trim());
-  if (!m) return 'Write it like 192.168.2.0/24.';
+  if (!m) return w.shape;
   const octets = m.slice(1, 5).map(Number);
   const prefix = Number(m[5]);
-  if (octets.some((o) => o > 255) || prefix > 32) return 'Write it like 192.168.2.0/24.';
-  if (prefix < 22) return `Look in at most ${groupDigits(1024)} addresses at a time: a /22 or smaller.`;
+  if (octets.some((o) => o > 255) || prefix > 32) return w.shape;
+  if (prefix < 22) return interpolate(w.tooBig, { max: groupDigits(1024) });
   const [a = 0, b = 0] = octets;
   const ip = (a << 24) | (b << 16);
   const inPrivate = PRIVATE.some(([pa, pb, bits]) => {
@@ -554,7 +585,7 @@ export function cidrProblem(text: string): string | null {
     const mask = (~0 << (32 - bits)) >>> 0;
     return (ip & mask) >>> 0 === (net & mask) >>> 0 && prefix >= bits;
   });
-  return inPrivate ? null : 'Only home network addresses: 10.…, 172.16–31.… or 192.168.….';
+  return inPrivate ? null : w.private;
 }
 
 /** The connect page for a found service, its address filled in (`?url=`, CS-51). */
@@ -566,12 +597,17 @@ export function foundSearch(catalogId: string, url: string) {
  * The connect page of an entry Whombat looks after best as a server (Proxmox VE, its Backup Server, Unraid;
  * connect-in-chat.md): its note above the form, and the address Add a server opens with (the connect address's host).
  */
-export function asServerNote(entry: Pick<CatalogEntry, 'name' | 'asServer'>, url: string | null | undefined) {
+export function asServerNote(
+  entry: Pick<CatalogEntry, 'name' | 'asServer'>,
+  url: string | null | undefined,
+  locale?: string | null,
+) {
   if (!entry.asServer) return null;
+  const w = clientTree(locale, CONN_SETUP_WORDS).asServer;
   return {
-    title: 'Add it as a server instead',
-    text: `Whombat looks after ${entry.name} best as a server: its helper there sees everything, with no sign-in key to keep.`,
-    label: 'Add as a server',
+    title: w.title,
+    text: interpolate(w.text, { name: entry.name }),
+    label: w.label,
     address: hostOf(url ?? ''),
   };
 }

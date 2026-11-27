@@ -4,7 +4,7 @@
  */
 
 import { z } from 'zod';
-import { coreTranslator } from '../i18n/catalog.js';
+import { coreTranslator, tCore } from '../i18n/catalog.js';
 import { AgentEffort, modelFast, type ProviderModel } from './models.js';
 
 /* Name and face (OA-08) ------------------------------------------------------------------------------------------ */
@@ -63,10 +63,18 @@ export function isReservedAgentName(name: string): boolean {
 }
 
 /** `agent.update` or onboarding with a reserved name: `validation_failed` on `name`. */
-export const AGENT_NAME_RESERVED_TEXT = 'Whombat is the name of this box, so pick another one.';
+export function agentNameReservedText(locale?: string | null): string {
+  return tCore(locale, 'agentName.reserved');
+}
+
+export const AGENT_NAME_RESERVED_TEXT = agentNameReservedText('en');
 
 /** `agent.update` or onboarding with a name that isn't one capitalised word: `validation_failed` on `name`. */
-export const AGENT_NAME_FORM_TEXT = 'Use one word with a capital first letter, like Dusty.';
+export function agentNameFormText(locale?: string | null): string {
+  return tCore(locale, 'agentName.form');
+}
+
+export const AGENT_NAME_FORM_TEXT = agentNameFormText('en');
 
 /** A name for the agent as a body carries it: trimmed, well-formed and not reserved. */
 export const AgentName = z

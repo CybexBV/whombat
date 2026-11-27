@@ -11,11 +11,10 @@
  * - a pairing that runs (started here or at the box's screen), read out as it moves;
  * - **Add a device** across the bottom, which opens the Add a device sheet (`BluetoothSheet`).
  *
- * The rows and every word are the shared `bluetoothSectionView` and `BLUETOOTH_TEXT`; the poller follows the box every
+ * The rows and every word are the shared `bluetoothSectionView` and `bluetoothTextHere`; the poller follows the box every
  * second while it looks or pairs (`useBluetooth`). Every target 44dp.
  */
 import {
-  BLUETOOTH_TEXT,
   type BluetoothApi,
   type BluetoothDeviceRow,
   type BluetoothPairingView,
@@ -23,9 +22,11 @@ import {
   type BluetoothState,
   bluetoothErrorText,
   bluetoothSectionView,
+  bluetoothText,
 } from '@whombat/client';
 import { type ReactNode, useState } from 'react';
 import { Alert, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { BluetoothConnected, BluetoothOff, EllipsisVertical, Trash } from '../ui/icons';
@@ -33,15 +34,15 @@ import { Button, SkeletonRows, StatusDot } from '../ui/primitives';
 import { Sheet } from '../ui/sheet';
 import { Touchable } from '../ui/Touchable';
 import { BluetoothSheet } from './BluetoothSheet';
-import { BLUETOOTH_MOBILE_TEXT, bluetoothCardKind } from './bluetooth';
+import { bluetoothCardKind, bluetoothMobileText } from './bluetooth';
 import { ChangeMark, KindIcon } from './MachineParts';
 import { Card, type Dot, dotColor, Row } from './ui';
 import { type MachineHere, useBluetooth } from './useMachine';
 
-const T = BLUETOOTH_TEXT;
-
 /** BLUETOOTH, or nothing (no Bluetooth service, or no adapter). */
 export function BluetoothSection({ machine, onHardware }: { machine: MachineHere; onHardware?: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = bluetoothText(rawLocale);
   const { state, poller } = useBluetooth(machine.bluetooth, machine.onReset);
   const kind = bluetoothCardKind(machine.bluetooth, state);
   if (kind === 'none' || !machine.bluetooth) return null;
@@ -89,11 +90,13 @@ function BluetoothRows({
   bluetooth: BluetoothState;
   onHardware: (() => void) | undefined;
 }) {
+  const { rawLocale } = useI18n();
+  const T = bluetoothText(rawLocale);
   const theme = useTheme();
   const [adding, setAdding] = useState(false);
   const [acting, setActing] = useState<BluetoothDeviceRow | null>(null);
   const [note, setNote] = useState<RowNote | null>(null);
-  const v = bluetoothSectionView(bluetooth);
+  const v = bluetoothSectionView(bluetooth, rawLocale);
   const busy = note !== null && !note.bad;
 
   const toggle = async (row: BluetoothDeviceRow) => {
@@ -110,7 +113,7 @@ function BluetoothRows({
     } catch (error) {
       setNote({
         address: row.address,
-        text: bluetoothErrorText(error, row.name, { paired: true }),
+        text: bluetoothErrorText(error, row.name, { paired: true, locale: rawLocale }),
         bad: true,
       });
       poller.refresh();
@@ -126,7 +129,7 @@ function BluetoothRows({
     } catch (error) {
       setNote({
         address: row.address,
-        text: bluetoothErrorText(error, row.name, { paired: true }),
+        text: bluetoothErrorText(error, row.name, { paired: true, locale: rawLocale }),
         bad: true,
       });
       poller.refresh();
@@ -295,6 +298,8 @@ function MissingRow({ text, dot, action }: { text: string; dot: Dot; action: Rea
 
 /** A row's ⋯: 44dp, the vertical ellipsis in `ink2`, as on an automation and a file in Files. */
 function MoreButton({ name, disabled, onPress }: { name: string; disabled: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = bluetoothText(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -357,10 +362,12 @@ function DeviceActionSheet({
   onClose: () => void;
   onAct: (what: 'toggle' | 'remove') => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = bluetoothText(rawLocale);
   const theme = useTheme();
   const connect = row?.toggle !== 'disconnect';
   return (
-    <Sheet visible={row !== null} onClose={onClose} label={BLUETOOTH_MOBILE_TEXT.deviceActions}>
+    <Sheet visible={row !== null} onClose={onClose} label={bluetoothMobileText(rawLocale).deviceActions}>
       <Text
         size={13.5}
         lh={1.4}

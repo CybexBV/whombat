@@ -1,4 +1,5 @@
 import { KIT_PRF_SALT_V2, KIT_PRF_SALT_V2_B64 } from '@whombat/core/backup';
+import { formatLocaleOf, interpolate } from '@whombat/core/i18n';
 /**
  * Shared passkey ceremonies for web and phone. The client checks endpoint-bound challenges before signing and verifies
  * the owner-signed appliance directory against the authenticator's user handle before pinning any identity. Each
@@ -25,6 +26,8 @@ import {
   type WebAuthnAuthenticationResponse,
   type WebAuthnRegistrationResponse,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { PASSKEY_WORDS } from '../i18n/messages/hostManaged/passkeys';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import {
   type ApplianceSession,
@@ -376,84 +379,84 @@ export function passkeyFailureDetail(error: unknown): string {
 }
 
 /** Words for a failure (`COPY.passkeys.errors`); null for a dismissed prompt. */
-export function passkeyErrorText(error: unknown): string | null {
+export function passkeyErrorText(error: unknown, locale?: string | null): string | null {
   const code = passkeyErrorOf(error);
-  return code ? PASSKEY_COPY.errors[code] : null;
+  return code ? passkeyCopy(locale).errors[code] : null;
 }
 
 /* Words (no mock: the design handoff's conventions, decided in passkeys.md AP-797) --------------------------------- */
 
-export const PASSKEY_COPY = {
-  signIn: 'Sign in with a passkey',
-  signInHint: 'Your passkey signs you in, opens your Whombats and unlocks your backups.',
-  or: 'or',
-  opening: (name: string | null) => `Opening ${name ?? 'your Whombat'}…`,
-  openingText: 'Your Whombat is checking your passkey. This takes a moment.',
-  /** The setup screen (PK-04 from a signed-in device that doesn't know the Whombat yet). */
-  setupWay: 'Your passkey, if you’ve already set it up.',
-  setupUse: 'Use a passkey',
-  /** The enrollment didn't happen: the way on (PK-11). */
-  otherWay: 'Set up this device another way',
-  notInOrg:
-    'This passkey is for a Whombat that isn’t in your organization. You’re signed in; pick a Whombat.',
-  retired: (name: string | null) =>
-    `That passkey was for ${name ?? 'a Whombat'}, which was retired, so it can’t open anything. Pick your Whombat; once it opens, you can add a new passkey.`,
-  /** Settings · Devices (PK-08). */
-  section: 'PASSKEYS',
-  intro: 'One passkey to sign in, open all your Whombats and unlock your backups.',
-  none: 'Set up your passkey',
-  add: 'Set up my passkey',
-  remove: 'Remove',
-  removed: 'Passkey removed.',
-  removeConfirm: (name: string) =>
-    `Remove the passkey “${name}”? It won’t open this Whombat any more. Devices it already set up stay until you remove them.`,
-  synced: 'Synced',
-  syncedLabel: 'Synced: it can open this Whombat on your other devices too',
-  thisDevice: 'On one device',
-  thisDeviceLabel: 'Stays on the device it was made on',
-  created: (date: string) => `Added ${date}`,
-  lastUsed: (ago: string) => `Last used ${ago}`,
-  neverUsed: 'Not used yet',
-  current: 'Set up this device',
-  policy: 'Only passkeys that stay on one device',
-  policyMeta:
-    'Synced passkeys (Google Password Manager, iCloud Keychain) can’t be added or open this Whombat on a new device.',
-  policyOn: 'Only passkeys that stay on one device are accepted now.',
-  policyOff: 'Synced passkeys are accepted again.',
-  unavailable: 'This browser can’t make passkeys.',
-  unavailablePhone: 'This phone can’t make passkeys.',
-  loadError: 'Couldn’t load your passkeys. Try again.',
-  /** PK-09: a device a passkey let in lately, told on the person's other devices. */
-  newDevice: (label: string) => `New device signed in with a passkey: ${label}`,
-  newDeviceMeta: 'Signed in with a passkey',
-  review: 'Review',
-  seen: 'OK',
-  /** The nudge (PK-10). */
-  nudge: 'One passkey to sign in, open all your Whombats and unlock your backups.',
-  nudgeAdd: 'Set up my passkey',
-  nudgeLater: 'Not now',
-  errors: {
-    challenge_mismatch:
-      'Whombat’s servers sent a sign-in request this device didn’t expect, so nothing was signed. Try again.',
-    options_mismatch:
-      'Whombat’s servers sent a passkey request that doesn’t match your Whombat, so no passkey was made. Try again.',
-    invalid:
-      'That passkey didn’t open your Whombat. It may have been removed. Sign in with your email instead.',
-    gone: 'That passkey was for a Whombat that’s gone, so it can’t open anything. Sign in with your email; once your Whombat opens, you can add a new passkey.',
-    kept: 'That passkey was for a Whombat that’s gone. It’s kept only to open that Whombat’s recovery kit. Sign in with your email.',
-    not_allowed:
-      'This Whombat only accepts passkeys that stay on one device, and this one syncs. Use another way in.',
-    limit: 'You already have 20 passkeys for this Whombat. Remove one in Settings → Devices first.',
-    exists: 'This device already has a passkey for this Whombat.',
-    unsupported: 'Passkeys don’t work here. Sign in with your email instead.',
-    none: 'There’s no passkey for your Whombat on this device. Sign in another way, then add one in Devices.',
-    control_failed:
-      'Your Whombat saved the passkey but Whombat’s servers didn’t, so it was removed again. Try again in a moment.',
-    rate_limited: 'Too many tries. Wait a few minutes, then try again.',
-    unreachable: 'Couldn’t reach Whombat. Check your connection and try again.',
-    failed: 'That didn’t work. Try again.',
-  } satisfies Record<PasskeyErrorCode, string>,
-} as const;
+/** The passkey words in the person's language; `errors` has one line for each `PasskeyErrorCode`. */
+export function passkeyCopy(locale?: string | null) {
+  const w = clientTree(locale, PASSKEY_WORDS);
+  const e = w.errors;
+  return {
+    signIn: w.signIn,
+    signInHint: w.signInHint,
+    or: w.or,
+    opening: (name: string | null) => (name === null ? w.openingYours : interpolate(w.opening, { name })),
+    openingText: w.openingText,
+    /** The setup screen from a signed-in device that doesn't know the Whombat yet. */
+    setupWay: w.setupWay,
+    setupUse: w.setupUse,
+    /** The enrollment didn't happen: the way on. */
+    otherWay: w.otherWay,
+    notInOrg: w.notInOrg,
+    retired: (name: string | null) => (name === null ? w.retiredSome : interpolate(w.retired, { name })),
+    /** Settings · Devices. */
+    section: w.section,
+    intro: w.intro,
+    none: w.none,
+    add: w.add,
+    remove: w.remove,
+    removed: w.removed,
+    removeConfirm: (name: string) => interpolate(w.removeConfirm, { name }),
+    synced: w.synced,
+    syncedLabel: w.syncedLabel,
+    thisDevice: w.thisDevice,
+    thisDeviceLabel: w.thisDeviceLabel,
+    created: (date: string) => interpolate(w.created, { date }),
+    lastUsed: (ago: string) => interpolate(w.lastUsed, { ago }),
+    neverUsed: w.neverUsed,
+    current: w.current,
+    policy: w.policy,
+    policyMeta: w.policyMeta,
+    policyOn: w.policyOn,
+    policyOff: w.policyOff,
+    unavailable: w.unavailable,
+    unavailablePhone: w.unavailablePhone,
+    loadError: w.loadError,
+    /** A device a passkey let in lately, told on the person's other devices. */
+    newDevice: (label: string) => interpolate(w.newDevice, { label }),
+    newDeviceMeta: w.newDeviceMeta,
+    review: w.review,
+    seen: w.seen,
+    /** The nudge to set up a passkey. */
+    nudge: w.nudge,
+    nudgeAdd: w.nudgeAdd,
+    nudgeLater: w.nudgeLater,
+    errors: {
+      challenge_mismatch: e.challengeMismatch,
+      options_mismatch: e.optionsMismatch,
+      invalid: e.invalid,
+      gone: e.gone,
+      kept: e.kept,
+      not_allowed: e.notAllowed,
+      limit: e.limit,
+      exists: e.exists,
+      unsupported: e.unsupported,
+      none: e.none,
+      control_failed: e.controlFailed,
+      rate_limited: e.rateLimited,
+      unreachable: e.unreachable,
+      failed: e.failed,
+    } satisfies Record<PasskeyErrorCode, string>,
+  } as const;
+}
+
+export type PasskeyCopy = ReturnType<typeof passkeyCopy>;
+
+export const PASSKEY_COPY: PasskeyCopy = passkeyCopy('en');
 
 /* Sign-in on a new device (PK-04) -------------------------------------------------------------------------------- */
 
@@ -905,16 +908,21 @@ export function orderPasskeys(passkeys: readonly PasskeySummary[], me: string | 
 }
 
 /** “Added 3 Oct 2026 · Last used 2 hours ago” (and “Synced” is a tag beside it). */
-export function passkeyMeta(p: PasskeySummary, ago: (iso: string | null) => string): string {
-  const date = new Date(p.createdAt).toLocaleDateString('en-GB', {
+export function passkeyMeta(
+  p: PasskeySummary,
+  ago: (iso: string | null) => string,
+  locale?: string | null,
+): string {
+  const t = passkeyCopy(locale);
+  const date = new Date(p.createdAt).toLocaleDateString(formatLocaleOf(locale), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
   });
   return [
-    PASSKEY_COPY.created(date),
-    p.lastUsedAt ? PASSKEY_COPY.lastUsed(ago(p.lastUsedAt)) : PASSKEY_COPY.neverUsed,
-    ...(p.current ? [PASSKEY_COPY.current] : []),
+    t.created(date),
+    p.lastUsedAt ? t.lastUsed(ago(p.lastUsedAt)) : t.neverUsed,
+    ...(p.current ? [t.current] : []),
   ].join(' · ');
 }
 

@@ -20,6 +20,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { AppState } from 'react-native';
+import { useI18n } from '../i18n';
 import { createDraftStore, type DraftStore, draftKey } from './drafts';
 import { createOutbox, type Outbox, type OutboxMessage, outboxFor, sendOutcome } from './outbox';
 import { deviceBox } from './secureBoxNative';
@@ -55,13 +56,15 @@ export function OutboxProvider({
   const { client } = useWhombat();
   const qc = useQueryClient();
   const online = useOnline() && connected;
-  const latest = useRef({ client, qc, online });
-  latest.current = { client, qc, online };
+  const { rawLocale } = useI18n();
+  const latest = useRef({ client, qc, online, locale: rawLocale });
+  latest.current = { client, qc, online, locale: rawLocale };
   const [outbox] = useState(() =>
     createOutbox({
       box: deviceBox(),
       scope,
       canSend: () => latest.current.online,
+      locale: () => latest.current.locale,
       async send(item) {
         const params = { burrow: item.burrow, conversationId: item.conversationId };
         const body = {
@@ -76,7 +79,7 @@ export function OutboxProvider({
           body,
           requestId: sendRequestId(item.id),
         });
-        return sendOutcome({ result: result as { status: string; message?: string } });
+        return sendOutcome({ result: result as { status: string; message?: string } }, latest.current.locale);
       },
       onSent(item) {
         const { qc } = latest.current;

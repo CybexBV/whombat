@@ -9,7 +9,6 @@
  * Summary had is a link to the tab that has it. Pure; times come in as arguments.
  */
 import {
-  HOST_CONTROL_LEVEL_WORDS,
   HOST_SERIES_RANGES,
   type HostControlLevel,
   type HostGuest,
@@ -22,6 +21,7 @@ import {
   type HostUnraidDetail,
   type HostUnraidDisk,
   type HostVolume,
+  hostControlLevelWords,
   noticeNature,
   type ThingLine,
   type ThingNoticeIcon,
@@ -35,6 +35,11 @@ import {
   type ThingTone,
   thingHref,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
+import { HOSTS_DASHBOARD_RANGE_WORDS } from '../i18n/messages/connectionsHosts/hostsBasics';
+import type { ReadTree } from '../i18n/tree';
 import { lastValue, type SeriesValues, tempScale } from './chart';
 import {
   cut,
@@ -45,6 +50,7 @@ import {
   movedGb,
   NBSP,
   rateWords,
+  type SeriesStats,
   seriesStats,
   sizePair,
   sizeWords,
@@ -61,20 +67,21 @@ import {
   formatPct1,
   formatRelativeDay,
   formatTemp,
-  plural,
+  formatWeekdayTime,
 } from './format';
-import { type HintFix, hintFixes } from './hints';
+import { type HintFix, hintFixes, hintOpenTabLabel } from './hints';
 import { INCUS_SERVER_TAB_WORDS, INCUS_SERVER_TABS } from './incus';
 import { incusFacts } from './incus-mobile';
 import { isLibvirtServer, LIBVIRT_KIND_WORD, LIBVIRT_SERVER_TAB_WORDS, LIBVIRT_SERVER_TABS } from './libvirt';
 import { libvirtFacts } from './libvirt-mobile';
-import { isMacServer, MAC_SERVER_TAB_WORDS, MAC_SERVER_TABS, macFacts, macSystemLine } from './macos';
+import { isMacServer, MAC_SERVER_TABS, macFacts, macServerTabWords, macSystemLine } from './macos';
 import {
   busiestGuests,
   detailGuests,
   hottestSensor,
-  SERVER_TAB_WORDS,
   SERVER_TABS,
+  type ServerTab,
+  serverTabWords,
   statusText,
   storageTotals,
 } from './model';
@@ -86,6 +93,7 @@ import {
   type ServerNoticeOptions,
   serverNoticeOptions,
 } from './notices';
+import { dayMonth, forecastWords } from './space';
 import { splitTemporary } from './temporary';
 import { diskUsedLevel, type HostTone, hostTone, sensorLevel, serverTone } from './thresholds';
 import { memoryFullWords, processorWords, spaceWords } from './tiles';
@@ -94,17 +102,17 @@ import {
   parityState,
   parityView,
   UNRAID_POOL_FULL_PCT,
-  UNRAID_TAB_WORDS,
   UNRAID_TABS,
   type UnraidHintFix,
   unraidArrayView,
   unraidDiskName,
   unraidHintFixes,
   unraidPageUrl,
+  unraidTabWords,
   unraidTempTone,
 } from './unraid';
 import { unraidFacts } from './unraid-mobile';
-import { isRebootHint, isUpdatesHint, UPDATES_WORDS } from './updates';
+import { isRebootHint, isUpdatesHint, updatesWords } from './updates';
 import { type RunningCounts, serverVerdict, type Verdict } from './verdict';
 
 export { type PlacedChart, type PlacedPanels, placePanels, thingSeriesToken } from '../home/thingPage';
@@ -125,6 +133,13 @@ export {
 type Panel = ThingPagePanel;
 type ChartPanel = Extract<ThingPagePanel, { kind: 'chart' }>;
 type ChartSeries = ChartPanel['series'][number];
+type Words = ReadTree<typeof HOSTS_DASHBOARD_MORE_WORDS.tree>;
+
+/** The Summary's words in a locale (English when none is given). */
+const wordsIn = (locale?: string | null): Words => clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS);
+
+/** A sentence's first letter in capitals (“Opslag bekijken” where a tab's name leads). */
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /* Ranges (DS-03, DS-16) ------------------------------------------------------------------------------------- */
 
@@ -138,27 +153,18 @@ export const SERVER_DASHBOARD_PHONE_RANGES: readonly HostSeriesRange[] = ['1h', 
 export const SERVER_DASHBOARD_DEFAULT_RANGE: HostSeriesRange = '24h';
 
 /** The range picker's words (the mock: “1h · 6h · 24h · 7d · 30d · 90d”). */
-export const DASHBOARD_RANGE_WORDS: Record<HostSeriesRange, string> = {
-  '1h': '1h',
-  '6h': '6h',
-  '24h': '24h',
-  '7d': '7d',
-  '30d': '30d',
-  '90d': '90d',
-};
+export function dashboardRangeWords(locale?: string | null): Record<HostSeriesRange, string> {
+  return { ...clientTree(locale, HOSTS_DASHBOARD_RANGE_WORDS).ranges };
+}
 
-/** A table's column of small lines, named for the range (“24 h”). */
-const RANGE_COLUMN: Record<HostSeriesRange, string> = {
-  '1h': '1 h',
-  '6h': '6 h',
-  '24h': '24 h',
-  '7d': '7 d',
-  '30d': '30 d',
-  '90d': '90 d',
-};
+export const DASHBOARD_RANGE_WORDS: Record<HostSeriesRange, string> = dashboardRangeWords('en');
 
 /** What stands before a server's range picker (DS-16): its figures follow the live hosts events. */
-export const SERVER_DASHBOARD_LIVE_WORDS = 'Live · every 10 s';
+export function serverDashboardLiveWords(locale?: string | null): string {
+  return clientTree(locale, HOSTS_DASHBOARD_RANGE_WORDS).live;
+}
+
+export const SERVER_DASHBOARD_LIVE_WORDS = serverDashboardLiveWords('en');
 
 /** How often a server's Summary reads its history again (DS-16). */
 export const SERVER_DASHBOARD_REFRESH_MS = 60_000;
@@ -215,22 +221,25 @@ export function serverDashboardTabs(kind: ServerDashboardKind): readonly string[
  * What runs on a server, in the word its tab, lists and figures use: a Docker host's (and Unraid's) are apps, a
  * Proxmox, Incus or QEMU/KVM server's machines (the word list: never “guests”).
  */
-export function guestsWord(kind: ServerDashboardKind): 'Apps' | 'Machines' {
-  return kind === 'docker' || kind === 'unraid' ? 'Apps' : 'Machines';
+export function guestsWord(kind: ServerDashboardKind, locale?: string | null): string {
+  const w = wordsIn(locale).guests;
+  return kind === 'docker' || kind === 'unraid' ? w.apps : w.machines;
 }
 
-function tabWord(kind: ServerDashboardKind, tab: string): string {
-  if (tab === 'guests') return guestsWord(kind);
+function tabWord(kind: ServerDashboardKind, tab: string, locale?: string | null): string {
+  if (tab === 'guests') return guestsWord(kind, locale);
+  // Incus's and QEMU/KVM's tabs keep their English table; their names in another language are the Summary's own.
+  const own: Record<string, string> = locale ? wordsIn(locale).tabs : {};
   const words: Record<string, string> =
     kind === 'unraid'
-      ? UNRAID_TAB_WORDS
+      ? unraidTabWords(locale)
       : kind === 'incus'
-        ? INCUS_SERVER_TAB_WORDS
+        ? { ...INCUS_SERVER_TAB_WORDS, ...own }
         : kind === 'libvirt'
-          ? LIBVIRT_SERVER_TAB_WORDS
+          ? { ...LIBVIRT_SERVER_TAB_WORDS, ...own }
           : kind === 'macos'
-            ? MAC_SERVER_TAB_WORDS
-            : SERVER_TAB_WORDS;
+            ? macServerTabWords(locale)
+            : serverTabWords(locale);
   return words[tab] ?? tab;
 }
 
@@ -372,49 +381,61 @@ export function lookCount(d: Pick<HostServerDetail, 'alerts' | 'hints' | 'server
 export function serverDashboardHead(
   detail: HostServerDetail,
   opts: { name?: string } = {},
+  locale?: string | null,
 ): ServerDashboardHead {
+  const w = wordsIn(locale).head;
   const s = detail.server;
   const kind = serverDashboardKind(detail);
   const offline = s.status === 'offline' || s.status === 'pending';
   const n = lookCount(detail);
   const u = detail.unraid;
-  let badge = statusText(s.status, offline ? null : s.statusNote);
+  let badge = statusText(s.status, offline ? null : s.statusNote, locale);
   let tone = serverTone(s.status);
   // The condition word its Overview card and the Inbox say (“Disk array failed”); a count only when there is none.
-  if (!offline && n > 0 && s.status !== 'ok' && !s.statusNote?.trim()) badge = `${n} to look at`;
+  if (!offline && n > 0 && s.status !== 'ok' && !s.statusNote?.trim())
+    badge = interpolate(w.lookAt, { count: n });
   else if (!offline && u && s.status === 'ok') {
-    const a = unraidArrayView(u.array);
-    badge = `Array ${a.stateText.toLowerCase().replace(/…$/, '')}`;
+    const a = unraidArrayView(u.array, locale);
+    badge = interpolate(w.array, { state: a.stateText.toLowerCase().replace(/…$/, '') });
     tone = a.tone;
   }
   const details: ServerDetailRow[] = [];
   const row = (label: string, value: string | null | undefined, mono = false) => {
     if (value) details.push({ label, value: cut(value, 200), ...(mono ? { mono } : {}) });
   };
-  if (kind === 'unraid' && u) row('System', `Unraid ${u.version}`);
-  else if (kind === 'macos' && detail.macos?.version) row('System', macSystemLine(detail.macos));
-  else if (s.os) row('System', `${s.os.name.replace(/^Debian GNU\/Linux/, 'Debian')} ${s.os.version}`);
-  if (kind === 'incus' && detail.incus) row('Platform', `Incus ${detail.incus.version}`);
-  if (kind === 'libvirt') row('Platform', LIBVIRT_KIND_WORD);
-  if (kind === 'docker') row('Platform', 'Docker');
-  row('Kernel', s.os?.kernel, true);
+  if (kind === 'unraid' && u) row(w.system, `Unraid ${u.version}`);
+  else if (kind === 'macos' && detail.macos?.version) row(w.system, macSystemLine(detail.macos));
+  else if (s.os) row(w.system, `${s.os.name.replace(/^Debian GNU\/Linux/, 'Debian')} ${s.os.version}`);
+  if (kind === 'incus' && detail.incus) row(w.platform, `Incus ${detail.incus.version}`);
+  if (kind === 'libvirt') row(w.platform, LIBVIRT_KIND_WORD);
+  if (kind === 'docker') row(w.platform, 'Docker');
+  row(w.kernel, s.os?.kernel, true);
   if (s.cpu)
-    row('Processor', `${s.cpu.model}, ${plural(s.cpu.cores, 'core')} / ${plural(s.cpu.threads, 'thread')}`);
-  if (s.memory) row('Memory', `${sizeWords(s.memory.totalGb)}${s.memory.type ? ` ${s.memory.type}` : ''}`);
-  if (s.uptimeS != null && !offline) row('Up', formatDuration(s.uptimeS));
-  row('Address', s.address, true);
+    row(
+      w.processor,
+      interpolate(w.cpu, {
+        model: s.cpu.model,
+        cores: w.cores(s.cpu.cores),
+        threads: w.threads(s.cpu.threads),
+      }),
+    );
+  if (s.memory) row(w.memory, `${sizeWords(s.memory.totalGb)}${s.memory.type ? ` ${s.memory.type}` : ''}`);
+  if (s.uptimeS != null && !offline) row(w.up, formatDuration(s.uptimeS, locale));
+  row(w.address, s.address, true);
   const ago = s.agent.lastSyncSAgo;
   row(
-    'Whombat’s helper',
+    w.helper,
     [
-      ago == null ? null : `${offline ? 'Last checked in' : 'Checked in'} ${formatAgo(ago)}`,
-      s.agent.version ? `version ${s.agent.version}` : null,
+      ago == null
+        ? null
+        : interpolate(offline ? w.lastCheckedIn : w.checkedIn, { ago: formatAgo(ago, locale) }),
+      s.agent.version ? interpolate(w.version, { version: s.agent.version }) : null,
     ]
       .filter(Boolean)
       .join(' · '),
   );
-  row('What Whombat may do', HOST_CONTROL_LEVEL_WORDS[serverControlLevel(s.remoteControl)].title);
-  if (!offline) row('Figures', SERVER_DASHBOARD_LIVE_WORDS.replace(' · ', ', '));
+  row(w.mayDo, hostControlLevelWords(locale)[serverControlLevel(s.remoteControl)].title);
+  if (!offline) row(w.figures, serverDashboardLiveWords(locale).replace(' · ', ', '));
   const name = opts.name ?? s.name ?? s.id;
   const idLine = name.toLowerCase() === s.id.toLowerCase() ? null : s.id;
   return { kind, name, idLine, status: s.status, tone, badge, details };
@@ -452,6 +473,8 @@ export interface ServerDashboardInput {
   name?: string;
   /** The assistant's name: a problem's button asks it by name (“Ask Neo”). */
   assistant?: string;
+  /** The reader's language (English when none is given). */
+  locale?: string | null;
 }
 
 interface Ctx {
@@ -476,6 +499,9 @@ interface Ctx {
   updates: 'web' | 'phone' | null;
   /** What the lines' quiet parts need (AP-4810). */
   lines: ServerNoticeOptions;
+  /** The reader's language, and the Summary's words in it. */
+  locale: string | null;
+  w: Words;
 }
 
 /** A server's Summary, its Technical details and its verdict, built once from the same lines. */
@@ -490,6 +516,8 @@ export interface ServerDashboardView {
 
 function context(input: ServerDashboardInput): Ctx {
   const d = input.detail;
+  const locale = input.locale ?? null;
+  const w = wordsIn(locale);
   const kind = serverDashboardKind(d);
   const guests = detailGuests(d);
   return {
@@ -507,12 +535,16 @@ function context(input: ServerDashboardInput): Ctx {
     kept: splitTemporary(guests).kept,
     offline: d.server.status === 'offline' || d.server.status === 'pending',
     updates: input.updates ?? null,
-    ask: input.assistant?.trim() ? cut(`Ask ${input.assistant.trim()}`, 30) : 'Ask about it',
+    ask: input.assistant?.trim()
+      ? cut(interpolate(w.ask.named, { assistant: input.assistant.trim() }), 30)
+      : w.ask.plain,
     lines: serverNoticeOptions(d, guests, {
       quiet: !!input.quiet,
       now: input.now ?? Date.parse(d.asOf),
       ...(input.timeZone ? { timeZone: input.timeZone } : {}),
     }),
+    locale,
+    w,
   };
 }
 
@@ -524,8 +556,11 @@ function context(input: ServerDashboardInput): Ctx {
  * loads the chart cards are there without lines, so nothing moves when it comes; once read, a chart without any point
  * (no disks with I/O, no sensors) is left out and the row closes up.
  */
-export function serverDashboardView(input: ServerDashboardInput): ServerDashboardView {
-  const c = context(input);
+export function serverDashboardView(
+  input: ServerDashboardInput,
+  locale?: string | null,
+): ServerDashboardView {
+  const c = context(locale === undefined ? input : { ...input, locale });
   const { d, kind } = c;
   const out: Panel[] = [];
   const banner = bannerPanel(c);
@@ -598,12 +633,13 @@ export function serverPageTellsProblem(detail: HostServerDetail): boolean {
 
 export function serverPageVerdict(
   detail: HostServerDetail,
-  opts: { name?: string; now?: number } = {},
+  opts: { name?: string; now?: number; locale?: string | null } = {},
 ): Verdict {
   const c = context({
     detail,
     range: SERVER_DASHBOARD_DEFAULT_RANGE,
     ...(opts.now ? { now: opts.now } : {}),
+    ...(opts.locale ? { locale: opts.locale } : {}),
   });
   const banner = bannerPanel(c);
   const look = lookPanel(c, banner?.alertId ?? null);
@@ -621,13 +657,14 @@ function verdictOf(c: Ctx, name: string | undefined, lines: ThingPageNotice[]): 
     statusNote: s.statusNote ?? null,
     lines,
     running: runningCounts(c),
-    lastHeard: s.agent.lastSyncSAgo == null ? null : formatAgo(s.agent.lastSyncSAgo),
+    lastHeard: s.agent.lastSyncSAgo == null ? null : formatAgo(s.agent.lastSyncSAgo, c.locale),
+    ...(c.locale ? { locale: c.locale } : {}),
   });
 }
 
 /** A server's Summary panels (`serverDashboardView` without its details and verdict). */
-export function serverDashboard(input: ServerDashboardInput): ThingPagePanel[] {
-  return serverDashboardView(input).panels;
+export function serverDashboard(input: ServerDashboardInput, locale?: string | null): ThingPagePanel[] {
+  return serverDashboardView(input, locale).panels;
 }
 
 type Workload = { running: number; total: number; guests?: readonly HostGuest[] } | null | undefined;
@@ -715,18 +752,18 @@ function key(s: string): string {
 }
 
 /** A tab's way there in the word list's words: “See …”, never “Open System”. */
-const SEE_TAB: Record<string, string> = {
-  system: 'See details',
-  sensors: 'See temperatures',
-  array: 'See disks',
-  guests: 'See them',
-  screen: 'See the screen',
-};
+const SEE_TAB = ['system', 'sensors', 'array', 'guests', 'screen'] as const;
+
+/** “See storage”: a tab's or a figure's way there, its name lower-case inside the sentence. */
+function seeWords(c: Ctx, what: string): string {
+  return capital(interpolate(c.w.see.tab, { tab: what.toLowerCase() }));
+}
 
 function tabLink(c: Ctx, tab: string, label?: string): ThingPageLink | undefined {
   const t = c.kind === 'unraid' && (tab === 'storage' || tab === 'disks') ? 'array' : tab;
   if (!c.tabs.includes(t) || t === 'summary') return undefined;
-  const words = label ?? SEE_TAB[t] ?? `See ${tabWord(c.kind, t).toLowerCase()}`;
+  const see = (SEE_TAB as readonly string[]).includes(t) ? c.w.see[t as (typeof SEE_TAB)[number]] : null;
+  const words = label ?? see ?? seeWords(c, tabWord(c.kind, t, c.locale));
   return { kind: 'tab', label: cut(words, 30), tab: t };
 }
 
@@ -735,7 +772,7 @@ function askLink(c: Ctx, title: string): ThingPageLink {
   return {
     kind: 'ask',
     label: c.ask,
-    question: cut(`${title.replace(/[.!]+$/, '')}. Can you look into it?`, 300),
+    question: cut(interpolate(c.w.ask.question, { title: title.replace(/[.!]+$/, '') }), 300),
   };
 }
 
@@ -774,7 +811,7 @@ function bannerPanel(c: Ctx): { panel: Panel; alertId: string | null } | null {
     ...(parts ?? {}),
   };
   return {
-    panel: { kind: 'notices', id: 'banner', place: 'top', title: 'Right now', items: [item] },
+    panel: { kind: 'notices', id: 'banner', place: 'top', title: c.w.rightNow, items: [item] },
     alertId: alert?.id ?? null,
   };
 }
@@ -805,7 +842,7 @@ function alertLink(
  */
 function figuresPanel(c: Ctx): Extract<Panel, { kind: 'kpis' }> {
   const items: ThingPageKpi[] = [processorTile(c), memoryTile(c)];
-  const space = c.kind === 'unraid' && c.d.unraid ? arrayTile(c.d.unraid, inWords(c)) : spaceTile(c);
+  const space = c.kind === 'unraid' && c.d.unraid ? arrayTile(c, c.d.unraid, inWords(c)) : spaceTile(c);
   if (space) items.push(space);
   const temp = temperatureTile(c);
   if (temp) items.push(temp);
@@ -844,7 +881,7 @@ function openFrom(c: Ctx, figures: Extract<Panel, { kind: 'kpis' }>, charts: rea
     for (const id of ids) left.delete(id);
     if (ids.length) return { ...k, charts: ids.slice(0, 3) };
     const tab = FIGURE_TABS[k.key];
-    const link = tab ? tabLink(c, tab, `See ${k.label.toLowerCase()}`) : undefined;
+    const link = tab ? tabLink(c, tab, seeWords(c, k.label)) : undefined;
     return link ? { ...k, link } : k;
   });
   return { ...figures, items };
@@ -857,9 +894,9 @@ function processorTile(c: Ctx): ThingPageKpi {
   const words = inWords(c);
   return {
     key: 'cpu',
-    label: 'Processor',
-    value: p == null ? DASH : words ? processorWords(p) : formatPct(p),
-    ...(p != null && words ? { sub: `${formatPct(p)} in use` } : {}),
+    label: c.w.tiles.processor,
+    value: p == null ? DASH : words ? processorWords(p, c.locale) : formatPct(p),
+    ...(p != null && words ? { sub: interpolate(c.w.tiles.inUse, { amount: formatPct(p) }) } : {}),
     ...(t ? { tone: t } : {}),
     ...(p != null ? { meter: clamp01(p / 100) } : {}),
     spark: spark(vals(c, 'cpu_pct')),
@@ -875,15 +912,21 @@ function memoryTile(c: Ctx): ThingPageKpi {
   const t = memTone(pct);
   const free = used != null && total != null ? Math.max(0, total - used) : null;
   const words = inWords(c);
+  const w = c.w.tiles;
+  const pair = used != null && total != null ? sizePair(used, total, c.w.charts.of) : null;
   const inUse =
-    used != null && total != null
-      ? `${sizePair(used, total)} in use${pct != null && words ? ` (${formatPct(pct)})` : ''}`
-      : null;
-  const sub = [words && free != null ? `${sizeWords(free)} free` : null, inUse].filter(Boolean).join(' · ');
+    pair == null
+      ? null
+      : pct != null && words
+        ? interpolate(w.inUseShare, { amount: pair, pct: formatPct(pct) })
+        : interpolate(w.inUse, { amount: pair });
+  const sub = [words && free != null ? interpolate(w.free, { amount: sizeWords(free) }) : null, inUse]
+    .filter(Boolean)
+    .join(' · ');
   return {
     key: 'memory',
-    label: 'Memory',
-    value: pct == null ? DASH : words ? memoryFullWords(pct) : formatPct(pct),
+    label: w.memory,
+    value: pct == null ? DASH : words ? memoryFullWords(pct, c.locale) : formatPct(pct),
     ...(sub ? { sub } : {}),
     ...(t ? { tone: t } : {}),
     ...(pct != null ? { meter: clamp01(pct / 100) } : {}),
@@ -899,14 +942,15 @@ function spaceTile(c: Ctx): ThingPageKpi | null {
   const soon = soonestForecast(c);
   const t = tone(hostTone(diskUsedLevel(pct)));
   const words = inWords(c);
+  const w = c.w.tiles;
   return {
     key: 'storage',
-    label: 'Storage',
-    value: words ? spaceWords(pct) : formatPct(pct),
+    label: w.storage,
+    value: words ? spaceWords(pct, c.locale) : formatPct(pct),
     sub: cut(
       words
-        ? `${soon ?? `${formatPct(100 - pct)} free`} · ${formatPct(pct)} in use`
-        : sizePair(st.usedGb, st.totalGb),
+        ? `${soon ?? interpolate(w.free, { amount: formatPct(100 - pct) })} · ${interpolate(w.inUse, { amount: formatPct(pct) })}`
+        : sizePair(st.usedGb, st.totalGb, c.w.charts.of),
       80,
     ),
     ...(t ? { tone: t } : {}),
@@ -933,9 +977,10 @@ function soonestForecast(c: Ctx): string | null {
 }
 
 /** Unraid's space is its array's, with what is wrong with it first (stopped, parity missing or broken). */
-function arrayTile(u: HostUnraidDetail, words: boolean): ThingPageKpi {
+function arrayTile(c: Ctx, u: HostUnraidDetail, words: boolean): ThingPageKpi {
+  const w = c.w.tiles;
   const a = u.array;
-  const view = unraidArrayView(a);
+  const view = unraidArrayView(a, c.locale);
   const total = a.sizeBytes / 1e9;
   const used = a.usedBytes / 1e9;
   const pct = total ? (used / total) * 100 : null;
@@ -950,28 +995,28 @@ function arrayTile(u: HostUnraidDetail, words: boolean): ThingPageKpi {
     a.state !== 'started'
       ? view.stateText
       : parity === 'broken'
-        ? 'Parity isn’t valid'
+        ? w.parityInvalid
         : parity === 'none'
-          ? 'No parity disk'
+          ? w.noParity
           : pct != null
-            ? `${formatPct(100 - pct)} free`
+            ? interpolate(w.free, { amount: formatPct(100 - pct) })
             : null;
   // Space that nothing protects isn't “plenty free”: the tile says what is wrong first.
   const value =
     a.state !== 'started'
-      ? 'Stopped'
+      ? w.stopped
       : bad
-        ? 'At risk'
+        ? w.atRisk
         : parity === 'none'
-          ? 'Not protected'
+          ? w.notProtected
           : pct != null
             ? words
-              ? spaceWords(pct)
+              ? spaceWords(pct, c.locale)
               : formatPct(pct)
             : DASH;
   return {
     key: 'storage',
-    label: 'Storage',
+    label: w.storage,
     value,
     ...(sub ? { sub: cut(sub, 80) } : {}),
     ...(t ? { tone: t } : {}),
@@ -987,7 +1032,7 @@ function temperatureTile(c: Ctx): ThingPageKpi | null {
   const t = c.offline ? undefined : sensorTone(hot);
   return {
     key: 'hottest',
-    label: 'Temperature',
+    label: c.w.tiles.temperature,
     value: level == null ? DASH : formatTemp(hot.nowC),
     ...(level != null ? { sub: cut(hot.label, 80) } : {}),
     ...(t ? { tone: t } : {}),
@@ -1025,20 +1070,33 @@ function chartBase(c: Ctx, id: string, title: string, span: 1 | 2 | 3): Omit<Cha
   };
 }
 
+/**
+ * When a peak was, in the reader's language: “Now”, “Sun 03:10” within six days, else “6 Oct”. English is the
+ * statistics' own words.
+ */
+function peakWhenIn(c: Ctx, st: SeriesStats): string | null {
+  if (!st.peakWhen || !c.locale || !st.peakAt) return st.peakWhen;
+  if (st.peakWhen === 'Now') return c.w.charts.now;
+  const t = Date.parse(st.peakAt);
+  if (!Number.isFinite(t)) return st.peakWhen;
+  return c.now - t < 6 * 86_400_000 ? formatWeekdayTime(t, c.tz, c.locale) : dayMonth(t, c.tz, c.locale);
+}
+
 /** “Avg **14 %**” and “Peak **63 %** Sun 03:10” over the range (DS-06, DS-15). */
-function avgPeak(c: Ctx, k: string, unit: string, peakWord = 'Peak'): ThingLine[] {
+function avgPeak(c: Ctx, k: string, unit: string): ThingLine[] {
   const st = seriesStats(vals(c, k), c.series?.timestamps, {
     timeZone: c.tz,
     now: c.now,
     summary: c.series?.summary?.[k] ?? null,
   });
   if (st.avg == null || st.peak == null) return [];
+  const when = peakWhenIn(c, st);
   return [
-    [{ text: 'Avg ' }, { text: withUnit(st.avg, unit), strong: true }],
+    [{ text: `${c.w.charts.avg} ` }, { text: withUnit(st.avg, unit), strong: true }],
     [
-      { text: `${peakWord} ` },
+      { text: `${c.w.charts.peak} ` },
       { text: withUnit(st.peak, unit), strong: true },
-      ...(st.peakWhen ? [{ text: ` ${st.peakWhen}` }] : []),
+      ...(when ? [{ text: ` ${when}` }] : []),
     ],
   ];
 }
@@ -1059,7 +1117,7 @@ function chartPanels(c: Ctx): Panel[] {
   const cpu = (span: 1 | 2 | 3) => cpuChart(c, span);
   const mem = (span: 1 | 2 | 3) => memoryChart(c, span);
   const temps = c.kind === 'unraid' ? diskTempChart(c) : null;
-  const tempCard = temps ?? tempChart(c, chartSensors(c, c.d.sensors), 'Temperatures');
+  const tempCard = temps ?? tempChart(c, chartSensors(c, c.d.sensors), c.w.charts.temperatures);
   const net = keep('net_rx_mbps') || keep('net_tx_mbps');
   const disk = keep('disk_read_mbs') || keep('disk_write_mbs');
   if (c.kind === 'unraid') {
@@ -1086,19 +1144,20 @@ function cpuChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
   const live = c.offline ? null : c.d.live;
   const threads = c.d.server.cpu?.threads;
   const values = vals(c, 'cpu_pct');
+  const w = c.w.charts;
   const foot: NonNullable<ChartPanel['foot']> = [];
-  if (live?.cpuUserPct != null) foot.push({ label: 'User', value: formatPct1(live.cpuUserPct) });
-  if (live?.cpuSystemPct != null) foot.push({ label: 'System', value: formatPct1(live.cpuSystemPct) });
-  if (live?.cpuIowaitPct != null) foot.push({ label: 'I/O wait', value: formatPct1(live.cpuIowaitPct) });
+  if (live?.cpuUserPct != null) foot.push({ label: w.user, value: formatPct1(live.cpuUserPct) });
+  if (live?.cpuSystemPct != null) foot.push({ label: w.system, value: formatPct1(live.cpuSystemPct) });
+  if (live?.cpuIowaitPct != null) foot.push({ label: w.ioWait, value: formatPct1(live.cpuIowaitPct) });
   const load = live?.loadAvg?.[0] ?? lastValue(vals(c, 'load1'));
-  if (load != null) foot.push({ label: 'Load', value: dashboardNumber(load) });
+  if (load != null) foot.push({ label: w.load, value: dashboardNumber(load) });
   const t = cpuTone(live?.cpuPct);
   const stats = avgPeak(c, 'cpu_pct', '%');
   return {
-    ...chartBase(c, 'cpu', 'CPU', span),
+    ...chartBase(c, 'cpu', w.cpu, span),
     series: [
       line(c, 'cpu_pct', {
-        label: 'CPU',
+        label: w.cpu,
         unit: '%',
         color: 'blue',
         fill: true,
@@ -1107,7 +1166,7 @@ function cpuChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
     ],
     figure: {
       value: formatPct(live?.cpuPct ?? lastValue(values)),
-      ...(threads ? { rest: `of ${plural(threads, 'thread')}` } : {}),
+      ...(threads ? { rest: w.ofThreads(threads) } : {}),
       ...(t ? { tone: t } : {}),
     },
     ...(stats.length ? { stats } : {}),
@@ -1120,32 +1179,33 @@ function memoryChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
   const live = c.offline ? null : c.d.live;
   const total = c.d.server.memory?.totalGb ?? null;
   const values = vals(c, 'mem_pct');
+  const w = c.w.charts;
   const foot: NonNullable<ChartPanel['foot']> = [];
   const running = c.guests.filter(
     (g) => (g.state === 'running' || g.state === 'unhealthy') && g.memoryUsedMb,
   );
   if (running.length)
     foot.push({
-      label: 'Guests',
+      label: w.guests,
       value: sizeWords(running.reduce((a, g) => a + (g.memoryUsedMb ?? 0), 0) / 1024),
     });
-  else if (live?.memUsedGb != null) foot.push({ label: 'Used', value: sizeWords(live.memUsedGb) });
+  else if (live?.memUsedGb != null) foot.push({ label: w.used, value: sizeWords(live.memUsedGb) });
   if (live?.zfsArcGb) foot.push({ label: 'ZFS ARC', value: sizeWords(live.zfsArcGb) });
-  else if (live?.memCacheGb) foot.push({ label: 'Cache', value: sizeWords(live.memCacheGb) });
-  if (live?.memFreeGb != null) foot.push({ label: 'Free', value: sizeWords(live.memFreeGb) });
+  else if (live?.memCacheGb) foot.push({ label: w.cache, value: sizeWords(live.memCacheGb) });
+  if (live?.memFreeGb != null) foot.push({ label: w.free, value: sizeWords(live.memFreeGb) });
   if (live?.swapTotalGb)
     foot.push({
-      label: 'Swap',
+      label: w.swap,
       value: sizePair(live.swapUsedGb ?? 0, live.swapTotalGb, '/'),
       ...((live.swapUsedGb ?? 0) / live.swapTotalGb >= 0.5 ? { tone: 'warn' as const } : {}),
     });
   const t = memTone(live?.memPct);
   const stats = avgPeak(c, 'mem_pct', '%');
   return {
-    ...chartBase(c, 'memory', 'Memory', span),
+    ...chartBase(c, 'memory', w.memory, span),
     series: [
       line(c, 'mem_pct', {
-        label: 'Memory',
+        label: w.memory,
         unit: '%',
         color: 'violet',
         fill: true,
@@ -1155,9 +1215,9 @@ function memoryChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
     figure: {
       value: formatPct(live?.memPct ?? lastValue(values)),
       ...(live?.memUsedGb != null && total != null
-        ? { rest: `${sizePair(live.memUsedGb, total)}` }
+        ? { rest: sizePair(live.memUsedGb, total, w.of) }
         : total != null
-          ? { rest: `of ${sizeWords(total)}` }
+          ? { rest: interpolate(w.ofSize, { size: sizeWords(total) }) }
           : {}),
       ...(t ? { tone: t } : {}),
     },
@@ -1218,7 +1278,7 @@ function tempChart(
         ...(st ? { tone: st } : {}),
       };
     }),
-    line: { value: limit, label: `${formatTemp(limit)} limit` },
+    line: { value: limit, label: interpolate(c.w.charts.limitLine, { temp: formatTemp(limit) }) },
     axis: { min: scale.min, max: scale.max, unit: '°' },
   };
 }
@@ -1234,7 +1294,8 @@ function diskTempChart(c: Ctx): ChartPanel | null {
       (s) => DISK_SENSOR_GROUPS.has(s.group ?? '') || /^(hdd|ssd|nvme|disk)/i.test(`${s.id} ${s.label}`),
     ),
   );
-  const chart = tempChart(c, sensors, 'Disk temperatures', 'disk_temperatures');
+  const w = c.w.charts;
+  const chart = tempChart(c, sensors, w.diskTemperatures, 'disk_temperatures');
   if (!chart || !u) return chart;
   const disks = [...u.array.disks, ...u.pools.flatMap((p) => p.disks)].filter(
     (d) => d.device && d.status !== 'empty',
@@ -1250,16 +1311,16 @@ function diskTempChart(c: Ctx): ChartPanel | null {
       ? {
           figure: {
             value: formatTemp(hot.tempC),
-            rest: `hottest, ${unraidDiskName(hot.name).toLowerCase()}`,
+            rest: interpolate(w.hottestDisk, { disk: unraidDiskName(hot.name).toLowerCase() }),
             ...(t ? { tone: t } : {}),
           },
         }
       : {}),
     stats: [
-      [{ text: 'Limit ' }, { text: formatTemp(limit), strong: true }],
-      ...(spun ? [[{ text: `${plural(spun, 'disk')} spun down` }]] : []),
+      [{ text: `${w.limit} ` }, { text: formatTemp(limit), strong: true }],
+      ...(spun ? [[{ text: w.spunDown(spun) }]] : []),
     ],
-    line: { value: limit, label: `${formatTemp(limit)} limit` },
+    line: { value: limit, label: interpolate(w.limitLine, { temp: formatTemp(limit) }) },
   };
 }
 
@@ -1274,27 +1335,29 @@ function networkChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
   const step = c.series?.stepSeconds ?? 0;
   const inGb = movedGb(rx, step);
   const outGb = movedGb(tx, step);
+  const w = c.w.charts;
+  const when = peakWhenIn(c, st);
   const stats: ThingLine[] = [];
   if (st.peak != null)
     stats.push([
-      { text: 'Peak in ' },
+      { text: `${w.peakIn} ` },
       { text: rateWords(st.peak), strong: true },
-      ...(st.peakWhen ? [{ text: ` ${st.peakWhen}` }] : []),
+      ...(when ? [{ text: ` ${when}` }] : []),
     ]);
   if (inGb != null || outGb != null)
     stats.push([
-      { text: 'Total ' },
+      { text: `${w.total} ` },
       { text: sizeWords(inGb ?? 0), strong: true },
-      { text: ' in · ' },
+      { text: ` ${w.inWord} · ` },
       { text: sizeWords(outGb ?? 0), strong: true },
-      { text: ' out' },
+      { text: ` ${w.outWord}` },
     ]);
   return {
-    ...chartBase(c, 'network', 'Network', span),
+    ...chartBase(c, 'network', w.network, span),
     series: [
-      line(c, 'net_rx_mbps', { label: 'In', unit: 'Mb/s', color: 'green', latest: rateWords(lastValue(rx)) }),
+      line(c, 'net_rx_mbps', { label: w.in, unit: 'Mb/s', color: 'green', latest: rateWords(lastValue(rx)) }),
       line(c, 'net_tx_mbps', {
-        label: 'Out',
+        label: w.out,
         unit: 'Mb/s',
         color: 'orange',
         latest: rateWords(lastValue(tx)),
@@ -1311,36 +1374,39 @@ function diskChart(c: Ctx, span: 1 | 2 | 3): ChartPanel {
   const opts = (k: string) => ({ timeZone: c.tz, now: c.now, summary: c.series?.summary?.[k] ?? null });
   const r = seriesStats(rd, c.series?.timestamps, opts('disk_read_mbs'));
   const w = seriesStats(wr, c.series?.timestamps, opts('disk_write_mbs'));
-  const top = (w.peak ?? -1) > (r.peak ?? -1) ? { ...w, word: 'write' } : { ...r, word: 'read' };
+  const words = c.w.charts;
+  const top =
+    (w.peak ?? -1) > (r.peak ?? -1) ? { ...w, word: words.peakWrite } : { ...r, word: words.peakRead };
+  const when = peakWhenIn(c, top);
   const step = c.series?.stepSeconds ?? 0;
   const read = movedGb(rd, step, false);
   const written = movedGb(wr, step, false);
   const stats: ThingLine[] = [];
   if (top.peak != null)
     stats.push([
-      { text: `Peak ${top.word} ` },
+      { text: `${top.word} ` },
       { text: diskRateWords(top.peak), strong: true },
-      ...(top.peakWhen ? [{ text: ` ${top.peakWhen}` }] : []),
+      ...(when ? [{ text: ` ${when}` }] : []),
     ]);
   if (read != null || written != null)
     stats.push([
-      { text: 'Total ' },
+      { text: `${words.total} ` },
       { text: sizeWords(read ?? 0), strong: true },
-      { text: ' read · ' },
+      { text: ` ${words.readWord} · ` },
       { text: sizeWords(written ?? 0), strong: true },
-      { text: ' written' },
+      { text: ` ${words.writtenWord}` },
     ]);
   return {
-    ...chartBase(c, 'disk_io', 'Disk I/O', span),
+    ...chartBase(c, 'disk_io', words.diskIo, span),
     series: [
       line(c, 'disk_read_mbs', {
-        label: 'Read',
+        label: words.read,
         unit: 'MB/s',
         color: 'blue',
         latest: diskRateWords(lastValue(rd)),
       }),
       line(c, 'disk_write_mbs', {
-        label: 'Write',
+        label: words.write,
         unit: 'MB/s',
         color: 'violet',
         latest: diskRateWords(lastValue(wr)),
@@ -1377,26 +1443,32 @@ function noticeIcon(
 
 function fixLink(c: Ctx, f: HintFix | UnraidHintFix): ThingPageLink | undefined {
   const name = (id: string) => c.guests.find((g) => g.id === id)?.name ?? '';
+  const see = c.w.see;
   switch (f.kind) {
-    case 'tab':
+    case 'tab': {
       // A fix that only opens a tab says where it goes in the page's words (“See storage”), not “Open Storage”.
-      return tabLink(c, f.tab, /^Open /.test(f.label) ? undefined : f.label);
+      const opens =
+        /^Open /.test(f.label) ||
+        ((SERVER_TABS as readonly string[]).includes(f.tab) &&
+          f.label === hintOpenTabLabel(f.tab as ServerTab, c.locale));
+      return tabLink(c, f.tab, opens ? undefined : f.label);
+    }
     case 'guest':
       return {
         kind: 'href',
-        label: label(f.label, 'gtab' in f && f.gtab === 'snapshots' ? 'See snapshots' : 'See it'),
+        label: label(f.label, 'gtab' in f && f.gtab === 'snapshots' ? see.snapshots : see.it),
         href: serverGuestHref(c.serverId, f.guestId, 'gtab' in f ? f.gtab : undefined),
       };
     case 'backup':
       return {
         kind: 'href',
-        label: label(f.label, 'Back it up'),
+        label: label(f.label, see.backItUp),
         href: serverGuestHref(c.serverId, f.guestId, 'backups'),
       };
     case 'update_container':
       return {
         kind: 'href',
-        label: label(`Update ${name(f.guestId)}`, 'Update it'),
+        label: label(interpolate(see.updateName, { name: name(f.guestId) }), see.updateIt),
         href: serverGuestHref(c.serverId, f.guestId),
       };
     case 'start_array':
@@ -1407,7 +1479,7 @@ function fixLink(c: Ctx, f: HintFix | UnraidHintFix): ThingPageLink | undefined 
     case 'archive':
       return tabLink(c, 'system');
     case 'link':
-      return { kind: 'url', label: label(f.label, 'See it'), url: f.href };
+      return { kind: 'url', label: label(f.label, see.it), url: f.href };
   }
 }
 
@@ -1415,9 +1487,10 @@ function hintLink(c: Ctx, h: HostHint): ThingPageLink | undefined {
   // Waiting updates install from the System tab, or the phone's Updates screen (SWU-13); Unraid has its own (SWU-01).
   // On the phone the restart hint opens Updates too, where Restart now is (AP-2887); the web's opens System as before.
   if (c.updates && c.kind !== 'unraid') {
-    if (c.updates === 'web' && isUpdatesHint(h)) return tabLink(c, 'system', UPDATES_WORDS.wayOut.web);
+    const wayOut = updatesWords(c.locale).wayOut;
+    if (c.updates === 'web' && isUpdatesHint(h)) return tabLink(c, 'system', wayOut.web);
     if (c.updates === 'phone' && (isUpdatesHint(h) || isRebootHint(h)))
-      return { kind: 'href', label: UPDATES_WORDS.wayOut.phone, href: serverTabHref(c.serverId, 'updates') };
+      return { kind: 'href', label: wayOut.phone, href: serverTabHref(c.serverId, 'updates') };
   }
   const fixes: (HintFix | UnraidHintFix)[] =
     c.kind === 'unraid'
@@ -1426,14 +1499,15 @@ function hintLink(c: Ctx, h: HostHint): ThingPageLink | undefined {
           updateUrl: unraidPageUrl(c.d, 'Tools/Update'),
           canManage: false,
         })
-      : hintFixes(h, c.guests);
+      : hintFixes(h, c.guests, c.locale);
   // Several machines: the tab that lists them all, where one machine's button would name (and open) the first only.
   const machines = fixes.filter((f) => f.kind === 'guest' || f.kind === 'backup');
   if (machines.length > 1) {
     const backups =
       h.kind === 'incus.no_snapshots' ||
       machines.some((f) => f.kind === 'backup' || ('gtab' in f && f.gtab === 'backups'));
-    const all = (backups ? tabLink(c, 'backups', 'See them') : undefined) ?? tabLink(c, 'guests', 'See them');
+    const them = c.w.see.them;
+    const all = (backups ? tabLink(c, 'backups', them) : undefined) ?? tabLink(c, 'guests', them);
     if (all) return all;
   }
   for (const f of fixes) {
@@ -1451,7 +1525,10 @@ function hintLink(c: Ctx, h: HostHint): ThingPageLink | undefined {
     const gtab = /backup/.test(h.kind) ? 'backups' : /snapshot/.test(h.kind) ? 'snapshots' : undefined;
     return {
       kind: 'href',
-      label: label(gtab === 'backups' ? `Back up ${g.name}` : `See ${g.name}`, 'See it'),
+      label: label(
+        interpolate(gtab === 'backups' ? c.w.see.backUpName : c.w.see.name, { name: g.name }),
+        c.w.see.it,
+      ),
       href: serverGuestHref(c.serverId, g.id, gtab),
     };
   }
@@ -1525,7 +1602,7 @@ function lookPanel(c: Ctx, bannerAlert: string | null): Extract<Panel, { kind: '
         id: 'unraid-notes',
         tone: 'info',
         icon: 'info',
-        title: `${plural(rest.length, 'note')} from Unraid`,
+        title: c.w.look.unraidNotes(rest.length),
         detail: cut(notificationTitle(newest), 200),
         ...(link ? { link } : {}),
         nature: 'fyi',
@@ -1538,9 +1615,9 @@ function lookPanel(c: Ctx, bannerAlert: string | null): Extract<Panel, { kind: '
     kind: 'notices',
     id: 'look',
     place: 'side',
-    title: 'Worth a look',
+    title: c.w.look.title,
     items: ranked.map((x) => x.n).slice(0, 30),
-    empty: 'Nothing needs a look.',
+    empty: c.w.look.empty,
   };
 }
 
@@ -1550,16 +1627,17 @@ function lookPanel(c: Ctx, bannerAlert: string | null): Extract<Panel, { kind: '
  * What a row says under its name: app or machine where a server has both, a Docker app's group, This Whombat, a change
  * waiting for a restart. Never a number or a type code (“CT 131”): a machine is its name.
  */
-function guestNoteWords(g: HostGuest, mixed: boolean): string {
+function guestNoteWords(c: Ctx, g: HostGuest, mixed: boolean): string {
+  const w = c.w.busiest;
   const docker = g.platform === 'docker';
-  const kindWords = mixed ? (docker ? 'App' : 'Machine') : docker ? (g.tags?.[0] ?? '') : '';
+  const kindWords = mixed ? (docker ? w.app : w.machine) : docker ? (g.tags?.[0] ?? '') : '';
   const pending =
     g.pendingChanges && g.pendingChanges > 0
       ? g.platform === 'libvirt'
-        ? `${plural(g.pendingChanges, 'change')} at the next start`
-        : `restart to apply ${plural(g.pendingChanges, 'change')}`
+        ? w.atNextStart(g.pendingChanges)
+        : w.restartToApply(g.pendingChanges)
       : null;
-  return cut([kindWords, g.self ? 'This Whombat' : null, pending].filter(Boolean).join(' · '), 80);
+  return cut([kindWords, g.self ? w.thisWhombat : null, pending].filter(Boolean).join(' · '), 80);
 }
 
 /**
@@ -1572,26 +1650,28 @@ function guestsPanel(c: Ctx): Panel | null {
   if (!list.length) return null;
   const rows = dashboardGuests(c.d);
   const running = list.filter(on).length;
-  const word = guestsWord(c.kind).toLowerCase();
+  const w = c.w.busiest;
+  const apps = c.kind === 'docker' || c.kind === 'unraid';
+  const word = guestsWord(c.kind, c.locale).toLowerCase();
   const mixed = list.some((g) => g.platform === 'docker') && list.some((g) => g.platform !== 'docker');
-  const link = tabLink(c, 'guests', 'See all');
+  const link = tabLink(c, 'guests', c.w.see.all);
   return {
     kind: 'table',
     id: 'guests',
     place: 'main',
     // A QEMU/KVM server's few machines are all listed, running first.
-    title: c.kind === 'libvirt' ? 'Machines' : `Busiest ${word}`,
-    meta: `${running} of ${list.length} running`,
+    title: c.kind === 'libvirt' ? w.machines : interpolate(w.title, { what: word }),
+    meta: interpolate(w.running, { running, total: list.length }),
     ...(link ? { link } : {}),
     columns: [
-      { key: 'guest', label: 'Name' },
-      { key: 'cpu', label: 'CPU', numeric: true },
-      { key: 'memory', label: 'Memory', numeric: true },
-      { key: 'trend', label: RANGE_COLUMN[c.range] },
+      { key: 'guest', label: w.name },
+      { key: 'cpu', label: w.cpu, numeric: true },
+      { key: 'memory', label: w.memory, numeric: true },
+      { key: 'trend', label: w.range[c.range] },
     ],
     rows: rows.map((g) => {
       const live = on(g);
-      const note = guestNoteWords(g, mixed);
+      const note = guestNoteWords(c, g, mixed);
       const history = c.guestSeries[g.id]?.series.cpu_pct;
       const cells: Record<string, ThingPageCell> = {
         guest: {
@@ -1622,39 +1702,32 @@ function guestsPanel(c: Ctx): Panel | null {
       };
       return { id: g.id, cells };
     }),
-    empty: `None of its ${plural(list.length, word.replace(/s$/, ''))} is running.`,
+    empty: (apps ? w.noneApps : w.noneMachines)(list.length),
   };
 }
 
 /* Unraid: the array, pools and VMs ----------------------------------------------------------------------------- */
 
 function arrayPanel(c: Ctx, u: HostUnraidDetail): Panel {
+  const w = c.w.array;
   const a = u.array;
-  const p = parityView(a, c.now);
+  const p = parityView(a, c.now, c.locale);
   const items: ThingPageBar[] = [];
   for (const d of a.disks) {
     if (d.slot !== 'parity' && d.slot !== 'data') continue;
     if (d.status === 'empty' && !d.device) continue;
     const name = unraidDiskName(d.name);
-    const temp = d.spunDown ? 'spun down' : d.tempC != null ? formatTemp(d.tempC) : null;
+    const temp = d.spunDown ? w.spunDown : d.tempC != null ? formatTemp(d.tempC) : null;
     const note = cut([d.model, temp].filter(Boolean).join(' · '), 80);
     const broken = d.status !== 'ok';
-    const statusWords: Record<string, string> = {
-      disabled: 'disabled',
-      emulated: 'emulated',
-      missing: 'missing',
-      new: 'new',
-      invalid: 'invalid',
-      wrong: 'wrong disk',
-      empty: 'no disk',
-    };
+    const statusWords: Record<string, string> = w.status;
     if (d.slot === 'parity') {
       items.push({
         id: d.name,
         label: name,
         mono: true,
         ...(note ? { note } : {}),
-        value: broken ? (statusWords[d.status] ?? d.status) : 'valid',
+        value: broken ? (statusWords[d.status] ?? d.status) : w.valid,
         pct: null,
         ...(broken ? { tone: 'bad' as const } : {}),
       });
@@ -1666,16 +1739,16 @@ function arrayPanel(c: Ctx, u: HostUnraidDetail): Panel {
     const level = tone(hostTone(diskUsedLevel(pct)));
     const f = forecastOf(c, `fs:/mnt/${d.name}`, null);
     const sub = broken
-      ? cut(`${(statusWords[d.status] ?? d.status).replace(/^./, (x) => x.toUpperCase())}: open Array`, 120)
+      ? cut(interpolate(w.broken, { status: capital(statusWords[d.status] ?? d.status) }), 120)
       : d.errors
-        ? `${plural(d.errors, 'read error')}`
-        : (f.words ?? (level && pct != null ? `${formatPct(pct)} full` : undefined));
+        ? w.readErrors(d.errors)
+        : (f.words ?? (level && pct != null ? interpolate(w.full, { pct: formatPct(pct) }) : undefined));
     items.push({
       id: d.name,
       label: name,
       mono: true,
       ...(note ? { note } : {}),
-      value: sizePair(used, size),
+      value: sizePair(used, size, c.w.charts.of),
       pct: pct == null ? null : clamp01(pct / 100),
       ...(broken ? { tone: 'bad' as const } : level ? { tone: level } : {}),
       ...(sub ? { sub } : {}),
@@ -1693,22 +1766,28 @@ function arrayPanel(c: Ctx, u: HostUnraidDetail): Panel {
     p.running || p.paused
       ? `${p.title} · ${p.detail}`
       : parityState(a) === 'ok' && last
-        ? `Parity checked ${formatDayMonth(Date.parse(last.at), c.tz)} · ${last.errors ? plural(last.errors, 'error') : 'no errors'}`
+        ? interpolate(w.parityChecked, {
+            date: c.locale
+              ? dayMonth(Date.parse(last.at), c.tz, c.locale)
+              : formatDayMonth(Date.parse(last.at), c.tz),
+            errors: last.errors ? w.errors(last.errors) : w.noErrors,
+          })
         : p.title;
-  const link = tabLink(c, 'array', 'See disks');
+  const link = tabLink(c, 'array', c.w.see.array);
   return {
     kind: 'bars',
     id: 'array',
     place: 'main',
-    title: 'Array',
+    title: w.title,
     meta: cut(meta, 120),
     ...(link ? { link } : {}),
     items: items.slice(0, 40),
-    empty: 'No disks in the array.',
+    empty: w.empty,
   };
 }
 
 function vmsPanel(c: Ctx): Panel | null {
+  const w = c.w.vms;
   const u = c.d.unraid;
   const vms = vmRows(c.kept.filter((g) => g.platform === 'libvirt'));
   if (!vms.length && !u?.vms.enabled) return null;
@@ -1718,20 +1797,20 @@ function vmsPanel(c: Ctx): Panel | null {
     return {
       id: g.id,
       title: cut(g.name, 160),
-      detail: cut([g.image || 'VM', mem].filter(Boolean).join(' · '), 300),
+      detail: cut([g.image || w.vm, mem].filter(Boolean).join(' · '), 300),
       tone: g.state === 'unhealthy' ? 'bad' : g.state === 'paused' ? 'warn' : live ? 'ok' : 'info',
-      right: live ? formatPct(g.cpuPct) : g.state === 'paused' ? 'Paused' : 'Stopped',
+      right: live ? formatPct(g.cpuPct) : g.state === 'paused' ? w.paused : w.stopped,
     };
   });
-  const link = tabLink(c, 'guests', 'See all');
+  const link = tabLink(c, 'guests', c.w.see.all);
   return {
     kind: 'list',
     id: 'vms',
     place: 'side',
-    title: 'Virtual machines',
+    title: w.title,
     ...(link ? { link } : {}),
     items,
-    empty: 'No virtual machines yet.',
+    empty: w.empty,
   };
 }
 
@@ -1742,13 +1821,14 @@ function forecastOf(c: Ctx, entity: string, fullInDays: number | null | undefine
   const v = (c.d.health?.volumes ?? []).find((x) => x.entity === entity);
   const k = `vol_pct:${entity}`;
   const src = c.volumes?.series[k]?.some((x) => x != null) ? c.volumes : c.series;
-  return volumeForecast({
+  const f = volumeForecast({
     values: src?.series[k] ?? [],
     timestamps: src?.timestamps,
     fullInDays: fullInDays ?? v?.fullInDays ?? null,
     now: c.now,
     timeZone: c.tz,
   });
+  return c.locale ? { ...f, words: forecastWords(f, c.tz, c.locale) } : f;
 }
 
 function forecastBar(
@@ -1769,7 +1849,6 @@ const STORAGE_TYPE_WORDS: Record<string, string> = {
   lvm: 'LVM',
   zfspool: 'ZFS',
   zfs: 'ZFS over iSCSI',
-  dir: 'folder',
   nfs: 'NFS',
   cifs: 'SMB',
   pbs: 'Proxmox Backup Server',
@@ -1793,6 +1872,8 @@ function storagePanel(c: Ctx, inMain: boolean): Panel | null {
   if (c.kind === 'unraid') return null;
   const items: ThingPageBar[] = [];
   const totals = { used: 0, total: 0 };
+  const w = c.w.storage;
+  const of = c.w.charts.of;
   const proxmox = c.d.proxmox?.storages.filter((s) => s.capacityGb > 0) ?? [];
   if (c.kind === 'proxmox' && proxmox.length) {
     for (const s of proxmox) {
@@ -1806,10 +1887,12 @@ function storagePanel(c: Ctx, inMain: boolean): Panel | null {
         label: cut(s.id, 80),
         mono: true,
         note: cut(
-          [STORAGE_TYPE_WORDS[s.type] ?? s.type, backups ? 'backups' : null].filter(Boolean).join(' · '),
+          [s.type === 'dir' ? w.folder : (STORAGE_TYPE_WORDS[s.type] ?? s.type), backups ? w.backups : null]
+            .filter(Boolean)
+            .join(' · '),
           80,
         ),
-        value: sizePair(s.usedGb, s.capacityGb),
+        value: sizePair(s.usedGb, s.capacityGb, of),
         pct: clamp01(pct / 100),
         ...(level ? { tone: level } : {}),
         ...forecastBar(c, `storage:${s.id}`),
@@ -1835,7 +1918,7 @@ function storagePanel(c: Ctx, inMain: boolean): Panel | null {
         label: cut(name, 80),
         mono: true,
         ...(note ? { note: cut(note, 80) } : {}),
-        value: sizePair(v.usedGb, v.totalGb),
+        value: sizePair(v.usedGb, v.totalGb, of),
         pct: clamp01(v.usedPct / 100),
         ...(broken ? { tone: 'bad' as const } : level ? { tone: level } : {}),
         ...forecastBar(c, v.entity, v.fullInDays),
@@ -1843,15 +1926,20 @@ function storagePanel(c: Ctx, inMain: boolean): Panel | null {
     }
   }
   if (!items.length) return null;
-  const pair = totals.total ? sizePair(totals.used, totals.total) : null;
-  const link = tabLink(c, 'storage', 'See storage');
+  const pair = totals.total ? sizePair(totals.used, totals.total, of) : null;
+  const link = tabLink(c, 'storage', c.w.see.storage);
   return {
     kind: 'bars',
     id: 'storage',
     place: inMain ? 'main' : 'bottom',
-    title: 'Storage',
+    title: w.title,
     ...(pair
-      ? { meta: c.kind === 'proxmox' ? `${plural(items.length, 'storage')} · ${pair}` : `${pair} used` }
+      ? {
+          meta:
+            c.kind === 'proxmox'
+              ? `${w.count(items.length)} · ${pair}`
+              : interpolate(w.used, { amount: pair }),
+        }
       : {}),
     ...(link ? { link } : {}),
     items,
@@ -1861,8 +1949,10 @@ function storagePanel(c: Ctx, inMain: boolean): Panel | null {
 
 /** Pools beside the rest: Unraid's, Incus's, libvirt's storage pools (or Unraid's VM folders). */
 function poolsPanel(c: Ctx): Panel | null {
+  const w = c.w.pools;
+  const of = c.w.charts.of;
   const items: ThingPageBar[] = [];
-  let title = 'Pools';
+  let title = w.title;
   let link: ThingPageLink | undefined;
   if (c.kind === 'unraid' && c.d.unraid) {
     for (const p of c.d.unraid.pools) {
@@ -1876,13 +1966,13 @@ function poolsPanel(c: Ctx): Panel | null {
         label: cut(p.name, 80),
         mono: true,
         note: cut(poolNote(p), 80),
-        value: sizePair(used, size),
+        value: sizePair(used, size, of),
         pct: pct == null ? null : clamp01(pct / 100),
         ...(level ? { tone: level } : {}),
         ...forecastBar(c, `fs:/mnt/${p.name}`),
       });
     }
-    link = tabLink(c, 'array', 'See disks');
+    link = tabLink(c, 'array', c.w.see.array);
   } else if (c.kind === 'incus' && c.d.incus) {
     for (const p of c.d.incus.pools) {
       const pct = p.usedBytes != null && p.totalBytes ? (p.usedBytes / p.totalBytes) * 100 : null;
@@ -1893,10 +1983,10 @@ function poolsPanel(c: Ctx): Panel | null {
         id: `pool-${p.name}`,
         label: cut(p.name, 80),
         mono: true,
-        note: cut(`${p.driver} · ${plural(p.volumes, 'volume')}`, 80),
+        note: cut(`${p.driver} · ${w.volumes(p.volumes)}`, 80),
         value:
           p.usedBytes != null && p.totalBytes != null
-            ? sizePair(p.usedBytes / 1e9, p.totalBytes / 1e9)
+            ? sizePair(p.usedBytes / 1e9, p.totalBytes / 1e9, of)
             : DASH,
         pct: pct == null ? null : clamp01(pct / 100),
         ...(bad
@@ -1907,9 +1997,9 @@ function poolsPanel(c: Ctx): Panel | null {
         ...(bad ? {} : forecastBar(c, `pool:${p.name}`)),
       });
     }
-    link = tabLink(c, 'storage', 'See storage');
+    link = tabLink(c, 'storage', c.w.see.storage);
   } else if (c.kind === 'libvirt' && c.d.libvirt) {
-    title = 'Storage pools';
+    title = w.storagePools;
     for (const p of c.d.libvirt.pools) {
       const pct = p.totalBytes > 0 ? (p.usedBytes / p.totalBytes) * 100 : null;
       const level: ThingTone | undefined =
@@ -1918,11 +2008,11 @@ function poolsPanel(c: Ctx): Panel | null {
         id: `pool-${p.name}`,
         label: cut(p.name, 80),
         mono: true,
-        note: cut(`${p.type} · ${plural(p.volumes, 'volume')}`, 80),
-        ...(p.totalBytes > 0 ? { value: sizePair(p.usedBytes / 1e9, p.totalBytes / 1e9) } : {}),
+        note: cut(`${p.type} · ${w.volumes(p.volumes)}`, 80),
+        ...(p.totalBytes > 0 ? { value: sizePair(p.usedBytes / 1e9, p.totalBytes / 1e9, of) } : {}),
         pct: p.active && pct != null ? clamp01(pct / 100) : null,
         ...(!p.active
-          ? { tone: 'warn' as const, sub: 'Not active', subTone: 'warn' as const }
+          ? { tone: 'warn' as const, sub: w.notActive, subTone: 'warn' as const }
           : level
             ? { tone: level }
             : {}),
@@ -1930,13 +2020,13 @@ function poolsPanel(c: Ctx): Panel | null {
       });
     }
     if (!c.d.libvirt.pools.length && c.d.libvirt.folders) {
-      title = 'VM folders';
+      title = w.vmFolders;
       const f = c.d.libvirt.folders;
       if (f.domains)
-        items.push({ id: 'folder-domains', label: 'VM disks', note: cut(f.domains, 80), pct: null });
-      if (f.isos) items.push({ id: 'folder-isos', label: 'ISO images', note: cut(f.isos, 80), pct: null });
+        items.push({ id: 'folder-domains', label: w.vmDisks, note: cut(f.domains, 80), pct: null });
+      if (f.isos) items.push({ id: 'folder-isos', label: w.isoImages, note: cut(f.isos, 80), pct: null });
     }
-    link = tabLink(c, 'storage', 'See storage');
+    link = tabLink(c, 'storage', c.w.see.storage);
   }
   if (!items.length) return null;
   return {
@@ -1952,8 +2042,9 @@ function poolsPanel(c: Ctx): Panel | null {
 /* Proxmox: backups and the cluster ---------------------------------------------------------------------------- */
 
 function backupsPanel(c: Ctx): Panel | null {
+  const w = c.w.backups;
   const b = c.d.proxmox?.backups;
-  const link = tabLink(c, 'backups', 'See backups');
+  const link = tabLink(c, 'backups', c.w.see.backups);
   const items: ThingPageItem[] = [];
   const job = b?.lastJob;
   if (job) {
@@ -1961,12 +2052,12 @@ function backupsPanel(c: Ctx): Panel | null {
     const failed = job.result !== 'ok' && job.guestsOk === 0;
     items.push({
       id: 'last-job',
-      title: cut(`${job.guestsOk} of ${plural(job.guestsTotal, 'machine')} backed up`, 160),
+      title: cut(w.backedUp(job.guestsTotal, { ok: job.guestsOk }), 160),
       detail: cut(
         [
-          formatRelativeDay(Date.parse(job.at), c.now, c.tz),
+          formatRelativeDay(Date.parse(job.at), c.now, c.tz, c.locale),
           `${dashboardNumber(job.durationMin)}${NBSP}min`,
-          job.warnings ? plural(job.warnings, 'warning') : null,
+          job.warnings ? w.warnings(job.warnings) : null,
         ]
           .filter(Boolean)
           .join(' · '),
@@ -1975,13 +2066,22 @@ function backupsPanel(c: Ctx): Panel | null {
       at: job.at,
       tone: failed ? 'bad' : all && !job.warnings && job.result === 'ok' ? 'ok' : 'warn',
       icon: 'backup',
-      ...(b?.nextRun ? { right: cut(`next ${formatIn((Date.parse(b.nextRun) - c.now) / 1000)}`, 40) } : {}),
+      ...(b?.nextRun
+        ? {
+            right: cut(
+              interpolate(w.next, { when: formatIn((Date.parse(b.nextRun) - c.now) / 1000, c.locale) }),
+              40,
+            ),
+          }
+        : {}),
     });
   } else if (b?.nextRun) {
     items.push({
       id: 'next-run',
-      title: 'No backup has run yet',
-      detail: `The first one runs ${formatRelativeDay(Date.parse(b.nextRun), c.now, c.tz)}`,
+      title: w.noneYet,
+      detail: interpolate(w.firstRuns, {
+        when: formatRelativeDay(Date.parse(b.nextRun), c.now, c.tz, c.locale),
+      }),
       tone: 'info',
       icon: 'backup',
     });
@@ -1990,16 +2090,17 @@ function backupsPanel(c: Ctx): Panel | null {
     kind: 'list',
     id: 'backups',
     place: 'side',
-    title: 'Backups',
+    title: w.title,
     ...(link ? { link } : {}),
     items,
-    empty: 'No backup plan covers this server yet.',
+    empty: w.empty,
   };
 }
 
 function clusterPanel(c: Ctx): Panel | null {
   const cl = c.d.proxmox?.cluster;
   if (!cl || cl.nodes.length < 2) return null;
+  const w = c.w.cluster;
   const items: ThingPageItem[] = cl.nodes.map((n) => {
     const online = n.status === 'online';
     return {
@@ -2008,27 +2109,31 @@ function clusterPanel(c: Ctx): Panel | null {
       detail: cut(
         online
           ? [
-              n.cpuPct != null ? `CPU ${formatPct(n.cpuPct)}` : null,
-              n.memPct != null ? `memory ${formatPct(n.memPct)}` : null,
-              plural(n.vms, 'VM'),
-              plural(n.containers, 'container'),
+              n.cpuPct != null ? interpolate(w.cpu, { pct: formatPct(n.cpuPct) }) : null,
+              n.memPct != null ? interpolate(w.memory, { pct: formatPct(n.memPct) }) : null,
+              w.vms(n.vms),
+              w.containers(n.containers),
             ]
               .filter(Boolean)
               .join(' · ')
-          : 'Offline',
+          : w.offline,
         300,
       ),
       tone: online ? 'ok' : 'bad',
-      ...(n.thisNode ? { right: 'This one' } : n.agent === 'not_enrolled' ? { right: 'Not added' } : {}),
+      ...(n.thisNode ? { right: w.thisOne } : n.agent === 'not_enrolled' ? { right: w.notAdded } : {}),
     };
   });
   return {
     kind: 'list',
     id: 'cluster',
     place: 'side',
-    title: 'Cluster',
+    title: w.title,
     meta: cut(
-      `${cl.name} · ${cl.quorate ? `quorate, ${cl.votes.have} of ${cl.votes.expected} votes` : 'not quorate'}`,
+      `${cl.name} · ${
+        cl.quorate
+          ? interpolate(w.quorate, { have: cl.votes.have, expected: cl.votes.expected })
+          : w.notQuorate
+      }`,
       120,
     ),
     items,
@@ -2042,16 +2147,16 @@ function kindFactsPanel(c: Ctx): Panel | null {
   let facts: { label: string; value: string }[];
   if (c.kind === 'unraid' && c.d.unraid) {
     title = 'Unraid';
-    facts = unraidFacts(c.d.unraid);
+    facts = unraidFacts(c.d.unraid, c.locale);
   } else if (c.kind === 'incus' && c.d.incus) {
     title = 'Incus';
-    facts = incusFacts(c.d.incus);
+    facts = incusFacts(c.d.incus, c.locale);
   } else if (c.kind === 'libvirt' && c.d.libvirt) {
     title = LIBVIRT_KIND_WORD;
-    facts = libvirtFacts(c.d.libvirt);
+    facts = libvirtFacts(c.d.libvirt, c.locale);
   } else if (c.kind === 'macos' && c.d.macos) {
-    title = 'This Mac';
-    facts = macFacts(c.d.macos);
+    title = c.w.thisMac;
+    facts = macFacts(c.d.macos, c.locale);
   } else return null;
   return {
     kind: 'facts',

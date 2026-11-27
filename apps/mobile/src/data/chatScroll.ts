@@ -16,6 +16,8 @@
  * above it, the list scrolls just enough that the field and its buttons show (`revealBy`).
  */
 
+import { mobileTranslator } from '../i18n/translate';
+
 /** What the list does after its content or size changed. */
 export type FollowAction =
   /** Scroll to the newest message (and stay there). */
@@ -85,7 +87,10 @@ export const ANCHOR_MAX_PAGES = 10;
 export const ANCHOR_FLASH_MS = 2000;
 
 /** What the screen says when the message isn't there (deleted, or too far back to load on the phone). */
-export const ANCHOR_MISSING_TEXT = 'That message isn’t here any more, or it’s too far back.';
+export function anchorMissingText(locale?: string): string {
+  return mobileTranslator(locale).t('data.chatScroll.anchorMissing');
+}
+export const ANCHOR_MISSING_TEXT = anchorMissingText();
 
 export type AnchorStep =
   /** It is the list's `index`-th item (or inside it, a run's folded line): scroll there and highlight `id`. */
@@ -118,11 +123,15 @@ export function anchorStep(input: {
 }
 
 /** The “New messages ↓” pill's words and what TalkBack hears. */
-export const NEW_MESSAGES_PILL = {
-  label: 'New messages ↓',
-  spoken: 'New messages',
-  hint: 'Scrolls to the newest message',
-} as const;
+export function newMessagesPill(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    label: t('data.chatScroll.pillLabel'),
+    spoken: t('data.chatScroll.pillSpoken'),
+    hint: t('data.chatScroll.pillHint'),
+  } as const;
+}
+export const NEW_MESSAGES_PILL = newMessagesPill();
 
 /**
  * Where a pinned message opens (MX-03): a reply in its thread at the reply; a top-level one back in the conversation the

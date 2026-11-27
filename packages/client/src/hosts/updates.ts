@@ -15,7 +15,10 @@ import type {
   HostSystem,
   HostTask,
 } from '@whombat/core/domain';
-import { formatAgoIso, plural } from './format';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_UPDATES_WORDS } from '../i18n/messages/connectionsHosts/hostsBasics';
+import { formatAgoIso } from './format';
 
 /* The report (contracts 0.98.0, CT-500…CT-502) ------------------------------------------------------------------ */
 
@@ -37,63 +40,69 @@ export type UpdatesSystem = Pick<
 
 /* The words (SWU-04, SWU-07, SWU-10, SWU-13) -------------------------------------------------------------------- */
 
-/** Check and Install may run this long on the server (SWU-04); a task stopped there says so. */
-const LIMIT_WORDS: Record<PackageOp, string> = { check: '10 minutes', install: '2 hours' };
+/** The words of a server's updates, in a locale (English when none is given). */
+export function updatesWords(locale?: string | null) {
+  const w = clientTree(locale, HOSTS_UPDATES_WORDS);
+  return {
+    title: w.title,
+    restartTitle: w.restartTitle,
+    install: w.install,
+    check: w.check,
+    showLog: w.showLog,
+    restartNow: w.restartNow,
+    running: { ...w.running } as Record<PackageOp, string>,
+    upToDate: w.upToDate,
+    noReport: w.noReport,
+    restartNeeded: w.restartNeeded,
+    restartNotNeeded: w.restartNotNeeded,
+    nothingWaiting: w.nothingWaiting,
+    /** The install question. */
+    confirmTitle: (n: number, server: string) => w.confirmTitle(n, { server }),
+    confirmBody: (server: string) => interpolate(w.confirmBody, { server }),
+    /** Watch only, Restart or consoles only. */
+    needsFullControl: (server: string) => interpolate(w.needsFullControl, { server }),
+    /** The package lock stayed held. */
+    busy: (server: string) => interpolate(w.busy, { server }),
+    /**
+     * The updates hint's way out: the web's System tab; the phone's Updates screen, short as “Look into it” so the
+     * hint's words keep their room, also for the restart hint.
+     */
+    wayOut: { ...w.wayOut },
+    /** The toasts and notes of a package task started from here. */
+    started: (op: PackageOp, server: string) => interpolate(w.started[opOf(op)], { server }),
+    /** What the task dialog and its toasts call it (“Updates on pve-02 failed: …”). */
+    what: (op: PackageOp, server: string) => interpolate(w.what[opOf(op)], { server }),
+    finished: (op: PackageOp, server: string) => interpolate(w.finished[opOf(op)], { server }),
+    failed: (op: PackageOp, server: string) => interpolate(w.failed[opOf(op)], { server }),
+  };
+}
 
-export const UPDATES_WORDS = {
-  title: 'Updates',
-  restartTitle: 'Restart',
-  install: 'Install updates',
-  check: 'Check now',
-  showLog: 'Show log',
-  restartNow: 'Restart now',
-  running: { install: 'Installing updates…', check: 'Checking for updates…' } as Record<PackageOp, string>,
-  upToDate: 'Up to date',
-  noReport: 'This server doesn’t report updates.',
-  restartNeeded: 'Needed',
-  restartNotNeeded: 'Not needed',
-  nothingWaiting: 'Nothing to update.',
-  /** The install question (SWU-10). */
-  confirmTitle: (n: number, server: string) => `Install ${plural(n, 'update')} on ${server}?`,
-  confirmBody: (server: string) =>
-    `${server} keeps running while they install, and so do its guests. Services restart when they need to. A new kernel needs a restart afterwards; Whombat doesn’t restart ${server} on its own.`,
-  /** Watch only, Restart or consoles only (SWU-07). */
-  needsFullControl: (server: string) => `Installing updates needs Full control on ${server}.`,
-  /** The package lock stayed held (SWU-04). */
-  busy: (server: string) =>
-    `Another program is installing packages on ${server} right now. Try again in a few minutes.`,
-  /**
-   * The updates hint's way out (SWU-13): the web's System tab; the phone's Updates screen, short as “Look into it” so
-   * the hint's words keep their room, also for the restart hint (AP-2887).
-   */
-  wayOut: { web: 'See updates', phone: 'See updates' },
-  /** The toasts and notes of a package task started from here (PX-05). */
-  started: (op: PackageOp, server: string) =>
-    op === 'install' ? `Installing updates on ${server}.` : `Checking ${server} for updates.`,
-  /** What the task dialog and its toasts call it (“Updates on pve-02 failed: …”). */
-  what: (op: PackageOp, server: string) =>
-    op === 'install' ? `Updates on ${server}` : `Update check on ${server}`,
-  finished: (op: PackageOp, server: string) =>
-    op === 'install' ? `Installed the updates on ${server}.` : `Checked ${server} for updates.`,
-  failed: (op: PackageOp, server: string) =>
-    op === 'install'
-      ? `Installing updates on ${server} didn’t work.`
-      : `Checking ${server} for updates didn’t work.`,
-} as const;
+export const UPDATES_WORDS = updatesWords('en');
+
+/** Anything but Install reads as a check. */
+function opOf(op: PackageOp): PackageOp {
+  return op === 'install' ? 'install' : 'check';
+}
 
 /** The Updates line's words as the agent reports them (the System tab's, unchanged). */
-export function updatesLineText(s: UpdatesSystem): string {
-  if (s.updatesError) return `Couldn’t check: ${s.updatesError}`;
-  if (s.updates == null) return UPDATES_WORDS.noReport;
-  if (s.updates === 0) return UPDATES_WORDS.upToDate;
-  return `${plural(s.updates, 'update')} waiting${s.securityUpdates ? `, ${s.securityUpdates} for security` : ''}`;
+export function updatesLineText(s: UpdatesSystem, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_UPDATES_WORDS);
+  if (s.updatesError) return interpolate(w.line.couldntCheck, { error: s.updatesError });
+  if (s.updates == null) return w.noReport;
+  if (s.updates === 0) return w.upToDate;
+  return s.securityUpdates
+    ? w.line.waitingSecurity(s.updates, { security: s.securityUpdates })
+    : w.line.waiting(s.updates);
 }
 
 /** The Restart line's words: “Needed: a new kernel”, “Not needed”. */
-export function restartLineText(s: Pick<UpdatesSystem, 'rebootRequired' | 'rebootReason'>): string {
-  return s.rebootRequired
-    ? `${UPDATES_WORDS.restartNeeded}${s.rebootReason ? `: ${s.rebootReason}` : ''}`
-    : UPDATES_WORDS.restartNotNeeded;
+export function restartLineText(
+  s: Pick<UpdatesSystem, 'rebootRequired' | 'rebootReason'>,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, HOSTS_UPDATES_WORDS);
+  if (!s.rebootRequired) return w.restartNotNeeded;
+  return s.rebootReason ? interpolate(w.line.restartWhy, { reason: s.rebootReason }) : w.restartNeeded;
 }
 
 /** A package task's own words as the end of “… stopped: {reason}.”: its first line, trimmed, without its stop. */
@@ -115,21 +124,21 @@ function reasonOf(message: string | null | undefined): string {
 export function packageResultText(
   last: Pick<HostPackageLast, 'op' | 'status' | 'installed' | 'message'> & { code?: string | null },
   server: string,
+  locale?: string | null,
 ): string | null {
-  const verb = last.op === 'install' ? 'Installing updates' : 'Checking for updates';
+  const w = clientTree(locale, HOSTS_UPDATES_WORDS);
+  const r = w.result;
+  const verb = r.verb[last.op];
   if (last.status === 'failed') {
-    if (last.code === 'busy') return UPDATES_WORDS.busy(server);
-    if (last.code === 'timeout') return `${verb} stopped: it took longer than ${LIMIT_WORDS[last.op]}.`;
+    if (last.code === 'busy') return interpolate(w.busy, { server });
+    // Check and Install may run this long on the server; a task stopped there says so.
+    if (last.code === 'timeout') return interpolate(r.timeout, { verb, limit: r.limit[last.op] });
     const why = reasonOf(last.message);
-    return why ? `${verb} stopped: ${why}.` : `${verb} stopped.`;
+    return why ? interpolate(r.stoppedWhy, { verb, why }) : interpolate(r.stopped, { verb });
   }
   if (last.op === 'check') return null;
   const done =
-    last.installed == null
-      ? 'Installed the updates.'
-      : last.installed === 0
-        ? 'Nothing to install.'
-        : `Installed ${plural(last.installed, 'update')}.`;
+    last.installed == null ? r.installedAll : last.installed === 0 ? r.nothing : r.installed(last.installed);
   return hasNote(last.message) ? `${done} ${reasonOf(last.message)}.` : done;
 }
 
@@ -147,16 +156,26 @@ export function packageTaskOutcomeText(
   op: PackageOp,
   p: PackageTaskOutcome | null | undefined,
   server: string,
+  locale?: string | null,
 ): string | null {
   if (!p) return null;
+  const r = clientTree(locale, HOSTS_UPDATES_WORDS).result;
   const parts: string[] = [];
-  const main = packageResultText({ op, status: 'ok', installed: p.installed, message: p.warning }, server);
+  const main = packageResultText(
+    { op, status: 'ok', installed: p.installed, message: p.warning },
+    server,
+    locale,
+  );
   if (main) parts.push(main);
   else if (hasNote(p.warning)) parts.push(`${reasonOf(p.warning)}.`);
-  if (p.keptBack.length)
+  if (p.keptBack.length) {
+    const list = p.keptBack.slice(0, 5).join(', ');
     parts.push(
-      `Kept back: ${p.keptBack.slice(0, 5).join(', ')}${p.keptBack.length > 5 ? ` and ${p.keptBack.length - 5} more` : ''}.`,
+      p.keptBack.length > 5
+        ? interpolate(r.keptBackMore, { list, more: p.keptBack.length - 5 })
+        : interpolate(r.keptBack, { list }),
     );
+  }
   return parts.length ? parts.join(' ') : null;
 }
 
@@ -181,6 +200,8 @@ export interface ServerUpdatesInput {
   /** Its agent is connected (an offline one can't be asked). */
   connected: boolean;
   now: number;
+  /** The language the words are in (English when none is given). */
+  locale?: string | null;
 }
 
 export type UpdatesTone = 'ok' | 'warn' | 'bad' | 'mut';
@@ -211,42 +232,48 @@ function reportsUpdates(s: UpdatesSystem): boolean {
 }
 
 export function serverUpdatesView(input: ServerUpdatesInput): ServerUpdatesView {
+  const locale = input.locale;
+  const words = updatesWords(locale);
   const s = input.system ?? null;
   const available = !!s && !input.unraid && reportsUpdates(s);
   const manage = input.remoteControl.manage === true;
   const may = available && manage && input.connected;
   const task = available ? (s?.packageTask ?? null) : null;
   const count = s?.updates ?? 0;
-  const lineText = s ? updatesLineText(s) : UPDATES_WORDS.noReport;
+  const lineText = s ? updatesLineText(s, locale) : words.noReport;
   const last = available && !task ? (s?.packageLast ?? null) : null;
   const lastAt = last ? Date.parse(last.finishedAt) : Number.NaN;
   const resultText =
     last && Number.isFinite(lastAt) && input.now - lastAt <= PACKAGE_RESULT_SHOWN_MS
-      ? packageResultText(last, input.server)
+      ? packageResultText(last, input.server, locale)
       : null;
   return {
     available,
     line: {
-      text: task ? UPDATES_WORDS.running[task.op] : lineText,
+      text: task ? words.running[task.op] : lineText,
       tone: task ? 'mut' : s?.securityUpdates ? 'warn' : 'ok',
-      checked: s?.updatesCheckedAt ? `checked ${formatAgoIso(s.updatesCheckedAt, input.now)}` : null,
+      checked: s?.updatesCheckedAt
+        ? interpolate(clientTree(locale, HOSTS_UPDATES_WORDS).line.checked, {
+            ago: formatAgoIso(s.updatesCheckedAt, input.now, locale),
+          })
+        : null,
     },
-    running: task ? { taskId: task.id, op: task.op, text: UPDATES_WORDS.running[task.op] } : null,
+    running: task ? { taskId: task.id, op: task.op, text: words.running[task.op] } : null,
     result:
       last && resultText
         ? {
             text: resultText,
             tone: last.status === 'failed' ? 'bad' : hasNote(last.message) ? 'warn' : 'ok',
-            when: formatAgoIso(last.finishedAt, input.now),
+            when: formatAgoIso(last.finishedAt, input.now, locale),
           }
         : null,
     count,
     may,
     install: may && !task && count > 0,
     check: may && !task,
-    note: available && !manage && count > 0 ? UPDATES_WORDS.needsFullControl(input.server) : null,
+    note: available && !manage && count > 0 ? words.needsFullControl(input.server) : null,
     restart: {
-      text: s ? restartLineText(s) : UPDATES_WORDS.restartNotNeeded,
+      text: s ? restartLineText(s, locale) : words.restartNotNeeded,
       tone: s?.rebootRequired ? 'warn' : 'ok',
       button:
         available && input.connected && s?.rebootRequired === true && input.remoteControl.hostPower !== false,
@@ -268,7 +295,8 @@ export interface PackageRow {
 }
 
 /** The waiting packages, security first, then by name. */
-export function packageRows(items: readonly PackageItem[]): PackageRow[] {
+export function packageRows(items: readonly PackageItem[], locale?: string | null): PackageRow[] {
+  const w = clientTree(locale, HOSTS_UPDATES_WORDS);
   return [...items]
     .sort((a, b) => Number(!!b.security) - Number(!!a.security) || a.name.localeCompare(b.name))
     .map((u) => {
@@ -278,7 +306,10 @@ export function packageRows(items: readonly PackageItem[]): PackageRow[] {
         versions,
         security: !!u.security,
         source: u.source ?? null,
-        label: `${u.name}${u.security ? ', security' : ''}: ${u.current ? `${u.current} to ${u.new}` : u.new}`,
+        label: interpolate(u.security ? w.packageLabelSecurity : w.packageLabel, {
+          name: u.name,
+          versions: u.current ? interpolate(w.versionsTo, { current: u.current, new: u.new }) : u.new,
+        }),
       };
     });
 }

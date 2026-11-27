@@ -17,8 +17,13 @@ import {
 
 type PickerAsset = Parameters<typeof fromImageAsset>[0] & { width?: number; height?: number };
 
-export async function preparePhoto(asset: PickerAsset, index: number, now: Date): Promise<PickedFile | null> {
-  const file = fromImageAsset(asset, index, now);
+export async function preparePhoto(
+  asset: PickerAsset,
+  index: number,
+  now: Date,
+  locale?: string,
+): Promise<PickedFile | null> {
+  const file = fromImageAsset(asset, index, now, locale);
   if (!file || !scalesDown(asset)) return file;
   const held: { release(): void }[] = [];
   const hold = <T extends { release(): void }>(ref: T): T => {
@@ -41,7 +46,11 @@ export async function preparePhoto(asset: PickerAsset, index: number, now: Date)
 }
 
 /** A pick's photos as they go up, in the pick's order; one is prepared at a time (`oneAtATime`). */
-export async function preparePhotos(assets: readonly PickerAsset[], now: Date): Promise<PickedFile[]> {
-  const files = await oneAtATime(assets, (asset, index) => preparePhoto(asset, index, now));
+export async function preparePhotos(
+  assets: readonly PickerAsset[],
+  now: Date,
+  locale?: string,
+): Promise<PickedFile[]> {
+  const files = await oneAtATime(assets, (asset, index) => preparePhoto(asset, index, now, locale));
   return files.filter((f): f is PickedFile => f !== null);
 }

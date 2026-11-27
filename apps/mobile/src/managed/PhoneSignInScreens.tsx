@@ -15,13 +15,14 @@ import ScanQrCode from 'lucide-react-native/icons/scan-qr-code';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, Easing, View } from 'react-native';
 import Svg, { G, Path, Rect } from 'react-native-svg';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Check, X } from '../ui/icons';
 import { Button } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
 import { UI_ORIGINS } from './config';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import {
   PHONE_STAGES,
   type PhoneAction,
@@ -31,8 +32,6 @@ import {
 } from './phoneSignIn';
 import { QrScanner } from './QrScanner';
 import { ErrorLine, Frame } from './ui';
-
-const T = COPY.phone;
 
 /* The hero: a computer showing the code, and this phone scanning it --------------------------------------------- */
 
@@ -214,6 +213,8 @@ export function PhoneScanner({
   /** A community box's own link scanned here instead (AP-5471): joined without a cloud account. */
   onLocalLink?: (link: LocalLinkParts) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).phone;
   return (
     <QrScanner
       visible={visible}
@@ -291,6 +292,8 @@ function StepMark({ state, n }: { state: StepState; n: number }) {
 }
 
 function Steps({ view }: { view: PhoneSignInView }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).phone;
   const theme = useTheme();
   const states = stepStates(view);
   return (
@@ -353,6 +356,8 @@ export function OrDivider({ label }: { label: string }) {
 
 /** This phone's name and its fingerprint, large, for the person to compare with the computer. */
 function Fingerprint({ label, fingerprint }: { label: string; fingerprint: string }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).phone;
   const theme = useTheme();
   const c = theme.colors;
   return (
@@ -430,6 +435,8 @@ export function PhoneProgressScreen({
   /** Stops waiting (not offered while the token is being exchanged, which is quick and can't be undone). */
   onCancel?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).phone;
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const failed = view.kind === 'failed' ? T.errors[view.error] : null;

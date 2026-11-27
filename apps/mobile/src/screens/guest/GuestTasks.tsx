@@ -32,7 +32,7 @@ export function GuestTasks({
   timeZone: string;
   canChange: boolean;
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const q = useHostManageRead(
@@ -47,7 +47,7 @@ export function GuestTasks({
     { retry: false },
   );
   const [open, setOpen] = useState<HostTask | null>(null);
-  const rows = q.data?.op === 'task.list' ? taskRows(q.data.items, now, timeZone) : [];
+  const rows = q.data?.op === 'task.list' ? taskRows(q.data.items, now, timeZone, rawLocale) : [];
   if (q.isPending) return <SkeletonRows count={4} lines={2} label={tMobile('screens.loading-the-tasks')} />;
   if (q.isError)
     return <ErrorState text={tMobile('screens.the-tasks-didnt-load')} onRetry={() => void q.refetch()} />;
@@ -116,13 +116,15 @@ export function TaskSheet({
   /** What it says under the title, from the task as read (how a package task ended). */
   body?: (t: HostTask) => string | null;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const q = useHostTask(
     { params: { burrow: slug, serverId, taskId: task.id }, query: { platform: taskPlatform(task.id) } },
     { retry: false, refetchInterval: (query) => (query.state.data?.status === 'running' ? 2000 : false) },
   );
   const t = q.data ?? task;
-  const status = taskStatus(t);
+  const status = taskStatus(t, rawLocale);
   const platform = taskPlatform(t.id);
   const running = t.status === 'running';
   // A Proxmox task always; an Incus operation that says so; a libvirt job (a backup or a copy) unless it says not.
@@ -134,7 +136,9 @@ export function TaskSheet({
       (platform === 'libvirt' && t.cancellable !== false));
   const { send, busy } = useManageChange(serverId);
   const [error, setError] = useState<string | null>(null);
-  const log = (t.log ?? []).join('\n') || (platform === 'incus' ? 'Incus keeps no log for this.' : 'No log.');
+  const log =
+    (t.log ?? []).join('\n') ||
+    tMobile(platform === 'incus' ? 'screens2.guest.incusNoLog' : 'screens2.guest.noLog');
   return (
     <OneSheet
       visible
@@ -143,29 +147,34 @@ export function TaskSheet({
       tone={
         status.tone === 'ok' ? 'ok' : status.tone === 'warn' ? 'warn' : status.tone === 'bad' ? 'bad' : 'mut'
       }
-      title={title ?? taskWord(t.type)}
-      body={body?.(t) ?? taskSheetLine(t)}
+      title={title ?? taskWord(t.type, rawLocale)}
+      body={body?.(t) ?? taskSheetLine(t, rawLocale)}
       busy={busy ? 'stop' : null}
       buttons={[
         ...(stoppable
           ? [
               {
                 id: 'stop',
-                label: 'Stop it',
+                label: tMobile('screens2.run.stopIt'),
                 variant: 'secondary' as const,
                 onPress: () =>
                   void send({
                     op: 'task.stop',
                     platform: platform === 'pve' ? undefined : platform,
                     params: { task: t.id, platform },
-                    name: 'the task',
+                    name: tMobile('screens2.guest.theTask'),
                   }).then((o) => {
                     if (!o.ok && !o.waiting) setError(o.message);
                   }),
               },
             ]
           : []),
-        { id: 'close', label: 'Close', variant: stoppable ? 'quiet' : 'primary', onPress: onClose },
+        {
+          id: 'close',
+          label: tMobile('screens2.common.close'),
+          variant: stoppable ? 'quiet' : 'primary',
+          onPress: onClose,
+        },
       ]}
       note={error}
     >
@@ -186,7 +195,7 @@ export function TaskSheet({
             mono
             color={theme.colors.ink2}
             selectable
-            accessibilityLabel={`Log: ${log}`}
+            accessibilityLabel={tMobile('screens2.guest.log', { log })}
           >
             {log}
           </Text>

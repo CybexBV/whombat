@@ -7,6 +7,7 @@
  */
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ChevronRight, type LucideIcon } from './icons';
@@ -165,7 +166,7 @@ export function PlaceState({
   title,
   line,
   onRetry,
-  retryLabel = 'Try again',
+  retryLabel: givenRetryLabel,
   action,
 }: {
   kind: PlaceStateKind;
@@ -177,6 +178,8 @@ export function PlaceState({
   /** The empty state's way on (Go to Chat). */
   action?: { label: string; onPress: () => void };
 }) {
+  const { t: tMobile } = useMobileT();
+  const retryLabel = givenRetryLabel ?? tMobile('screens2.common.tryAgain');
   const theme = useTheme();
   return (
     <View

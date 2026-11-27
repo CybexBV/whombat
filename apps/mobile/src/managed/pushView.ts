@@ -1,8 +1,10 @@
 /** What the notifications row says for a push state (pure; `NotificationsRow.tsx` draws it). */
+
 import { agoText } from '@whombat/client/managed';
+import { formatLocaleList } from '@whombat/core/i18n';
 import { type DeliveryPage, type DeliveryStatus, RUNS_CHANNEL } from '../../modules/whombat-live/src/content';
 import type { ManagedPush } from './context';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 
 export type Dot = 'ok' | 'warn' | 'bad' | 'mut';
 
@@ -19,10 +21,11 @@ export interface NotificationsView {
 }
 
 /** `“A”`, `“A” and “B”`, `“A”, “B” and “C”`. */
-const quotedList = (names: readonly string[]) => {
-  const q = names.map((n) => `“${n}”`);
-  return q.length > 1 ? `${q.slice(0, -1).join(', ')} and ${q.at(-1)}` : (q[0] ?? '');
-};
+const quotedList = (names: readonly string[], locale?: string) =>
+  formatLocaleList(
+    names.map((n) => `“${n}”`),
+    locale,
+  );
 
 /**
  * What Android holds back although the app's push is set up (Android only; `delivery` is null elsewhere), the most
@@ -30,9 +33,9 @@ const quotedList = (names: readonly string[]) => {
  * every channel off is “Not allowed”, then the channels that are off (runs in progress aside: `calmLine`), then the
  * app's battery use restricted (its pushes don't arrive while it is closed). Null when nothing is.
  */
-function heldBack(delivery: DeliveryStatus | null): NotificationsView | null {
+function heldBack(delivery: DeliveryStatus | null, locale?: string): NotificationsView | null {
   if (!delivery) return null;
-  const t = COPY.notifications;
+  const t = managedCopy(locale).notifications;
   const blocked = delivery.channels.filter((c) => c.blocked);
   const off = blocked.filter((c) => c.id !== RUNS_CHANNEL);
   if (delivery.enabled === false || (blocked.length && blocked.length === delivery.channels.length))
@@ -48,7 +51,12 @@ function heldBack(delivery: DeliveryStatus | null): NotificationsView | null {
     return {
       dot: 'warn',
       title: t.partly,
-      meta: t.channelsOff(quotedList(off.map((c) => c.name))),
+      meta: t.channelsOff(
+        quotedList(
+          off.map((c) => c.name),
+          locale,
+        ),
+      ),
       action: 'delivery',
       page: off.length === 1 ? { page: 'channel', channel: only.id } : { page: 'notifications' },
     };
@@ -68,8 +76,11 @@ function heldBack(delivery: DeliveryStatus | null): NotificationsView | null {
  * usually the person's choice, each with a way back), else battery optimisation, which is Android's default and lets
  * these pushes through on most phones, so it gets no button that would send the person off to change it.
  */
-function calmLine(delivery: DeliveryStatus | null): { line: string; page?: DeliveryPage } | null {
-  const t = COPY.notifications;
+function calmLine(
+  delivery: DeliveryStatus | null,
+  locale?: string,
+): { line: string; page?: DeliveryPage } | null {
+  const t = managedCopy(locale).notifications;
   const runs = delivery?.channels.find((c) => c.id === RUNS_CHANNEL && c.blocked);
   if (runs) return { line: t.runsOff(runs.name), page: { page: 'channel', channel: runs.id } };
   if (delivery?.liveUpdatesAllowed === false)
@@ -82,13 +93,14 @@ export function notificationsView(
   push: Pick<ManagedPush, 'state' | 'lastReceivedAt' | 'quiet'>,
   now = Date.now(),
   delivery: DeliveryStatus | null = null,
+  locale?: string,
 ): NotificationsView {
-  const t = COPY.notifications;
-  const last = push.lastReceivedAt ? t.lastReceived(agoText(push.lastReceivedAt / 1000, now)) : null;
+  const t = managedCopy(locale).notifications;
+  const last = push.lastReceivedAt ? t.lastReceived(agoText(push.lastReceivedAt / 1000, now, locale)) : null;
   switch (push.state.status) {
     case 'registered': {
       // When Android holds them back, when the last one reached the phone says nothing about the next.
-      const held = heldBack(delivery);
+      const held = heldBack(delivery, locale);
       if (held) return held;
       // Quiet on an iPhone: they arrive, in Notification Center only; alerts are one question away.
       if (push.quiet)
@@ -98,7 +110,7 @@ export function notificationsView(
           meta: [t.quietMeta, last].filter(Boolean).join(' · '),
           action: 'alerts',
         };
-      const calm = calmLine(delivery);
+      const calm = calmLine(delivery, locale);
       return {
         dot: 'ok',
         title: t.on,

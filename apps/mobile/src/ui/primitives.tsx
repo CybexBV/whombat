@@ -13,7 +13,7 @@ import {
   View,
   type ViewStyle,
 } from 'react-native';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { makeStyles, useTheme } from '../theme/theme';
 import type { LucideIcon } from './icons';
@@ -259,7 +259,9 @@ export function QuietText({ children, style }: { children: string; style?: Style
   );
 }
 
-export function Loading({ label = 'Loading' }: { label?: string }) {
+export function Loading({ label: givenLabel }: { label?: string }) {
+  const { t: tMobile } = useMobileT();
+  const label = givenLabel ?? tMobile('screens2.common.loading');
   const theme = useTheme();
   return (
     <View
@@ -296,13 +298,15 @@ export function SkeletonRows({
   count = 5,
   avatarSize,
   lines = 2,
-  label = 'Loading',
+  label: givenLabel,
 }: {
   count?: number;
   avatarSize?: number;
   lines?: number;
   label?: string;
 }) {
+  const { t: tMobile } = useMobileT();
+  const label = givenLabel ?? tMobile('screens2.common.loading');
   const widths: `${number}%`[] = ['62%', '40%', '78%', '52%'];
   return (
     <View style={{ padding: 16, gap: 18 }} accessibilityLabel={label}>

@@ -5,8 +5,13 @@
  * this only arranges them. Pure, no DOM and no React Native.
  */
 import type { FileChange, MergeBlock, PrFileLine, PullRequestDetail } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { ApiError } from './http/errors';
 import type { CommitResult } from './http/types';
+import { clientTree } from './i18n/catalog';
+import { ASKS_AREA_WORDS } from './i18n/messages/chatWork/asks';
+
+const words = (locale?: string | null) => clientTree(locale, ASKS_AREA_WORDS).pullRequests;
 
 /* MERGE ------------------------------------------------------------------------------------------- */
 
@@ -15,19 +20,24 @@ import type { CommitResult } from './http/types';
  * the mock's `MERGE_NOTE` (“Merging is for people. Agents in this burrow don’t hold a merge key.”) is no longer always
  * true there, and the branch room can't see the agents' keys, so it says what holds instead.
  */
-export const MERGE_NOTE_WITH_KEYS =
-  'Your agent merges only with the Merge key. On Ask, a person approves each merge first.';
+export function mergeNoteWithKeys(locale?: string | null): string {
+  return words(locale).mergeNoteWithKeys;
+}
+
+export const MERGE_NOTE_WITH_KEYS = mergeNoteWithKeys();
+
+/** Why the button is off, for its description (the server's 409 says the same), in a locale. */
+export function mergeBlockHints(locale?: string | null): Record<NonNullable<MergeBlock>, string> {
+  const b = words(locale).blocks;
+  return { agent: b.agent, not_open: b.not_open, checks: b.checks, review: b.review };
+}
 
 /** Why the button is off, for its description (the server's 409 says the same). */
-export const MERGE_BLOCK_HINTS: Record<NonNullable<MergeBlock>, string> = {
-  agent: 'Merging is for people.',
-  not_open: 'This pull request isn’t open.',
-  checks: 'Checks have to pass before this can be merged.',
-  review: 'It needs an approving review, with no changes requested, before it can be merged.',
-};
+export const MERGE_BLOCK_HINTS: Record<NonNullable<MergeBlock>, string> = mergeBlockHints();
 
 export interface MergeButtonView {
-  label: 'Merge into main' | 'Merged into main';
+  /** “Merge into main”, “Merged into main”. */
+  label: string;
   /** `ready` = primary (btn), `blocked` = sf2 + mut + not-allowed, `merged` = sf2 + ok + default. */
   look: 'ready' | 'blocked' | 'merged';
   canMerge: boolean;
@@ -35,38 +45,41 @@ export interface MergeButtonView {
   hint: string | null;
 }
 
-export function mergeButton(detail: Pick<PullRequestDetail, 'pr' | 'mergeBlock'>): MergeButtonView {
+export function mergeButton(
+  detail: Pick<PullRequestDetail, 'pr' | 'mergeBlock'>,
+  locale?: string | null,
+): MergeButtonView {
+  const w = words(locale);
   if (detail.pr.state === 'merged') {
-    return { label: 'Merged into main', look: 'merged', canMerge: false, hint: null };
+    return { label: w.merged, look: 'merged', canMerge: false, hint: null };
   }
   if (detail.mergeBlock === null) {
-    return { label: 'Merge into main', look: 'ready', canMerge: true, hint: null };
+    return { label: w.merge, look: 'ready', canMerge: true, hint: null };
   }
   return {
-    label: 'Merge into main',
+    label: w.merge,
     look: 'blocked',
     canMerge: false,
-    hint: MERGE_BLOCK_HINTS[detail.mergeBlock],
+    hint: mergeBlockHints(locale)[detail.mergeBlock],
   };
 }
 
 /** What a merge that didn't go through says (the branch room's words): null when it merged. */
-export function mergeOutcomeText(result: CommitResult<unknown>): string | null {
+export function mergeOutcomeText(result: CommitResult<unknown>, locale?: string | null): string | null {
+  const w = words(locale);
   switch (result.status) {
     case 'ok':
       return null;
     case 'blocked':
-      return `Blocked: merging needs the “${result.keyNeeded.label}” key.`;
+      return interpolate(w.blocked, { key: result.keyNeeded.label });
     case 'pending_approval':
-      return 'That needs a person to approve it first. We’ve asked.';
+      return w.pending;
   }
 }
 
 /** What a merge that failed says: the server's own sentence, else a generic one. */
-export function mergeErrorText(error: unknown): string {
-  return error instanceof ApiError && error.message
-    ? error.message
-    : 'Couldn’t merge. Try again in a moment.';
+export function mergeErrorText(error: unknown, locale?: string | null): string {
+  return error instanceof ApiError && error.message ? error.message : words(locale).failed;
 }
 
 /* THE FILE VIEW (AP-664) -------------------------------------------------------------------------- */

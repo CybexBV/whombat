@@ -6,13 +6,14 @@
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { parseClock } from '../data/notify';
+import { useMobileT } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
 
 export function ClockField({
   label,
-  spoken = `${label} time`,
+  spoken: givenSpoken,
   value,
   onChange,
   disabled,
@@ -24,6 +25,8 @@ export function ClockField({
   onChange: (clock: string) => void;
   disabled?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
+  const spoken = givenSpoken ?? tMobile('screens2.ui.clockSpoken', { label });
   const theme = useTheme();
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {

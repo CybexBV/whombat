@@ -13,22 +13,20 @@
  */
 
 import {
-  AGENT_FALLBACK_NAME,
-  VAULT_TOTP_TEXT,
+  agentFallbackName,
   vaultEntryStaysMcp,
   vaultKeptPasswordLine,
   vaultTotpLine,
+  vaultTotpText,
 } from '@whombat/client';
 import { type Principal, shortNameOf, type Tone } from '@whombat/core';
 import { SetVaultKeyEnvNameBody } from '@whombat/core/contracts';
 import {
   defaultVaultEnvName,
   VAULT_AGENT_ACCESS,
-  VAULT_COPY,
-  VAULT_KEYS_COPY,
-  VAULT_SSH_COPY,
-  VAULT_SSH_KEY_TYPE_LABELS,
-  VAULT_SSH_PRODUCTION_COPY,
+  VAULT_ENV_NAME_PATTERN,
+  VAULT_ENV_NAMES_RESERVED,
+  VAULT_ENV_PREFIXES_RESERVED,
   type VaultAgentAccess,
   type VaultAuth,
   type VaultCheckStatus,
@@ -37,16 +35,21 @@ import {
   type VaultNetwork,
   vaultAgentAccessCopy,
   vaultCheckLine,
+  vaultCopy,
   vaultEntryAddress,
   vaultEntryMeta,
   vaultKeyDeliverable,
   vaultKeyEnvNames,
   vaultKeyServersText,
+  vaultKeysCopy,
   vaultLastUsedText,
   vaultRotateNotice,
   vaultSavedIntro,
   vaultSecretLine,
+  vaultSshCopy,
   vaultSshHostKeyLabel,
+  vaultSshKeyTypeLabels,
+  vaultSshProductionCopy,
   vaultSshServerCheckLine,
   vaultSshServerTarget,
   vaultUseRow,
@@ -61,14 +64,17 @@ export interface VaultStatus {
   label: string;
 }
 
-const STATUS: Record<VaultCheckStatus, VaultStatus> = {
-  reached: { tone: 'ok', label: 'Reached' },
-  failing: { tone: 'bad', label: 'Failing' },
-  unchecked: { tone: 'neutral', label: VAULT_COPY.notChecked },
-};
+const STATUS_TONE: Record<VaultCheckStatus, Tone> = { reached: 'ok', failing: 'bad', unchecked: 'neutral' };
 
-export function vaultStatus(status: VaultCheckStatus): VaultStatus {
-  return STATUS[status];
+export function vaultStatus(status: VaultCheckStatus, locale?: string): VaultStatus {
+  const { t } = mobileTranslator(locale);
+  const label =
+    status === 'reached'
+      ? t('data.vault.reached')
+      : status === 'failing'
+        ? t('data.vault.failing')
+        : vaultCopy(locale).notChecked;
+  return { tone: STATUS_TONE[status], label };
 }
 
 /* YOUR ENTRIES ----------------------------------------------------------------------------------- */
@@ -118,7 +124,7 @@ export function vaultEntryRow(
   locale?: string,
 ): VaultEntryRow {
   const meta = vaultMetaFor(entry, agent, locale);
-  const status = vaultStatus(entry.check.status);
+  const status = vaultStatus(entry.check.status, locale);
   const lastUsed = vaultLastUsedText(entry.lastUsedAt, now, timeZone, locale);
   return {
     id: entry.id,
@@ -153,9 +159,10 @@ export interface VaultNetworkRow {
   line: string;
 }
 
-export function vaultNetworkRows(networks: readonly VaultNetwork[]): VaultNetworkRow[] {
+export function vaultNetworkRows(networks: readonly VaultNetwork[], locale?: string): VaultNetworkRow[] {
+  const { tp } = mobileTranslator(locale);
   return networks.map((n) => {
-    const ports = `${n.ports.length === 1 ? 'port' : 'ports'} ${n.ports.join(', ')}`;
+    const ports = tp('data.vault.ports', n.ports.length, { ports: n.ports.join(', ') });
     const note = n.note.trim() || null;
     return { id: n.id, cidr: n.cidr, ports, note, line: [n.cidr, ports, note].filter(Boolean).join(' · ') };
   });
@@ -167,23 +174,24 @@ export function vaultNetworkRows(networks: readonly VaultNetwork[]): VaultNetwor
  * CONNECTION's line about signing in, in the web's words: “Signs in with a bearer token”, “Signs in as admin with a
  * password”, “Signs in as buyer@example.com in the browser” (a website login, VT-D28).
  */
-export function signsInText(auth: VaultAuth): string {
+export function signsInText(auth: VaultAuth, locale?: string): string {
+  const { t } = mobileTranslator(locale);
   switch (auth.type) {
     case 'bearer':
-      return 'Signs in with a bearer token';
+      return t('data.vault.signsIn.bearer');
     case 'header':
-      return `Signs in with the ${auth.name} header`;
+      return t('data.vault.signsIn.header', { name: auth.name });
     case 'query':
-      return `Signs in with the ${auth.name} query parameter`;
+      return t('data.vault.signsIn.query', { name: auth.name });
     case 'basic':
-      return `Signs in as ${auth.username} with a password`;
+      return t('data.vault.signsIn.basic', { username: auth.username });
     case 'form':
-      return `Signs in as ${auth.username} in the browser`;
+      return t('data.vault.signsIn.form', { username: auth.username });
     case 'none':
-      return 'Signs in with nothing';
+      return t('data.vault.signsIn.none');
     // An SSH key (contracts 0.32.0, VT-S02): its servers are set up on the web.
     case 'ssh_key':
-      return 'Signs in with an SSH key';
+      return t('data.vault.signsIn.sshKey');
   }
 }
 
@@ -191,13 +199,16 @@ export function signsInText(auth: VaultAuth): string {
  * An old `secret` entry (Whombat skill-store.md SST-09, contracts CT-823; AP-4156): packs used it and went, nothing makes
  * one any more. The web's words (AP-4113).
  */
-export const VAULT_SECRET_UNUSED = 'Nothing uses this any more. You can remove it.';
+export function vaultSecretUnused(locale?: string): string {
+  return mobileTranslator(locale).t('data.vault.secretUnused');
+}
+export const VAULT_SECRET_UNUSED = vaultSecretUnused();
 
 /** Remove from Vault on the phone, for an old `secret` entry only (AP-4157): the web's words, no keys to lose. */
 export function vaultRemoveCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
   return {
-    action: VAULT_COPY.remove,
+    action: vaultCopy(locale).remove,
     confirm: (name: string) => t('vault.vaultRemoveCopy.confirm', { name }),
     confirmBody: t('vault.vaultRemoveCopy.confirmBody'),
     removed: (name: string) => t('vault.vaultRemoveCopy.removed', { name }),
@@ -262,10 +273,21 @@ export const VAULT_ENV_TEXT = vaultEnvText();
 /** A typed variable name as `vault.setKeyEnvName` takes it (the contract's own check), or why not. */
 export function vaultEnvNameCheck(
   typed: string,
+  locale?: string,
 ): { ok: true; name: string } | { ok: false; problem: string } {
-  const parsed = SetVaultKeyEnvNameBody.safeParse({ envName: typed.trim() });
+  const name = typed.trim();
+  const parsed = SetVaultKeyEnvNameBody.safeParse({ envName: name });
   if (parsed.success) return { ok: true, name: parsed.data.envName };
-  return { ok: false, problem: parsed.error.issues[0]?.message ?? 'That name won’t work.' };
+  return { ok: false, problem: envNameProblem(name, locale) };
+}
+
+/** The contract's two rules, said in the person's language (the contract's own message is English). */
+function envNameProblem(name: string, locale?: string): string {
+  const { t } = mobileTranslator(locale);
+  if (!VAULT_ENV_NAME_PATTERN.test(name)) return t('data.vault.envPattern');
+  if (VAULT_ENV_NAMES_RESERVED.includes(name) || VAULT_ENV_PREFIXES_RESERVED.some((p) => name.startsWith(p)))
+    return t('data.vault.envReserved', { name });
+  return t('data.vault.envInvalid');
 }
 
 /** What switching sends (CT-1240): On switches it on (an SSH key for All servers), Off off. Null when nothing changes. */
@@ -355,24 +377,31 @@ export interface VaultSshModel {
 }
 
 /** Keys, servers and trusting host keys happen on the web (VT-S13). */
-export const VAULT_SSH_ON_WEB = VAULT_SSH_COPY.sshOnWeb;
-
-const SSH_ORIGIN = { generated: 'made by Whombat', imported: 'your own key' } as const;
+export function vaultSshOnWeb(locale?: string): string {
+  return vaultSshCopy(locale).sshOnWeb;
+}
+export const VAULT_SSH_ON_WEB = vaultSshOnWeb();
 
 export function vaultServerRow(
   server: VaultEntryDetail['servers'][number],
   now: Date,
   timeZone: string,
+  locale?: string,
 ): VaultServerRow {
-  const status = vaultStatus(server.check.status);
+  const { t } = mobileTranslator(locale);
+  const status = vaultStatus(server.check.status, locale);
   const target = vaultSshServerTarget(server);
-  const line = vaultSshServerCheckLine(server, now, timeZone);
+  const line = vaultSshServerCheckLine(server, now, timeZone, locale);
   const seen = server.seenHostKey;
   const hostKey = seen
-    ? `${server.hostKey ? 'New host key' : 'Host key to confirm'}: ${seen.fingerprint} (${vaultSshHostKeyLabel(seen.algorithm)})`
+    ? t(server.hostKey ? 'data.vault.newHostKey' : 'data.vault.hostKeyToConfirm', {
+        fingerprint: seen.fingerprint,
+        algorithm: vaultSshHostKeyLabel(seen.algorithm),
+      })
     : null;
-  const production = server.production ? VAULT_SSH_PRODUCTION_COPY.badge : null;
-  const keptPassword = vaultKeptPasswordLine(server.password, now, timeZone);
+  const productionCopy = vaultSshProductionCopy(locale);
+  const production = server.production ? productionCopy.badge : null;
+  const keptPassword = vaultKeptPasswordLine(server.password, now, timeZone, locale);
   return {
     id: server.id,
     name: server.name,
@@ -384,7 +413,7 @@ export function vaultServerRow(
     keptPassword,
     accessibilityLabel: [
       `${server.name}, ${status.label}`,
-      production ? VAULT_SSH_PRODUCTION_COPY.label : null,
+      production ? productionCopy.label : null,
       target,
       line,
       keptPassword,
@@ -395,20 +424,29 @@ export function vaultServerRow(
   };
 }
 
-function sshModel(entry: VaultEntryDetail, now: Date, timeZone: string): VaultSshModel {
+function sshModel(entry: VaultEntryDetail, now: Date, timeZone: string, locale?: string): VaultSshModel {
+  const { t } = mobileTranslator(locale);
   const auth = entry.auth?.type === 'ssh_key' ? entry.auth : null;
   return {
     fingerprint: auth?.fingerprint ?? null,
     keyMeta: auth
       ? [
-          VAULT_SSH_KEY_TYPE_LABELS[auth.keyType],
-          SSH_ORIGIN[auth.origin],
-          vaultSecretLine(entry, now, timeZone).replace(/^Set · /, ''),
+          vaultSshKeyTypeLabels(locale)[auth.keyType],
+          t(auth.origin === 'generated' ? 'data.vault.madeByWhombat' : 'data.vault.ownKey'),
+          keyAdded(entry, now, timeZone, locale),
         ].join(' · ')
       : null,
-    servers: entry.servers.map((s) => vaultServerRow(s, now, timeZone)),
-    empty: entry.servers.length === 0 ? VAULT_SSH_COPY.noServers : null,
+    servers: entry.servers.map((s) => vaultServerRow(s, now, timeZone, locale)),
+    empty: entry.servers.length === 0 ? vaultSshCopy(locale).noServers : null,
   };
+}
+
+/** The secret line without its leading “Set”: “added 5 days ago” (an SSH key always has its secret). */
+function keyAdded(entry: VaultEntryDetail, now: Date, timeZone: string, locale?: string): string {
+  const line = vaultSecretLine(entry, now, timeZone, locale);
+  if (!entry.secret.set || !entry.secret.setAt) return line;
+  const cut = line.indexOf(' · ');
+  return cut < 0 ? line : line.slice(cut + 3);
 }
 
 function namesOf(ctx: ViewContext) {
@@ -427,17 +465,18 @@ export function vaultAccessRow(entry: VaultEntryDetail, ctx: ViewContext): Vault
   if (!agent) return null;
   const key = entry.key;
   const name = shortNameOf(agent);
-  const copy = vaultAgentAccessCopy(name);
+  const copy = vaultAgentAccessCopy(name, ctx.locale);
+  const keysCopy = vaultKeysCopy(ctx.locale);
   const value: VaultAgentAccess = key ? 'on' : 'off';
   const ssh = entry.kind === 'ssh';
   const how =
     entry.kind === 'http'
-      ? VAULT_KEYS_COPY.envNameHint
+      ? keysCopy.envNameHint
       : ssh
-        ? VAULT_KEYS_COPY.sshHint
+        ? keysCopy.sshHint
         : entry.kind === 'login'
-          ? VAULT_KEYS_COPY.loginHint
-          : VAULT_KEYS_COPY.mcpHint;
+          ? keysCopy.loginHint
+          : keysCopy.mcpHint;
   const envName = key && entry.kind === 'http' ? (key.envName ?? defaultVaultEnvName(entry.name)) : null;
   return {
     agentId: agent.id,
@@ -449,12 +488,14 @@ export function vaultAccessRow(entry: VaultEntryDetail, ctx: ViewContext): Vault
     hints: copy.hints,
     servers:
       ssh && key && key.servers !== null
-        ? `Servers · ${vaultKeyServersText(key.servers, entry.servers)}`
+        ? mobileTranslator(ctx.locale).t('data.vault.servers', {
+            servers: vaultKeyServersText(key.servers, entry.servers, ctx.locale),
+          })
         : null,
     how: key ? how : null,
     env: envName ? { name: envName, variables: vaultKeyEnvNames(envName, entry) } : null,
     offNotice: vaultKeyDeliverable(entry)
-      ? vaultRotateNotice({ agentName: name, entryName: entry.name, kind: entry.kind }).text
+      ? vaultRotateNotice({ agentName: name, entryName: entry.name, kind: entry.kind }, ctx.locale).text
       : null,
   };
 }
@@ -464,22 +505,24 @@ export function vaultEntryScreen(entry: VaultEntryDetail, ctx: ViewContext): Vau
   const names = namesOf(ctx);
   const secretOnly = entry.kind === 'secret';
   const ssh = entry.kind === 'ssh';
+  const locale = ctx.locale;
+  const copy = vaultCopy(locale);
   return {
     id: entry.id,
     name: entry.name,
     description: entry.description.trim() || null,
-    meta: bareMeta(entry),
-    status: vaultStatus(entry.check.status),
+    meta: bareMeta(entry, locale),
+    status: vaultStatus(entry.check.status, locale),
     connection:
       !secretOnly && entry.url
         ? {
             address: vaultEntryAddress(entry.url),
-            signsIn: entry.auth ? signsInText(entry.auth) : null,
-            line: entry.kind === 'login' ? null : vaultCheckLine(entry.check, ctx.now, ctx.timeZone),
+            signsIn: entry.auth ? signsInText(entry.auth, locale) : null,
+            line: entry.kind === 'login' ? null : vaultCheckLine(entry.check, ctx.now, ctx.timeZone, locale),
             canCheck: entry.kind !== 'login',
           }
         : null,
-    secretLine: vaultSecretLine(entry, ctx.now, ctx.timeZone),
+    secretLine: vaultSecretLine(entry, ctx.now, ctx.timeZone, locale),
     tools:
       entry.kind === 'mcp'
         ? entry.tools.map((t) => ({
@@ -487,29 +530,32 @@ export function vaultEntryScreen(entry: VaultEntryDetail, ctx: ViewContext): Vau
             description: t.description,
             enabled: t.enabled,
             isNew: t.isNew,
-            accessibilityLabel: `${t.name}${t.isNew ? `, ${VAULT_COPY.newBadge.toLowerCase()}` : ''}. ${t.description}`,
+            accessibilityLabel: `${t.name}${t.isNew ? `, ${copy.newBadge.toLowerCase()}` : ''}. ${t.description}`,
           }))
         : [],
     toolsIgnored:
-      entry.kind === 'mcp' && entry.toolsIgnored > 0 ? VAULT_COPY.toolsIgnored(entry.toolsIgnored) : null,
+      entry.kind === 'mcp' && entry.toolsIgnored > 0 ? copy.toolsIgnored(entry.toolsIgnored) : null,
     access: vaultAccessRow(entry, ctx),
-    unused: secretOnly ? VAULT_SECRET_UNUSED : null,
+    unused: secretOnly ? vaultSecretUnused(locale) : null,
     recentUse: entry.recentUses.map((u) => {
-      const row = vaultUseRow(u, { names, now: ctx.now, timeZone: ctx.timeZone });
+      const row = vaultUseRow(u, { names, now: ctx.now, timeZone: ctx.timeZone, locale });
       return { id: u.id, ...row };
     }),
-    ssh: ssh ? sshModel(entry, ctx.now, ctx.timeZone) : null,
+    ssh: ssh ? sshModel(entry, ctx.now, ctx.timeZone, locale) : null,
     totp: entry.kind === 'login' ? totpModel(entry, ctx) : null,
     moveToConnections: vaultEntryStaysMcp(entry),
   };
 }
 
 function totpModel(entry: VaultEntryDetail, ctx: ViewContext): { set: boolean; line: string } {
-  const line = vaultTotpLine(entry.totp, ctx.now, ctx.timeZone);
+  const line = vaultTotpLine(entry.totp, ctx.now, ctx.timeZone, ctx.locale);
   const agent = ctx.people.agent;
   return line
     ? { set: true, line }
-    : { set: false, line: VAULT_TOTP_TEXT.notSet(agent ? shortNameOf(agent) : AGENT_FALLBACK_NAME) };
+    : {
+        set: false,
+        line: vaultTotpText(ctx.locale).notSet(agent ? shortNameOf(agent) : agentFallbackName(ctx.locale)),
+      };
 }
 
 /* Settings → Agent → Keys' VAULT --------------------------------------------------------------- */
@@ -527,11 +573,11 @@ export interface VaultAgentRow {
  * → Keys lists them, each opening its entry (where it is switched On or Off). Old `secret` entries, which
  * nothing uses, aren't listed.
  */
-export function vaultAgentRows(entries: readonly VaultEntry[]): VaultAgentRow[] {
+export function vaultAgentRows(entries: readonly VaultEntry[], locale?: string): VaultAgentRow[] {
   return entries
     .filter((e) => e.agentOn && e.kind !== 'secret')
     .map((e) => {
-      const meta = bareMeta(e);
+      const meta = bareMeta(e, locale);
       return { entryId: e.id, name: e.name, meta, accessibilityLabel: `${e.name}, ${meta}` };
     });
 }

@@ -17,27 +17,16 @@ import {
   localModelUrlProblem,
   ModelId,
 } from '@whombat/core/domain';
-import { LOCAL_MODEL_COPY, localModelCheckText } from '@whombat/core/text';
+import { localModelCheckText, localModelCopy } from '@whombat/core/text';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
-/** The app's own words around the contracts' (AP-5005). */
-export const LOCAL_MODEL_TEXT = {
-  /** Opens the form on a saved model. */
-  change: 'Change',
-  cancel: 'Cancel',
-  /** The row before its first test. */
-  notTested: 'Not tested yet.',
-  testing: 'Testing…',
-  /** An empty field that needs a value. */
-  noAddress: 'Type the address of the AI service or model server.',
-  noModel: 'Type the model’s name.',
-  /** What a failed write or test says when the Whombat gave no sentence of its own. */
-  failed: 'That didn’t save. Try again in a moment.',
-  testFailed: 'The test didn’t run. Try again in a moment.',
-  /** The agent's model and the Chat picker on Custom: a model the list doesn't name, typed. */
-  another: 'Another model',
-  anotherHint: 'Any model that service or server offers, by its name.',
-  use: 'Use',
-} as const;
+/** The app's own words around the contracts', in a locale (English when none). */
+export function localModelText(locale?: string | null) {
+  return clientTree(locale, SETTINGS_AREA_WORDS).localModel;
+}
+
+export const LOCAL_MODEL_TEXT = localModelText();
 
 /** The burrow's model on its network; null without one. */
 export function localModelOf(
@@ -74,16 +63,20 @@ function issue(
  * What stops the form from saving or testing, by field: an empty address or model, an address Whombat can't use (the
  * contracts' sentence: “Use https:// for a model on the internet.”), a name or key that is too long. Empty when it can go.
  */
-export function localModelProblems(draft: LocalModelDraft): Partial<Record<LocalModelField, string>> {
+export function localModelProblems(
+  draft: LocalModelDraft,
+  locale?: string | null,
+): Partial<Record<LocalModelField, string>> {
+  const text = localModelText(locale);
   const out: Partial<Record<LocalModelField, string>> = {};
   const baseUrl = draft.baseUrl.trim();
-  if (!baseUrl) out.baseUrl = LOCAL_MODEL_TEXT.noAddress;
+  if (!baseUrl) out.baseUrl = text.noAddress;
   else {
     const problem = localModelUrlProblem(baseUrl);
     if (problem) out.baseUrl = LOCAL_MODEL_URL_PROBLEM_TEXT[problem];
   }
   const model = draft.model.trim();
-  if (!model) out.model = LOCAL_MODEL_TEXT.noModel;
+  if (!model) out.model = text.noModel;
   else {
     const problem = issue(ModelId, model);
     if (problem) out.model = problem;
@@ -199,10 +192,11 @@ export type LocalModelTone = 'ok' | 'warn' | 'bad' | 'mut';
 export function localModelCheckLine(
   check: Pick<LocalModelCheck, 'state'> | null | undefined,
   model: string,
+  locale?: string | null,
 ): { text: string; tone: LocalModelTone } {
-  if (!check) return { text: LOCAL_MODEL_TEXT.notTested, tone: 'mut' };
+  if (!check) return { text: localModelText(locale).notTested, tone: 'mut' };
   const tone: LocalModelTone = check.state === 'ok' ? 'ok' : check.state === 'unreachable' ? 'warn' : 'bad';
-  return { text: localModelCheckText(check.state, model), tone };
+  return { text: localModelCheckText(check.state, model, locale), tone };
 }
 
 /**
@@ -214,10 +208,17 @@ export function localModelRow(view: LocalModelView): { name: string; meta: strin
   return { name, meta: [view.label ? view.model : null, view.baseUrl].filter(Boolean).join(' · ') };
 }
 
-/** The field hints and labels in the form's order (the contracts' words). */
-export const LOCAL_MODEL_FIELDS: readonly { field: LocalModelField; label: string; hint: string | null }[] = [
-  { field: 'baseUrl', label: LOCAL_MODEL_COPY.address, hint: LOCAL_MODEL_COPY.addressHint },
-  { field: 'model', label: LOCAL_MODEL_COPY.model, hint: LOCAL_MODEL_COPY.modelHint },
-  { field: 'label', label: LOCAL_MODEL_COPY.label, hint: LOCAL_MODEL_COPY.labelHint },
-  { field: 'apiKey', label: LOCAL_MODEL_COPY.apiKey, hint: null },
-];
+/** The field hints and labels in the form's order (the contracts' words), in a locale (English when none). */
+export function localModelFields(
+  locale?: string | null,
+): readonly { field: LocalModelField; label: string; hint: string | null }[] {
+  const copy = localModelCopy(locale);
+  return [
+    { field: 'baseUrl', label: copy.address, hint: copy.addressHint },
+    { field: 'model', label: copy.model, hint: copy.modelHint },
+    { field: 'label', label: copy.label, hint: copy.labelHint },
+    { field: 'apiKey', label: copy.apiKey, hint: null },
+  ];
+}
+
+export const LOCAL_MODEL_FIELDS = localModelFields();

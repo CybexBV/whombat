@@ -25,8 +25,8 @@ import {
   runStatusCopy,
   runStepsView,
   type SkippedStepsView,
-  SUGGESTS_A_CHANGE,
-  TECHNICAL_DETAILS,
+  suggestsAChange,
+  technicalDetails,
 } from '../data/automations';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { useI18n, useMobileT } from '../i18n';
@@ -71,11 +71,11 @@ export function AutomationRunScreen({ route, navigation }: Props) {
       { params },
       {
         onSuccess: (res) => {
-          const text = outcomeText(res);
+          const text = outcomeText(res, rawLocale);
           if (text) Alert.alert(text.title, text.body);
           else void query.refetch();
         },
-        onError: (err) => Alert.alert(tMobile('screens.that-didnt-work'), errorText(err)),
+        onError: (err) => Alert.alert(tMobile('screens.that-didnt-work'), errorText(err, rawLocale)),
         onSettled: () => setBusy(null),
       },
     );
@@ -85,8 +85,8 @@ export function AutomationRunScreen({ route, navigation }: Props) {
       tMobile('screens.stop-this-run'),
       tMobile('screens.any-agent-working-for-it-stops-too-steps'),
       [
-        { text: 'Keep going', style: 'cancel' },
-        { text: 'Stop it', style: 'destructive', onPress: () => control('cancel') },
+        { text: tMobile('screens2.run.keepGoing'), style: 'cancel' },
+        { text: tMobile('screens2.run.stopIt'), style: 'destructive', onPress: () => control('cancel') },
       ],
     );
 
@@ -100,7 +100,7 @@ export function AutomationRunScreen({ route, navigation }: Props) {
   const steps = run ? runStepsView(run, words, rawLocale) : null;
   // The route's number is the run's: a request opened from a step comes back to “Run #12”.
   const openApproval = (approval: number) =>
-    navigation.navigate('Approval', { number: approval, back: `Run #${number}` });
+    navigation.navigate('Approval', { number: approval, back: tMobile('screens2.run.number', { number }) });
 
   return (
     <Screen>
@@ -128,13 +128,13 @@ export function AutomationRunScreen({ route, navigation }: Props) {
           <>
             <View style={{ paddingHorizontal: 20, paddingTop: 6, paddingBottom: 14, gap: 6 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <StatusDot color={toneColor(theme, status.tone)} label={automationRunLabel(run)} />
+                <StatusDot color={toneColor(theme, status.tone)} label={automationRunLabel(run, rawLocale)} />
                 <Text size={11.5} mono color={theme.colors.ink2}>
-                  {`${data.automation.name.toUpperCase()} · ${automationRunLabel(run).toUpperCase()}`}
+                  {`${data.automation.name.toUpperCase()} · ${automationRunLabel(run, rawLocale).toUpperCase()}`}
                 </Text>
               </View>
               <Text size={28} weight={700} accessibilityRole="header">
-                {`Run #${run.number}`}
+                {tMobile('screens2.run.number', { number: run.number })}
               </Text>
               <Text size={15} lh={1.42} color={theme.colors.ink2}>
                 {run.trigger.summary}
@@ -146,7 +146,12 @@ export function AutomationRunScreen({ route, navigation }: Props) {
               ) : null}
               {run.missingAttachments?.length || run.missingAttachmentsOmitted ? (
                 <Text size={14} lh={1.42} color={toneColor(theme, 'warn')}>
-                  {missingAttachmentsText(run.missingAttachments ?? [], run.missingAttachmentsOmitted ?? 0)}
+                  {missingAttachmentsText(
+                    run.missingAttachments ?? [],
+                    run.missingAttachmentsOmitted ?? 0,
+                    undefined,
+                    rawLocale,
+                  )}
                 </Text>
               ) : null}
               {data.automation.deletedAt ? (
@@ -210,11 +215,12 @@ function StepRow({
   step: RunStepView;
   onOpenApproval: (number: number) => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const open = s.approvalNumber !== null ? () => onOpenApproval(s.approvalNumber as number) : null;
   const request = s.approvalOpen ? (
     <Text size={13.5} weight={600} color={theme.colors.brand}>
-      {`Request #${s.approvalNumber} needs a person ›`}
+      {tMobile('screens2.run.requestNeedsPerson', { number: s.approvalNumber ?? '' })}
     </Text>
   ) : null;
   if (s.assessment)
@@ -254,9 +260,11 @@ function AssessedStepRow({
   onPress: (() => void) | null;
   children?: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [open, setOpen] = useState(false);
+  const technicalDetailsText = technicalDetails(rawLocale);
   const content = (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
@@ -302,7 +310,7 @@ function AssessedStepRow({
             }}
           >
             <Text size={10.5} weight={500} mono tracking={0.04} uppercase color={theme.colors.brand}>
-              {SUGGESTS_A_CHANGE}
+              {suggestsAChange(rawLocale)}
             </Text>
           </View>
         ) : null}
@@ -348,7 +356,7 @@ function AssessedStepRow({
           <Touchable
             onPress={() => setOpen((o) => !o)}
             feedback="wash"
-            accessibilityLabel={TECHNICAL_DETAILS}
+            accessibilityLabel={technicalDetailsText}
             accessibilityHint={
               open ? tMobile('screens.hides-them') : tMobile('screens.shows-what-was-checked')
             }
@@ -367,7 +375,7 @@ function AssessedStepRow({
             }}
           >
             <Text size={14} weight={500} color={theme.colors.ink2}>
-              {TECHNICAL_DETAILS}
+              {technicalDetailsText}
             </Text>
             {open ? (
               <ChevronUp size={16} color={theme.colors.mut} strokeWidth={2} />

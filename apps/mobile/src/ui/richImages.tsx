@@ -109,7 +109,10 @@ function ImageLink({ src, alt }: { src: string; alt: string }) {
       feedback="wash"
       ringRadius={12}
       accessibilityRole="link"
-      accessibilityLabel={`${alt || 'Image'}, on ${host}`}
+      accessibilityLabel={tMobile('screens2.rich.imageOn', {
+        alt: alt || tMobile('screens2.rich.image'),
+        host,
+      })}
       style={{
         alignSelf: 'flex-start',
         flexDirection: 'row',

@@ -8,12 +8,13 @@ import { ApiError, type CommitResult, problemText } from '@whombat/client';
 import {
   canRetryTurn,
   canStopTurn,
-  TURN_FAILURE_LABELS,
-  TURN_STOP_LABEL,
   type TurnFailedCard,
+  turnFailureLabels,
   turnFailureRetryable,
   turnRetriedText,
+  turnStopLabel,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface TurnFailedView {
   dispatchId: string;
@@ -41,6 +42,7 @@ export interface TurnFailedContext {
   /** The runtime advertises `dispatches.retry` (always true over the legacy server and in the demo world). */
   retryFeature: boolean;
   timeZone: string;
+  locale?: string;
 }
 
 /** “Not signed in” for TalkBack (the labels are written in capitals for the eye). */
@@ -49,10 +51,12 @@ function spoken(label: string): string {
 }
 
 export function turnFailedView(card: TurnFailedCard, ctx: TurnFailedContext): TurnFailedView {
-  const label = TURN_FAILURE_LABELS[card.code] ?? TURN_FAILURE_LABELS.internal;
-  const agentName = ctx.agent?.name ?? 'The agent';
+  const { t } = mobileTranslator(ctx.locale);
+  const labels = turnFailureLabels(ctx.locale);
+  const label = labels[card.code] ?? labels.internal;
+  const agentName = ctx.agent?.name ?? t('data.turns.theAgent');
   const reason = ctx.text.trim() === card.reason.trim() ? null : card.reason;
-  const retried = card.retriedAt ? turnRetriedText(card.retriedAt, ctx.timeZone) : null;
+  const retried = card.retriedAt ? turnRetriedText(card.retriedAt, ctx.timeZone, ctx.locale) : null;
   const canRetry = ctx.retryFeature && turnFailureRetryable(card.code) && canRetryTurn(card, ctx.viewer);
   return {
     dispatchId: card.dispatchId,
@@ -63,26 +67,27 @@ export function turnFailedView(card: TurnFailedCard, ctx: TurnFailedContext): Tu
     reason,
     canRetry,
     retried,
-    accessibilityLabel: [`${agentName} couldn’t finish`, spoken(label), reason, retried]
+    accessibilityLabel: [t('data.turns.couldntFinish', { agent: agentName }), spoken(label), reason, retried]
       .filter(Boolean)
       .join('. '),
   };
 }
 
 /** “Asked Dusty to try again.” after a retry went through. */
-export function retriedNotice(agentName: string): string {
-  return `Asked ${agentName} to try again.`;
+export function retriedNotice(agentName: string, locale?: string): string {
+  return mobileTranslator(locale).t('data.turns.retried', { agent: agentName });
 }
 
 /**
  * What a retry that didn't happen says (the server's words when it gave some). The runtime's 409 — the person the turn
  * was for left — is final: the card keeps the words and loses the button (`isFinal`).
  */
-export function retryFailureText(result: CommitResult<unknown> | Error): string {
-  if (result instanceof ApiError) return problemText(result);
-  if (result instanceof Error) return 'Couldn’t reach Whombat. Nothing changed, try again.';
-  if (result.status === 'blocked') return `This needs “${result.keyNeeded.label}”.`;
-  if (result.status === 'pending_approval') return 'That needs a person to approve it first.';
+export function retryFailureText(result: CommitResult<unknown> | Error, locale?: string): string {
+  const { t } = mobileTranslator(locale);
+  if (result instanceof ApiError) return problemText(result, undefined, locale);
+  if (result instanceof Error) return t('data.turns.unreachable');
+  if (result.status === 'blocked') return t('data.turns.needsKey', { key: result.keyNeeded.label });
+  if (result.status === 'pending_approval') return t('data.turns.needsApproval');
   return '';
 }
 
@@ -107,10 +112,14 @@ export function offersStop(input: {
 }
 
 /** Asked before stopping: what was being done is left where it is. */
-export function stopConfirm(agentName: string): { title: string; body: string; cta: string } {
+export function stopConfirm(
+  agentName: string,
+  locale?: string,
+): { title: string; body: string; cta: string } {
+  const { t } = mobileTranslator(locale);
   return {
-    title: `Stop ${agentName}?`,
-    body: `${agentName} stops what it’s doing here now. You can ask again.`,
-    cta: TURN_STOP_LABEL,
+    title: t('data.turns.stopTitle', { agent: agentName }),
+    body: t('data.turns.stopBody', { agent: agentName }),
+    cta: turnStopLabel(locale),
   };
 }

@@ -6,7 +6,10 @@
  * left out. Pure; web and phone share it.
  */
 import type { HostDisk, HostDiskUsage, HostGuest, HostServerDetail, HostVolume } from '@whombat/core/domain';
-import { FORECAST_DATE_DAYS, volumeForecast } from './dashboard-words';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
+import { FORECAST_DATE_DAYS, formatDayMonth, type VolumeForecast, volumeForecast } from './dashboard-words';
 import { formatGb, formatPct } from './format';
 import { storageTotals } from './model';
 import { isTemporaryGuest } from './temporary';
@@ -98,24 +101,63 @@ function folderOverlapsCategories(
   return false;
 }
 
+const words = (locale?: string | null) => clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS);
+
+/** English (or no locale): the forecast's own words stand as they are. */
+const isEnglish = (locale?: string | null) => !locale || /^en\b/i.test(locale);
+
+/**
+ * A volume's forecast in words, in a locale: “Full about 18 Dec” within 60 days, else “Full in about 5 months”; null
+ * when it isn't filling up. English is the forecast's own words.
+ */
+export function forecastWords(
+  f: Pick<VolumeForecast, 'fullInDays' | 'fullAt' | 'words'>,
+  timeZone?: string,
+  locale?: string | null,
+): string | null {
+  if (!f.words || f.fullInDays == null || !f.fullAt || isEnglish(locale)) return f.words;
+  const w = words(locale).forecast;
+  if (f.fullInDays < FORECAST_DATE_DAYS)
+    return interpolate(w.about, { date: dayMonth(Date.parse(f.fullAt), timeZone, locale) });
+  const months = Math.round(f.fullInDays / 30.4);
+  return months >= 12 ? w.inYear : interpolate(w.inMonths, { count: months });
+}
+
+/** “18 Dec”, in Dutch “18 dec”: a date in the person's language. */
+export function dayMonth(t: number, timeZone?: string, locale?: string | null): string {
+  if (!locale || isEnglish(locale)) return formatDayMonth(t, timeZone);
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      day: 'numeric',
+      month: 'short',
+      ...(timeZone ? { timeZone } : {}),
+    })
+      .format(t)
+      .replace(/\.$/, '');
+  } catch {
+    // A locale Intl doesn't know (the QA pseudo-locale) reads the date as English does.
+    return formatDayMonth(t, timeZone);
+  }
+}
+
 /** Plain-English note when an on-request disk usage scan skipped without measuring; null when it ran. */
 export function diskUsageSkipNote(
   usage: Pick<HostDiskUsage, 'ok' | 'code' | 'message' | 'skippedSpunDown'>,
+  locale?: string | null,
 ): string | null {
   if (usage.ok !== false && !usage.code) return null;
   const msg = usage.message?.trim();
   if (msg) return msg;
+  const w = words(locale).space;
   if (usage.code === 'spun_down') {
     const disks = usage.skippedSpunDown ?? [];
-    if (disks.length === 1) return `Skipped because ${disks[0]} is asleep; sleeping disks aren’t woken.`;
+    if (disks.length === 1) return interpolate(w.skipOne, { disk: disks[0] ?? '' });
     if (disks.length > 1)
-      return `Skipped because ${disks.slice(0, -1).join(', ')} and ${disks.at(-1)} are asleep; sleeping disks aren’t woken.`;
-    return 'Skipped because a backing disk is asleep; sleeping disks aren’t woken.';
+      return interpolate(w.skipMany, { disks: disks.slice(0, -1).join(', '), last: disks.at(-1) ?? '' });
+    return w.skipBacking;
   }
-  if (usage.code === 'standby_unknown') {
-    return 'Skipped because Whombat can’t tell whether the disk is asleep; sleeping disks aren’t woken.';
-  }
-  return 'Could not check what fills this disk.';
+  if (usage.code === 'standby_unknown') return w.skipUnknown;
+  return w.couldNot;
 }
 
 /** Pick the freshest recent breakdown (preferring the matching mount when there is one volume). */
@@ -155,8 +197,10 @@ export function spaceUse(input: {
   diskUsage?: readonly HostDiskUsage[];
   now?: number;
   most?: number;
+  locale?: string | null;
 }): SpaceUse | null {
   const most = input.most ?? SPACE_PARTS;
+  const w = words(input.locale).space;
   const sized = input.guests
     .filter((g) => !isTemporaryGuest(g) && (g.diskUsedGb ?? 0) >= 0.05)
     .sort((a, b) => (b.diskUsedGb ?? 0) - (a.diskUsedGb ?? 0));
@@ -175,18 +219,13 @@ export function spaceUse(input: {
   if (more.length) {
     const apps = more.every((g) => kindOf(g) === 'app');
     const machines = more.every((g) => kindOf(g) === 'machine');
-    const word = apps
-      ? more.length === 1
-        ? 'app'
-        : 'apps'
-      : machines
-        ? more.length === 1
-          ? 'machine'
-          : 'machines'
-        : 'more';
     parts.push({
       id: 'more',
-      label: apps || machines ? `${more.length} more ${word}` : `${more.length} more`,
+      label: apps
+        ? w.moreApps(more.length)
+        : machines
+          ? w.moreMachines(more.length)
+          : interpolate(w.more, { count: more.length }),
       gb: more.reduce((s, g) => s + (g.diskUsedGb ?? 0), 0),
       kind: apps ? 'app' : 'machine',
       guestId: null,
@@ -207,7 +246,10 @@ export function spaceUse(input: {
       if (c.key === 'vm_disks' && hasSizedMachines) continue;
       categoryKeys.add(c.key);
       const reclaimGb = (c.reclaimableBytes ?? 0) / GB_BYTES;
-      const detail = reclaimGb >= 0.1 ? `${formatGb(reclaimGb)} reclaimable` : c.detail || undefined;
+      const detail =
+        reclaimGb >= 0.1
+          ? interpolate(w.reclaimable, { amount: formatGb(reclaimGb) })
+          : c.detail || undefined;
       measuredParts.push({
         id: `cat:${c.key}`,
         label: c.label,
@@ -242,7 +284,7 @@ export function spaceUse(input: {
     if (rest >= 1) {
       parts.push({
         id: 'rest',
-        label: shownMeasured.length ? 'Other' : 'Everything else',
+        label: shownMeasured.length ? w.other : w.everythingElse,
         gb: rest,
         kind: 'rest',
         guestId: null,
@@ -264,8 +306,7 @@ export function spaceUse(input: {
   if (only) {
     const known = parts.reduce((s, p) => s + p.gb, 0);
     const rest = only.usedGb - known;
-    if (rest >= 1)
-      parts.push({ id: 'rest', label: 'Everything else', gb: rest, kind: 'rest', guestId: null });
+    if (rest >= 1) parts.push({ id: 'rest', label: w.everythingElse, gb: rest, kind: 'rest', guestId: null });
   }
   const totalGb = parts.reduce((s, p) => s + p.gb, 0);
   return { parts: parts.map((p) => ({ ...p, share: totalGb > 0 ? p.gb / totalGb : 0 })), totalGb };
@@ -274,12 +315,16 @@ export function spaceUse(input: {
 /* The Storage tab's tiles ---------------------------------------------------------------------------------------- */
 
 /** How a disk is doing in a word: failing (SMART or the hub says so), wear high (the wear warning), else healthy. */
-export function diskHealth(d: HostDisk): { tone: 'ok' | 'warn' | 'bad'; text: string } {
-  if (d.health === 'failing' || d.smart?.passed === false) return { tone: 'bad', text: 'Failing' };
+export function diskHealth(
+  d: HostDisk,
+  locale?: string | null,
+): { tone: 'ok' | 'warn' | 'bad'; text: string } {
+  const w = words(locale).space;
+  if (d.health === 'failing' || d.smart?.passed === false) return { tone: 'bad', text: w.failing };
   const wear = hostTone(wearLevel(d.wearPct));
   if (d.health === 'wear_high' || wear === 'warn' || wear === 'bad')
-    return { tone: wear === 'bad' ? 'bad' : 'warn', text: 'Wear high' };
-  return { tone: 'ok', text: 'Healthy' };
+    return { tone: wear === 'bad' ? 'bad' : 'warn', text: w.wearHigh };
+  return { tone: 'ok', text: w.healthy };
 }
 
 export interface SpaceTile {
@@ -297,13 +342,20 @@ export function spaceVolumes(volumes: readonly HostVolume[]): HostVolume[] {
 }
 
 const quoted = (label: string) => `‘${label}’`;
+const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 /**
  * The Storage tab's tiles in words: how full (the Summary's own words and warning bands), when it fills up (the hosts
  * service's forecast, the Summary's words), and the disks to watch. A tile with nothing to go on is left out.
  */
-export function spaceTiles(input: { detail: HostServerDetail; now: number; timeZone?: string }): SpaceTile[] {
-  const { detail } = input;
+export function spaceTiles(input: {
+  detail: HostServerDetail;
+  now: number;
+  timeZone?: string;
+  locale?: string | null;
+}): SpaceTile[] {
+  const { detail, locale } = input;
+  const w = words(locale).space;
   const tiles: SpaceTile[] = [];
   const volumes = spaceVolumes(detail.health?.volumes ?? []);
   const totals = storageTotals(detail);
@@ -313,16 +365,16 @@ export function spaceTiles(input: { detail: HostServerDetail; now: number; timeZ
     const fullest = [...volumes].sort((a, b) => b.usedPct - a.usedPct)[0];
     tiles.push({
       key: 'space',
-      label: 'Space',
-      value: spaceWords(pct),
+      label: w.space,
+      value: spaceWords(pct, locale),
       sub: fullest
-        ? `${quoted(fullest.label)} is ${formatPct(fullest.usedPct)} full`
-        : `${formatPct(100 - pct)} free`,
+        ? interpolate(w.fullShare, { name: quoted(fullest.label), pct: formatPct(fullest.usedPct) })
+        : interpolate(w.free, { pct: formatPct(100 - pct) }),
       tone: tone === 'warn' || tone === 'bad' ? tone : null,
     });
   }
   if (volumes.length) {
-    let soonest: { days: number; words: string; label: string } | null = null;
+    let soonest: { days: number; words: string; label: string; at: string | null } | null = null;
     for (const v of volumes) {
       const f = volumeForecast({
         fullInDays: v.fullInDays,
@@ -330,31 +382,43 @@ export function spaceTiles(input: { detail: HostServerDetail; now: number; timeZ
         ...(input.timeZone ? { timeZone: input.timeZone } : {}),
       });
       if (f.fullInDays != null && f.words && (!soonest || f.fullInDays < soonest.days))
-        soonest = { days: f.fullInDays, words: f.words, label: v.label };
+        soonest = { days: f.fullInDays, words: f.words, label: v.label, at: f.fullAt };
     }
     if (soonest) {
       // “Full in about 5 months” → Full in · About 5 months; “Full about 18 Dec” → Full by · About 18 Dec.
-      const dated = !soonest.words.startsWith('Full in ');
-      const rest = soonest.words.replace(/^Full (in )?/, '');
+      const dated = soonest.days < FORECAST_DATE_DAYS;
+      const months = Math.round(soonest.days / 30.4);
+      const value = isEnglish(locale)
+        ? capital(soonest.words.replace(/^Full (in )?/, ''))
+        : dated && soonest.at
+          ? capital(dayMonth(Date.parse(soonest.at), input.timeZone, locale))
+          : months >= 12
+            ? w.aboutYear
+            : interpolate(w.aboutMonths, { count: months });
       tiles.push({
         key: 'full',
-        label: dated ? 'Full by' : 'Full in',
-        value: rest.charAt(0).toUpperCase() + rest.slice(1),
-        sub: volumes.length > 1 ? `${quoted(soonest.label)} first` : quoted(soonest.label),
+        label: dated ? w.fullBy : w.fullIn,
+        value,
+        sub:
+          volumes.length > 1 ? interpolate(w.first, { name: quoted(soonest.label) }) : quoted(soonest.label),
         tone: soonest.days < FORECAST_DATE_DAYS ? 'warn' : null,
       });
-    } else tiles.push({ key: 'full', label: 'Full in', value: 'Not filling up', sub: null, tone: null });
+    } else tiles.push({ key: 'full', label: w.fullIn, value: w.notFilling, sub: null, tone: null });
   }
   if (detail.disks.length) {
-    const health = detail.disks.map(diskHealth);
+    const health = detail.disks.map((d) => diskHealth(d, locale));
     const failing = health.filter((h) => h.tone === 'bad').length;
     const watch = health.filter((h) => h.tone !== 'ok').length;
     const healthy = health.length - watch;
     tiles.push({
       key: 'disks',
-      label: 'Disks',
-      value: failing ? `${failing} failing` : watch ? `${watch} to watch` : 'All healthy',
-      sub: watch ? `${healthy} healthy` : `${health.length} ${health.length === 1 ? 'disk' : 'disks'}`,
+      label: w.disks,
+      value: failing
+        ? interpolate(w.failingCount, { count: failing })
+        : watch
+          ? interpolate(w.toWatch, { count: watch })
+          : w.allHealthy,
+      sub: watch ? interpolate(w.healthyCount, { count: healthy }) : w.diskCount(health.length),
       tone: failing ? 'bad' : watch ? 'warn' : null,
     });
   }

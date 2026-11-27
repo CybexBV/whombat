@@ -23,7 +23,7 @@ export function UpdateRow({ update, first = false }: { update: AndroidDownload; 
   const managedCopyHere = managedCopy(rawLocale);
 
   const install = useAppInstall();
-  const view = install ? installView(install.state, update, managedCopyHere.update.install) : null;
+  const view = install ? installView(install.state, update, managedCopyHere.update.install, rawLocale) : null;
   return (
     <Row
       first={first}

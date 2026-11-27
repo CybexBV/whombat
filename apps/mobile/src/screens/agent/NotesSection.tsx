@@ -5,7 +5,7 @@
  * in a sheet (the count, Save and Cancel). Beside what it remembers about you, so what it knows is in one place.
  */
 
-import { MEMORY_TEXT } from '@whombat/client';
+import { memoryText } from '@whombat/client';
 import { useAgentNotes, useSetAgentNotes } from '@whombat/client/react';
 import { memoryUsageText } from '@whombat/core';
 import { useState } from 'react';
@@ -24,17 +24,18 @@ import type { PartProps } from './parts';
 
 export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
   const { rawLocale } = useI18n();
+  const memoryTextHere = memoryText(rawLocale);
 
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { slug, timeZone } = useBurrowBase();
   const now = useNow();
-  const copy = notesCopy(profile.agent.name);
+  const copy = notesCopy(profile.agent.name, rawLocale);
   const query = useAgentNotes({ params: { burrow: slug } });
   const save = useSetAgentNotes(slug);
   const [editing, setEditing] = useState(false);
   const data = query.data;
-  const meta = data ? notesMeta(data, timeZone, now) : null;
+  const meta = data ? notesMeta(data, timeZone, now, rawLocale) : null;
 
   return (
     <>
@@ -51,7 +52,7 @@ export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
         </View>
         {!data ? (
           query.error ? (
-            <ErrorState text={MEMORY_TEXT.loadFailed} onRetry={() => void query.refetch()} />
+            <ErrorState text={memoryTextHere.loadFailed} onRetry={() => void query.refetch()} />
           ) : (
             <SkeletonRows count={2} lines={1} label={tMobile('screens.loading-the-notes')} />
           )
@@ -97,11 +98,11 @@ export function NotesSection({ profile }: Pick<PartProps, 'profile'>) {
               { params: { burrow: slug }, body: { text } },
               {
                 onSuccess: (result) => {
-                  if (result.status !== 'ok') return resolve(MEMORY_TEXT.failed);
-                  showNotice(MEMORY_TEXT.notesSaved);
+                  if (result.status !== 'ok') return resolve(memoryTextHere.failed);
+                  showNotice(memoryTextHere.notesSaved);
                   resolve(null);
                 },
-                onError: (error) => resolve(errorText(error)),
+                onError: (error) => resolve(errorText(error, rawLocale)),
               },
             ),
           )
@@ -127,6 +128,7 @@ function NotesEditor({
   onClose: () => void;
   onSave: (text: string) => Promise<string | null>;
 }) {
+  const { rawLocale } = useI18n();
   const [text, setText] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const [shown, setShown] = useState(false);
@@ -141,7 +143,7 @@ function NotesEditor({
     onClose();
   };
   const save = async () => {
-    const edit = notesEdit(saved, text);
+    const edit = notesEdit(saved, text, rawLocale);
     if (edit.kind === 'too_long') return setProblem(edit.problem);
     if (edit.kind === 'unchanged') return close();
     const result = await onSave(edit.text);
@@ -160,7 +162,7 @@ function NotesEditor({
           }}
           multiline
           placeholder={copy.placeholder}
-          hint={notesCount(text)}
+          hint={notesCount(text, rawLocale)}
           autoFocus
         />
         <FormMessage text={problem} />

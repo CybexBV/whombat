@@ -6,6 +6,7 @@
  * a settled thread's, a file's, a conversation's and a notice line's. Pure; a pick comes back as the id written here.
  */
 import type { NeedsYouButton, NeedsYouButtonKind, QuietMenuView } from '@whombat/client';
+import { mobileTranslator } from '../i18n/translate';
 import type { FileAction, FileActionKind } from './files';
 import { type MessageActionKind, type MessageMenu, messageAction } from './messageActions';
 import type { NotifyOption } from './notify';
@@ -46,7 +47,11 @@ const GROUP_OF: Record<MessageActionKind, number> = {
 const REACT = 'react:';
 const MORE = 'more';
 
-export const MORE_REACTIONS = 'More reactions';
+export function moreReactions(locale?: string): string {
+  return mobileTranslator(locale).t('data.nativeMenu.moreReactions');
+}
+
+export const MORE_REACTIONS = moreReactions();
 
 /** One line of a menu (`whombat-menu`'s `MenuSpec.Item`). */
 export interface NativeMenuItem {
@@ -76,7 +81,9 @@ export function nativeMenuSpec(
   menu: MessageMenu,
   quick: readonly { value: string; mine: boolean }[] | null,
   detail: string | null,
+  locale?: string,
 ): NativeMenuSpec {
+  const { t } = mobileTranslator(locale);
   const sections: NativeMenuItem[][] = [];
   let group = -1;
   for (const a of menu.actions) {
@@ -99,11 +106,13 @@ export function nativeMenuSpec(
           id: `${REACT}${q.value}`,
           value: q.value,
           mine: q.mine,
-          label: `${q.mine ? 'Take back' : 'React with'} ${reactionName(q.value)}`,
+          label: t(q.mine ? 'data.nativeMenu.takeBack' : 'data.nativeMenu.reactWith', {
+            name: reactionName(q.value),
+          }),
         }))
       : null,
     more: react
-      ? { id: MORE, title: MORE_REACTIONS, icon: 'face.smiling', destructive: false, disabled: false }
+      ? { id: MORE, title: moreReactions(locale), icon: 'face.smiling', destructive: false, disabled: false }
       : null,
     sections,
   };
@@ -127,8 +136,8 @@ export function plainMenu(sections: NativeMenuItem[][], title: string | null = n
   return { title, reactions: null, more: null, sections: sections.filter((s) => s.length > 0) };
 }
 
-function actionItem(kind: MessageActionKind): NativeMenuItem {
-  const a = messageAction(kind);
+function actionItem(kind: MessageActionKind, locale?: string): NativeMenuItem {
+  const a = messageAction(kind, locale);
   return { id: kind, title: a.label, icon: ACTION_SYMBOLS[kind], destructive: a.destructive };
 }
 
@@ -136,10 +145,10 @@ function actionItem(kind: MessageActionKind): NativeMenuItem {
  * A row of a room's Settled list, held or its ⋯ swiped to: Open again puts it back in the room, Reply in thread opens it
  * where the reply box is, and Copy link where the thread has a web address (not in the demo world).
  */
-export function settledThreadMenu(canLink: boolean): NativeMenuSpec {
+export function settledThreadMenu(canLink: boolean, locale?: string): NativeMenuSpec {
   return plainMenu([
-    [actionItem('open_again'), actionItem('reply_thread')],
-    canLink ? [actionItem('copy_link')] : [],
+    [actionItem('open_again', locale), actionItem('reply_thread', locale)],
+    canLink ? [actionItem('copy_link', locale)] : [],
   ]);
 }
 
@@ -199,13 +208,14 @@ const LINK_SYMBOLS: Record<ConversationMenuLink['key'], string> = {
 export function conversationMenu(
   notify: readonly NotifyOption[],
   links: readonly ConversationMenuLink[],
+  locale?: string,
 ): NativeMenuSpec {
   const current = notify.find((o) => o.selected);
   return plainMenu([
     [
       {
         id: 'notify',
-        title: 'Notifications',
+        title: mobileTranslator(locale).t('data.nativeMenu.notifications'),
         subtitle: current?.label ?? null,
         icon: 'bell',
         children: [

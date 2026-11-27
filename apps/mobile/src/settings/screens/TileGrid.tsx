@@ -19,7 +19,7 @@ import { BrandMark } from '../../ui/BrandMark';
 
 import { Touchable } from '../../ui/Touchable';
 import {
-  PHONE_SCREENS_TEXT,
+  phoneScreensText,
   TILE_SLOP,
   type TileGeometry,
   type TileLabel,
@@ -159,7 +159,7 @@ const Tile = memo(function Tile({
     <Touchable
       accessibilityRole="button"
       accessibilityLabel={tileSpoken(label, widget, rawLocale)}
-      accessibilityHint={PHONE_SCREENS_TEXT.tapHint}
+      accessibilityHint={phoneScreensText(rawLocale).tapHint}
       accessibilityState={{ selected: chosen }}
       onPress={() => onPress(widget.id)}
       feedback="fade"

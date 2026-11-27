@@ -9,13 +9,13 @@
 
 import type { SettledLine } from '@whombat/client';
 import {
-  AUTOMATION_PLAN_STATE_LABELS,
   type AutomationPlanCard,
   type AutomationPlanChange,
   type AutomationPlanState,
   type AutomationPlanView,
   type AutomationReportSample,
   type AutomationSample,
+  automationPlanStateLabels,
   formatClock,
   formatRecent,
 } from '@whombat/core';
@@ -60,7 +60,9 @@ export function automationPlanText(locale?: string) {
       change: (name: string) => t('automationPlan.automationPlanText.setAside.change', { name }),
     },
     trying: (name: string, sample: number | null) =>
-      sample === null ? `Trying “${name}” now.` : `Trying “${name}” on #${sample}.`,
+      sample === null
+        ? t('data.automationPlan.tryingNow', { name })
+        : t('data.automationPlan.tryingOn', { name, sample }),
     /** Settled lines. */
     turnedOnBy: (who: string, name: string) =>
       t('automationPlan.automationPlanText.turnedOnBy', { who, name }),
@@ -142,10 +144,11 @@ function sentence(text: string): string {
 }
 
 /** The card's view of a plan; `agent` is the agent's name, for “What Dusty is asked”. */
-export function planCardView(plan: AutomationPlanView, agent: string): PlanCardView {
+export function planCardView(plan: AutomationPlanView, agent: string, locale?: string): PlanCardView {
+  const AUTOMATION_PLAN_TEXT = automationPlanText(locale);
   const kind = plan.change ? 'change' : 'new';
   const kicker = plan.change ? AUTOMATION_PLAN_TEXT.changeKicker : AUTOMATION_PLAN_TEXT.newKicker;
-  const status = `${kicker} · ${AUTOMATION_PLAN_STATE_LABELS[plan.state].toUpperCase()}`;
+  const status = `${kicker} · ${automationPlanStateLabels(locale)[plan.state].toUpperCase()}`;
   const tone: PlanStateTone = plan.state === 'waiting' ? 'warn' : plan.state === 'accepted' ? 'ok' : 'mut';
   return {
     planId: plan.planId,
@@ -190,10 +193,12 @@ export function planDisplay(card: Pick<AutomationPlanCard, 'plan'>): 'full' | 'l
 }
 
 /** “14:02” today, “Mon 14:02” this week, “24 Sep 14:02” before; “just now” under a minute. */
-function decidedWhen(at: string, now: Date, timeZone: string): string {
-  const recent = formatRecent(at, now, timeZone);
+function decidedWhen(at: string, now: Date, timeZone: string, locale?: string): string {
+  const recent = formatRecent(at, now, timeZone, locale);
   const clock = formatClock(at, timeZone);
-  return recent === clock || recent === 'just now' ? recent : `${recent} ${clock}`;
+  // “just now” in the locale: what `formatRecent` says of this very moment.
+  const justNow = formatRecent(now, now, timeZone, locale);
+  return recent === clock || recent === justNow ? recent : `${recent} ${clock}`;
 }
 
 /**
@@ -202,16 +207,20 @@ function decidedWhen(at: string, now: Date, timeZone: string): string {
  */
 export function planSettledLine(
   plan: Pick<AutomationPlanView, 'state' | 'name' | 'decidedById' | 'decidedAt'>,
-  ctx: { viewerId: string; name: (id: string) => string; now: Date; timeZone: string },
+  ctx: { viewerId: string; name: (id: string) => string; now: Date; timeZone: string; locale?: string },
 ): SettledLine | null {
+  const AUTOMATION_PLAN_TEXT = automationPlanText(ctx.locale);
   switch (plan.state) {
     case 'waiting':
       return null;
     case 'accepted': {
-      const who = !plan.decidedById || plan.decidedById === ctx.viewerId ? 'You' : ctx.name(plan.decidedById);
+      const who =
+        !plan.decidedById || plan.decidedById === ctx.viewerId
+          ? mobileTranslator(ctx.locale).t('data.messages.you')
+          : ctx.name(plan.decidedById);
       return {
         lead: AUTOMATION_PLAN_TEXT.turnedOnBy(who, plan.name),
-        detail: plan.decidedAt ? decidedWhen(plan.decidedAt, ctx.now, ctx.timeZone) : null,
+        detail: plan.decidedAt ? decidedWhen(plan.decidedAt, ctx.now, ctx.timeZone, ctx.locale) : null,
         tone: 'ok',
       };
     }
@@ -238,7 +247,9 @@ export function newestSample(samples: readonly AutomationSample[] | undefined): 
 export function tryItLabel(
   tryIt: AutomationPlanView['tryIt'],
   samples: readonly AutomationSample[] | undefined,
+  locale?: string,
 ): string {
+  const AUTOMATION_PLAN_TEXT = automationPlanText(locale);
   if (tryIt === 'now') return AUTOMATION_PLAN_TEXT.tryNow;
   if (!samples) return AUTOMATION_PLAN_TEXT.tryIt;
   const sample = newestSample(samples);

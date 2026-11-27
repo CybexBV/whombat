@@ -16,23 +16,25 @@ import {
   hostTasksSnapshot,
   subscribeHostTasks,
 } from '../data/hostTasks';
+import { useI18n } from '../i18n';
 import { showFailure, showNotice } from './feedback';
 
 /** A task whose read keeps failing (gone, or never readable) is dropped quietly after this many tries. */
 const MAX_READ_ERRORS = 5;
 
 function useFinish() {
+  const { rawLocale } = useI18n();
   const refresh = useRefreshHosts();
   return useCallback(
     (t: FollowedTask, result: 'ok' | 'warning' | 'error', message?: string | null) => {
       if (!endHostTask(t.key)) return;
       refresh();
       if (t.quiet && result === 'ok') return;
-      const text = followEndText(t.words, result, message);
-      if (result === 'error') showFailure(text);
+      const text = followEndText(t.words, result, message, rawLocale);
+      if (result === 'error') showFailure(text, rawLocale);
       else showNotice(text);
     },
-    [refresh],
+    [refresh, rawLocale],
   );
 }
 

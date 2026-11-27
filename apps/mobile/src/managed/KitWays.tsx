@@ -34,7 +34,7 @@ import { Button } from '../ui/primitives';
 import { Touchable } from '../ui/Touchable';
 import { Tag } from './BackupsOverview';
 import {
-  BACKUP_PHONE_TEXT,
+  backupPhoneText,
   initialKitWays,
   kitPasskeyIds,
   kitPrimary,
@@ -70,6 +70,7 @@ export interface KitWaysProps {
 
 export function KitWays(props: KitWaysProps) {
   const { rawLocale } = useI18n();
+  const backupPhoneTextHere = backupPhoneText(rawLocale);
   const K = backupOptionsText(rawLocale).kit;
   const managedCopyHere = managedCopy(rawLocale);
 
@@ -124,7 +125,7 @@ export function KitWays(props: KitWaysProps) {
       platform,
       appliance: appliancePeerId,
       me: accountOf(session),
-      name: passkeyName(phoneLabel()),
+      name: passkeyName(phoneLabel(rawLocale)),
     });
     const ids = [added.credentialId];
     setHasPasskey(true);
@@ -155,7 +156,7 @@ export function KitWays(props: KitWaysProps) {
           setError(
             e instanceof PasskeyError && e.code === 'unsupported'
               ? K.noPrf
-              : (passkeyErrorText(e) ?? managedCopyHere.claim.errors.failed),
+              : (passkeyErrorText(e, rawLocale) ?? managedCopyHere.claim.errors.failed),
           );
           return;
         }
@@ -172,7 +173,7 @@ export function KitWays(props: KitWaysProps) {
             }),
           );
         } catch {
-          setError(BACKUP_PHONE_TEXT.printFailed);
+          setError(backupPhoneTextHere.printFailed);
           return;
         }
       }
@@ -180,7 +181,7 @@ export function KitWays(props: KitWaysProps) {
         try {
           await props.saver.save(`whombat-recovery-kit-${props.device}.txt`, t);
         } catch {
-          setError(BACKUP_PHONE_TEXT.fileFailed);
+          setError(backupPhoneTextHere.fileFailed);
           return;
         }
       }
@@ -195,7 +196,7 @@ export function KitWays(props: KitWaysProps) {
   };
 
   const primary = kitPrimary(ways, rawLocale);
-  const back = props.onBack ? { back: { label: BACKUP_PHONE_TEXT.back, onPress: props.onBack } } : {};
+  const back = props.onBack ? { back: { label: backupPhoneTextHere.back, onPress: props.onBack } } : {};
 
   if (kept)
     return (

@@ -5,12 +5,13 @@
  */
 import type { AgentWords } from '@whombat/client';
 import {
-  DEVICE_SKILL_COPY,
-  DEVICE_TIER_LABELS,
   type DeviceActionChoice,
   type DeviceSkillCard,
+  deviceSkillCopy,
+  deviceTierLabels,
   limitText,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export type DeviceTier = DeviceActionChoice['tier'];
 
@@ -18,13 +19,18 @@ export type DeviceTier = DeviceActionChoice['tier'];
 export const DEVICE_TIERS: readonly DeviceTier[] = ['off', 'ask', 'can'];
 
 /** The card's own words besides the contracts' (`DEVICE_SKILL_COPY`). Mock 3 copy where the mock has one. */
-export const DEVICE_CARD_COPY = {
-  newSkill: 'New skill · reads only, until you allow more',
-  tested: 'Tested on your unit',
-  mayChange: 'What I may change',
-  /** The tier control's name for TalkBack: “What Neo may do with Room temperature” (assistant-name-mobile.md AP-1534). */
-  tiersLabel: (action: string, w: AgentWords) => `What ${w.name} may do with ${action}`,
-} as const;
+export function deviceCardCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    newSkill: t('data.deviceSkill.newSkill'),
+    tested: t('data.deviceSkill.tested'),
+    mayChange: t('data.deviceSkill.mayChange'),
+    /** The tier control's name for TalkBack: “What Neo may do with Room temperature”. */
+    tiersLabel: (action: string, w: AgentWords) => t('data.deviceSkill.tiersLabel', { name: w.name, action }),
+  };
+}
+
+export const DEVICE_CARD_COPY = deviceCardCopy();
 
 export interface DeviceReadingView {
   key: string;
@@ -59,14 +65,11 @@ export interface DeviceSkillView {
 
 const capitalize = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : s);
 
-export function deviceSkillView(card: DeviceSkillCard): DeviceSkillView {
+export function deviceSkillView(card: DeviceSkillCard, locale?: string): DeviceSkillView {
+  const copy = deviceSkillCopy(locale);
+  const own = deviceCardCopy(locale);
   const open = card.status === 'proposed';
-  const sub =
-    card.status === 'on'
-      ? DEVICE_SKILL_COPY.on
-      : card.status === 'declined'
-        ? DEVICE_SKILL_COPY.declined
-        : DEVICE_CARD_COPY.newSkill;
+  const sub = card.status === 'on' ? copy.on : card.status === 'declined' ? copy.declined : own.newSkill;
   const actions = card.actions.map((a) => {
     const limit = a.proposed.limits ? limitText(a.proposed.limits, a.unit) : null;
     return {
@@ -79,13 +82,16 @@ export function deviceSkillView(card: DeviceSkillCard): DeviceSkillView {
   return {
     title: card.name,
     sub,
-    badge: open ? DEVICE_CARD_COPY.tested : null,
+    badge: open ? own.tested : null,
     readings: card.readings.map((r) => ({
       key: r.key,
       label: r.label,
       value: r.unit ? `${r.value} ${r.unit}` : r.value,
     })),
-    more: card.moreReadings > 0 ? `+ ${card.moreReadings} more` : null,
+    more:
+      card.moreReadings > 0
+        ? mobileTranslator(locale).t('data.deviceSkill.more', { count: card.moreReadings })
+        : null,
     actions,
     open,
     status: card.status,
@@ -101,8 +107,8 @@ export function initialTiers(card: DeviceSkillCard): Record<string, DeviceTier> 
 }
 
 /** A tier's words (“Ask me”). */
-export function tierLabel(tier: DeviceTier): string {
-  return DEVICE_TIER_LABELS[tier];
+export function tierLabel(tier: DeviceTier, locale?: string): string {
+  return deviceTierLabels(locale)[tier];
 }
 
 /**

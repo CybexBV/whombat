@@ -10,13 +10,15 @@
 import { backupServersSummaryLines } from '@whombat/core/backup';
 import {
   HOST_REPOINT_MAX,
-  HOST_REPOINT_WORDS,
   type HostAddressChange,
   type HostRepoint,
   type HostRepointServerState,
   hostInstallErrorText,
+  hostRepointWords,
   hostsAddressChangeText,
 } from '@whombat/core/domain';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_REPOINT_WORDS } from '../i18n/messages/connectionsHosts/hostsBasics';
 
 /** The query that opens the dialog (BF-16's Needs you item: `/things/servers?repoint=1`). */
 export const REPOINT_QUERY = 'repoint' as const;
@@ -27,14 +29,15 @@ export function repointRequested(search: Record<string, unknown>): boolean {
   return v === '1' || v === 1 || v === true;
 }
 
-/** Words the contracts leave to the app (AP-4418). */
-export const REPOINT_TEXT = {
-  /** Opened when there is nothing left to point (every server found it, or the change is old). */
-  nothing: 'Your servers have found this Whombat.',
-  /** While the job runs, closing the dialog: Whombat carries on. */
-  hide: 'Hide',
-  done: 'Done',
-} as const;
+/**
+ * Words the contracts leave to the app: `nothing` when every server found it (or the change is old), `hide` to close
+ * the dialog while the job runs (Whombat carries on), `done`.
+ */
+export function repointText(locale?: string | null) {
+  return { ...clientTree(locale, HOSTS_REPOINT_WORDS) };
+}
+
+export const REPOINT_TEXT = repointText('en');
 
 export type RepointTone = 'ok' | 'warn' | 'bad' | 'mut';
 
@@ -70,7 +73,9 @@ const TONES: Record<HostRepointServerState, RepointTone> = {
 export function repointRows(
   change: Pick<HostAddressChange, 'waiting'> | null | undefined,
   job: Pick<HostRepoint, 'servers'> | null | undefined,
+  locale?: string | null,
 ): RepointRow[] {
+  const words = hostRepointWords(locale);
   if (job)
     return job.servers.map((s) => {
       const byHand = s.state === 'no_key' || s.state === 'failed';
@@ -79,15 +84,15 @@ export function repointRows(
         name: s.name,
         address: s.address,
         state: s.state,
-        stateText: HOST_REPOINT_WORDS.states[s.state],
+        stateText: words.states[s.state],
         tone: TONES[s.state],
         line:
           s.state === 'no_key'
-            ? HOST_REPOINT_WORDS.noKey
+            ? words.noKey
             : s.state === 'failed'
               ? s.error?.message ||
                 (s.error
-                  ? hostInstallErrorText(s.error.code, { address: s.address ?? s.name, name: s.name })
+                  ? hostInstallErrorText(s.error.code, { address: s.address ?? s.name, name: s.name }, locale)
                   : null)
               : null,
         addServer: byHand ? { address: s.address ?? '' } : null,
@@ -131,11 +136,13 @@ export interface RepointView {
 export function repointView(
   change: HostAddressChange | null | undefined,
   job: HostRepoint | null | undefined,
+  locale?: string | null,
 ): RepointView {
-  const rows = repointRows(change, job);
+  const rows = repointRows(change, job, locale);
+  const words = hostRepointWords(locale);
   const count = job ? job.servers.length : (change?.waiting.length ?? 0);
-  const title = count === 1 ? HOST_REPOINT_WORDS.pointItHere : HOST_REPOINT_WORDS.pointThemHere;
-  const lead = change && change.waiting.length > 0 ? hostsAddressChangeText(change) : null;
+  const title = count === 1 ? words.pointItHere : words.pointThemHere;
+  const lead = change && change.waiting.length > 0 ? hostsAddressChangeText(change, locale) : null;
   const servers = (change?.waiting ?? []).slice(0, HOST_REPOINT_MAX).map((s) => s.id);
   if (job) {
     const done = job.state === 'done';
@@ -145,13 +152,20 @@ export function repointView(
       title,
       lead,
       rows,
-      outcome: done ? (backupServersSummaryLines({ back: 0, pointed })[0] ?? null) : null,
+      outcome: done ? (backupServersSummaryLines({ back: 0, pointed }, locale)[0] ?? null) : null,
       servers,
     };
   }
   if (change === undefined) return { step: 'loading', title, lead: null, rows, outcome: null, servers };
   if (!change || change.waiting.length === 0)
-    return { step: 'nothing', title, lead: REPOINT_TEXT.nothing, rows: [], outcome: null, servers: [] };
+    return {
+      step: 'nothing',
+      title,
+      lead: repointText(locale).nothing,
+      rows: [],
+      outcome: null,
+      servers: [],
+    };
   return { step: 'ask', title, lead, rows, outcome: null, servers };
 }
 

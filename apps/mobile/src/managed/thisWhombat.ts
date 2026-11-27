@@ -6,7 +6,7 @@
  * `THIS_WHOMBAT_TEXT`, Whombat this-whombat-sections.md AP-1223…AP-1225). Pure.
  */
 
-import { AGENT_FALLBACK_NAME } from '@whombat/client';
+import { agentFallbackName } from '@whombat/client';
 import {
   type PasskeySetupView,
   thisWhombatText,
@@ -93,7 +93,7 @@ export function overviewInput(f: OverviewFacts): WhombatOverviewInput {
     versions: f.app ? { app: f.app, runtime: f.status.appliance.runtimeVersion ?? null } : null,
     ...(f.timeZone ? { timeZone: f.timeZone } : {}),
     ...(f.locale ? { locale: f.locale } : {}),
-    agent: f.agent ?? AGENT_FALLBACK_NAME,
+    agent: f.agent ?? agentFallbackName(f.locale),
   };
 }
 

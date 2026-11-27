@@ -6,6 +6,7 @@
  * notes). Server-made only, never `PostableCard`; the same shape is stored, and the server updates it in place.
  */
 import { z } from 'zod';
+import { coreTranslator } from '../i18n/catalog.js';
 import { AttachmentId, CouncilId, CouncilMemberId } from '../ids.js';
 import { Timestamp } from './common.js';
 
@@ -238,13 +239,14 @@ export type CouncilProviderOption = z.infer<typeof CouncilProviderOption>;
 /** Whether a council's seats are the person's choice the rules allow: 2–4 seats, two different providers at least. */
 export function councilSeatsProblem(
   seats: readonly Pick<CouncilSeatSetup, 'provider' | 'model'>[],
+  locale?: string | null,
 ): string | null {
-  if (seats.length < 2) return 'A council needs at least two seats.';
-  if (seats.length > COUNCIL_MEMBERS_MAX) return `A council has at most ${COUNCIL_MEMBERS_MAX} seats.`;
-  if (new Set(seats.map((s) => s.provider)).size < 2)
-    return 'A council needs AIs from two different companies.';
+  const tr = coreTranslator(locale);
+  if (seats.length < 2) return tr.t('councilSeats.tooFew');
+  if (seats.length > COUNCIL_MEMBERS_MAX) return tr.t('councilSeats.tooMany', { max: COUNCIL_MEMBERS_MAX });
+  if (new Set(seats.map((s) => s.provider)).size < 2) return tr.t('councilSeats.oneCompany');
   const keys = seats.map((s) => `${s.provider}\n${s.model}`);
-  if (new Set(keys).size !== keys.length) return 'The same model sits on it twice.';
+  if (new Set(keys).size !== keys.length) return tr.t('councilSeats.twice');
   return null;
 }
 

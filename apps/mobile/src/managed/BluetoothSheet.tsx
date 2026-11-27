@@ -14,7 +14,6 @@
  * `bluetooth.ts` (tested); the rows, the pairing in words and every word are the shared model's.
  */
 import {
-  BLUETOOTH_TEXT,
   type BluetoothApi,
   type BluetoothFoundRow,
   type BluetoothPairingView,
@@ -25,9 +24,11 @@ import {
   bluetoothErrorText,
   bluetoothKindText,
   bluetoothPairingView,
+  bluetoothText,
 } from '@whombat/client';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -45,9 +46,6 @@ import {
 import { ChangeMark, KindIcon, SignalBars } from './MachineParts';
 import { ErrorLine } from './ui';
 
-const T = BLUETOOTH_TEXT;
-const D = T.dialog;
-
 export function BluetoothSheet({
   visible,
   onClose,
@@ -63,6 +61,9 @@ export function BluetoothSheet({
   /** The box's Bluetooth as BLUETOOTH shows it (the poller's). */
   bluetooth: BluetoothState;
 }) {
+  const { rawLocale } = useI18n();
+  const T = bluetoothText(rawLocale);
+  const D = bluetoothText(rawLocale).dialog;
   const theme = useTheme();
   const [step, setStep] = useState<BluetoothStep>({ at: 'list' });
   const [look, setLook] = useState<BluetoothLook>({ at: 'asking' });
@@ -160,7 +161,7 @@ export function BluetoothSheet({
       else setStep({ at: 'pairing', pairing: p });
     } catch (error) {
       if (mine === opening.current) {
-        setProblem(bluetoothErrorText(error, row.name));
+        setProblem(bluetoothErrorText(error, row.name, { locale: rawLocale }));
         // A device no longer nearby leaves the list.
         if (bluetoothErrorCode(error) === 'not_found') setGone((g) => [...g, row.address]);
       }
@@ -181,7 +182,7 @@ export function BluetoothSheet({
       poller.pairing(p);
       if (mine === opening.current) setStep({ at: 'pairing', pairing: p, declined: !accept });
     } catch (error) {
-      if (mine === opening.current) setProblem(bluetoothErrorText(error, name));
+      if (mine === opening.current) setProblem(bluetoothErrorText(error, name, { locale: rawLocale }));
       poller.refresh();
     } finally {
       if (mine === opening.current) setBusy(null);
@@ -194,9 +195,10 @@ export function BluetoothSheet({
     void lookAgain();
   };
 
-  const list = step.at === 'list' ? bluetoothListView(look, bluetooth, seen, Date.now(), gone) : null;
+  const list =
+    step.at === 'list' ? bluetoothListView(look, bluetooth, seen, Date.now(), gone, rawLocale) : null;
   const pairing =
-    step.at === 'pairing' ? bluetoothPairingView(bluetoothFollowed(step.pairing, current)) : null;
+    step.at === 'pairing' ? bluetoothPairingView(bluetoothFollowed(step.pairing, current), rawLocale) : null;
 
   return (
     <Sheet visible={visible} onClose={close} label={D.title} closeLabel={D.cancel}>
@@ -206,7 +208,7 @@ export function BluetoothSheet({
             {pairing ? pairing.name : D.title}
           </Text>
           <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-            {pairing ? bluetoothKindText(pairing.kind) : D.hint}
+            {pairing ? bluetoothKindText(pairing.kind, rawLocale) : D.hint}
           </Text>
         </View>
 
@@ -397,6 +399,7 @@ function PairingPanel({ pairing }: { pairing: BluetoothPairingView }) {
  * one ringed in `brand`, the rest in `ink`. Read as the digits and how many are typed.
  */
 function Digits({ pairing }: { pairing: BluetoothPairingView }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const digits = pairing.digits ?? [];
   const next = pairing.phase === 'code' ? digits.findIndex((d) => !d.typed) : -1;
@@ -404,7 +407,7 @@ function Digits({ pairing }: { pairing: BluetoothPairingView }) {
     <View
       accessible
       accessibilityLiveRegion="polite"
-      accessibilityLabel={bluetoothDigitsLabel(pairing) ?? undefined}
+      accessibilityLabel={bluetoothDigitsLabel(pairing, rawLocale) ?? undefined}
       style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, paddingVertical: 4 }}
     >
       {digits.map((d, i) => (

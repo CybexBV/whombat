@@ -4,6 +4,8 @@
  * (clients draw the characters with the system font). A reaction's value is the emoji character (`ReactionValue`).
  */
 
+import { coreWords } from '../i18n/catalog.js';
+
 export const EMOJI_GROUPS = [
   'smileys',
   'people',
@@ -16,17 +18,12 @@ export const EMOJI_GROUPS = [
 ] as const;
 export type EmojiGroup = (typeof EMOJI_GROUPS)[number];
 
-/** Tab and section labels, in `EMOJI_GROUPS` order. */
-export const EMOJI_GROUP_LABELS: Record<EmojiGroup, string> = {
-  smileys: 'Smileys',
-  people: 'People',
-  nature: 'Nature',
-  food: 'Food & drink',
-  activities: 'Activities',
-  travel: 'Travel & places',
-  objects: 'Objects',
-  symbols: 'Symbols',
-};
+/** Tab and section labels, in `EMOJI_GROUPS` order, in a locale. */
+export function emojiGroupLabels(locale?: string | null): Readonly<Record<EmojiGroup, string>> {
+  return coreWords(locale, 'emoji.group', EMOJI_GROUPS);
+}
+
+export const EMOJI_GROUP_LABELS: Record<EmojiGroup, string> = emojiGroupLabels('en');
 
 export interface Emoji {
   /** The character, fully qualified (`❤️` with its variation selector): the reaction's value. */

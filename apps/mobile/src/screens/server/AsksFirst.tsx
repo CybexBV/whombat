@@ -63,7 +63,7 @@ export function useAsksFirstChoice(
 
   const choose = (to: HostAsksFirst) => {
     if (saving) return;
-    const step = serverAsksChange(serverName, current, to);
+    const step = serverAsksChange(serverName, current, to, rawLocale);
     if (!step) return;
     if (!step.confirm) return save(to, step.toast);
     Alert.alert(step.confirm.title, step.confirm.body, [
@@ -85,9 +85,16 @@ export function AsksFirstCard({
   asksFirst: HostAsksFirst | null | undefined;
   hostsThisWhombat: boolean | null | undefined;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { value, choose } = useAsksFirstChoice(serverId, serverName, asksFirst);
-  const row = serverAsksRow({ server: serverName, asksFirst: value, hostsThisWhombat, available: true });
+  const row = serverAsksRow({
+    server: serverName,
+    asksFirst: value,
+    hostsThisWhombat,
+    available: true,
+    locale: rawLocale,
+  });
   if (!row) return null;
   return (
     <OneCard label={row.label}>

@@ -20,19 +20,15 @@ import type {
   HostUnraidPool,
   HostUnraidShare,
 } from '@whombat/core/domain';
-import {
-  DASH,
-  formatAgoIso,
-  formatDayTime,
-  formatDuration,
-  formatGb,
-  formatPct,
-  formatTemp,
-  plural,
-} from './format';
+import { interpolate, resolveLanguage } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_UNRAID_WORDS } from '../i18n/messages/connectionsHosts/unraid';
+import { DASH, formatAgoIso, formatDayTime, formatDuration, formatGb, formatPct, formatTemp } from './format';
 import { hintGuests } from './hints';
 import { compareVersions } from './system';
 import type { HostTone } from './thresholds';
+
+const words = (locale?: string | null) => clientTree(locale, HOSTS_UNRAID_WORDS);
 
 /** The Unraid parts of a server's page (absent on other servers and on older hubs). */
 export function unraidDetail(d: Pick<HostServerDetail, 'unraid'>): HostUnraidDetail | null {
@@ -48,15 +44,12 @@ export function isUnraidServer(d: Pick<HostServerDetail, 'server' | 'unraid'>): 
 
 export type UnraidTab = 'summary' | 'array' | 'shares' | 'guests' | 'plugins' | 'sensors' | 'system';
 
-export const UNRAID_TAB_WORDS: Record<UnraidTab, string> = {
-  summary: 'Summary',
-  array: 'Array',
-  shares: 'Shares',
-  guests: 'Apps',
-  plugins: 'Plugins',
-  sensors: 'Sensors',
-  system: 'System',
-};
+/** An Unraid server's tabs' names, in a locale (English when none is given). */
+export function unraidTabWords(locale?: string | null): Record<UnraidTab, string> {
+  return { ...words(locale).tabs };
+}
+
+export const UNRAID_TAB_WORDS: Record<UnraidTab, string> = unraidTabWords('en');
 
 /** An Unraid server's tabs: Summary · Array · Shares · Guests · Plugins · Sensors · System. */
 export const UNRAID_TABS: readonly UnraidTab[] = [
@@ -94,34 +87,38 @@ export function unraidDiskName(name: string): string {
 }
 
 /** A file system in words: “luks:btrfs” → “btrfs, encrypted”. */
-export function fsWords(fs: string | null | undefined): string {
+export function fsWords(fs: string | null | undefined, locale?: string | null): string {
   if (!fs || fs === 'auto' || fs === '-') return DASH;
   const [a, b] = fs.split(':');
-  return b && a === 'luks' ? `${b}, encrypted` : fs;
+  return b && a === 'luks' ? interpolate(words(locale).encrypted, { fs: b }) : fs;
 }
 
 /** What a disk's status says (Unraid's ball and its tooltip, in Whombat's words). */
-export function unraidDiskStatus(d: Pick<HostUnraidDisk, 'status' | 'statusRaw' | 'device'>): {
+export function unraidDiskStatus(
+  d: Pick<HostUnraidDisk, 'status' | 'statusRaw' | 'device'>,
+  locale?: string | null,
+): {
   text: string;
   tone: HostTone;
 } {
+  const w = words(locale).disk;
   switch (d.status) {
     case 'ok':
-      return { text: 'Normal', tone: 'ok' };
+      return { text: w.ok, tone: 'ok' };
     case 'disabled':
-      return { text: d.device ? 'Disabled' : 'Disabled, no disk', tone: 'bad' };
+      return { text: d.device ? w.disabled : w.disabledNoDisk, tone: 'bad' };
     case 'emulated':
-      return { text: 'Emulated', tone: 'bad' };
+      return { text: w.emulated, tone: 'bad' };
     case 'missing':
-      return { text: 'Missing', tone: 'bad' };
+      return { text: w.missing, tone: 'bad' };
     case 'new':
-      return { text: 'New', tone: 'warn' };
+      return { text: w.new, tone: 'warn' };
     case 'invalid':
-      return { text: 'Invalid', tone: 'bad' };
+      return { text: w.invalid, tone: 'bad' };
     case 'wrong':
-      return { text: 'Wrong disk', tone: 'bad' };
+      return { text: w.wrong, tone: 'bad' };
     default:
-      return { text: 'Not installed', tone: 'mut' };
+      return { text: w.notInstalled, tone: 'mut' };
   }
 }
 
@@ -140,10 +137,12 @@ export function canSpin(d: Pick<HostUnraidDisk, 'slot' | 'device' | 'rotational'
 /** The spin column: “Spun down”, “Spinning”, “SSD”, or nothing (no disk, the flash drive). */
 export function spinWords(
   d: Pick<HostUnraidDisk, 'slot' | 'device' | 'rotational' | 'spunDown' | 'status'>,
+  locale?: string | null,
 ): string {
   if (d.slot === 'flash' || !d.device || d.status === 'empty') return '';
-  if (d.rotational === false) return 'SSD';
-  return d.spunDown ? 'Spun down' : 'Spinning';
+  const w = words(locale).disk;
+  if (d.rotational === false) return w.ssd;
+  return d.spunDown ? w.spunDown : w.spinning;
 }
 
 export interface UnraidDiskRow {
@@ -167,22 +166,27 @@ export interface UnraidDiskRow {
 
 /** One row of an Array table (Unraid's Main: Device, Identification, Temp., Errors, FS, Size, Used, Free). */
 export function unraidDiskRow(d: HostUnraidDisk): UnraidDiskRow {
+  return unraidDiskRowFor(d);
+}
+
+/** {@link unraidDiskRow} in a locale (English when none is given); `unraidDiskRow` stays one-argument for `map`. */
+export function unraidDiskRowFor(d: HostUnraidDisk, locale?: string | null): UnraidDiskRow {
   const present = !!d.device && d.status !== 'empty';
   return {
     name: d.name,
     label: unraidDiskName(d.name),
     device: d.device ?? '',
-    model: d.model ?? (present ? '' : 'Not installed'),
-    status: unraidDiskStatus(d),
+    model: d.model ?? (present ? '' : words(locale).disk.notInstalled),
+    status: unraidDiskStatus(d, locale),
     tempText: formatTemp(d.tempC),
     tempTone: unraidTempTone(d),
     errors: d.errors,
-    fsText: present ? fsWords(d.fsType) : DASH,
+    fsText: present ? fsWords(d.fsType, locale) : DASH,
     sizeText: present ? unraidSize(d.sizeBytes) : DASH,
     usedText: present ? unraidSize(d.usedBytes) : DASH,
     freeText: present ? unraidSize(d.freeBytes) : DASH,
     usedPct: present ? usedPct(d.usedBytes, (d.usedBytes ?? 0) + (d.freeBytes ?? 0) || null) : null,
-    spin: spinWords(d),
+    spin: spinWords(d, locale),
     canSpin: canSpin(d),
     spunDown: d.spunDown,
   };
@@ -207,14 +211,6 @@ export function spinningDisks(u: Pick<HostUnraidDetail, 'array' | 'pools'>): Hos
 
 /* The array (AP-1589, AP-1590) ----------------------------------------------------------------------------- */
 
-const ARRAY_STATE_WORDS: Record<HostUnraidArray['state'], string> = {
-  started: 'Started',
-  stopped: 'Stopped',
-  starting: 'Starting…',
-  stopping: 'Stopping…',
-  invalid: 'Can’t start',
-};
-
 export interface UnraidArrayView {
   stateText: string;
   tone: HostTone;
@@ -225,11 +221,10 @@ export interface UnraidArrayView {
   trouble: string | null;
 }
 
-export function unraidArrayView(a: HostUnraidArray): UnraidArrayView {
-  const trouble = [
-    a.disabled ? `${plural(a.disabled, 'disk')} disabled` : null,
-    a.missing ? `${plural(a.missing, 'disk')} missing` : null,
-  ]
+export function unraidArrayView(a: HostUnraidArray, locale?: string | null): UnraidArrayView {
+  const all = words(locale);
+  const w = all.array;
+  const trouble = [a.disabled ? w.disabled(a.disabled) : null, a.missing ? w.missing(a.missing) : null]
     .filter(Boolean)
     .join(' · ');
   // Started reads as started; disabled disks have their own lines (parity, Disks).
@@ -242,22 +237,19 @@ export function unraidArrayView(a: HostUnraidArray): UnraidArrayView {
           ? 'ok'
           : 'mut';
   return {
-    stateText: ARRAY_STATE_WORDS[a.state],
+    stateText: all.arrayState[a.state],
     tone,
     useText: a.sizeBytes
-      ? `${unraidSize(a.usedBytes)} used of ${unraidSize(a.sizeBytes)} · ${unraidSize(a.freeBytes)} free`
-      : 'No data disks',
+      ? interpolate(w.use, {
+          used: unraidSize(a.usedBytes),
+          size: unraidSize(a.sizeBytes),
+          free: unraidSize(a.freeBytes),
+        })
+      : w.noData,
     usedPct: usedPct(a.usedBytes, a.sizeBytes),
     trouble: trouble || null,
   };
 }
-
-const PARITY_ACTION_WORDS: Record<NonNullable<HostUnraidParity['action']>, string> = {
-  check: 'Parity check',
-  correct: 'Parity check with corrections',
-  rebuild: 'Rebuilding a disk',
-  clear: 'Clearing a disk',
-};
 
 /** Whether the array has parity that works: at least one parity disk, none of them disabled or missing. */
 export function parityState(a: Pick<HostUnraidArray, 'disks'>): 'none' | 'ok' | 'broken' {
@@ -277,28 +269,36 @@ export interface ParityView {
   pct: number | null;
 }
 
-function runResult(r: HostUnraidParityRun): string {
+function runResult(r: HostUnraidParityRun, locale?: string | null): string {
+  const w = words(locale).run;
   switch (r.result) {
     case 'ok':
-      return 'no errors';
+      return w.ok;
     case 'errors':
-      return `${plural(r.errors, 'error')} found`;
+      return w.errors(r.errors);
     case 'cancelled':
-      return 'cancelled';
+      return w.cancelled;
     default:
-      return 'failed';
+      return w.failed;
   }
 }
 
 /** The parity line of the array card: a check that runs (with its progress), the last one, or why there is none. */
-export function parityView(a: HostUnraidArray, now: number): ParityView {
+export function parityView(a: HostUnraidArray, now: number, locale?: string | null): ParityView {
+  const all = words(locale);
+  const w = all.parity;
   const p = a.parity;
   if (p.state !== 'idle') {
-    const what = PARITY_ACTION_WORDS[p.action ?? 'check'];
+    const action: NonNullable<HostUnraidParity['action']> = p.action ?? 'check';
+    const what = all.parityAction[action];
     const parts = [
-      p.state === 'paused' ? 'Paused' : p.etaS != null ? `${formatDuration(p.etaS)} left` : null,
+      p.state === 'paused'
+        ? w.paused
+        : p.etaS != null
+          ? interpolate(w.left, { duration: formatDuration(p.etaS, locale) })
+          : null,
       p.state === 'running' && p.speedMbs != null ? `${Math.round(p.speedMbs)} MB/s` : null,
-      p.errors ? `${plural(p.errors, 'error')} so far` : 'no errors so far',
+      p.errors ? w.errorsSoFar(p.errors) : w.noErrorsSoFar,
     ].filter(Boolean);
     return {
       title: p.pct != null ? `${what} · ${formatPct(p.pct)}` : what,
@@ -312,8 +312,8 @@ export function parityView(a: HostUnraidArray, now: number): ParityView {
   const state = parityState(a);
   if (state === 'none')
     return {
-      title: 'No parity disk',
-      detail: 'Nothing protects the array if a disk fails.',
+      title: w.noneTitle,
+      detail: w.noneDetail,
       tone: 'warn',
       running: false,
       paused: false,
@@ -321,8 +321,8 @@ export function parityView(a: HostUnraidArray, now: number): ParityView {
     };
   if (state === 'broken')
     return {
-      title: 'Parity is disabled',
-      detail: 'Nothing protects the array if a disk fails. Replace or reassign the parity disk in Unraid.',
+      title: w.brokenTitle,
+      detail: w.brokenDetail,
       tone: 'bad',
       running: false,
       paused: false,
@@ -331,8 +331,8 @@ export function parityView(a: HostUnraidArray, now: number): ParityView {
   const last = p.last ?? p.history[0] ?? null;
   if (!last)
     return {
-      title: 'Parity never checked',
-      detail: 'A check reads every disk and compares it with parity.',
+      title: w.neverTitle,
+      detail: w.neverDetail,
       tone: 'warn',
       running: false,
       paused: false,
@@ -340,8 +340,8 @@ export function parityView(a: HostUnraidArray, now: number): ParityView {
     };
   const old = now - Date.parse(last.at) > PARITY_OLD_DAYS * 86_400_000;
   return {
-    title: `Last checked ${formatAgoIso(last.at, now).replace(/ ago$/, '')} ago`,
-    detail: `${runResult(last).replace(/^./, (c) => c.toUpperCase())}${last.durationS != null ? ` · took ${formatDuration(last.durationS)}` : ''}`,
+    title: interpolate(w.lastChecked, { ago: formatAgoIso(last.at, now, locale) }),
+    detail: `${runResult(last, locale).replace(/^./, (c) => c.toUpperCase())}${last.durationS != null ? interpolate(w.took, { duration: formatDuration(last.durationS, locale) }) : ''}`,
     tone:
       last.result === 'ok' && !old
         ? 'ok'
@@ -358,28 +358,35 @@ export function parityView(a: HostUnraidArray, now: number): ParityView {
 export const PARITY_OLD_DAYS = 35;
 
 /** One parity run of the history: “Oct 1 · Check · took 5 h 12 min · 182 MB/s · no errors”. */
-export function parityRunWords(r: HostUnraidParityRun): { action: string; result: string; tone: HostTone } {
+export function parityRunWords(
+  r: HostUnraidParityRun,
+  locale?: string | null,
+): { action: string; result: string; tone: HostTone } {
+  const w = words(locale).runAction;
   const action = (r.action ?? 'check')
-    .replace(/^check P Q$|^check P$|^check$/i, 'Check')
-    .replace(/^correct.*$/i, 'Check with corrections')
-    .replace(/^recon.*$/i, 'Rebuild')
-    .replace(/^clear.*$/i, 'Clear');
+    .replace(/^check P Q$|^check P$|^check$/i, w.check)
+    .replace(/^correct.*$/i, w.correct)
+    .replace(/^recon.*$/i, w.rebuild)
+    .replace(/^clear.*$/i, w.clear);
   return {
     action: action.charAt(0).toUpperCase() + action.slice(1),
-    result: runResult(r).replace(/^./, (c) => c.toUpperCase()),
+    result: runResult(r, locale).replace(/^./, (c) => c.toUpperCase()),
     tone: r.result === 'ok' ? 'ok' : r.result === 'cancelled' ? 'mut' : 'bad',
   };
 }
 
 /** When a parity check ran: “1 Oct, 00:30” this year, “10 Jul 2024” before. */
-export function parityRunWhen(iso: string, now: number, timeZone?: string): string {
+export function parityRunWhen(iso: string, now: number, timeZone?: string, locale?: string | null): string {
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return DASH;
   const tz = timeZone ? { timeZone } : {};
   const year = (d: number) => new Intl.DateTimeFormat('en-US', { year: 'numeric', ...tz }).format(d);
+  const dateLocale = resolveLanguage(locale) === 'nl' ? 'nl-NL' : 'en-GB';
   return year(t) === year(now)
-    ? formatDayTime(t, timeZone)
-    : new Intl.DateTimeFormat('en-GB', { month: 'short', day: 'numeric', year: 'numeric', ...tz }).format(t);
+    ? formatDayTime(t, timeZone, locale)
+    : new Intl.DateTimeFormat(dateLocale, { month: 'short', day: 'numeric', year: 'numeric', ...tz }).format(
+        t,
+      );
 }
 
 /** What may be done to the array now (the buttons that show; the rest say why). */
@@ -397,7 +404,11 @@ export interface UnraidAbilities {
   spin: boolean;
 }
 
-export function unraidAbilities(u: Pick<HostUnraidDetail, 'array' | 'pools' | 'shares'>): UnraidAbilities {
+export function unraidAbilities(
+  u: Pick<HostUnraidDetail, 'array' | 'pools' | 'shares'>,
+  locale?: string | null,
+): UnraidAbilities {
+  const w = words(locale).abilities;
   const a = u.array;
   const started = a.state === 'started';
   const idle = a.parity.state === 'idle';
@@ -408,25 +419,19 @@ export function unraidAbilities(u: Pick<HostUnraidDetail, 'array' | 'pools' | 's
     stop: started,
     checkParity: started && idle && parity === 'ok',
     checkReason: !started
-      ? 'Start the array first.'
+      ? w.startFirst
       : !idle
         ? null
         : parity === 'none'
-          ? 'There’s no parity disk to check.'
+          ? w.noParity
           : parity === 'broken'
-            ? 'Parity is disabled, so there’s nothing to check.'
+            ? w.parityBroken
             : null,
     pause: a.parity.state === 'running',
     resume: a.parity.state === 'paused',
     cancel: a.parity.state !== 'idle',
     mover: started && !a.moverRunning,
-    moverReason: a.moverRunning
-      ? 'The mover is running.'
-      : !started
-        ? 'Start the array first.'
-        : moverWork
-          ? null
-          : 'No share moves files between a pool and the array.',
+    moverReason: a.moverRunning ? w.moverRunning : !started ? w.startFirst : moverWork ? null : w.noMoverWork,
     spin: started && spinningDisks(u).length > 0,
   };
 }
@@ -436,36 +441,40 @@ export function arrayStopWords(
   u: Pick<HostUnraidDetail, 'docker' | 'vms' | 'array' | 'shares'>,
   guests: readonly HostGuest[],
   serverName: string,
+  locale?: string | null,
 ): string {
+  const w = words(locale).stop;
   const running = (p: HostGuest['platform']) =>
     guests.filter((g) => g.platform === p && (g.state === 'running' || g.state === 'unhealthy')).length;
   const docker = running('docker');
   const vms = running('libvirt');
   const parts = [
-    u.docker.enabled && docker ? `${plural(docker, 'running container')}` : null,
-    u.vms.enabled && vms ? `${plural(vms, 'running VM')}` : null,
-    u.shares.length ? 'the shares' : null,
+    u.docker.enabled && docker ? w.containers(docker) : null,
+    u.vms.enabled && vms ? w.vms(vms) : null,
+    u.shares.length ? w.shares : null,
   ].filter(Boolean) as string[];
-  const stops = parts.length
-    ? `${parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)}` : parts[0]} stop too`
-    : 'Nothing else stops';
+  const list =
+    parts.length > 1
+      ? interpolate(w.and, { list: parts.slice(0, -1).join(', '), last: parts.at(-1) ?? '' })
+      : parts[0];
+  const stops = list ? interpolate(w.stopToo, { list }) : w.nothingElse;
   const extra = [
-    u.array.parity.state !== 'idle' ? 'The parity check is cancelled.' : null,
-    u.array.moverRunning ? 'The mover stops halfway.' : null,
+    u.array.parity.state !== 'idle' ? w.parityCancelled : null,
+    u.array.moverRunning ? w.moverHalfway : null,
   ].filter(Boolean);
-  return [`${stops} until the array is started again on ${serverName}.`, ...extra].join(' ');
+  return [interpolate(w.until, { stops, server: serverName }), ...extra].join(' ');
 }
 
 /* Pools and shares ------------------------------------------------------------------------------------------ */
 
 /** “btrfs raid10, encrypted · 4 disks”. */
-export function poolWords(p: HostUnraidPool): string {
-  const fs = fsWords(p.fsType);
+export function poolWords(p: HostUnraidPool, locale?: string | null): string {
+  const fs = fsWords(p.fsType, locale);
   const [base, enc] = fs.split(', ');
   return [
     [base, p.profile && p.profile !== 'single' ? p.profile : null].filter(Boolean).join(' ') +
       (enc ? `, ${enc}` : ''),
-    plural(p.disks.length, 'disk'),
+    words(locale).pool.disks(p.disks.length),
   ].join(' · ');
 }
 
@@ -473,8 +482,12 @@ export function poolWords(p: HostUnraidPool): string {
 export const UNRAID_POOL_FULL_PCT = 90;
 
 /** Where a share keeps its files: “data”, “Array”, “cache → array” (the mover's way). */
-export function shareWhere(s: Pick<HostUnraidShare, 'primary' | 'secondary' | 'moverAction'>): string {
-  const word = (w: string) => (w === 'array' ? 'Array' : w);
+export function shareWhere(
+  s: Pick<HostUnraidShare, 'primary' | 'secondary' | 'moverAction'>,
+  locale?: string | null,
+): string {
+  const array = words(locale).pool.array;
+  const word = (w: string) => (w === 'array' ? array : w);
   if (!s.secondary) return word(s.primary);
   return s.moverAction === 'to_pool'
     ? `${word(s.secondary)} → ${word(s.primary)}`
@@ -482,8 +495,8 @@ export function shareWhere(s: Pick<HostUnraidShare, 'primary' | 'secondary' | 'm
 }
 
 /** How a share is shared over SMB: “Private”, “Public”, “Secure”, “Not shared”. */
-export function shareSmbWords(smb: string | null): string {
-  if (!smb) return 'Not shared';
+export function shareSmbWords(smb: string | null, locale?: string | null): string {
+  if (!smb) return words(locale).pool.notShared;
   return smb.charAt(0).toUpperCase() + smb.slice(1);
 }
 
@@ -504,15 +517,19 @@ export function pluginUpdates(u: Pick<HostUnraidDetail, 'plugins'>): HostUnraidP
 }
 
 /** The Unraid version line: “Unraid 7.3.1 · Pro”, and the newer one when there is one. */
-export function unraidVersionView(u: Pick<HostUnraidDetail, 'version' | 'license' | 'osUpdate'>): {
+export function unraidVersionView(
+  u: Pick<HostUnraidDetail, 'version' | 'license' | 'osUpdate'>,
+  locale?: string | null,
+): {
   text: string;
   update: string | null;
 } {
+  const w = words(locale).version;
   const newer =
     u.osUpdate && (compareVersions(u.osUpdate.version, u.version) ?? 1) > 0 ? u.osUpdate.version : null;
   return {
-    text: [`Unraid ${u.version}`, u.license].filter(Boolean).join(' · '),
-    update: newer ? `Unraid ${newer} is available — update it in Unraid.` : null,
+    text: [interpolate(w.text, { version: u.version }), u.license].filter(Boolean).join(' · '),
+    update: newer ? interpolate(w.update, { version: newer }) : null,
   };
 }
 
@@ -539,11 +556,15 @@ export function notificationTitle(n: Pick<HostUnraidNotification, 'subject' | 'e
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : n.event;
 }
 
-export const NOTIFICATION_WORDS: Record<HostUnraidNotification['importance'], string> = {
-  alert: 'Alert',
-  warning: 'Warning',
-  normal: 'Notice',
-};
+/** How important an Unraid notification is, in a locale (English when none is given). */
+export function notificationWords(
+  locale?: string | null,
+): Record<HostUnraidNotification['importance'], string> {
+  return { ...words(locale).notification };
+}
+
+export const NOTIFICATION_WORDS: Record<HostUnraidNotification['importance'], string> =
+  notificationWords('en');
 
 /* Docker the Unraid way and libvirt's autostart (AP-1593) ----------------------------------------------------- */
 
@@ -593,49 +614,55 @@ function unraidTabOf(section: string | null | undefined): UnraidTab | null {
 /** What an Unraid server's hint (or alert, by its section) offers as its way out. */
 export function unraidHintFixes(
   h: Pick<HostHint, 'kind' | 'entity' | 'detail' | 'section'>,
-  ctx: { guests: readonly HostGuest[]; updateUrl: string | null; canManage: boolean },
+  ctx: { guests: readonly HostGuest[]; updateUrl: string | null; canManage: boolean; locale?: string | null },
 ): UnraidHintFix[] {
+  const all = words(ctx.locale);
+  const w = all.fixes;
   const m = ctx.canManage;
   switch (h.kind) {
     case 'unraid.array_stopped':
       return m
-        ? [{ kind: 'start_array', label: 'Start the array' }]
-        : [{ kind: 'tab', tab: 'array', label: 'Open Array' }];
+        ? [{ kind: 'start_array', label: w.startArray }]
+        : [{ kind: 'tab', tab: 'array', label: w.openArray }];
     case 'unraid.parity_errors':
     case 'unraid.parity_old':
       return m
-        ? [{ kind: 'check_parity', label: 'Check parity' }]
-        : [{ kind: 'tab', tab: 'array', label: 'Open Array' }];
+        ? [{ kind: 'check_parity', label: w.checkParity }]
+        : [{ kind: 'tab', tab: 'array', label: w.openArray }];
     case 'unraid.disk_errors':
     case 'unraid.pool_full':
-      return [{ kind: 'tab', tab: 'array', label: 'Open Array' }];
+      return [{ kind: 'tab', tab: 'array', label: w.openArray }];
     case 'unraid.plugin_updates':
       return m
         ? [
-            { kind: 'update_plugins', label: 'Update all' },
-            { kind: 'tab', tab: 'plugins', label: 'Open Plugins' },
+            { kind: 'update_plugins', label: w.updateAll },
+            { kind: 'tab', tab: 'plugins', label: w.openPlugins },
           ]
-        : [{ kind: 'tab', tab: 'plugins', label: 'Open Plugins' }];
+        : [{ kind: 'tab', tab: 'plugins', label: w.openPlugins }];
     case 'unraid.notification':
-      return m ? [{ kind: 'archive', id: h.entity, label: 'Archive' }] : [];
+      return m ? [{ kind: 'archive', id: h.entity, label: w.archive }] : [];
     case 'unraid.os_update':
-      return ctx.updateUrl ? [{ kind: 'link', href: ctx.updateUrl, label: 'Update in Unraid' }] : [];
+      return ctx.updateUrl ? [{ kind: 'link', href: ctx.updateUrl, label: w.updateInUnraid }] : [];
     case 'docker.update_available': {
       const named = hintGuests(h, ctx.guests);
       const list = named.length
         ? named
         : ctx.guests.filter((g) => g.platform === 'docker' && g.updateAvailable === true);
-      return list
-        .slice(0, 3)
-        .map((g) =>
-          m && canUpdateContainer(g, true)
-            ? { kind: 'update_container' as const, guestId: g.id, label: `Update ${g.name}` }
-            : { kind: 'guest' as const, guestId: g.id, label: `Open ${g.name}` },
-        );
+      return list.slice(0, 3).map((g) =>
+        m && canUpdateContainer(g, true)
+          ? {
+              kind: 'update_container' as const,
+              guestId: g.id,
+              label: interpolate(w.update, { name: g.name }),
+            }
+          : { kind: 'guest' as const, guestId: g.id, label: interpolate(w.open, { name: g.name }) },
+      );
     }
     default: {
       const tab = unraidTabOf(h.section);
-      return tab && tab !== 'summary' ? [{ kind: 'tab', tab, label: `Open ${UNRAID_TAB_WORDS[tab]}` }] : [];
+      return tab && tab !== 'summary'
+        ? [{ kind: 'tab', tab, label: interpolate(w.open, { name: all.tabs[tab] }) }]
+        : [];
     }
   }
 }
@@ -678,103 +705,54 @@ export function unraidChangeWords(
   op: UnraidOp,
   server: string,
   opts: { target?: string; on?: boolean; correct?: boolean } = {},
+  locale?: string | null,
 ): UnraidChangeWords {
   const t = opts.target ?? 'all';
-  const w = (what: string, started: string, finished: string) => ({ what, started, finished });
+  const c = words(locale).change;
+  const vars = { server, target: t };
+  const say = (s: { what: string; started: string; finished: string }) => ({
+    what: interpolate(s.what, vars),
+    started: interpolate(s.started, vars),
+    finished: interpolate(s.finished, vars),
+  });
   switch (op) {
     case 'array.start':
-      return w(
-        `Starting the array on ${server}`,
-        `Starting the array on ${server}.`,
-        `The array on ${server} is started.`,
-      );
+      return say(c.arrayStart);
     case 'array.stop':
-      return w(
-        `Stopping the array on ${server}`,
-        `Stopping the array on ${server}.`,
-        `The array on ${server} is stopped.`,
-      );
+      return say(c.arrayStop);
     case 'parity.start':
-      return w(
-        `Starting the parity check on ${server}`,
-        opts.correct
-          ? `Starting a parity check with corrections on ${server}.`
-          : `Starting a parity check on ${server}.`,
-        `The parity check on ${server} is running.`,
-      );
+      return say(opts.correct ? { ...c.parityStart, started: c.parityStartCorrect } : c.parityStart);
     case 'parity.pause':
-      return w(
-        `Pausing the parity check on ${server}`,
-        `Pausing the parity check on ${server}.`,
-        `The parity check on ${server} is paused.`,
-      );
+      return say(c.parityPause);
     case 'parity.resume':
-      return w(
-        `Resuming the parity check on ${server}`,
-        `Resuming the parity check on ${server}.`,
-        `The parity check on ${server} is running again.`,
-      );
+      return say(c.parityResume);
     case 'parity.cancel':
-      return w(
-        `Cancelling the parity check on ${server}`,
-        `Cancelling the parity check on ${server}.`,
-        `The parity check on ${server} is cancelled.`,
-      );
+      return say(c.parityCancel);
     case 'disk.spin_up':
-      return t === 'all'
-        ? w(
-            `Spinning up the disks on ${server}`,
-            `Spinning up the disks on ${server}.`,
-            `The disks on ${server} are spinning.`,
-          )
-        : w(`Spinning up ${t}`, `Spinning up ${t}.`, `${t} is spinning.`);
+      return say(t === 'all' ? c.spinUpAll : c.spinUpOne);
     case 'disk.spin_down':
-      return t === 'all'
-        ? w(
-            `Spinning down the disks on ${server}`,
-            `Spinning down the disks on ${server}.`,
-            `The disks on ${server} are spun down.`,
-          )
-        : w(`Spinning down ${t}`, `Spinning down ${t}.`, `${t} is spun down.`);
+      return say(t === 'all' ? c.spinDownAll : c.spinDownOne);
     case 'mover.start':
-      return w(
-        `The mover on ${server}`,
-        `The mover on ${server} started.`,
-        `The mover on ${server} is done.`,
-      );
+      return say(c.mover);
     case 'plugin.check':
-      return w(
-        `Checking ${server}’s plugins for updates`,
-        `Checking ${server}’s plugins for updates.`,
-        `Checked ${server}’s plugins for updates.`,
-      );
+      return say(c.pluginCheck);
     case 'plugin.update':
-      return t === 'all'
-        ? w(
-            `Updating ${server}’s plugins`,
-            `Updating ${server}’s plugins.`,
-            `${server}’s plugins are up to date now.`,
-          )
-        : w(`Updating ${t}`, `Updating ${t} on ${server}.`, `${t} is up to date now.`);
+      return say(t === 'all' ? c.pluginUpdateAll : c.pluginUpdateOne);
     case 'container.update':
-      return w(`Updating ${t}`, `Updating ${t} on ${server}.`, `${t} on ${server} is up to date now.`);
+      return say(c.containerUpdate);
     case 'containers.check':
-      return w(
-        `Checking ${server}’s containers for updates`,
-        `Checking ${server}’s containers for updates.`,
-        `Checked ${server}’s containers for updates.`,
-      );
+      return say(c.containersCheck);
     case 'notification.archive':
-      return w(
-        'Archiving',
-        '',
-        t === 'all' ? `Archived ${server}’s notifications.` : 'Archived the notification.',
-      );
+      return {
+        what: c.archive,
+        started: '',
+        finished: t === 'all' ? interpolate(c.archivedAll, vars) : c.archivedOne,
+      };
     case 'guest.autostart':
-      return w(
-        `Autostart of ${t}`,
-        '',
-        opts.on ? `${t} starts with ${server} now.` : `${t} no longer starts with ${server}.`,
-      );
+      return {
+        what: interpolate(c.autostart, vars),
+        started: '',
+        finished: interpolate(opts.on ? c.autostartOn : c.autostartOff, vars),
+      };
   }
 }

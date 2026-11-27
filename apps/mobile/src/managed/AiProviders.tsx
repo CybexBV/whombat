@@ -9,7 +9,7 @@
 import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { useI18n } from '../i18n';
-import { AI_TEXT } from '../settings/ai';
+import { aiText } from '../settings/ai';
 import { MoreFold } from '../ui/fold';
 import { useManagedOrThrow } from './context';
 import { managedText } from './copy';
@@ -52,7 +52,7 @@ export function AiProviders({ folded = false }: { folded?: boolean }) {
   );
   if (!folded) return card;
   return (
-    <MoreFold label={AI_TEXT.whombatAi} open={providers.some((p) => p.state !== 'ready')} inset={6}>
+    <MoreFold label={aiText(rawLocale).whombatAi} open={providers.some((p) => p.state !== 'ready')} inset={6}>
       {card}
     </MoreFold>
   );

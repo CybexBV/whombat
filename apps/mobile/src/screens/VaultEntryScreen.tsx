@@ -14,15 +14,15 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { VAULT_MCP_MOVE_TEXT, VAULT_TOTP_TEXT, vaultEntrySourceLine, vaultProblemOf } from '@whombat/client';
+import { vaultEntrySourceLine, vaultMcpMoveText, vaultProblemOf, vaultTotpText } from '@whombat/client';
 import { useVaultEntry, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import {
-  VAULT_KEYS_COPY,
-  VAULT_SSH_COPY,
   VAULT_TOTP_INPUT_MAX,
   type VaultAgentAccess,
   vaultCopy,
+  vaultKeysCopy,
+  vaultSshCopy,
   vaultTotpProblem,
 } from '@whombat/core/vault';
 import { useEffect, useMemo, useState } from 'react';
@@ -30,13 +30,13 @@ import { AccessibilityInfo, Alert, RefreshControl, ScrollView, Switch, View } fr
 import { PrincipalAvatar } from '../avatars/Avatars';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import {
-  VAULT_SSH_ON_WEB,
   type VaultAgentAccessRow,
   vaultAccessChange,
   vaultEntryScreen,
   vaultEnvNameCheck,
   vaultEnvText,
   vaultRemoveCopy,
+  vaultSshOnWeb,
 } from '../data/vault';
 import { vaultFormText } from '../data/vaultForm';
 import { useI18n, useMobileT } from '../i18n';
@@ -61,6 +61,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'VaultEntry'>;
 
 export function VaultEntryScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
+  const vaultTotpTextHere = vaultTotpText(rawLocale);
+  const vaultMcpMoveTextHere = vaultMcpMoveText(rawLocale);
+  const vaultSshCopyHere = vaultSshCopy(rawLocale);
   const vaultCopyHere = vaultCopy(rawLocale);
 
   const vaultRemoveCopyHere = vaultRemoveCopy(rawLocale);
@@ -71,7 +74,8 @@ export function VaultEntryScreen({ route, navigation }: Props) {
   const theme = useTheme();
   const { slug } = useBurrowBase();
   const ctx = useViewContext();
-  const { entryId, title, back = 'Back' } = route.params;
+  const { entryId, title, back: backParam } = route.params;
+  const back = backParam ?? tMobile('screens2.common.back');
   const query = useVaultEntry({ params: { burrow: slug, entryId } });
   const check = useVaultWrite(api.vault.check, slug);
   const setTool = useVaultWrite(api.vault.setTool, slug);
@@ -84,16 +88,16 @@ export function VaultEntryScreen({ route, navigation }: Props) {
     [query.data, ctx],
   );
   // Kept in step with 1Password: how it stands there, a problem in the warning colour.
-  const source = query.data ? vaultEntrySourceLine(query.data.entry, ctx.now, ctx.timeZone) : null;
+  const source = query.data ? vaultEntrySourceLine(query.data.entry, ctx.now, ctx.timeZone, rawLocale) : null;
   const toolBusy = setTool.isPending ? setTool.variables?.params.tool : null;
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
   const act = async (run: () => Promise<Parameters<typeof outcomeText>[0]>) => {
     try {
-      const text = outcomeText(await run());
+      const text = outcomeText(await run(), rawLocale);
       if (text) Alert.alert(text.title, text.body);
     } catch (error) {
-      Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error));
+      Alert.alert(tMobile('managed.that-didnt-go-through'), errorText(error, rawLocale));
     }
   };
   const runCheck = () =>
@@ -108,9 +112,9 @@ export function VaultEntryScreen({ route, navigation }: Props) {
   // Only an old `secret` entry is removed here (AP-4157): asked first, then back to where it was opened from.
   const askRemove = (name: string) =>
     Alert.alert(vaultRemoveCopyHere.confirm(name), vaultRemoveCopyHere.confirmBody, [
-      { text: 'Cancel', style: 'cancel' },
+      { text: tMobile('screens2.common.cancel'), style: 'cancel' },
       {
-        text: 'Remove',
+        text: tMobile('screens2.common.remove'),
         style: 'destructive',
         onPress: () =>
           void act(async () => {
@@ -137,11 +141,11 @@ export function VaultEntryScreen({ route, navigation }: Props) {
         onSave={async (totp) => {
           const result = await setTotp.mutateAsync({ params: { burrow: slug, entryId }, body: { totp } });
           if (result.status !== 'ok') {
-            const text = outcomeText(result);
+            const text = outcomeText(result, rawLocale);
             if (text) Alert.alert(text.title, text.body);
             return false;
           }
-          showNotice(VAULT_TOTP_TEXT.saved);
+          showNotice(vaultTotpTextHere.saved);
           return true;
         }}
       />
@@ -201,11 +205,11 @@ export function VaultEntryScreen({ route, navigation }: Props) {
         ) : (
           <>
             {model.moveToConnections ? (
-              <Section title={VAULT_MCP_MOVE_TEXT.title.toUpperCase()}>
-                <CardNote>{VAULT_MCP_MOVE_TEXT.body}</CardNote>
+              <Section title={vaultMcpMoveTextHere.title.toUpperCase()}>
+                <CardNote>{vaultMcpMoveTextHere.body}</CardNote>
                 <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
                   <Button
-                    label={VAULT_MCP_MOVE_TEXT.link}
+                    label={vaultMcpMoveTextHere.link}
                     variant="secondary"
                     onPress={() =>
                       openAppUrl(
@@ -263,14 +267,14 @@ export function VaultEntryScreen({ route, navigation }: Props) {
 
             {model.ssh ? (
               <>
-                <Section title={VAULT_SSH_COPY.publicKey}>
+                <Section title={vaultSshCopyHere.publicKey}>
                   <ListRow
                     title={model.ssh.fingerprint ?? model.secretLine}
                     titleMono
                     meta={model.ssh.keyMeta}
                   />
                 </Section>
-                <Section title={VAULT_SSH_COPY.servers}>
+                <Section title={vaultSshCopyHere.servers}>
                   {model.ssh.empty ? <CardNote>{model.ssh.empty}</CardNote> : null}
                   {model.ssh.servers.map((s) => (
                     <ListRow
@@ -305,7 +309,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                       ) : null}
                     </ListRow>
                   ))}
-                  <CardNote>{VAULT_SSH_ON_WEB}</CardNote>
+                  <CardNote>{vaultSshOnWeb(rawLocale)}</CardNote>
                 </Section>
               </>
             ) : model.unused ? (
@@ -316,7 +320,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                     label={vaultRemoveCopyHere.action}
                     variant="secondary"
                     busy={remove.isPending}
-                    accessibilityHint={`Removes ${model.name} from your Vault`}
+                    accessibilityHint={tMobile('screens2.vault.removesHint', { name: model.name })}
                     onPress={() => askRemove(model.name)}
                   />
                 </View>
@@ -332,7 +336,7 @@ export function VaultEntryScreen({ route, navigation }: Props) {
                       <Button
                         label={vaultCopyHere.replace}
                         variant="secondary"
-                        accessibilityHint={`Replaces the secret of ${model.name}`}
+                        accessibilityHint={tMobile('screens2.vault.replacesHint', { name: model.name })}
                         onPress={() => {
                           if (query.data)
                             setReplacing({ entryId, name: model.name, auth: query.data.entry.auth });
@@ -345,29 +349,29 @@ export function VaultEntryScreen({ route, navigation }: Props) {
             )}
 
             {model.totp ? (
-              <Section title={VAULT_TOTP_TEXT.label}>
+              <Section title={vaultTotpTextHere.label}>
                 <ListRow title={model.totp.line} />
                 <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
                   <Button
-                    label={model.totp.set ? VAULT_TOTP_TEXT.replace : VAULT_TOTP_TEXT.add}
+                    label={model.totp.set ? vaultTotpTextHere.replace : vaultTotpTextHere.add}
                     variant="secondary"
-                    accessibilityHint={`${VAULT_TOTP_TEXT.field}, ${model.name}`}
+                    accessibilityHint={`${vaultTotpTextHere.field}, ${model.name}`}
                     onPress={() => setTotpOpen(true)}
                     style={{ flex: 1 }}
                   />
                   {model.totp.set ? (
                     <Button
-                      label={VAULT_TOTP_TEXT.remove}
+                      label={vaultTotpTextHere.remove}
                       variant="secondary"
                       busy={setTotp.isPending}
-                      accessibilityHint={`${VAULT_TOTP_TEXT.field}, ${model.name}`}
+                      accessibilityHint={`${vaultTotpTextHere.field}, ${model.name}`}
                       onPress={() =>
                         void act(async () => {
                           const result = await setTotp.mutateAsync({
                             params: { burrow: slug, entryId },
                             body: { totp: null },
                           });
-                          if (result.status === 'ok') showNotice(VAULT_TOTP_TEXT.removed);
+                          if (result.status === 'ok') showNotice(vaultTotpTextHere.removed);
                           return result;
                         })
                       }
@@ -444,6 +448,7 @@ function AccessRow({
   act: (run: () => Promise<Parameters<typeof outcomeText>[0]>) => Promise<void>;
 }) {
   const { rawLocale } = useI18n();
+  const vaultKeysCopyHere = vaultKeysCopy(rawLocale);
   const vaultEnvTextHere = vaultEnvText(rawLocale);
 
   const theme = useTheme();
@@ -515,7 +520,7 @@ function AccessRow({
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut}>
-                {VAULT_KEYS_COPY.envName}
+                {vaultKeysCopyHere.envName}
               </Text>
               <Text
                 size={13}
@@ -569,6 +574,7 @@ function EnvNameSheet({
   onClose: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const vaultKeysCopyHere = vaultKeysCopy(rawLocale);
   const vaultEnvTextHere = vaultEnvText(rawLocale);
   const vaultFormTextHere = vaultFormText(rawLocale);
 
@@ -587,7 +593,7 @@ function EnvNameSheet({
     onClose();
   };
   const save = async () => {
-    const checked = vaultEnvNameCheck(text);
+    const checked = vaultEnvNameCheck(text, rawLocale);
     if (!checked.ok) return setProblem(checked.problem);
     if (checked.name === current) return close();
     try {
@@ -598,14 +604,19 @@ function EnvNameSheet({
       if (result.status !== 'ok') return setProblem(vaultFormTextHere.failed);
       close();
     } catch (error) {
-      setProblem(errorText(error));
+      setProblem(errorText(error, rawLocale));
     }
   };
   return (
-    <Sheet visible={visible} onClose={close} title={VAULT_KEYS_COPY.envName} label={vaultEnvTextHere.change}>
+    <Sheet
+      visible={visible}
+      onClose={close}
+      title={vaultKeysCopyHere.envName}
+      label={vaultEnvTextHere.change}
+    >
       <View style={{ paddingHorizontal: 22, gap: 12 }}>
         <FormField
-          label={VAULT_KEYS_COPY.envName}
+          label={vaultKeysCopyHere.envName}
           value={text}
           onChangeText={(next) => {
             setText(next);
@@ -614,7 +625,7 @@ function EnvNameSheet({
           mono
           autoCapitalize="characters"
           autoCorrect={false}
-          hint={VAULT_KEYS_COPY.envNameHint}
+          hint={vaultKeysCopyHere.envNameHint}
           error={problem}
           autoFocus
         />
@@ -651,6 +662,7 @@ function TotpSheet({
   onSave: (totp: string) => Promise<boolean>;
 }) {
   const { rawLocale } = useI18n();
+  const vaultTotpTextHere = vaultTotpText(rawLocale);
   const vaultFormTextHere = vaultFormText(rawLocale);
 
   const theme = useTheme();
@@ -672,24 +684,24 @@ function TotpSheet({
     try {
       if (await onSave(typed)) close();
     } catch (error) {
-      const p = vaultProblemOf(error);
+      const p = vaultProblemOf(error, rawLocale);
       setProblem(p.fields.totp ?? null);
       setMessage(p.message ?? (p.fields.totp ? null : vaultFormTextHere.failed));
     }
   };
   return (
-    <Sheet visible={visible} onClose={close} title={VAULT_TOTP_TEXT.label} label={VAULT_TOTP_TEXT.field}>
+    <Sheet visible={visible} onClose={close} title={vaultTotpTextHere.label} label={vaultTotpTextHere.field}>
       <View style={{ paddingHorizontal: 22, paddingBottom: 8, gap: 14 }}>
         <View style={{ gap: 4 }}>
           <Text size={19} weight={700} tracking={-0.01} accessibilityRole="header">
-            {`${VAULT_TOTP_TEXT.field} · ${name}`}
+            {`${vaultTotpTextHere.field} · ${name}`}
           </Text>
           <Text size={13.5} lh={1.4} color={theme.colors.mut}>
-            {VAULT_TOTP_TEXT.hint}
+            {vaultTotpTextHere.hint}
           </Text>
         </View>
         <FormField
-          label={VAULT_TOTP_TEXT.field}
+          label={vaultTotpTextHere.field}
           value={value}
           onChangeText={(v) => {
             setValue(v);
@@ -700,7 +712,7 @@ function TotpSheet({
           secret
           autoFocus
           maxLength={VAULT_TOTP_INPUT_MAX}
-          placeholder={VAULT_TOTP_TEXT.placeholder}
+          placeholder={vaultTotpTextHere.placeholder}
         />
         <FormMessage text={message} />
         <View style={{ flexDirection: 'row', gap: 8 }}>

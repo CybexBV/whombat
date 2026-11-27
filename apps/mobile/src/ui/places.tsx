@@ -23,7 +23,7 @@ import {
   type ServerFacts,
   sheetPlaces,
 } from '../data/places';
-import { OVERVIEW_TITLE, TAB_WORDS, type Tab } from '../data/shell';
+import { overviewTitle, type Tab, tabWords } from '../data/shell';
 import { usePlaceLists } from '../data/usePlaceLists';
 import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
@@ -80,7 +80,8 @@ export function useServerFacts(): ServerFacts[] {
   const status = useHostsStatus({ params: { burrow: slug } }, { retry: false });
   const present = status.data?.present === true;
   const fleet = useHostsFleet(present ? { params: { burrow: slug } } : null, { retry: false });
-  return useMemo(() => serverFacts(fleet.data?.servers ?? []), [fleet.data?.servers]);
+  const { rawLocale } = useI18n();
+  return useMemo(() => serverFacts(fleet.data?.servers ?? [], rawLocale), [fleet.data?.servers, rawLocale]);
 }
 
 const OPENER = 'places-opener';
@@ -184,7 +185,7 @@ function PlacesSheet({
   const lastTab = useLastTab();
   // A place that is the left page gives way to the tabs: what opens next goes back to them, by their name.
   const fromList = role === 'list' && (current === 'servers' || current === 'connections');
-  const backWord = fromList ? (TAB_WORDS[lastTab as Tab] ?? OVERVIEW_TITLE) : here;
+  const backWord = fromList ? (tabWords(rawLocale)[lastTab as Tab] ?? overviewTitle(rawLocale)) : here;
   const go = () => {
     after.onDismissed();
     setMounted(false);

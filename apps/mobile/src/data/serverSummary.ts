@@ -6,7 +6,7 @@
  * `@whombat/client/hosts` `serverDashboard`; the screen is `screens/ServerScreen.tsx`.
  */
 import { parseThingId } from '@whombat/core';
-import { SERVER_COPY } from './servers';
+import { serverCopy } from './servers';
 import type { PhoneThingTab } from './thingPage';
 
 /** The server segments the phone has (the rest stay on the web). */
@@ -28,13 +28,14 @@ const SERVER_TAB_ALIASES: Record<ServerTab, readonly string[]> = {
 };
 
 /** The phone's segments as the renderer's tabs, with the keys a link may name for each. */
-export function serverPhoneTabs(tabs: readonly ServerTab[]): PhoneThingTab[] {
+export function serverPhoneTabs(tabs: readonly ServerTab[], locale?: string): PhoneThingTab[] {
+  const copy = serverCopy(locale);
   return tabs.map((key) => ({
     key,
-    label: SERVER_COPY[key],
+    label: copy[key],
     count: null,
     settings: false,
-    spoken: SERVER_COPY[key],
+    spoken: copy[key],
     aliases: SERVER_TAB_ALIASES[key],
   }));
 }

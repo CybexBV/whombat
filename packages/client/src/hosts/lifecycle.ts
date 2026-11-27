@@ -5,71 +5,83 @@
  * the web and Android.
  */
 import type { HostBackupJob, HostFirewall, HostGuest, HostManageOp, HostTask } from '@whombat/core/domain';
-import { plural } from './format';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_ACTIONS_WORDS } from '../i18n/messages/connectionsHosts/actions';
+import { HOSTS_DASHBOARD_MORE_WORDS } from '../i18n/messages/connectionsHosts/dashboardMore';
 import type { HostTone } from './thresholds';
 
 /* Tasks --------------------------------------------------------------------------------------------- */
 
-const TASK_TYPES: Record<string, string> = {
-  qmstart: 'Start',
-  vzstart: 'Start',
-  qmstop: 'Stop',
-  vzstop: 'Stop',
-  qmshutdown: 'Shut down',
-  vzshutdown: 'Shut down',
-  qmreboot: 'Restart',
-  vzreboot: 'Restart',
-  qmreset: 'Reset',
-  qmsuspend: 'Pause',
-  vzsuspend: 'Pause',
-  qmresume: 'Resume',
-  vzresume: 'Resume',
-  qmcreate: 'Create',
-  vzcreate: 'Create',
-  qmclone: 'Clone',
-  vzclone: 'Clone',
-  qmdestroy: 'Delete',
-  vzdestroy: 'Delete',
-  qmtemplate: 'Convert to template',
-  vztemplate: 'Convert to template',
-  qmrestore: 'Restore',
-  vzrestore: 'Restore',
-  qmconfig: 'Settings',
-  vzconfig: 'Settings',
-  qmresize: 'Grow a disk',
-  resize: 'Grow a disk',
-  qmmove: 'Move a disk',
-  move_volume: 'Move a disk',
-  imgcopy: 'Copy a disk',
-  qmsnapshot: 'Snapshot',
-  vzsnapshot: 'Snapshot',
-  qmdelsnapshot: 'Remove a snapshot',
-  vzdelsnapshot: 'Remove a snapshot',
-  qmrollback: 'Back to a snapshot',
-  vzrollback: 'Back to a snapshot',
-  qmigrate: 'Move',
-  vzmigrate: 'Move',
-  vzdump: 'Backup',
-  download: 'Download',
-  aptupdate: 'Update package lists',
-  vncproxy: 'Console',
-  vncshell: 'Shell',
-  create: 'Create',
-  copy: 'Copy',
-  delete: 'Delete',
-};
+/** Which word each Proxmox task type is called by (`vzdump` → the backup's). */
+const TASK_TYPE_WORD = {
+  qmstart: 'start',
+  vzstart: 'start',
+  qmstop: 'stop',
+  vzstop: 'stop',
+  qmshutdown: 'shutdown',
+  vzshutdown: 'shutdown',
+  qmreboot: 'reboot',
+  vzreboot: 'reboot',
+  qmreset: 'reset',
+  qmsuspend: 'suspend',
+  vzsuspend: 'suspend',
+  qmresume: 'resume',
+  vzresume: 'resume',
+  qmcreate: 'create',
+  vzcreate: 'create',
+  qmclone: 'clone',
+  vzclone: 'clone',
+  qmdestroy: 'destroy',
+  vzdestroy: 'destroy',
+  qmtemplate: 'template',
+  vztemplate: 'template',
+  qmrestore: 'restore',
+  vzrestore: 'restore',
+  qmconfig: 'config',
+  vzconfig: 'config',
+  qmresize: 'resize',
+  resize: 'resize',
+  qmmove: 'move',
+  move_volume: 'move',
+  imgcopy: 'imgcopy',
+  qmsnapshot: 'snapshot',
+  vzsnapshot: 'snapshot',
+  qmdelsnapshot: 'delsnapshot',
+  vzdelsnapshot: 'delsnapshot',
+  qmrollback: 'rollback',
+  vzrollback: 'rollback',
+  qmigrate: 'migrate',
+  vzmigrate: 'migrate',
+  vzdump: 'vzdump',
+  download: 'download',
+  aptupdate: 'aptupdate',
+  vncproxy: 'vncproxy',
+  vncshell: 'vncshell',
+  create: 'create',
+  copy: 'copy',
+  delete: 'destroy',
+} as const;
 
-/** “vzdump” → “Backup”; an unknown type reads as itself. */
-export function taskTypeText(type: string): string {
-  return TASK_TYPES[type] ?? type;
+/** What each Proxmox task type is called, in a locale (English when none is given). */
+export function taskTypes(locale?: string | null): Record<string, string> {
+  const w = clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).tasks.types;
+  return Object.fromEntries(Object.entries(TASK_TYPE_WORD).map(([type, word]) => [type, w[word]]));
 }
 
-export const TASK_STATUS_WORDS: Record<HostTask['status'], string> = {
-  running: 'Running',
-  ok: 'Done',
-  warning: 'Done, with warnings',
-  error: 'Failed',
-};
+const TASK_TYPES: Record<string, string> = taskTypes();
+
+/** “vzdump” → “Backup”; an unknown type reads as itself. */
+export function taskTypeText(type: string, locale?: string | null): string {
+  return (locale ? taskTypes(locale)[type] : TASK_TYPES[type]) ?? type;
+}
+
+/** A task's state in words, in a locale (English when none is given). */
+export function taskStatusWords(locale?: string | null): Record<HostTask['status'], string> {
+  return { ...clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).tasks.status };
+}
+
+export const TASK_STATUS_WORDS: Record<HostTask['status'], string> = taskStatusWords();
 
 export function taskStatusTone(status: HostTask['status']): HostTone {
   return status === 'ok' ? 'ok' : status === 'running' ? 'mut' : status === 'warning' ? 'warn' : 'bad';
@@ -83,45 +95,16 @@ export function taskSeconds(started: string, ended: string | null | undefined, n
 }
 
 /** What a change that runs as a task is called in its toasts (“Backup of web”, “Clone of web”). */
-export function taskWhat(op: HostManageOp | string, name: string): string {
-  switch (op) {
-    case 'backup.create':
-      return `Backup of ${name}`;
-    case 'backup.restore':
-      return `Restore of ${name}`;
-    case 'backup.delete':
-      return 'Deleting the backup';
-    case 'guest.clone':
-      return `Clone of ${name}`;
-    case 'guest.create':
-      return `Creating ${name}`;
-    case 'guest.template':
-      return `Turning ${name} into a template`;
-    case 'guest.delete':
-      return `Deleting ${name}`;
-    case 'guest.migrate':
-      return `Move of ${name}`;
-    case 'disk.resize':
-      return `Growing ${name}’s disk`;
-    case 'disk.move':
-      return `Moving ${name}’s disk`;
-    case 'content.download':
-    case 'appliance.download':
-      return `Download of ${name}`;
-    case 'content.delete':
-      return `Deleting ${name}`;
-    case 'config.set':
-      return `Saving ${name}’s settings`;
-    case 'backupjob.run':
-      return `Backup job ${name}`;
-    default:
-      return name ? `The task for ${name}` : 'The task';
-  }
+export function taskWhat(op: HostManageOp | string, name: string, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_ACTIONS_WORDS).what;
+  if (op !== 'named' && op !== 'unnamed' && Object.hasOwn(w, op))
+    return interpolate(w[op as keyof typeof w], { name });
+  return name ? interpolate(w.named, { name }) : w.unnamed;
 }
 
 /** “Backup of web started.” */
-export function taskStartedText(what: string): string {
-  return `${what} started.`;
+export function taskStartedText(what: string, locale?: string | null): string {
+  return interpolate(clientTree(locale, HOSTS_ACTIONS_WORDS).started, { what });
 }
 
 /** Proxmox ends a task with warnings as “WARNINGS: 2”: the count, or null. */
@@ -146,14 +129,18 @@ export function taskOutcomeText(
   what: string,
   result: 'ok' | 'warning' | 'error',
   message?: string | null,
+  locale?: string | null,
 ): string {
-  if (result === 'ok') return `${what} finished.`;
+  const w = clientTree(locale, HOSTS_ACTIONS_WORDS).outcome;
+  if (result === 'ok') return interpolate(w.ok, { what });
   if (result === 'warning') {
     const n = taskWarnings(message);
-    return n ? `${what} finished with ${plural(n, 'warning')}.` : `${what} finished with warnings.`;
+    return n ? w.warnings(n, { what }) : interpolate(w.someWarnings, { what });
   }
   const m = (message ?? '').trim();
-  return m && m !== 'OK' ? `${what} failed: ${reason(m)}` : `${what} failed.`;
+  return m && m !== 'OK'
+    ? interpolate(w.failedWhy, { what, reason: reason(m) })
+    : interpolate(w.failed, { what });
 }
 
 /* Proxmox hints for one guest (PX-07) ----------------------------------------------------------------- */
@@ -182,17 +169,19 @@ const days = (ms: number) => Math.max(1, Math.floor(ms / DAY_MS));
  * The hub's Proxmox guest hints for one guest, worked out from the guest itself (the hub lists them per server):
  * no backup job, the last backup old or failed, changes waiting for a restart, an old snapshot, the guest agent down.
  */
-export function guestHints(g: HostGuest, now: number): GuestHintView[] {
+export function guestHints(g: HostGuest, now: number, locale?: string | null): GuestHintView[] {
   if (g.platform !== 'pve') return [];
+  const w = clientTree(locale, HOSTS_ACTIONS_WORDS).hints;
+  const name = g.name;
   const out: GuestHintView[] = [];
   if (g.backupJob === false)
     out.push({
       kind: 'guest.no_backup_job',
       tone: 'warn',
-      title: `No backup plan covers ${g.name}`,
-      detail: 'Proxmox doesn’t back it up on a schedule, so a broken disk loses it.',
+      title: interpolate(w.noPlanTitle, { name }),
+      detail: w.noPlanDetail,
       fix: 'backup_job',
-      action: 'Add to a backup plan',
+      action: w.addToPlan,
     });
   else if (g.backupJob && g.lastBackup) {
     const age = now - Date.parse(g.lastBackup.at);
@@ -200,32 +189,29 @@ export function guestHints(g: HostGuest, now: number): GuestHintView[] {
       out.push({
         kind: 'guest.backup_old',
         tone: 'warn',
-        title: 'Its last backup failed',
-        detail: `The backup plan tried ${days(age) === 1 ? 'a day' : `${days(age)} days`} ago. The task log says why.`,
+        title: w.failedTitle,
+        detail: w.failedDetail(days(age)),
         fix: 'backup_now',
-        action: 'Back up now',
+        action: w.backUpNow,
       });
     else if (age > BACKUP_OLD_DAYS * DAY_MS)
       out.push({
         kind: 'guest.backup_old',
         tone: 'warn',
-        title: `Last backup ${days(age)} days ago`,
-        detail: 'Its backup plan covers it but hasn’t backed it up for over a week.',
+        title: interpolate(w.oldTitle, { count: days(age) }),
+        detail: w.oldDetail,
         fix: 'backup_now',
-        action: 'Back up now',
+        action: w.backUpNow,
       });
   }
   if (g.pendingChanges && g.pendingChanges > 0)
     out.push({
       kind: 'guest.pending_changes',
       tone: 'mut',
-      title:
-        g.pendingChanges === 1
-          ? 'A change waits for a restart'
-          : `${g.pendingChanges} changes wait for a restart`,
-      detail: 'They apply when it next starts.',
+      title: w.pendingTitle(g.pendingChanges),
+      detail: w.pendingDetail,
       fix: 'restart',
-      action: 'Restart to apply',
+      action: w.restart,
     });
   if (g.oldestSnapshot) {
     const age = now - Date.parse(g.oldestSnapshot);
@@ -233,20 +219,20 @@ export function guestHints(g: HostGuest, now: number): GuestHintView[] {
       out.push({
         kind: 'guest.snapshot_old',
         tone: 'mut',
-        title: `A snapshot is ${days(age)} days old`,
-        detail: 'Old snapshots keep growing and slow the disk down. Remove the ones you don’t need.',
+        title: interpolate(w.snapshotTitle, { count: days(age) }),
+        detail: w.snapshotDetail,
         fix: 'snapshots',
-        action: 'Open Snapshots',
+        action: w.openSnapshots,
       });
   }
   if (g.kind === 'vm' && g.guestAgent === 'not_running' && (g.state === 'running' || g.state === 'unhealthy'))
     out.push({
       kind: 'guest.agent_down',
       tone: 'mut',
-      title: 'It doesn’t report what’s inside',
-      detail: `Proxmox’s helper isn’t running inside ${g.name}, so Proxmox can’t see its addresses or shut it down cleanly.`,
+      title: w.agentTitle,
+      detail: interpolate(w.agentDetail, { name }),
       fix: 'agent',
-      action: 'What to do',
+      action: w.whatToDo,
     });
   return out;
 }
@@ -309,8 +295,9 @@ export function firewallOption(fw: Pick<HostFirewall, 'options'>, key: string): 
 }
 
 /** “Allow”, “Drop”, “Refuse”; a security group's name as it is. */
-export function firewallActionWord(action: string): string {
-  return action === 'ACCEPT' ? 'Allow' : action === 'DROP' ? 'Drop' : action === 'REJECT' ? 'Refuse' : action;
+export function firewallActionWord(action: string, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_DASHBOARD_MORE_WORDS).firewall;
+  return action === 'ACCEPT' ? w.allow : action === 'DROP' ? w.drop : action === 'REJECT' ? w.refuse : action;
 }
 
 /** What a rule matches in a line: “SSH from 10.100.0.0/16”, “tcp port 443”, “the rules of webservers”. */

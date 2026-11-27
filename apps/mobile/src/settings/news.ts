@@ -6,17 +6,17 @@
  */
 import { countryName } from '@whombat/client';
 import {
-  NEWS_KIND_WORDS,
   NEWS_SOURCES_MAX,
   NEWS_SOURCES_MAX_BEFORE_MORE,
-  NEWS_TOPIC_WORDS,
-  NEWS_WORDS,
   type NewsBrowseSite,
   type NewsChosenSource,
   type NewsImportResult,
   type NewsTopic,
+  newsKindWords,
   newsSourceKind,
   newsSuggestion,
+  newsTopicWords,
+  newsWords,
   type Place,
 } from '@whombat/core';
 
@@ -29,13 +29,13 @@ export function newsMax(more: boolean): number {
 }
 
 /** “5 of 30”, beside YOUR SOURCES. */
-export function newsCountText(on: number, max: number): string {
-  return fill(NEWS_WORDS.count, { n: on, max });
+export function newsCountText(on: number, max: number, locale?: string | null): string {
+  return fill(newsWords(locale).count, { n: on, max });
 }
 
 /** “Up to 30 sources. Turn one off first.” */
-export function newsFullTextFor(max: number): string {
-  return fill(NEWS_WORDS.full, { n: max });
+export function newsFullTextFor(max: number, locale?: string | null): string {
+  return fill(newsWords(locale).full, { n: max });
 }
 
 /**
@@ -68,11 +68,14 @@ const lower = (word: string) => word.charAt(0).toLowerCase() + word.slice(1);
 export function chosenSourceLine(
   source: Pick<NewsChosenSource, 'id' | 'url' | 'kind' | 'own'>,
   place: Pick<Place, 'country' | 'region' | 'regionName'> | null,
+  locale?: string | null,
 ): string {
-  if (source.own) return `${NEWS_KIND_WORDS[newsSourceKind(source)]} · ${NEWS_WORDS.addedByYou}`;
+  const NEWS_WORDS = newsWords(locale);
+  const NEWS_TOPIC_WORDS = newsTopicWords(locale);
+  if (source.own) return `${newsKindWords(locale)[newsSourceKind(source)]} · ${NEWS_WORDS.addedByYou}`;
   const row = newsSuggestion(source.id);
   if (!row) return hostOf(source.url);
-  const country = countryName(row.country);
+  const country = countryName(row.country, {}, locale);
   if (row.topic && row.topic !== 'news') return `${country} · ${NEWS_TOPIC_WORDS[row.topic]}`;
   if (!row.regions && !row.areas) return `${country} · ${lower(NEWS_WORDS.national)}`;
   const ours = place?.country === row.country && !!place.region && !!row.regions?.includes(place.region);
@@ -136,18 +139,23 @@ export function newsChips(sites: readonly Pick<NewsBrowseSite, 'near' | 'scope' 
 }
 
 /** A chip's word. */
-export function newsChipLabel(chip: NewsChip): string {
+export function newsChipLabel(chip: NewsChip, locale?: string | null): string {
+  const NEWS_WORDS = newsWords(locale);
   if (chip === 'all') return NEWS_WORDS.allTopics;
   if (chip === 'near') return NEWS_WORDS.nearYou;
   if (chip === 'national') return NEWS_WORDS.national;
-  return NEWS_TOPIC_WORDS[chip];
+  return newsTopicWords(locale)[chip];
 }
 
 /** A suggested site's line in Find more: “National”, “Tech”, “Noord-Brabant · regional”, “Regional”. */
-export function browseSiteLine(site: Pick<NewsBrowseSite, 'scope' | 'topic' | 'where'>): string {
+export function browseSiteLine(
+  site: Pick<NewsBrowseSite, 'scope' | 'topic' | 'where'>,
+  locale?: string | null,
+): string {
+  const NEWS_WORDS = newsWords(locale);
   const what =
     site.topic !== 'news'
-      ? NEWS_TOPIC_WORDS[site.topic]
+      ? newsTopicWords(locale)[site.topic]
       : site.scope === 'country'
         ? NEWS_WORDS.national
         : NEWS_WORDS.regional;
@@ -156,7 +164,11 @@ export function browseSiteLine(site: Pick<NewsBrowseSite, 'scope' | 'topic' | 'w
 }
 
 /** What an import says: “2 sources added. 1 couldn’t be added.”, “1 couldn’t be added.”, “0 sources added.” */
-export function newsImportText(result: Pick<NewsImportResult, 'added' | 'skipped'>): string {
+export function newsImportText(
+  result: Pick<NewsImportResult, 'added' | 'skipped'>,
+  locale?: string | null,
+): string {
+  const NEWS_WORDS = newsWords(locale);
   const added =
     result.added.length === 1
       ? NEWS_WORDS.importedOne

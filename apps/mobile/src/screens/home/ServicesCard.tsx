@@ -11,8 +11,8 @@
  */
 
 import {
-  ARRANGE_WORDS,
   type ArrangedTile,
+  arrangeWords,
   type FigureFace,
   type OverviewSectionView,
   type OverviewTile,
@@ -27,8 +27,8 @@ import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { connectionsCopy, serviceRowOpens } from '../../data/home';
 import { figureWhat, tileRows } from '../../data/overviewArranged';
-import { parseThingRowPick, RENAME_COPY, thingRowMenu } from '../../data/rename';
-import { OVERVIEW_TITLE } from '../../data/shell';
+import { parseThingRowPick, renameCopy, thingRowMenu } from '../../data/rename';
+import { overviewTitle } from '../../data/shell';
 import { type PhoneGlyph, phoneThingGlyph } from '../../data/thingLook';
 import { useThingRename } from '../../data/useThingRename';
 import { useI18n } from '../../i18n';
@@ -76,6 +76,7 @@ export function ServicesCard({
 }) {
   const { rawLocale } = useI18n();
   const connectionsCopyHere = connectionsCopy(rawLocale);
+  const RENAME_COPY = renameCopy(rawLocale);
 
   const navigation = useAppNavigation();
   const beside = useBeside();
@@ -95,7 +96,7 @@ export function ServicesCard({
       navigation.navigate('Thing', {
         thingId: tile.row.id,
         title: rename.shown(tile.row.id, tile.row.name),
-        back: OVERVIEW_TITLE,
+        back: overviewTitle(rawLocale),
       });
   };
   const pick = (tile: OverviewTile, id: string) => {
@@ -193,7 +194,7 @@ export function ServicesCard({
       ) : null}
       {hasNativeMenu ? null : (
         <MenuSheet
-          spec={menuFor ? thingRowMenu(menuFor.target.name) : null}
+          spec={menuFor ? thingRowMenu(menuFor.target.name, rawLocale) : null}
           visible={menuFor !== null}
           label={RENAME_COPY.rowMenu(menuFor?.target.name ?? '')}
           onClose={() => setMenuFor(null)}
@@ -242,7 +243,9 @@ export function ConnectionTile({
   still?: boolean;
 }) {
   const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const connectionsCopyHere = connectionsCopy(rawLocale);
+  const RENAME_COPY = renameCopy(rawLocale);
 
   const theme = useTheme();
   const toneColor = useToneColor();
@@ -321,7 +324,7 @@ export function ConnectionTile({
           )}
         </View>
         {arranging && !still ? (
-          <GearButton label={ARRANGE_WORDS.changeTile(name)} onPress={() => onGear?.()} />
+          <GearButton label={arrangeWordsHere.changeTile(name)} onPress={() => onGear?.()} />
         ) : null}
       </View>
       {face && hasValue ? (
@@ -414,7 +417,7 @@ export function ConnectionTile({
     </Touchable>
   );
   return menu ? (
-    <NativeMenu spec={thingRowMenu(name)} onPick={menu.onPick}>
+    <NativeMenu spec={thingRowMenu(name, rawLocale)} onPick={menu.onPick}>
       {button}
     </NativeMenu>
   ) : (
@@ -427,6 +430,8 @@ export function ConnectionTile({
  * over how many wait there.
  */
 function AddTile({ removed, onPress }: { removed: number; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -434,7 +439,7 @@ function AddTile({ removed, onPress }: { removed: number; onPress: () => void })
       feedback="wash"
       ringRadius={18}
       accessibilityRole="button"
-      accessibilityLabel={`${ARRANGE_WORDS.add}, ${ARRANGE_WORDS.addLine(removed)}`}
+      accessibilityLabel={`${arrangeWordsHere.add}, ${arrangeWordsHere.addLine(removed)}`}
       style={{
         flexGrow: 1,
         minHeight: 150,
@@ -450,10 +455,10 @@ function AddTile({ removed, onPress }: { removed: number; onPress: () => void })
     >
       <Plus size={20} color={theme.colors.ink2} strokeWidth={1.75} />
       <Text size={14.5} weight={500} color={theme.colors.ink2} style={{ textAlign: 'center' }}>
-        {ARRANGE_WORDS.add}
+        {arrangeWordsHere.add}
       </Text>
       <Text size={12.5} color={theme.colors.mut} style={{ textAlign: 'center' }}>
-        {ARRANGE_WORDS.addLine(removed)}
+        {arrangeWordsHere.addLine(removed)}
       </Text>
     </Touchable>
   );

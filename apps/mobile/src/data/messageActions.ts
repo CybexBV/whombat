@@ -8,7 +8,7 @@
  * the rules are core's (`canEditMessage`, `canDeleteMessage`, `canPinMessage`), the order and the words are the phone's,
  * and the delete confirmation says what happens.
  */
-import { appPath, isJobResult, PROMPT_WORDS, SHARE_TEXT, withBurrow } from '@whombat/client';
+import { appPath, isJobResult, promptWords, shareText, withBurrow } from '@whombat/client';
 import {
   type ConversationLink,
   canDeleteMessage,
@@ -18,7 +18,8 @@ import {
   type MessageViewer,
   messageTextFits,
 } from '@whombat/core';
-import { SETTLE_COPY, type SettleOffer } from './threadSettle';
+import { mobileTranslator } from '../i18n/translate';
+import { type SettleOffer, settleCopy } from './threadSettle';
 
 export type MessageActionKind =
   | 'settle'
@@ -67,46 +68,48 @@ export interface MessageMenuOptions {
    * works on it or it waits for the person; absent outside Chat and Feedback's top level.
    */
   settle?: (m: Message) => SettleOffer;
+  locale?: string;
 }
 
-const ACTIONS: Record<MessageActionKind, Omit<MessageAction, 'kind'>> = {
-  settle: { label: SETTLE_COPY.settleThread, destructive: false, accessibilityHint: SETTLE_COPY.settleHint },
-  open_again: {
-    label: SETTLE_COPY.openAgain,
-    destructive: false,
-    accessibilityHint: SETTLE_COPY.openAgainHint,
-  },
-  reply_thread: {
-    label: 'Reply in thread',
-    destructive: false,
-    accessibilityHint: 'Opens the thread on this message',
-  },
-  copy_text: { label: 'Copy text', destructive: false, accessibilityHint: 'Copies the message’s text' },
-  copy_link: {
-    label: 'Copy link',
-    destructive: false,
-    accessibilityHint: 'Copies a link that opens this message',
-  },
-  save_prompt: {
-    label: PROMPT_WORDS.saveFromMessage,
-    destructive: false,
-    accessibilityHint: 'Keeps its words to use again',
-  },
-  share: {
-    label: SHARE_TEXT.shareMenu,
-    destructive: false,
-    accessibilityHint: 'Makes a link to a copy of this thread',
-  },
-  share_from: {
-    label: SHARE_TEXT.shareFromMenu,
-    destructive: false,
-    accessibilityHint: 'Makes a link to a copy of the thread from this message on',
-  },
-  edit: { label: 'Edit', destructive: false, accessibilityHint: 'Changes the text of your message' },
-  pin: { label: 'Pin', destructive: false, accessibilityHint: 'Pins it in this conversation' },
-  unpin: { label: 'Unpin', destructive: false, accessibilityHint: 'Takes it off the pinned messages' },
-  delete: { label: 'Delete', destructive: true, accessibilityHint: 'Asks first' },
-};
+function actions(locale?: string): Record<MessageActionKind, Omit<MessageAction, 'kind'>> {
+  const { t } = mobileTranslator(locale);
+  const settle = settleCopy(locale);
+  const share = shareText(locale);
+  const own = (
+    key: 'replyThread' | 'copyText' | 'copyLink' | 'edit' | 'pin' | 'unpin' | 'delete',
+    destructive = false,
+  ) => ({
+    label: t(`data.messageActions.${key}.label`),
+    destructive,
+    accessibilityHint: t(`data.messageActions.${key}.hint`),
+  });
+  return {
+    settle: { label: settle.settleThread, destructive: false, accessibilityHint: settle.settleHint },
+    open_again: { label: settle.openAgain, destructive: false, accessibilityHint: settle.openAgainHint },
+    reply_thread: own('replyThread'),
+    copy_text: own('copyText'),
+    copy_link: own('copyLink'),
+    save_prompt: {
+      label: promptWords(locale).saveFromMessage,
+      destructive: false,
+      accessibilityHint: t('data.messageActions.savePrompt.hint'),
+    },
+    share: {
+      label: share.shareMenu,
+      destructive: false,
+      accessibilityHint: t('data.messageActions.share.hint'),
+    },
+    share_from: {
+      label: share.shareFromMenu,
+      destructive: false,
+      accessibilityHint: t('data.messageActions.shareFrom.hint'),
+    },
+    edit: own('edit'),
+    pin: own('pin'),
+    unpin: own('unpin'),
+    delete: own('delete', true),
+  };
+}
 
 /** Messages still on their way (the optimistic copy) have no menu yet. */
 export function isSending(m: Pick<Message, 'id'>): boolean {
@@ -136,7 +139,7 @@ export function messageMenu(
   if (options.features.edit && canEditMessage(m, viewer) && !isJobResult(m)) kinds.push('edit');
   if (options.features.pins && canPinMessage(m, viewer)) kinds.push(m.pinnedAt ? 'unpin' : 'pin');
   if (options.features.edit && canDeleteMessage(m, viewer)) kinds.push('delete');
-  return { react: !m.deletedAt, actions: kinds.map(messageAction) };
+  return { react: !m.deletedAt, actions: kinds.map((kind) => messageAction(kind, options.locale)) };
 }
 
 /**
@@ -154,8 +157,8 @@ export function messageSwipe(menu: MessageMenu | null, roomTop: boolean): Messag
 }
 
 /** An action with its words, as every menu on a message or a thread shows it. */
-export function messageAction(kind: MessageActionKind): MessageAction {
-  return { kind, ...ACTIONS[kind] };
+export function messageAction(kind: MessageActionKind, locale?: string): MessageAction {
+  return { kind, ...actions(locale)[kind] };
 }
 
 /** The viewer as the message rules see them, from the bootstrap's `me`: the person, who may delete any message. */
@@ -171,13 +174,18 @@ export function deleteConfirm(
   m: Pick<Message, 'authorId' | 'replyCount' | 'threadRootId'>,
   viewerId: string,
   authorName: string,
+  locale?: string,
 ): { title: string; body: string; cta: string } {
-  const title = m.authorId === viewerId ? 'Delete this message?' : `Delete ${authorName}’s message?`;
+  const { t } = mobileTranslator(locale);
+  const title =
+    m.authorId === viewerId
+      ? t('data.messageActions.deleteOwn')
+      : t('data.messageActions.deleteTheirs', { name: authorName });
   const body =
     m.threadRootId === null && m.replyCount > 0
-      ? 'It’s removed from this conversation, with its replies.'
-      : 'It’s removed from this conversation.';
-  return { title, body, cta: 'Delete' };
+      ? t('data.messageActions.deleteWithReplies')
+      : t('data.messageActions.deleteBody');
+  return { title, body, cta: t('data.messageActions.delete.label') };
 }
 
 /**
@@ -192,19 +200,30 @@ export function canSaveEdit(original: string, draft: string, hasAttachments: boo
 }
 
 /** Why Save is held back, for the line under the editor (null when it can be saved or nothing was typed yet). */
-export function editProblem(original: string, draft: string, hasAttachments: boolean): string | null {
+export function editProblem(
+  original: string,
+  draft: string,
+  hasAttachments: boolean,
+  locale?: string,
+): string | null {
+  const { t } = mobileTranslator(locale);
   const next = draft.trim();
-  if (!next && !hasAttachments && original.trim()) return 'A message needs some text.';
-  if (next && !messageTextFits(next)) return 'That message is too long.';
+  if (!next && !hasAttachments && original.trim()) return t('data.messageActions.needsText');
+  if (next && !messageTextFits(next)) return t('data.messageActions.tooLong');
   return null;
 }
 
 /** What a copy says when it worked (MX-04). */
-export const COPIED_TEXT = {
-  text: 'Copied the text.',
-  link: 'Copied the link.',
-  code: 'Copied the code.',
-} as const;
+export function copiedText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    text: t('data.messageActions.copied.text'),
+    link: t('data.messageActions.copied.link'),
+    code: t('data.messageActions.copied.code'),
+  };
+}
+
+export const COPIED_TEXT = copiedText();
 
 /**
  * The web path a copied link opens (MX-04, the web's WX-06): the conversation with the message's `#msg_…` fragment, a

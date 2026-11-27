@@ -10,7 +10,7 @@
 import type { ChatProvider } from '@whombat/core';
 import { View } from 'react-native';
 import { switchedParts } from '../data/chatRuntime';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -102,7 +102,8 @@ export function RanOnMark({
  */
 export function RunSwitchDivider({ provider, text }: { provider: ChatProvider; text: string }) {
   const theme = useTheme();
-  const parts = switchedParts(text);
+  const { rawLocale } = useI18n();
+  const parts = switchedParts(text, rawLocale);
   return (
     <View
       accessible
@@ -208,6 +209,7 @@ export function ChatRuntimeIcon({
   onPress: () => void;
   disabled?: boolean;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
@@ -222,7 +224,7 @@ export function ChatRuntimeIcon({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityValue={{
-        text: `${[providerLabel, model, effort].filter(Boolean).join(', ')}${fast ? ', fast replies' : ''}. ${scope}`,
+        text: `${[providerLabel, model, effort, fast ? tMobile('screens2.ui.fastReplies') : null].filter(Boolean).join(', ')}. ${scope}`,
       }}
       hitSlop={hitSlopFor(32)}
       style={{

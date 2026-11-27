@@ -11,16 +11,32 @@ import {
   type DiagnosticScope,
   diagnosticBundleBytes,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { DIAGNOSTICS_WORDS } from '../i18n/messages/hostManaged/diagnostics';
 import { type DiagnosticBundleSummary, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
+import { managedCopyText } from './copy';
 
 export { DIAGNOSTIC_SCOPES, type DiagnosticScope };
 
-/** The scopes in the contract's order, each with its description (what it contains, and what never). */
-export const DIAGNOSTIC_SCOPE_LIST = (Object.keys(DIAGNOSTIC_SCOPES) as DiagnosticScope[]).map((scope) => ({
-  scope,
-  description: DIAGNOSTIC_SCOPES[scope],
-}));
+/**
+ * The scopes in the contract's order, each with its name and description (what it contains, and what never), in a
+ * locale (English when none is given). The scope ids stay as they are: they are what the box is asked for.
+ */
+export function diagnosticScopeList(
+  locale?: string | null,
+): { scope: DiagnosticScope; label: string; description: string }[] {
+  const w = clientTree(locale, DIAGNOSTICS_WORDS);
+  const names = managedCopyText(locale).diagnostics.scopeNames;
+  return (Object.keys(DIAGNOSTIC_SCOPES) as DiagnosticScope[]).map((scope) => ({
+    scope,
+    label: names[scope] ?? scope,
+    description: w.scopes[scope] ?? DIAGNOSTIC_SCOPES[scope],
+  }));
+}
+
+/** The scopes in English. */
+export const DIAGNOSTIC_SCOPE_LIST = diagnosticScopeList('en');
 
 /** The bundle shown, or downloaded, isn't the one the appliance recorded: nothing is shown or saved. */
 export class DiagnosticsIntegrityError extends Error {

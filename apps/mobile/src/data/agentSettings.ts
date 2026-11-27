@@ -28,6 +28,7 @@ import {
   RISK_KEY_OPTIONS,
   type Tier,
 } from '@whombat/core/keys';
+import { mobileTranslator } from '../i18n/translate';
 
 /* Keys -------------------------------------------------------------------------------------------------------- */
 
@@ -126,16 +127,22 @@ export function isTierSwitch(row: KeySwitchRow | KeyTierSwitchRow): row is KeyTi
 export function accessView(
   draft: AccessDraft,
   opts: AccessOptions,
-  ctx: { deployWorkflow?: boolean | undefined } = {},
+  ctx: { deployWorkflow?: boolean | undefined; locale?: string | undefined } = {},
 ): AccessView {
-  const rows = tierKeyRows(opts.rowOptions, (row) => draft.tiers[row] ?? 'cannot', ctx.deployWorkflow);
-  const switches = liveKeyRows(opts.allOptions, (keyId) => !!draft.keys[keyId]);
+  const { locale } = ctx;
+  const rows = tierKeyRows(
+    opts.rowOptions,
+    (row) => draft.tiers[row] ?? 'cannot',
+    ctx.deployWorkflow,
+    locale,
+  );
+  const switches = liveKeyRows(opts.allOptions, (keyId) => !!draft.keys[keyId], locale);
   const all = opts.allOptions.flatMap((option): (KeySwitchRow | KeyTierSwitchRow)[] => {
     if (isThreeStateOption(option))
       return [
         {
           keyId: option.keyId,
-          label: keyLabel(option.keyId),
+          label: keyLabel(option.keyId, locale),
           tier: draft.tiers[option.keyId] ?? option.defaultTier ?? 'ask',
         },
       ];
@@ -144,7 +151,7 @@ export function accessView(
     return [
       {
         keyId: option.keyId,
-        label: keyLabel(option.keyId),
+        label: keyLabel(option.keyId, locale),
         on: row.checked,
         note: row.note,
         locked: !!row.includedWith,
@@ -154,7 +161,14 @@ export function accessView(
   const on =
     switches.filter((r) => r.checked).length +
     opts.allOptions.filter((o) => isThreeStateOption(o) && draft.tiers[o.keyId] === 'can').length;
-  return { rows, all, allCount: `${on} of ${opts.allOptions.length} on` };
+  return {
+    rows,
+    all,
+    allCount: mobileTranslator(locale).t('data.agentSettings.allCount', {
+      on,
+      total: opts.allOptions.length,
+    }),
+  };
 }
 
 /**
@@ -170,15 +184,18 @@ export function keyTarget(
 }
 
 /** All keys' line (the web's, AP-679). */
-export const ALL_KEYS_LABEL = 'All keys';
-export const allKeysHint = (agent: string) =>
-  `Everything else ${agent} may do. Switch off what ${agent} shouldn’t have.`;
+export function allKeysLabel(locale?: string): string {
+  return mobileTranslator(locale).t('data.agentSettings.allKeys');
+}
+export const ALL_KEYS_LABEL = allKeysLabel();
+export const allKeysHint = (agent: string, locale?: string) =>
+  mobileTranslator(locale).t('data.agentSettings.allKeysHint', { agent });
 
 /* Saving --------------------------------------------------------------------------------------------------------- */
 
 /** “Updated Neo’s keys.” (the web's `savedText`, AP-385). */
-export function settingsSavedText(name: string, what: string): string {
-  return `Updated ${name}’s ${what}.`;
+export function settingsSavedText(name: string, what: string, locale?: string): string {
+  return mobileTranslator(locale).t('data.agentSettings.saved', { name, what });
 }
 
 /** A save step's answer when it didn't happen (the web's `outcomeNotice`): the notice, or null when it went through. */
@@ -187,9 +204,12 @@ export function settingsRefusal(
     | { status: 'ok' }
     | { status: 'blocked'; message: string }
     | { status: 'pending_approval'; approvalNumber: number },
+  locale?: string,
 ): string | null {
   if (result.status === 'blocked') return result.message;
   if (result.status === 'pending_approval')
-    return `Waiting for a person to approve (approval #${result.approvalNumber}).`;
+    return mobileTranslator(locale).t('data.agentSettings.waitingApproval', {
+      number: result.approvalNumber,
+    });
   return null;
 }

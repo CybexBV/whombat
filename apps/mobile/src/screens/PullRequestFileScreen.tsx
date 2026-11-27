@@ -18,14 +18,14 @@ import {
   tokenizeFileLines,
 } from '@whombat/client';
 import { usePullRequest, usePullRequestFile } from '@whombat/client/react';
-import { formatAdditions, formatDeletions, PR_FILE_SHOWN_TEXT, type PrFileLine } from '@whombat/core';
+import { formatAdditions, formatDeletions, type PrFileLine, prFileShownText } from '@whombat/core';
 import type { NativeTheme } from '@whombat/tokens';
 import { memo, type ReactNode, useMemo, useRef } from 'react';
 import { FlatList, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { LINE_KIND_LABELS, LINE_MARKS } from '../data/pullRequest';
-import { useMobileT } from '../i18n';
+import { LINE_MARKS, lineKindLabels } from '../data/pullRequest';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -62,15 +62,18 @@ const FileLine = memo(function FileLine({
   /** The unchanged line's syntax colours; null for changed lines and files in a language without them. */
   tokens: readonly CodeToken[] | null;
 }) {
+  const { rawLocale } = useI18n();
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const color =
     line.kind === 'add' ? theme.code.added : line.kind === 'del' ? theme.code.removed : theme.code.text;
-  const label = LINE_KIND_LABELS[line.kind];
+  const labels = useMemo(() => lineKindLabels(rawLocale), [rawLocale]);
+  const label = labels[line.kind];
   const width = digits * 8 + 8;
   return (
     <View
       accessible
-      accessibilityLabel={`${label ? `${label}: ` : ''}${line.text || 'empty line'}`}
+      accessibilityLabel={`${label ? `${label}: ` : ''}${line.text || tMobile('screens2.pr.emptyLine')}`}
       style={{
         flexDirection: 'row',
         minHeight: LINE_HEIGHT,
@@ -122,6 +125,8 @@ const FileLine = memo(function FileLine({
 });
 
 export function PullRequestFileScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const prFileShownTextHere = prFileShownText(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -157,7 +162,7 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
   };
 
   let body: ReactNode;
-  if (view && view.shown !== 'text') body = <QuietText>{PR_FILE_SHOWN_TEXT[view.shown]}</QuietText>;
+  if (view && view.shown !== 'text') body = <QuietText>{prFileShownTextHere[view.shown]}</QuietText>;
   else if (view && lines.length === 0) body = <QuietText>{tMobile('screens.this-file-is-empty')}</QuietText>;
   else if (view)
     body = (
@@ -178,12 +183,12 @@ export function PullRequestFileScreen({ route, navigation }: Props) {
           initialNumToRender={60}
           windowSize={11}
           contentContainerStyle={{ paddingVertical: 12 }}
-          accessibilityLabel={`${path}, view only`}
+          accessibilityLabel={tMobile('screens2.pr.viewOnly', { path })}
         />
       </ScrollView>
     );
   else if (query.error instanceof ApiError && query.error.status === 404)
-    body = <ErrorState text={`This pull request doesn’t change ${path}.`} />;
+    body = <ErrorState text={tMobile('screens2.pr.notChanged', { path })} />;
   else if (query.error)
     body = (
       <ErrorState

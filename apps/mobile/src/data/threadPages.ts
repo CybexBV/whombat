@@ -7,11 +7,15 @@
  */
 import { earlierCardLine, movedCardLink } from '@whombat/client';
 import type { Message, MessagePage, ThreadView } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /** Replies per page: the newest ones open the thread. */
 export const THREAD_PAGE_SIZE = 50;
 
-export const LOAD_EARLIER_REPLIES = 'Load earlier replies';
+export function loadEarlierReplies(locale?: string): string {
+  return mobileTranslator(locale).t('data.threadPages.loadEarlier');
+}
+export const LOAD_EARLIER_REPLIES = loadEarlierReplies();
 
 /** `messages.thread`'s query: the newest page, or the page before `before`. */
 export function threadQuery(before?: string): { limit: number; before?: string } {
@@ -82,13 +86,16 @@ const NO_LINKS: ReadonlyMap<string, MovedCardLink> = new Map();
  * card-moves.md CM-07), by message id: “Tick what you want” above points at the card there. `messages` is the thread
  * as loaded; a card not in it gets no link.
  */
-export function movedCardLinks(messages: readonly Message[]): ReadonlyMap<string, MovedCardLink> {
+export function movedCardLinks(
+  messages: readonly Message[],
+  locale?: string,
+): ReadonlyMap<string, MovedCardLink> {
   let links: Map<string, MovedCardLink> | null = null;
   for (const m of messages) {
-    const link = m.movedCard ? movedCardLink(m, messages) : null;
+    const link = m.movedCard ? movedCardLink(m, messages, locale) : null;
     if (!link) continue;
     links ??= new Map();
-    links.set(m.id, m.earlierCard ? { ...link, earlierLine: earlierCardLine(m, messages) } : link);
+    links.set(m.id, m.earlierCard ? { ...link, earlierLine: earlierCardLine(m, messages, locale) } : link);
   }
   return links ?? NO_LINKS;
 }

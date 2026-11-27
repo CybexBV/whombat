@@ -6,6 +6,7 @@
  * `tailscaleApi(session)` is the four ops; `tailscaleView` turns `host.tailscale`'s answer into the section's one row,
  * its action and whether to ask again soon (`TAILSCALE_POLL_MS` while it starts, waits for a sign-in or an approval).
  */
+import { interpolate } from '@whombat/core/i18n';
 import {
   type HostTailscaleChangeOutput,
   type HostTailscaleOutput,
@@ -16,6 +17,8 @@ import {
   type TailscaleStatus,
   tailscaleLoginUrlTrusted,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { TAILSCALE_WORDS } from '../i18n/messages/hostManaged/tailscale';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 
@@ -45,69 +48,26 @@ export function tailscaleApi(session: ApplianceSession): TailscaleApi {
   };
 }
 
-/** Every word of TAILSCALE. */
-export const TAILSCALE_TEXT = {
-  section: 'TAILSCALE',
-  intro: 'Reach this Whombat over Tailscale, from anywhere your devices are on your tailnet.',
-  title: 'Tailscale',
-  off: 'Off',
-  /** Off: what Tailscale is, for someone who hasn't met it. */
-  offMeta: 'Reach this Whombat from anywhere with Tailscale, a private network for your own devices.',
-  starting: 'Starting…',
-  startingMeta: 'Tailscale is getting ready.',
-  signIn: 'Sign in to Tailscale',
-  signInMeta: 'Sign in with the Tailscale account this Whombat should join.',
-  makingLink: 'Making a sign-in link…',
-  approval: 'Waiting for approval',
-  approvalMeta: 'Approve this Whombat in your Tailscale admin console.',
-  on: 'On',
-  /** Its name in the tailnet, as NETWORK's rows put an address under the state. */
-  onMeta: (name: string, tailnet: string | null) => (tailnet ? `${name} · in ${tailnet}` : name),
-  noHttps: 'Turn on HTTPS in your tailnet’s DNS settings to open this Whombat in a browser there.',
-  error: 'Not working',
-  problems: {
-    not_running: 'Tailscale stopped on this Whombat. Turn it on again.',
-    unreachable: 'This Whombat can’t reach Tailscale right now.',
-    failed: 'Tailscale ran into a problem on this Whombat.',
-  } satisfies Record<TailscaleProblem, string>,
-  notHere: 'Tailscale isn’t on this Whombat.',
-  unavailable: 'Couldn’t ask this Whombat about Tailscale.',
-  turnOn: 'Turn on',
-  openSignIn: 'Sign in',
-  newLink: 'New sign-in link',
-  turnOff: 'Turn off',
-  tryAgain: 'Try again',
-  offConfirmTitle: 'Turn off Tailscale?',
-  offConfirm:
-    'Devices that use Tailscale reach this Whombat through your local network or Whombat’s servers instead.',
-  failedChange: 'That didn’t work. Try again.',
-  busy: 'Tailscale is busy with another change. Try again in a moment.',
-  /** Its own login server (community; AP-5404, AP-5426). */
-  loginServer: 'Login server',
-  loginServerOwn: 'Tailscale’s own',
-  loginServerOwnMeta: 'This Whombat signs in to Tailscale’s own servers.',
-  loginServerMeta: (server: string) => `This Whombat signs in to ${server}.`,
-  /** The sign-in row's words on a server of the person's own. */
-  signInOnMeta: (host: string) => `Sign in on ${host} with the account this Whombat should join.`,
-  change: 'Change',
-  changeTitle: 'Login server',
-  changeLead: 'Use Headscale or your company’s server instead of Tailscale’s own.',
-  field: 'Login server',
-  fieldHint: 'Leave it empty for Tailscale’s own.',
-  plainHttp: 'Plain http:// is fine for a server on your own network: Tailscale encrypts inside it.',
-  moves:
-    'This Whombat leaves its tailnet and signs in again on the new server. Devices that use Tailscale reach it another way until then.',
-  save: 'Save and sign in',
-  problems_server: {
-    invalid: 'That isn’t a web address.',
-    scheme: 'Start it with https:// or http://.',
-    credentials: 'Leave the user name and password out of it.',
-    query: 'Leave out anything after ? or #.',
-    host: 'That server name doesn’t look right.',
-    port: 'That port doesn’t look right.',
-    path: 'That address has a character Whombat can’t pass on.',
-  } satisfies Record<TailscaleLoginServerProblem, string>,
-} as const;
+/** Every word of TAILSCALE, in a locale (English when none is given). */
+export function tailscaleText(locale?: string | null) {
+  const w = clientTree(locale, TAILSCALE_WORDS);
+  return {
+    ...w,
+    /** Its name in the tailnet, as NETWORK's rows put an address under the state. */
+    onMeta: (name: string, tailnet: string | null) =>
+      tailnet ? interpolate(w.onMetaIn, { name, tailnet }) : name,
+    problems: w.problems satisfies Record<TailscaleProblem, string>,
+    loginServerMeta: (server: string) => interpolate(w.loginServerMeta, { server }),
+    /** The sign-in row's words on a server of the person's own. */
+    signInOnMeta: (host: string) => interpolate(w.signInOnMeta, { host }),
+    problems_server: w.problems_server satisfies Record<TailscaleLoginServerProblem, string>,
+  } as const;
+}
+
+export type TailscaleText = ReturnType<typeof tailscaleText>;
+
+/** TAILSCALE's words in English. */
+export const TAILSCALE_TEXT: TailscaleText = tailscaleText('en');
 
 /**
  * A typed login server (AP-5404): `null` for Tailscale's own (empty), its normal form, or why not in words. Plain
@@ -115,10 +75,11 @@ export const TAILSCALE_TEXT = {
  */
 export function readLoginServer(
   raw: string,
+  locale?: string | null,
 ): { ok: true; value: string | null; plainHttp: boolean } | { ok: false; problem: string } {
   if (!raw.trim()) return { ok: true, value: null, plainHttp: false };
   const n = normalizeTailscaleLoginServer(raw);
-  if (!n.ok) return { ok: false, problem: TAILSCALE_TEXT.problems_server[n.problem] };
+  if (!n.ok) return { ok: false, problem: tailscaleText(locale).problems_server[n.problem] };
   return { ok: true, value: n.value, plainHttp: n.value.startsWith('http://') };
 }
 
@@ -150,8 +111,8 @@ export interface TailscaleView {
 }
 
 /** The row for `host.tailscale`'s answer (null: not asked yet). */
-export function tailscaleView(answer: HostTailscaleOutput | null): TailscaleView {
-  const T = TAILSCALE_TEXT;
+export function tailscaleView(answer: HostTailscaleOutput | null, locale?: string | null): TailscaleView {
+  const T = tailscaleText(locale);
   const base = { loginUrl: null, loginServer: null, pollMs: null, hidden: false };
   const can = (actions: TailscaleAction[], meta: string) => ({ actions, meta });
   if (!answer) return { ...base, dot: 'mut', title: T.title, meta: '', actions: [] };
@@ -218,10 +179,11 @@ export function tailscaleView(answer: HostTailscaleOutput | null): TailscaleView
 }
 
 /** What a failed change says (`tailscale.busy` by name, anything else the general line). */
-export function tailscaleErrorText(error: unknown): string {
+export function tailscaleErrorText(error: unknown, locale?: string | null): string {
+  const T = tailscaleText(locale);
   const code =
     error instanceof OperationError ? (error.details as { code?: unknown } | undefined)?.code : null;
-  return code === 'tailscale.busy' ? TAILSCALE_TEXT.busy : TAILSCALE_TEXT.failedChange;
+  return code === 'tailscale.busy' ? T.busy : T.failedChange;
 }
 
 /** The status a change answered, as `host.tailscale` would (so the row follows at once). */

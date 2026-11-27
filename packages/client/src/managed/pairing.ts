@@ -6,6 +6,8 @@
  * device in (`pairing_fingerprint_mismatch`).
  */
 import { pairingFingerprint } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { SWITCHER_WORDS } from '../i18n/messages/hostManaged/switcher';
 import { OperationError } from '../session/managed-ops';
 import type { ConnectionState } from '../session/types';
 
@@ -31,20 +33,21 @@ export function formatPairingCodeInput(value: string): string {
 }
 
 /** What kind of device asked, in plain words. */
-export function platformName(platform: string): string {
+export function platformName(platform: string, locale?: string | null): string {
+  const p = clientTree(locale, SWITCHER_WORDS).platforms;
   switch (platform) {
     case 'web':
-      return 'Browser';
+      return p.web;
     case 'android':
-      return 'Android phone';
+      return p.android;
     case 'ios':
-      return 'iPhone or iPad';
+      return p.ios;
     case 'desktop':
-      return 'Desktop app';
+      return p.desktop;
     case 'cli':
-      return 'Command line';
+      return p.cli;
     default:
-      return 'Device';
+      return p.other;
   }
 }
 

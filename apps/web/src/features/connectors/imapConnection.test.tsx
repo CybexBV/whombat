@@ -1,6 +1,10 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { createMemoryHistory } from '@tanstack/react-router';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import { App } from '../../app/App';
+import { LOCALE_OVERRIDE_KEY } from '../../app/theme/noFlash';
+import { WebI18nProvider } from '../../i18n/provider';
 import { expectNotALogin } from '../../test/notALogin';
 import { fixtureServices, renderApp } from '../../test/renderApp';
 
@@ -12,6 +16,31 @@ async function account() {
 }
 
 describe('Email (IMAP) (Whombat CM-20…CM-22, CM-29)', () => {
+  afterEach(() => sessionStorage.removeItem(LOCALE_OVERRIDE_KEY));
+
+  it('joins the two servers with Dutch words in Dutch, the names whole', async () => {
+    sessionStorage.setItem(LOCALE_OVERRIDE_KEY, 'nl-NL');
+    const user = userEvent.setup();
+    const { container } = render(
+      <WebI18nProvider>
+        <App
+          services={fixtureServices({ connectors: 'none' })}
+          history={createMemoryHistory({ initialEntries: [IMAP] })}
+        />
+      </WebI18nProvider>,
+    );
+    const email = (await waitFor(() => {
+      const input = container.querySelector('input[type="email"], input[id$="-email"]');
+      if (!input) throw new Error('no email field yet');
+      return input;
+    })) as HTMLInputElement;
+    await user.type(email, 'mara@fastmail.com');
+    await user.tab();
+    const imap = await screen.findByText('imap.fastmail.com');
+    expect(screen.getByText('smtp.fastmail.com')).toBeTruthy();
+    expect(imap.parentElement?.textContent).toBe('imap.fastmail.com en smtp.fastmail.com');
+  });
+
   it('finds the servers, says the provider’s hint, refuses a wrong password, then connects', async () => {
     const user = userEvent.setup();
     renderApp(IMAP, fixtureServices({ connectors: 'none' }));

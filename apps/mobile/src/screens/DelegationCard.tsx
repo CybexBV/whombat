@@ -10,12 +10,12 @@
 import { useQueryClient } from '@tanstack/react-query';
 import {
   type CommitResult,
-  DELEGATION_AI_WORDS,
-  DELEGATION_WORDS,
   type DelegationTaskView,
   delegationAiChoice,
   delegationAiOf,
+  delegationAiWords,
   delegationCardView,
+  delegationWords,
   sameDelegationAi,
 } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
@@ -41,6 +41,7 @@ import {
 } from '../data/delegation';
 import type { FileAccess } from '../data/fileAccess';
 import type { MessageFileActions } from '../data/useFiles';
+import { useI18n } from '../i18n';
 import { DelegationCardPanel } from '../ui/delegationCard';
 import { haptic } from '../ui/haptics';
 import { DelegationAiSheet } from './DelegationAiSheet';
@@ -80,6 +81,9 @@ export function DelegationCard({
   onChange: () => void;
   openUrl: (url: string) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const delegationWordsHere = delegationWords(rawLocale);
+  const delegationAiWordsHere = delegationAiWords(rawLocale);
   const { slug, timeZone } = useBurrowBase();
   const qc = useQueryClient();
   const nowMs = useDelegationClock(item, clock);
@@ -97,10 +101,12 @@ export function DelegationCard({
   const card = useMemo(() => withAiHolds(withPicks(item.card, held), aiHolds), [item.card, held, aiHolds]);
   const view = useMemo(
     () =>
-      item.ticking || held.size || aiHolds.size ? delegationCardView(card, nowMs, item.lead) : item.view,
-    [item, card, held, aiHolds, nowMs],
+      item.ticking || held.size || aiHolds.size
+        ? delegationCardView(card, nowMs, item.lead, rawLocale)
+        : item.view,
+    [item, card, held, aiHolds, nowMs, rawLocale],
   );
-  const after = useMemo(() => delegationAfter(item.card), [item.card]);
+  const after = useMemo(() => delegationAfter(item.card, rawLocale), [item.card, rawLocale]);
 
   const refresh = () =>
     // The card follows by `message.updated`; read the thread again in case that was missed.
@@ -111,7 +117,7 @@ export function DelegationCard({
     );
   /** A press that went through, or was held back (a key, a person's OK). */
   const settled = (result: CommitResult<unknown>): boolean => {
-    const text = outcomeText(result);
+    const text = outcomeText(result, rawLocale);
     if (text) {
       showHeldBack(text);
       return false;
@@ -132,20 +138,22 @@ export function DelegationCard({
     },
     onError: (error, input) => {
       unpick(input.body);
-      showFailure(delegationActionProblem(error, DELEGATION_WORDS.failed.pick));
+      showFailure(delegationActionProblem(error, delegationWordsHere.failed.pick, rawLocale), rawLocale);
     },
   });
   const start = useApiMutation(api.delegations.start, {
     onSuccess: (result) => {
       if (settled(result)) haptic('success');
     },
-    onError: (error) => showFailure(delegationActionProblem(error, DELEGATION_WORDS.failed.start)),
+    onError: (error) =>
+      showFailure(delegationActionProblem(error, delegationWordsHere.failed.start, rawLocale), rawLocale),
   });
   const stop = useApiMutation(api.delegations.stop, {
     onSuccess: (result) => {
       if (settled(result)) haptic('success');
     },
-    onError: (error) => showFailure(delegationActionProblem(error, DELEGATION_WORDS.failed.stop)),
+    onError: (error) =>
+      showFailure(delegationActionProblem(error, delegationWordsHere.failed.stop, rawLocale), rawLocale),
   });
   const done = (taskId: string) =>
     setStopping((now) => {
@@ -160,7 +168,7 @@ export function DelegationCard({
     },
     onError: (error, input) => {
       done(input.body.taskId);
-      showFailure(delegationActionProblem(error, DELEGATION_WORDS.failed.stop));
+      showFailure(delegationActionProblem(error, delegationWordsHere.failed.stop, rawLocale), rawLocale);
     },
   });
 
@@ -180,7 +188,7 @@ export function DelegationCard({
   };
   const setAi = useApiMutation(api.delegations.setAi, {
     onSuccess: (result, input) => {
-      const text = outcomeText(result);
+      const text = outcomeText(result, rawLocale);
       if (text) {
         showHeldBack(text);
         unholdFor(input.body);
@@ -190,19 +198,19 @@ export function DelegationCard({
     },
     onError: (error, input) => {
       unholdFor(input.body);
-      showFailure(delegationActionProblem(error, DELEGATION_AI_WORDS.failed));
+      showFailure(delegationActionProblem(error, delegationAiWordsHere.failed, rawLocale), rawLocale);
     },
   });
 
   const params = { burrow: slug };
   const delegationId = item.card.delegationId;
   const models = useDelegationModels({ params }, { enabled: aiMenu.open, retry: false });
-  const heading = delegationAiHeading(view, aiMenu.target);
+  const heading = delegationAiHeading(view, aiMenu.target, rawLocale);
   const currentAi =
     (aiMenu.target === EVERY_TASK ? card.ai : card.tasks.find((t) => t.id === aiMenu.target)?.ai) ?? null;
   const closeAi = () => setAiMenu((m) => ({ ...m, open: false }));
-  const all = DELEGATION_WORDS.stopAsk;
-  const one = DELEGATION_WORDS.stopTaskAsk;
+  const all = delegationWordsHere.stopAsk;
+  const one = delegationWordsHere.stopTaskAsk;
   return (
     <>
       <DelegationCardPanel
@@ -232,7 +240,7 @@ export function DelegationCard({
             Alert.alert(all.title, all.body, [
               { text: all.keep, style: 'cancel' },
               {
-                text: DELEGATION_WORDS.stop,
+                text: delegationWordsHere.stop,
                 style: 'destructive',
                 onPress: () => stop.mutate({ params, body: { delegationId } }),
               },
@@ -241,7 +249,7 @@ export function DelegationCard({
             Alert.alert(one.title, one.body, [
               { text: one.keep, style: 'cancel' },
               {
-                text: DELEGATION_WORDS.stop,
+                text: delegationWordsHere.stop,
                 style: 'destructive',
                 onPress: () => {
                   setStopping((now) => new Set(now).add(task.id));

@@ -19,43 +19,54 @@ import {
   type Preferences,
   type ThreadSettle,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { ChatItem } from './messages';
 
 /** The words (verbatim, AP-6150…AP-6157); `{Agent}` is the assistant's name. */
-export const SETTLE_COPY = {
-  /** The thread header's button. */
-  settle: 'Settle',
-  /** A thread's swipe in Chat and Feedback. */
-  swipe: 'Settle',
-  /** The ⋯ panel beside it, and beside Settled's Open again. */
-  more: 'More',
-  /** The long-press menu's item and what TalkBack calls the swipe. */
-  settleThread: 'Settle',
-  openAgain: 'Open again',
-  /** The toast with Undo (AP-6151). */
-  settled: 'Settled.',
-  /** Under a settled thread's reply box (AP-6154). */
-  replyOpens: 'A reply opens it again.',
-  /** After the time of a settled thread's first message still in its room (the one a link opens at, AP-6251). */
-  mark: 'Settled',
-  showMore: 'Show more',
-  /** Profile → CHAT (AP-6156); when threads settle by themselves is `INBOX_WORDS.quietChoice`. */
-  chat: 'CHAT',
-  merged: 'Settle when its code is merged',
-  mergedHint: 'When the pull request a thread asked for is merged on GitHub',
-  note: (w: Pick<AgentWords, 'Name'>) =>
-    `Never while ${w.Name} is still working on it or waiting for your answer. A new message opens a thread again.`,
-  /** TalkBack's hints. */
-  settleHint: 'Puts this thread in Settled. A new message brings it back.',
-  openAgainHint: 'Brings this thread back to the room',
-} as const;
+export function settleCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The thread header's button. */
+    settle: t('data.settle.settle'),
+    /** A thread's swipe in Chat and Feedback. */
+    swipe: t('data.settle.settle'),
+    /** The ⋯ panel beside it, and beside Settled's Open again. */
+    more: t('data.settle.more'),
+    /** The long-press menu's item and what TalkBack calls the swipe. */
+    settleThread: t('data.settle.settle'),
+    openAgain: t('data.settle.openAgain'),
+    /** The toast with Undo (AP-6151). */
+    settled: t('data.settle.settledToast'),
+    /** Under a settled thread's reply box (AP-6154). */
+    replyOpens: t('data.settle.replyOpens'),
+    /** After the time of a settled thread's first message still in its room (the one a link opens at, AP-6251). */
+    mark: t('data.settle.mark'),
+    showMore: t('data.settle.showMore'),
+    /** Profile → CHAT (AP-6156); when threads settle by themselves is `INBOX_WORDS.quietChoice`. */
+    chat: t('data.settle.chat'),
+    merged: t('data.settle.merged'),
+    mergedHint: t('data.settle.mergedHint'),
+    note: (w: Pick<AgentWords, 'Name'>) => t('data.settle.note', { agent: w.Name }),
+    /** TalkBack's hints. */
+    settleHint: t('data.settle.settleHint'),
+    openAgainHint: t('data.settle.openAgainHint'),
+  } as const;
+}
+export const SETTLE_COPY = settleCopy();
 
 /** The quiet days a settle by itself is told in when the person's choice is Never now (the default's). */
 export const QUIET_DAYS_ON = 3;
 
 /** The words for “Settled {when}”: `2 hours ago`, `yesterday`, `Monday`, `3 Mar`. */
-export function settledWhen(settled: ThreadSettle, now: Date | number, timeZone: string): string {
-  return `Settled ${formatUpdated(settled.at, now, timeZone)}`;
+export function settledWhen(
+  settled: ThreadSettle,
+  now: Date | number,
+  timeZone: string,
+  locale?: string,
+): string {
+  return mobileTranslator(locale).t('data.settle.settledWhen', {
+    when: formatUpdated(settled.at, now, timeZone, locale),
+  });
 }
 
 /**
@@ -69,16 +80,18 @@ export function settledRowLine(
   now: Date | number,
   timeZone: string,
   quietDays: number | null = DEFAULT_CHAT_PREFERENCES.settleQuietDays,
+  locale?: string,
 ): string {
+  const { t } = mobileTranslator(locale);
   switch (settled.how) {
     case 'person':
-      return settledWhen(settled, now, timeZone);
+      return settledWhen(settled, now, timeZone, locale);
     case 'quiet':
-      return `Settled by itself ${quietDaysWords(quietDays ?? QUIET_DAYS_ON)}`;
+      return t('data.settle.byItself', { words: quietDaysWords(quietDays ?? QUIET_DAYS_ON, locale) });
     case 'merged':
-      return 'Settled when its pull request merged';
+      return t('data.settle.mergedLine');
     case 'resolved':
-      return 'Settled when the problem went away';
+      return t('data.settle.resolvedLine');
   }
 }
 

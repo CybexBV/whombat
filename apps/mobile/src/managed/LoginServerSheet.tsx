@@ -3,10 +3,10 @@
  * AP-5476): on a community box you name Headscale or a company's server instead of Tailscale's own — or empties the
  * field for Tailscale's own again. Moving servers signs the box out of its tailnet and starts a fresh sign-in there, so
  * the sheet says that before Save; plain `http://` is said to be fine on your own network. Checked with the
- * shared `readLoginServer`; its words are `TAILSCALE_TEXT`'s. Every target 44dp.
+ * shared `readLoginServer`; its words are `tailscaleTextHere`'s. Every target 44dp.
  */
 
-import { readLoginServer, TAILSCALE_TEXT, tailscaleErrorText } from '@whombat/client';
+import { readLoginServer, tailscaleErrorText, tailscaleText } from '@whombat/client';
 import { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useI18n } from '../i18n';
@@ -15,8 +15,6 @@ import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { Sheet } from '../ui/sheet';
 import { ErrorLine, Field, Note } from './ui';
-
-const T = TAILSCALE_TEXT;
 
 export function LoginServerSheet({
   visible,
@@ -31,6 +29,8 @@ export function LoginServerSheet({
   /** Turns Tailscale on at `server` (null: Tailscale's own); rejects with what went wrong. */
   onSave: (server: string | null) => Promise<void>;
 }) {
+  const { rawLocale } = useI18n();
+  const T = tailscaleText(rawLocale);
   const { tClient } = useI18n();
   const theme = useTheme();
   const [text, setText] = useState(current ?? '');
@@ -41,7 +41,7 @@ export function LoginServerSheet({
     setText(current ?? '');
     setProblem(null);
   }, [visible, current]);
-  const read = readLoginServer(text);
+  const read = readLoginServer(text, rawLocale);
   const save = async () => {
     if (!read.ok) return setProblem(read.problem);
     if (read.value === current) return onClose();
@@ -51,7 +51,7 @@ export function LoginServerSheet({
       await onSave(read.value);
       onClose();
     } catch (error) {
-      setProblem(tailscaleErrorText(error));
+      setProblem(tailscaleErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }

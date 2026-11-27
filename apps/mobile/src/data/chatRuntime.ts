@@ -7,6 +7,7 @@
  */
 import { chatModelsOf, type RanOnSwitch, ranOnMark, ranOnMarked, ranOnNotes } from '@whombat/client';
 import type { ChatProvider, ChatRuntimeView, Message } from '@whombat/core';
+import { coreTranslator } from '@whombat/core/i18n';
 
 /** What a reply says about what answered it (CR-07, CR-08). */
 export interface RanOnView {
@@ -55,8 +56,8 @@ export function ranOnView(
  * The divider's words split for the mockup's bold (“Switched to **ChatGPT** · High effort”): what it switched to first,
  * then the rest; “Fast replies on” alone has nothing bold.
  */
-export function switchedParts(text: string): { lead: string; bold: string; rest: string } {
-  const lead = 'Switched to ';
+export function switchedParts(text: string, locale?: string): { lead: string; bold: string; rest: string } {
+  const lead = coreTranslator(locale).t('chat.switchedTo', { what: '' });
   if (!text.startsWith(lead)) return { lead: text, bold: '', rest: '' };
   const after = text.slice(lead.length);
   const cut = after.indexOf(' · ');

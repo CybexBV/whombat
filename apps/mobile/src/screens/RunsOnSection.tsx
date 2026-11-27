@@ -63,7 +63,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   const [pickError, setPickError] = useState<string | null>(null);
   const localModel = localModelOf(bootstrap.burrow);
   // Its tool goes through the burrow's AI gateway (AIG-17): said first, whatever else the section shows.
-  const gateway = gatewayRunsOn(bootstrap.burrow, profile.agent.runtime.provider);
+  const gateway = gatewayRunsOn(bootstrap.burrow, profile.agent.runtime.provider, rawLocale);
   const gatewayRow = gateway ? (
     <ListRow
       title={gateway.title}
@@ -73,7 +73,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
   ) : null;
   const agent = profile.agent;
   // Its turns run on your own sign-in (OP-09).
-  const signIn = signInLine(agent.runtime);
+  const signIn = signInLine(agent.runtime, rawLocale);
   const signInSection = signIn ? (
     <Section title={tMobile('screens.sign-in')}>
       <ListRow title={signIn.title} body={signIn.note} bodyLines={4} />
@@ -86,7 +86,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     </>
   );
   if (!status) return bare;
-  const model = runsOnModel(agent.runtime, status, { agentName: agent.name, localModel });
+  const model = runsOnModel(agent.runtime, status, { agentName: agent.name, localModel, locale: rawLocale });
 
   const choices = modelEffortView(
     agent,
@@ -96,6 +96,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     true,
     localModel,
     canPickBackgroundModel,
+    rawLocale,
   );
   const fast = choices?.fast ?? null;
   /** Fast replies switched: saved at once, the whole model runtime (CR-10, AP-2730). */
@@ -126,7 +127,7 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
       {
         onSuccess: (r) => {
           if (r.status !== 'ok') {
-            then.refused(r.status === 'blocked' ? r.message : 'Waiting for a person to approve.');
+            then.refused(r.status === 'blocked' ? r.message : tMobile('screens2.runsOn.waitingApproval'));
             return;
           }
           if (
@@ -148,17 +149,21 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
     );
 
   const move = (option: (typeof model.options)[number]) => {
-    Alert.alert(`Move ${agent.name} to ${option.label}?`, `From now on it works on ${option.label}.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Move',
-        onPress: () => {
-          setError(null);
-          // The provider alone: its model and effort go back to the default and automatic (ME-01).
-          save(option.runtime, { done: () => {}, refused: setError });
+    Alert.alert(
+      tMobile('screens2.runsOn.moveAsk', { name: agent.name, place: option.label }),
+      tMobile('screens2.runsOn.moveBody', { place: option.label }),
+      [
+        { text: tMobile('screens2.common.cancel'), style: 'cancel' },
+        {
+          text: tMobile('screens2.common.move'),
+          onPress: () => {
+            setError(null);
+            // The provider alone: its model and effort go back to the default and automatic (ME-01).
+            save(option.runtime, { done: () => {}, refused: setError });
+          },
         },
-      },
-    ]);
+      ],
+    );
   };
 
   const sheet =
@@ -194,7 +199,15 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
               ) : null
             }
             onPress={o.selectable && !update.isPending ? () => move(o) : undefined}
-            accessibilityLabel={`${o.label}, ${o.state}${o.selected ? `, current${choices?.summary ? `, ${choices.summary}` : ''}` : o.selectable ? ', tap to move here' : ''}`}
+            accessibilityLabel={[
+              o.label,
+              o.state,
+              o.selected ? tMobile('screens2.runsOn.current') : null,
+              o.selected ? (choices?.summary ?? null) : null,
+              !o.selected && o.selectable ? tMobile('screens2.runsOn.tapToMove') : null,
+            ]
+              .filter(Boolean)
+              .join(', ')}
           />
         ))}
         {model.note ? <Note>{model.note}</Note> : null}
@@ -207,7 +220,10 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             body={choices.model.description}
             trailing="›"
             onPress={editable ? () => open('model') : undefined}
-            accessibilityLabel={`${agent.name}’s model: ${choices.model.label}, tap to change`}
+            accessibilityLabel={tMobile('screens2.runsOn.modelLabel', {
+              name: agent.name,
+              value: choices.model.label,
+            })}
           />
           {choices.fallback ? <Note>{choices.fallback}</Note> : null}
         </Section>
@@ -220,7 +236,11 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             bodyLines={3}
             trailing="›"
             onPress={editable ? () => open('backgroundModel') : undefined}
-            accessibilityLabel={`${agent.name}’s background model: ${choices.backgroundModel.label}. ${choices.backgroundModel.hint}, tap to change`}
+            accessibilityLabel={tMobile('screens2.runsOn.backgroundLabel', {
+              name: agent.name,
+              value: choices.backgroundModel.label,
+              hint: choices.backgroundModel.hint,
+            })}
           />
         </Section>
       ) : null}
@@ -231,7 +251,11 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
             body={choices.effort.hint}
             trailing="›"
             onPress={editable ? () => open('effort') : undefined}
-            accessibilityLabel={`${agent.name}’s effort: ${choices.effort.label}. ${choices.effort.hint}, tap to change`}
+            accessibilityLabel={tMobile('screens2.runsOn.effortLabel', {
+              name: agent.name,
+              value: choices.effort.label,
+              hint: choices.effort.hint,
+            })}
           />
         </Section>
       ) : null}
@@ -272,10 +296,10 @@ export function RunsOnSection({ profile, onChanged }: { profile: AgentProfile; o
           }
           label={
             picking === 'effort'
-              ? `${agent.name}’s effort`
+              ? tMobile('screens2.runsOn.effort', { name: agent.name })
               : picking === 'backgroundModel'
-                ? `${agent.name}’s background model`
-                : `${agent.name}’s model`
+                ? tMobile('screens2.runsOn.background', { name: agent.name })
+                : tMobile('screens2.runtime.model', { name: agent.name })
           }
           choices={sheet?.choices ?? []}
           note={

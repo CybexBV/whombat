@@ -48,6 +48,7 @@ export function IncusBackups({
   canChange: boolean;
   onBackUp: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const q = useHostManageRead(
     {
@@ -60,8 +61,12 @@ export function IncusBackups({
   const items = q.data?.op === 'backup.list' ? q.data.items : [];
   const rows =
     platform === 'libvirt'
-      ? libvirtBackupRows(items, now, timeZone).map((r) => ({ ...r, name: r.line, line: null }))
-      : incusBackupRows(items, now, timeZone);
+      ? libvirtBackupRows(items, now, timeZone, undefined, rawLocale).map((r) => ({
+          ...r,
+          name: r.line,
+          line: null,
+        }))
+      : incusBackupRows(items, now, timeZone, undefined, rawLocale);
   return (
     <>
       {canChange ? (
@@ -82,11 +87,15 @@ export function IncusBackups({
                 meta={r.line}
                 chevron={canChange}
                 label={r.label}
-                {...(canChange ? { hint: 'Restore it or remove it', onPress: () => setOpen(r.backup) } : {})}
+                {...(canChange
+                  ? { hint: tMobile('screens2.backups.restoreOrRemove'), onPress: () => setOpen(r.backup) }
+                  : {})}
               />
             ))
           ) : (
-            <CardQuiet>{`No backups of this ${platform === 'libvirt' ? 'VM' : 'instance'} yet.`}</CardQuiet>
+            <CardQuiet>
+              {tMobile(platform === 'libvirt' ? 'screens2.backups.noneVm' : 'screens2.backups.noneInstance')}
+            </CardQuiet>
           )}
         </OneCard>
       )}
@@ -135,8 +144,8 @@ export function IncusBackupSheet({
   );
   const when = b.created
     ? formatRelativeDay(Date.parse(b.created), clock().getTime(), timeZone, rawLocale)
-    : 'this backup';
-  const word = platform === 'libvirt' ? 'VM' : 'instance';
+    : tMobile('screens2.backups.thisBackup');
+  const vm = platform === 'libvirt';
   const done = (o: Awaited<ReturnType<typeof send>>) => {
     if (o.ok || o.waiting) onClose();
     else setError(o.message);
@@ -148,17 +157,22 @@ export function IncusBackupSheet({
         visible
         onClose={onClose}
         badge={guestName}
-        title={`The backup from ${when}`}
+        title={tMobile('screens2.backups.from', { when })}
         body={b.volume}
         buttons={[
           {
             id: 'restore',
-            label: `Restore as a new ${word}`,
+            label: tMobile(vm ? 'screens2.backups.restoreNewVm' : 'screens2.backups.restoreNewInstance'),
             variant: 'secondary',
             onPress: () => setStep('restore'),
           },
-          { id: 'remove', label: 'Remove it', variant: 'secondary', onPress: () => setStep('remove') },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+          {
+            id: 'remove',
+            label: tMobile('screens2.common.removeIt'),
+            variant: 'secondary',
+            onPress: () => setStep('remove'),
+          },
+          { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
         ]}
       />
     );
@@ -170,13 +184,13 @@ export function IncusBackupSheet({
         onClose={() => !busy && onClose()}
         badge={guestName}
         tone="bad"
-        title={`Remove the backup from ${when}?`}
-        body={`It’s gone for good. ${guestName} stays as it is.`}
+        title={tMobile('screens2.backups.removeAsk', { when })}
+        body={tMobile('screens2.backups.goneForGood', { name: guestName })}
         busy={busy ? 'go' : null}
         buttons={[
           {
             id: 'go',
-            label: 'Remove',
+            label: tMobile('screens2.common.remove'),
             variant: 'primary',
             onPress: () =>
               void send({
@@ -187,7 +201,7 @@ export function IncusBackupSheet({
                 name: guestName,
               }).then(done),
           },
-          { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+          { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
         ]}
         note={error}
       />
@@ -196,22 +210,24 @@ export function IncusBackupSheet({
   const nameError = (platform === 'libvirt' ? libvirtNameError : incusNewNameError)(
     name,
     (guests.data?.guests ?? []).map((g) => g.name),
+    undefined,
+    rawLocale,
   );
   return (
     <OneSheet
       visible
       onClose={() => !busy && onClose()}
-      title={`Restore ${guestName} from ${when}`}
+      title={tMobile('screens2.backups.restoreFrom', { name: guestName, when })}
       body={
         platform === 'libvirt'
-          ? `A new VM is made from the backup, with its own network addresses; ${guestName} stays as it is.`
-          : `A new instance is made from the backup; ${guestName} stays as it is.`
+          ? tMobile('screens2.backups.newVmBody', { name: guestName })
+          : tMobile('screens2.backups.newInstanceBody', { name: guestName })
       }
       busy={busy ? 'go' : null}
       buttons={[
         {
           id: 'go',
-          label: 'Restore',
+          label: tMobile('screens2.common.restore'),
           variant: 'primary',
           disabled: !!nameError,
           onPress: () =>
@@ -224,13 +240,13 @@ export function IncusBackupSheet({
               follow: { kind: 'backup.restore_new', extra: name.trim() },
             }).then(done),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
       note={error}
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <FormField
-          label={`Name of the new ${word}`}
+          label={tMobile(vm ? 'screens2.backups.newVmName' : 'screens2.backups.newInstanceName')}
           value={name}
           onChangeText={setName}
           error={name.trim() ? nameError : null}

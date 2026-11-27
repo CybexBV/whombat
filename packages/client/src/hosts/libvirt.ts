@@ -23,6 +23,9 @@ import {
   LIBVIRT_ISOS_FOLDER,
   LIBVIRT_NAME_PATTERN,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_LIBVIRT_WORDS } from '../i18n/messages/connectionsHosts/libvirt';
 import { currentValue, keyOrder, keysOf } from './config';
 import { formatBytesBinary, plural } from './format';
 import { isIncusServer } from './incus';
@@ -522,12 +525,14 @@ export function libvirtNameError(
   name: string,
   taken: readonly string[] = [],
   current?: string,
+  locale?: string | null,
 ): string | null {
+  const w = clientTree(locale, HOSTS_LIBVIRT_WORDS).name;
   const v = name.trim();
-  if (!v) return 'Fill this in.';
-  if (!LIBVIRT_NAME_PATTERN.test(v)) return 'Letters, digits, dots, dashes and “_”.';
-  if (current && v === current) return 'That’s its name now.';
-  if (taken.includes(v)) return `There’s already a guest called ${v}.`;
+  if (!v) return w.fillIn;
+  if (!LIBVIRT_NAME_PATTERN.test(v)) return w.chars;
+  if (current && v === current) return w.same;
+  if (taken.includes(v)) return interpolate(w.taken, { name: v });
   return null;
 }
 

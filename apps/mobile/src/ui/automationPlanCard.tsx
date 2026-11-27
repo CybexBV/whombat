@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { automationPlanText, type PlanCardView, tryItLabel } from '../data/automationPlan';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { useI18n } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { SAMPLES_STALE_MS, useAutomationSamples, useStartAutomation } from '../screens/useStartAutomation';
@@ -36,6 +36,7 @@ export function AutomationPlanCardView({
   /** Opened from its line: “Hide card” returns the line. */
   collapse?: (() => void) | undefined;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
   const automationPlanTextHere = automationPlanText(rawLocale);
 
@@ -62,10 +63,11 @@ export function AutomationPlanCardView({
       .mutateAsync({ params })
       .then(
         (result) => {
-          if (result.status !== 'ok') return setProblem(outcomeText(result)?.body ?? errorText(null));
+          if (result.status !== 'ok')
+            return setProblem(outcomeText(result, rawLocale)?.body ?? errorText(null, rawLocale));
           showNotice(automationPlanTextHere.turnedOn[kind](view.name));
         },
-        (error) => setProblem(errorText(error)),
+        (error) => setProblem(errorText(error, rawLocale)),
       )
       .finally(() => setBusy(null));
   };
@@ -76,10 +78,11 @@ export function AutomationPlanCardView({
       .mutateAsync({ params })
       .then(
         (result) => {
-          if (result.status !== 'ok') return setProblem(outcomeText(result)?.body ?? errorText(null));
+          if (result.status !== 'ok')
+            return setProblem(outcomeText(result, rawLocale)?.body ?? errorText(null, rawLocale));
           showNotice(automationPlanTextHere.setAside[kind](view.name));
         },
-        (error) => setProblem(errorText(error)),
+        (error) => setProblem(errorText(error, rawLocale)),
       )
       .finally(() => setBusy(null));
   };
@@ -90,7 +93,10 @@ export function AutomationPlanCardView({
       setBusy(null);
       if (!outcome.ok) return setProblem(outcome.text);
       showNotice(automationPlanTextHere.trying(view.name, outcome.sample?.number ?? null));
-      navigation.navigate('AutomationRun', { number: outcome.runNumber, back: 'Back' });
+      navigation.navigate('AutomationRun', {
+        number: outcome.runNumber,
+        back: tMobile('screens2.common.back'),
+      });
     });
   };
 
@@ -98,7 +104,7 @@ export function AutomationPlanCardView({
     view.tone === 'warn' ? theme.colors.warn : view.tone === 'ok' ? theme.colors.ok : theme.colors.mut;
   const signColor = (tone: PlanCardView['changes'][number]['tone']) =>
     tone === 'ok' ? theme.colors.ok : tone === 'bad' ? theme.colors.bad : theme.colors.mut;
-  const tryLabel = tryItLabel(view.tryIt, samples.isError ? [] : samples.data?.samples);
+  const tryLabel = tryItLabel(view.tryIt, samples.isError ? [] : samples.data?.samples, rawLocale);
 
   return (
     <View

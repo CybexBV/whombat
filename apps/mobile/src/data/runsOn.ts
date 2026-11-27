@@ -17,7 +17,7 @@ import {
   effortChoices,
   effortHint,
   fastChoice,
-  LOCAL_MODEL_TEXT,
+  localModelText,
   modelChoices,
   modelEffortLabels,
   modelFallbackNote,
@@ -25,7 +25,7 @@ import {
   modelRuntimeDraft,
   providerModels,
 } from '@whombat/client';
-import { SOURCE_TEXT } from '@whombat/client/signins';
+import { sourceText } from '@whombat/client/signins';
 import {
   type AgentModelFallback,
   type AgentModelRuntimeUpdate,
@@ -33,15 +33,16 @@ import {
   type AgentRuntime,
   type AgentSetupStatus,
   agentsBlockedNotice,
-  CHAT_PROVIDER_LABELS,
+  chatProviderLabels,
   engineReady,
   LIVE_PROVIDERS,
   type LocalModelView,
   localModelName,
-  MODEL_EFFORT_COPY,
-  PROVIDER_LABELS,
+  modelEffortCopy,
+  providerLabels,
   providerStateLabel,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface RunsOnOption {
   key: AgentProvider;
@@ -64,20 +65,25 @@ export interface RunsOnModel {
 }
 
 /** Local's line when the agent is on it and the burrow has none (the agent's own reply says the same, CT-1170). */
-export const LOCAL_NOT_SET_UP = 'The custom AI model isn’t set up yet. Set it up in Settings → AI.';
+export function localNotSetUp(locale?: string): string {
+  return mobileTranslator(locale).t('data.runsOn.localNotSetUp');
+}
+export const LOCAL_NOT_SET_UP = localNotSetUp();
 
 export function runsOnModel(
   runtime: AgentRuntime,
   status: AgentSetupStatus,
-  who: { agentName: string; localModel: LocalModelView | null },
+  who: { agentName: string; localModel: LocalModelView | null; locale?: string },
 ): RunsOnModel {
+  const locale = who.locale;
+  const labels = providerLabels(locale);
   const options: RunsOnOption[] = LIVE_PROVIDERS.map((provider) => {
     const setup = status.providers.find((p) => p.provider === provider);
     const selected = runtime.provider === provider;
     return {
       key: provider,
-      label: PROVIDER_LABELS[provider],
-      state: setup ? providerStateLabel(setup) : 'Not checked yet',
+      label: labels[provider],
+      state: setup ? providerStateLabel(setup, locale) : mobileTranslator(locale).t('data.runsOn.notChecked'),
       runtime: { provider },
       selected,
       selectable: !selected && setup?.state === 'ready',
@@ -88,16 +94,16 @@ export function runsOnModel(
   if (local || onLocal)
     options.push({
       key: 'local',
-      label: CHAT_PROVIDER_LABELS.local,
-      state: local ? localModelName(local) : PROVIDER_LABELS.local,
+      label: chatProviderLabels(locale).local,
+      state: local ? localModelName(local) : labels.local,
       runtime: { provider: 'local' },
       selected: onLocal,
       selectable: !onLocal && !!local,
     });
   const note = !engineReady(status)
-    ? agentsBlockedNotice(status, who.agentName)
+    ? agentsBlockedNotice(status, who.agentName, locale)
     : onLocal && !local
-      ? LOCAL_NOT_SET_UP
+      ? localNotSetUp(locale)
       : null;
   return { options, note };
 }
@@ -161,8 +167,11 @@ export function modelEffortView(
   fastFeature = false,
   localModel: LocalModelView | null = null,
   backgroundModelFeature = true,
+  locale?: string,
 ): ModelEffortView | null {
   if (!feature) return null;
+  const copy = modelEffortCopy(locale);
+  const localText = localModelText(locale);
   const models = providerModels(status, agent.runtime.provider, localModel);
   const draft = modelRuntimeDraft(agent.runtime);
   const labels = modelEffortLabels(draft, models);
@@ -179,7 +188,7 @@ export function modelEffortView(
   const efforts = effortChoices(models, draft.model, draft.effort).map((c) => ({
     key: c.value ?? 'automatic',
     label: c.label,
-    detail: c.value ? null : MODEL_EFFORT_COPY.automaticHint,
+    detail: c.value ? null : copy.automaticHint,
     checked: c.value === draft.effort,
     runtime: modelRuntimeBody(draftWithEffort(draft, c.value), bodyOptions),
   }));
@@ -197,7 +206,7 @@ export function modelEffortView(
     },
     backgroundModel:
       bgChoices.length > 1
-        ? { label: labels.backgroundModel, hint: MODEL_EFFORT_COPY.backgroundModelHint, choices: bgChoices }
+        ? { label: labels.backgroundModel, hint: copy.backgroundModelHint, choices: bgChoices }
         : null,
     effort: efforts.length
       ? { label: labels.effort, hint: effortHint(draft.effort), choices: efforts }
@@ -205,13 +214,13 @@ export function modelEffortView(
     fast: fastOf(),
     summary: agentModelLine(agent.runtime, models, feature),
     fallback: modelFallbackNote(agent.name, fallback, models),
-    fixedHint: MODEL_EFFORT_COPY.effortHint,
+    fixedHint: copy.effortHint,
     another:
       agent.runtime.provider === 'local'
         ? {
-            label: LOCAL_MODEL_TEXT.another,
-            hint: LOCAL_MODEL_TEXT.anotherHint,
-            use: LOCAL_MODEL_TEXT.use,
+            label: localText.another,
+            hint: localText.anotherHint,
+            use: localText.use,
             runtime: (name) =>
               modelRuntimeBody(draftWithModel(draft, name.trim() || null, models), bodyOptions),
           }
@@ -239,8 +248,9 @@ export interface SignInLine {
  * SIGN-IN under Model and AI (one-person-android.md AP-5763): your own sign-in, or your own API key, in the web's words
  * (`SOURCE_TEXT`). Null for a provider without sign-ins (the model on the network).
  */
-export function signInLine(runtime: Pick<AgentRuntime, 'provider'>): SignInLine | null {
+export function signInLine(runtime: Pick<AgentRuntime, 'provider'>, locale?: string): SignInLine | null {
   const provider = SIGN_IN_PROVIDERS[runtime.provider];
   if (!provider) return null;
-  return { title: SOURCE_TEXT.title(provider), note: SOURCE_TEXT.note };
+  const text = sourceText(locale);
+  return { title: text.title(provider), note: text.note };
 }

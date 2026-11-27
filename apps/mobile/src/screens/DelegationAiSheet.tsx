@@ -9,10 +9,10 @@
  */
 
 import {
-  DELEGATION_AI_WORDS,
   type DelegationAiDraft,
   delegationAiDraft,
   delegationAiMenu,
+  delegationAiWords,
   problemText,
   withAiModel,
 } from '@whombat/client';
@@ -46,12 +46,14 @@ export interface DelegationAiSheetProps {
 }
 
 export function DelegationAiSheet(props: DelegationAiSheetProps) {
+  const { rawLocale } = useI18n();
+  const delegationAiWordsHere = delegationAiWords(rawLocale);
   return (
     <Sheet
       visible={props.visible}
       onClose={props.onClose}
       label={props.title}
-      closeLabel={DELEGATION_AI_WORDS.cancel}
+      closeLabel={delegationAiWordsHere.cancel}
       surface="sf"
       maxHeight="90%"
     >
@@ -62,6 +64,7 @@ export function DelegationAiSheet(props: DelegationAiSheetProps) {
 
 function AiMenu({ title, subtitle, first, current, models, error, onClose, onDone }: DelegationAiSheetProps) {
   const { rawLocale } = useI18n();
+  const delegationAiWordsHere = delegationAiWords(rawLocale);
 
   const theme = useTheme();
   const [draft, setDraft] = useState<DelegationAiDraft>(() => delegationAiDraft(current));
@@ -69,11 +72,11 @@ function AiMenu({ title, subtitle, first, current, models, error, onClose, onDon
   const menu = options ? delegationAiMenu(options, draft, current) : null;
   const quiet = !models
     ? error
-      ? problemText(error, DELEGATION_AI_WORDS.t3.unreachable, rawLocale)
-      : DELEGATION_AI_WORDS.loading
+      ? problemText(error, delegationAiWordsHere.t3.unreachable, rawLocale)
+      : delegationAiWordsHere.loading
     : options
       ? null
-      : DELEGATION_AI_WORDS.t3[models.t3 === 'ready' ? 'unreachable' : models.t3];
+      : delegationAiWordsHere.t3[models.t3 === 'ready' ? 'unreachable' : models.t3];
   return (
     <ScrollView contentContainerStyle={{ paddingBottom: 4 }} keyboardShouldPersistTaps="handled">
       <View style={{ paddingHorizontal: 18, paddingTop: 4, paddingBottom: 12, gap: 3 }}>
@@ -105,9 +108,9 @@ function AiMenu({ title, subtitle, first, current, models, error, onClose, onDon
       ) : null}
       {menu && options ? (
         <>
-          <Label text={DELEGATION_AI_WORDS.model} />
+          <Label text={delegationAiWordsHere.model} />
           <ModelRows
-            label={DELEGATION_AI_WORDS.model}
+            label={delegationAiWordsHere.model}
             rows={delegationAiModelRows(menu, first)}
             more={0}
             onPick={(id) => setDraft(withAiModel(options, draft, id ?? ''))}
@@ -115,10 +118,10 @@ function AiMenu({ title, subtitle, first, current, models, error, onClose, onDon
           />
           {menu.selected && menu.efforts.length ? (
             <View style={{ paddingHorizontal: 18, paddingTop: 12, paddingBottom: 12 }}>
-              <Label text={DELEGATION_AI_WORDS.effort} inline />
+              <Label text={delegationAiWordsHere.effort} inline />
               <View
                 accessibilityRole="radiogroup"
-                accessibilityLabel={DELEGATION_AI_WORDS.effort}
+                accessibilityLabel={delegationAiWordsHere.effort}
                 style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5 }}
               >
                 {menu.efforts.map((e) => (
@@ -136,8 +139,8 @@ function AiMenu({ title, subtitle, first, current, models, error, onClose, onDon
             <FastRow
               row={{
                 kind: 'offered',
-                title: DELEGATION_AI_WORDS.fast,
-                text: DELEGATION_AI_WORDS.fastHint,
+                title: delegationAiWordsHere.fast,
+                text: delegationAiWordsHere.fastHint,
                 on: menu.fast,
                 note: null,
               }}
@@ -148,13 +151,13 @@ function AiMenu({ title, subtitle, first, current, models, error, onClose, onDon
       ) : null}
       <View style={{ flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingTop: 14 }}>
         <Button
-          label={DELEGATION_AI_WORDS.cancel}
+          label={delegationAiWordsHere.cancel}
           variant="secondary"
           onPress={onClose}
           style={{ flex: 1 }}
         />
         <Button
-          label={DELEGATION_AI_WORDS.done}
+          label={delegationAiWordsHere.done}
           disabled={!options}
           onPress={() => {
             if (options) onDone(draft, options);

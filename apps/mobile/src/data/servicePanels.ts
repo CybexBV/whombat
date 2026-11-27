@@ -26,19 +26,24 @@ import type {
   ThingPageButton,
   ThingTone,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { LinkRun } from './thingPage';
 
-export const SERVICE_COPY = {
-  /** A link to the service's own page (TalkBack's hint). */
-  opensBrowser: 'Opens in your browser',
-  /** A link to another page of the app. */
-  opensPage: 'Opens its page',
-  /** A press whose answer had no words of its own. */
-  failed: 'That didn’t go through.',
-  /** A stepper's − and + for TalkBack. */
-  lower: (label: string) => `Lower ${label}`,
-  raise: (label: string) => `Raise ${label}`,
-} as const;
+export function serviceCopy(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** A link to the service's own page (TalkBack's hint). */
+    opensBrowser: t('data.servicePanels.opensBrowser'),
+    /** A link to another page of the app. */
+    opensPage: t('data.servicePanels.opensPage'),
+    /** A press whose answer had no words of its own. */
+    failed: t('data.servicePanels.failed'),
+    /** A stepper's − and + for TalkBack. */
+    lower: (label: string) => t('data.servicePanels.lower', { label }),
+    raise: (label: string) => t('data.servicePanels.raise', { label }),
+  } as const;
+}
+export const SERVICE_COPY = serviceCopy();
 
 /* Galleries (CT-1004) ---------------------------------------------------------------------------------------------- */
 
@@ -89,9 +94,11 @@ export function galleryItems(
   panel: Pick<ThingGalleryPanel, 'items'>,
   now: Date | number,
   timeZone: string,
+  locale?: string,
 ): GalleryItemView[] {
+  const SERVICE_COPY = serviceCopy(locale);
   return panel.items.map((item) => {
-    const sub = item.sub?.trim() || (item.at ? doneWhen(item.at, now, timeZone) : null);
+    const sub = item.sub?.trim() || (item.at ? doneWhen(item.at, now, timeZone, locale) : null);
     const to = thingItemLink(item);
     const link: LinkRun | null = to
       ? to.kind === 'href'
@@ -172,8 +179,8 @@ export function buttonHint(
 }
 
 /** The words a press leaves in the toast: the server's, or plain ones when a failure came without any. */
-export function pressNote(message: string, outcome: 'done' | 'failed'): string | null {
+export function pressNote(message: string, outcome: 'done' | 'failed', locale?: string): string | null {
   const text = message.trim();
   if (text) return text;
-  return outcome === 'failed' ? SERVICE_COPY.failed : null;
+  return outcome === 'failed' ? serviceCopy(locale).failed : null;
 }

@@ -25,6 +25,8 @@ import {
   parsePasskeyUserHandle,
 } from '@whombat/protocol/session';
 import type { z } from 'zod';
+import { clientTree } from '../i18n/catalog';
+import { BACKUP_PASSKEY_WORDS } from '../i18n/messages/hostManaged/backupPasskey';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import type { ControlApi } from './control';
@@ -316,21 +318,18 @@ export function kitQrPayload(kitText: string): string | null {
   return material ? `${KIT_QR_PREFIX}${JSON.stringify(material)}` : null;
 }
 
-/** Feedback for compatibility callers; app entry points use the shared setup action. */
-export const BACKUP_PASSKEY_TEXT = {
-  upgradeAction: 'Finish setup',
-  armed: 'Your passkey now unlocks your backups.',
-  again: 'Your passkey is saved. Choose “Finish setup” to continue.',
-  /** Most often a passkey kept by a password manager that can't do this on this device (Google's on an iPhone). */
-  unsupported:
-    'Your passkey provider didn’t return an encryption key. Update your browser and passkey provider, then try again. You can also save a paper copy of your backup details.',
-  upgrade:
-    'This older passkey signs you in but can’t unlock backups. Choose “Finish setup” to use one passkey for your account, Whombats and backups. An existing shared passkey will be reused.',
-  saving: 'Your backup details are being saved. Touch your passkey again in a moment to verify them.',
-  verify: 'Your backup key is saved. Touch your passkey once more to verify that it unlocks your backups.',
-  failed: 'That didn’t work. Try again.',
-  wrongKey: 'This passkey didn’t unlock the saved backup details. Your current backup access has been kept.',
-} as const;
+/**
+ * Feedback for compatibility callers, in the person's language; app entry points use the shared setup action.
+ * `unsupported` is most often a passkey kept by a password manager that can't do this on this device (Google's on an
+ * iPhone).
+ */
+export function backupPasskeyText(locale?: string | null) {
+  return clientTree(locale, BACKUP_PASSKEY_WORDS);
+}
+
+export type BackupPasskeyText = ReturnType<typeof backupPasskeyText>;
+
+export const BACKUP_PASSKEY_TEXT: BackupPasskeyText = backupPasskeyText('en');
 
 /**
  * Compatibility helper for older callers; app setup uses `setUpOnePasskey`. A touch of one of the person's passkeys
@@ -348,8 +347,10 @@ export async function tapPasskeyForBackups(input: {
   name: string;
   upgrade?: boolean;
   onPrompt?: (step: PasskeySetupStep) => void;
+  /** The language of what it answers; English when left out. */
+  locale?: string | null;
 }): Promise<string | null> {
-  const T = BACKUP_PASSKEY_TEXT;
+  const T = backupPasskeyText(input.locale);
   try {
     const shared = (await input.control?.passkeys?.())
       ?.filter((p) => p.owner)
@@ -361,7 +362,7 @@ export async function tapPasskeyForBackups(input: {
           ...(shared && { credentialId: shared.id }),
         });
     if (armed.kind === 'upgrade') return T.upgrade;
-    if (armed.kind === 'armed') return recoveryWords(armed.bringBack);
+    if (armed.kind === 'armed') return recoveryWords(armed.bringBack, T);
     if (!input.control) return T.unsupported;
     const added = await passkeyRegister({
       session: input.session,
@@ -374,7 +375,7 @@ export async function tapPasskeyForBackups(input: {
       onPrompt: input.onPrompt,
     });
     if (added.backups === 'armed')
-      return added.backupsVerified ? T.armed : recoveryWords(await verifyPasskeyBackups(input, added.id));
+      return added.backupsVerified ? T.armed : recoveryWords(await verifyPasskeyBackups(input, added.id), T);
     return added.backups === 'unsupported' ? T.unsupported : T.again;
   } catch (error) {
     if (error instanceof PasskeyCancelled) return null;
@@ -384,7 +385,7 @@ export async function tapPasskeyForBackups(input: {
       return T.wrongKey;
     if (error instanceof PasskeyError && error.code === 'unsupported') return T.unsupported;
     if (error instanceof PasskeyError && error.code === 'invalid') return T.wrongKey;
-    return passkeyErrorText(error) ?? T.failed;
+    return passkeyErrorText(error, input.locale) ?? T.failed;
   }
 }
 
@@ -462,9 +463,12 @@ export function kitFromScan(text: string): string | null {
   return kitMaterialOf(body) ? body : null;
 }
 
-function recoveryWords(bringBack: BackupPasskeyKeyOutput['bringBack'] | undefined): string {
-  if (bringBack?.setup === 'verified' && bringBack.state === 'ready') return BACKUP_PASSKEY_TEXT.armed;
-  return bringBack?.setup === 'saving' ? BACKUP_PASSKEY_TEXT.saving : BACKUP_PASSKEY_TEXT.verify;
+function recoveryWords(
+  bringBack: BackupPasskeyKeyOutput['bringBack'] | undefined,
+  T: BackupPasskeyText,
+): string {
+  if (bringBack?.setup === 'verified' && bringBack.state === 'ready') return T.armed;
+  return bringBack?.setup === 'saving' ? T.saving : T.verify;
 }
 
 export async function verifyPasskeyBackups(

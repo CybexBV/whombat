@@ -3,19 +3,20 @@
  * section (AP-5326) on a phone: “Reach this Whombat over Tailscale”. One row in NETWORK's look — Off with **Turn on**;
  * Sign in to Tailscale with **Sign in** (Tailscale's own page in the browser), asked again every 2 s until it is on;
  * On, its name in its tailnet beneath, with **Turn off** (asked first). A box without Tailscale (development) shows
- * nothing. Every word is the client's `TAILSCALE_TEXT`; `tailscaleView` decides the row.
+ * nothing. Every word is the client's `tailscaleTextHere`; `tailscaleView` decides the row.
  * Every target 44dp.
  */
 import {
   type HostTailscaleOutput,
-  TAILSCALE_TEXT,
   type TailscaleAction,
   tailscaleAnswer,
   tailscaleErrorText,
+  tailscaleText,
   tailscaleView,
 } from '@whombat/client';
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, View } from 'react-native';
+import { mobileTranslator, useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
@@ -24,9 +25,8 @@ import { Card, Row } from './ui';
 import { useForeground } from './useHostStatus';
 import type { TailscaleHere } from './useTailscale';
 
-const T = TAILSCALE_TEXT;
-
-function label(action: TailscaleAction): string {
+function label(action: TailscaleAction, locale?: string | null): string {
+  const T = tailscaleText(locale);
   switch (action) {
     case 'turn_on':
       return T.turnOn;
@@ -43,6 +43,8 @@ function label(action: TailscaleAction): string {
 
 /** TAILSCALE, or nothing (no Whombat to ask, or one without Tailscale). */
 export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
+  const { rawLocale } = useI18n();
+  const T = tailscaleText(rawLocale);
   const theme = useTheme();
   const foreground = useForeground();
   const [answer, setAnswer] = useState<HostTailscaleOutput | null>(null);
@@ -57,7 +59,7 @@ export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
   }, [api]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: `asked` asks again.
   useEffect(read, [read, asked]);
-  const v = tailscaleView(answer);
+  const v = tailscaleView(answer, rawLocale);
   // While it starts, waits for a sign-in or for the tailnet's approval, it is asked again (in the foreground only);
   // each answer starts the wait over.
   // biome-ignore lint/correctness/useExhaustiveDependencies: `answer` starts the next wait.
@@ -76,7 +78,7 @@ export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
     try {
       setAnswer(tailscaleAnswer(await run()));
     } catch (error) {
-      setNote(tailscaleErrorText(error));
+      setNote(tailscaleErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -90,7 +92,7 @@ export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
     } else if (action === 'try_again') setAsked((n) => n + 1);
     else if (action === 'turn_off')
       Alert.alert(T.offConfirmTitle, T.offConfirm, [
-        { text: 'Cancel', style: 'cancel' },
+        { text: mobileTranslator(rawLocale).t('managed2.cancel'), style: 'cancel' },
         { text: T.turnOff, style: 'destructive', onPress: () => void change(() => ts.off()) },
       ]);
   };
@@ -106,7 +108,7 @@ export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
         action={
           main ? (
             <Button
-              label={label(main)}
+              label={label(main, rawLocale)}
               variant={main === 'turn_off' ? 'secondary' : 'primary'}
               disabled={busy}
               onPress={() => act(main)}
@@ -141,7 +143,7 @@ export function TailscaleSection({ here }: { here: TailscaleHere | null }) {
           {rest.map((action) => (
             <Button
               key={action}
-              label={label(action)}
+              label={label(action, rawLocale)}
               variant="secondary"
               disabled={busy}
               onPress={() => act(action)}

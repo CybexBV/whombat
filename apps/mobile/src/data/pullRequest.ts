@@ -4,22 +4,23 @@
  * (`mergeButton`: the server's `mergeBlock` says who may and when; the note says how agents merge where they may hold
  * the Merge key) — and the file view's lines. Pure.
  */
-import { MERGE_NOTE_WITH_KEYS, type MergeButtonView, mergeButton } from '@whombat/client';
+import { type MergeButtonView, mergeButton, mergeNoteWithKeys } from '@whombat/client';
 import {
   type Check,
   formatAdditions,
   formatDeletions,
   formatDiffStat,
   mergeNote,
-  PR_STATUS_LABELS,
   PR_STATUS_TONES,
   type PrFileLine,
   type Principal,
   type PullRequestDetail,
-  REVIEW_STATE_LABELS,
+  prStatusLabels,
   REVIEW_STATE_TONES,
+  reviewStateLabels,
   type Tone,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface PrCheckRow {
   name: string;
@@ -60,13 +61,14 @@ export interface PullRequestModel {
   mergeNote: string;
 }
 
-function checkRow(c: Check): PrCheckRow {
+function checkRow(c: Check, locale?: string): PrCheckRow {
   const passed = c.state === 'passed' || c.state === 'skipped';
+  const state = mobileTranslator(locale).t(`data.pullRequest.check.${c.state}`);
   return {
     name: c.name,
     note: c.note,
     passed,
-    accessibilityLabel: `${c.name}, ${c.state}${c.note ? `, ${c.note}` : ''}`,
+    accessibilityLabel: `${c.name}, ${state}${c.note ? `, ${c.note}` : ''}`,
   };
 }
 
@@ -77,48 +79,59 @@ export function pullRequestModel(
     agentsMayMerge: boolean;
     /** The agent by its name, for the merge note (core's `mergeNote(name)`, AP-4999). */
     agent: string;
+    locale?: string;
   },
 ): PullRequestModel {
   const { pr } = detail;
+  const locale = opts.locale;
+  const { t, tp } = mobileTranslator(locale);
+  const reviewStates = reviewStateLabels(locale);
   return {
     title: pr.title,
     label: `${pr.repoFullName ? `${pr.repoFullName} · ` : ''}PR #${pr.number}`,
-    status: { text: PR_STATUS_LABELS[detail.status], tone: PR_STATUS_TONES[detail.status] },
+    status: { text: prStatusLabels(locale)[detail.status], tone: PR_STATUS_TONES[detail.status] },
     branch: `${pr.branch} → ${pr.baseBranch}`,
-    diff: formatDiffStat({ add: pr.diff.add, del: pr.diff.del, files: pr.files.length }),
-    checks: pr.checks.map(checkRow),
+    diff: formatDiffStat({ add: pr.diff.add, del: pr.diff.del, files: pr.files.length }, locale),
+    checks: pr.checks.map((c) => checkRow(c, locale)),
     reviewers: pr.reviewers.map((r) => ({
       id: r.principalId,
-      name: opts.lookup(r.principalId)?.name ?? 'Someone',
-      state: REVIEW_STATE_LABELS[r.state],
+      name: opts.lookup(r.principalId)?.name ?? t('data.approval.someone'),
+      state: reviewStates[r.state],
       tone: REVIEW_STATE_TONES[r.state],
     })),
     files: pr.files.map((f) => ({
       path: f.path,
       add: formatAdditions(f.add),
       del: formatDeletions(f.del),
-      accessibilityLabel: `${f.path}, ${f.add} ${f.add === 1 ? 'line' : 'lines'} added, ${f.del} removed`,
+      accessibilityLabel: tp('data.pullRequest.fileLines', f.add, { path: f.path, removed: f.del }),
     })),
-    merge: mergeButton(detail),
-    mergeNote: opts.agentsMayMerge ? MERGE_NOTE_WITH_KEYS : mergeNote(opts.agent),
+    merge: mergeButton(detail, locale),
+    mergeNote: opts.agentsMayMerge ? mergeNoteWithKeys(locale) : mergeNote(opts.agent, locale),
   };
 }
 
 /** “Merge PR #12 into main?”: the phone asks first, a tap in a list is easily made (AP-712). */
-export function mergeConfirm(detail: Pick<PullRequestDetail, 'pr'>): { title: string; body: string } {
+export function mergeConfirm(
+  detail: Pick<PullRequestDetail, 'pr'>,
+  locale?: string,
+): { title: string; body: string } {
+  const { t } = mobileTranslator(locale);
+  const { number, branch, baseBranch } = detail.pr;
   return {
-    title: `Merge PR #${detail.pr.number} into ${detail.pr.baseBranch}?`,
-    body: `${detail.pr.branch} goes into ${detail.pr.baseBranch}. This can’t be undone from here.`,
+    title: t('data.pullRequest.mergeTitle', { number, base: baseBranch }),
+    body: t('data.pullRequest.mergeBody', { branch, base: baseBranch }),
   };
 }
 
 /** The mark before a line (`+`, `−`, a space) and what TalkBack says before it. */
 export const LINE_MARKS: Record<PrFileLine['kind'], string> = { context: ' ', add: '+', del: '−' };
-export const LINE_KIND_LABELS: Record<PrFileLine['kind'], string | null> = {
-  context: null,
-  add: 'Added',
-  del: 'Removed',
-};
+
+export function lineKindLabels(locale?: string): Record<PrFileLine['kind'], string | null> {
+  const { t } = mobileTranslator(locale);
+  return { context: null, add: t('data.pullRequest.added'), del: t('data.pullRequest.removed') };
+}
+
+export const LINE_KIND_LABELS: Record<PrFileLine['kind'], string | null> = lineKindLabels();
 
 /** The pull request a link that knows only its number (a run) opens: with its repository when one room has it. */
 export function pullRequestTarget(

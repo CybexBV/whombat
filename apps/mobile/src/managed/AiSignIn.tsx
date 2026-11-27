@@ -17,9 +17,9 @@ import {
   deviceStep,
   isCodeShaped,
   readSignInOutput,
-  SIGNIN_TEXT,
   type SignInOutput,
   SUBSCRIPTION_MODE,
+  signinText,
 } from '@whombat/client/signins';
 import type { LiveProvider, ProviderLogin } from '@whombat/core/domain';
 import * as Clipboard from 'expo-clipboard';
@@ -33,14 +33,13 @@ import { Button, Loading } from '../ui/primitives';
 import { openSignInPage } from './openSignInPage';
 import { Card, ErrorLine, Field, Note } from './ui';
 
-const S = SIGNIN_TEXT;
 type Client = Pick<ReturnType<typeof createClient>, 'signins' | 'clients'>;
 
 /** How often a device code's state is asked (the web's `DEVICE_POLL`). */
 const DEVICE_POLL_MS = 3_000;
 
-function ok<R>(r: { status: string; data?: R; message?: string }): R {
-  if (r.status !== 'ok') throw new Error(r.message ?? S.failed);
+function ok<R>(r: { status: string; data?: R; message?: string }, locale?: string | null): R {
+  if (r.status !== 'ok') throw new Error(r.message ?? signinText(locale).failed);
   return r.data as R;
 }
 
@@ -59,6 +58,8 @@ export function AiSignInCard({
   installing: boolean;
   onChanged: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const S = signinText(rawLocale);
   const theme = useTheme();
   const [started, setStarted] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export function AiSignInCard({
   const install = async () => {
     setProblem(null);
     try {
-      ok(await client.clients.install({ params: { provider } }));
+      ok(await client.clients.install({ params: { provider } }), rawLocale);
       onChanged();
     } catch (error) {
       setProblem(error instanceof Error ? error.message : S.failed);
@@ -116,6 +117,7 @@ function DeviceSignIn({
   onClose: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const S = signinText(rawLocale);
   const T = connectAiText(rawLocale);
   const theme = useTheme();
   const [login, setLogin] = useState<ProviderLogin | null>(null);
@@ -179,7 +181,7 @@ function DeviceSignIn({
       <Button
         label={S.device.copy}
         variant="secondary"
-        onPress={() => void copyToClipboard(at.code, S.device.copied)}
+        onPress={() => void copyToClipboard(at.code, S.device.copied, rawLocale)}
       />
       <Button label={S.device.open(at.host)} onPress={() => void openSignInPage(at.url)} />
       <Note text={T.phone.deviceHint} />
@@ -203,6 +205,7 @@ function ConsoleSignIn({
   onClose: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const S = signinText(rawLocale);
   const T = connectAiText(rawLocale);
   const [state, setState] = useState<ConsoleDriverState>({ phase: 'starting', console: null, error: null });
   const [output, setOutput] = useState<SignInOutput>(() => readSignInOutput(''));

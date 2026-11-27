@@ -319,7 +319,11 @@ export function sheetPlaces(shown: Record<ThingPlace, boolean>): PlaceId[] {
 }
 
 /** With two pages, the right page while nothing from the list is open there. */
-export const PLACE_PICK: Record<ThingPlace, string> = {
-  servers: 'Pick a server to see it here.',
-  connections: 'Pick a connection to see it here.',
-};
+export function placePick(locale?: string): Record<ThingPlace, string> {
+  const { t } = mobileTranslator(locale);
+  return {
+    servers: t('places.pick.servers'),
+    connections: t('places.pick.connections'),
+  };
+}
+export const PLACE_PICK: Record<ThingPlace, string> = placePick();

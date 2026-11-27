@@ -13,10 +13,10 @@
 
 import { type NavigationProp, type RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import {
-  ARRANGE_WORDS,
   addTile,
   arrangePins,
   arrangeTiles,
+  arrangeWords,
   type ConnectionsTab,
   type HomeSection,
   homeSections,
@@ -87,6 +87,7 @@ const tileLevel = (t: OverviewTile) => t.row.level;
 
 export function HomeScreen() {
   const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const connectionsCopyHere = connectionsCopy(rawLocale);
 
   const overviewWordsHere = overviewWords(rawLocale);
@@ -106,8 +107,9 @@ export function HomeScreen() {
   });
   // Whoever has Connections in Settings has Add a connection here (AP-2258).
   const sections = useMemo(
-    () => (data ? homeSections(data, { now, timeZone, servers, canAddConnection: true }) : []),
-    [data, now, timeZone, servers],
+    () =>
+      data ? homeSections(data, { now, timeZone, servers, canAddConnection: true, locale: rawLocale }) : [],
+    [data, now, timeZone, servers, rawLocale],
   );
   // A pull to refresh sorts the servers and connections worst first again; live changes keep their order.
   const [sortKey, setSortKey] = useState(0);
@@ -122,9 +124,9 @@ export function HomeScreen() {
   const allTiles = useMemo(
     () =>
       thingsSection && data
-        ? overviewTiles(thingsSection.rows, data.things, now, timeZone, assistant.name)
+        ? overviewTiles(thingsSection.rows, data.things, now, timeZone, assistant.name, rawLocale)
         : [],
-    [thingsSection, data, now, timeZone, assistant.name],
+    [thingsSection, data, now, timeZone, assistant.name, rawLocale],
   );
   const ordered = useStatusOrder(allTiles, tileId, tileLevel, sortKey);
   const tiles = useMemo(() => arrangeTiles(arranged, ordered), [arranged, ordered]);
@@ -198,7 +200,7 @@ export function HomeScreen() {
   }, [canArrange, arranging, endArranging]);
   const fail = () => {
     setFailed(true);
-    showNotice(ARRANGE_WORDS.couldntSave);
+    showNotice(arrangeWordsHere.couldntSave);
   };
   // Every choice saves the whole layout as the page shows it now, changed.
   const save = (edit: (layout: OverviewLayout) => OverviewLayout) => {
@@ -259,7 +261,10 @@ export function HomeScreen() {
   // Loading, a failed first read, a failed refresh (the saved readings stay) and refreshing are kept apart.
   const state = readState({ hasData: !!data, error: home.error, fetching: home.isFetching });
   // The broken thing leads the summary card; else how things are.
-  const headline = useMemo(() => (data ? overviewHeadline(data, { timeZone }) : null), [data, timeZone]);
+  const headline = useMemo(
+    () => (data ? overviewHeadline(data, { timeZone, locale: rawLocale }) : null),
+    [data, timeZone, rawLocale],
+  );
   const broken = headline?.kind === 'broken' ? headline : null;
   const brokenItem = (broken && data?.needsYou.find((i) => i.id === broken.itemId)) || null;
   const navigation = useAppNavigation();

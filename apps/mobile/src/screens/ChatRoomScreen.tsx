@@ -17,7 +17,7 @@
 
 import { StackActions } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
-import { agentFaceOf, CHAT_WORDS } from '@whombat/client';
+import { agentFaceOf, chatWords } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { useChatRooms, useHandoffs } from '@whombat/client/react';
 import type { ChatRoom } from '@whombat/core';
@@ -58,6 +58,9 @@ import { ChatView } from './ChatView';
 
 /** The Chat tab; Files is one of Places (phone-shell-final.md), what needs the person the Inbox tab's alone. */
 export function ChatRoomScreen() {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
   const rooms = useChatRooms(slug);
@@ -68,11 +71,11 @@ export function ChatRoomScreen() {
   // Feedback (its unread count) stands beside the title while it fits; on a narrow page or with large text it goes
   // into ⋯. Settled is at the end of the list's filters.
   const buttons: HeaderButtonSpec[] = feedback
-    ? [{ id: 'feedback', label: CHAT_WORDS.feedback, badge: feedback.unread > 0 }]
+    ? [{ id: 'feedback', label: chatWordsHere.feedback, badge: feedback.unread > 0 }]
     : [];
   // The title keeps its room beside Places and Search, which take more of the row than the header's old padding.
   const icons = 2 * SHELL_TARGET + 18 - (LARGE_TITLE_LEFT + 10);
-  const fit = fitHeaderButtons(page.right - page.left - icons, CHAT_WORDS.chat, buttons, fontScale);
+  const fit = fitHeaderButtons(page.right - page.left - icons, chatWordsHere.chat, buttons, fontScale);
   const open = (id: string) => {
     if (id === 'feedback') navigation.navigate('Feedback');
   };
@@ -85,7 +88,7 @@ export function ChatRoomScreen() {
   return (
     <Screen>
       <TabTop
-        title={CHAT_WORDS.chat}
+        title={chatWordsHere.chat}
         lined={false}
         right={
           <>
@@ -106,7 +109,7 @@ export function ChatRoomScreen() {
       <MenuSheet
         spec={menu}
         visible={moreOpen}
-        label={CHAT_MORE_LABEL}
+        label={tMobile('screens2.chat.moreInChat')}
         onClose={() => setMoreOpen(false)}
         onPick={open}
       />
@@ -115,7 +118,7 @@ export function ChatRoomScreen() {
         conversationId={rooms.chat?.id ?? null}
         known={rooms.known}
         failed={!!rooms.error}
-        back={CHAT_WORDS.chat}
+        back={chatWordsHere.chat}
       />
     </Screen>
   );
@@ -123,6 +126,8 @@ export function ChatRoomScreen() {
 
 /** The Feedback room, above Chat. */
 export function FeedbackScreen() {
+  const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
   const rooms = useChatRooms(slug);
@@ -130,13 +135,13 @@ export function FeedbackScreen() {
     navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs', { screen: 'ChatRoom' });
   return (
     <Screen>
-      <RoomHeader title={CHAT_WORDS.feedback} back={{ label: CHAT_WORDS.chat, onPress: goBack }} />
+      <RoomHeader title={chatWordsHere.feedback} back={{ label: chatWordsHere.chat, onPress: goBack }} />
       <RoomBody
         room="feedback"
         conversationId={rooms.feedback?.id ?? null}
         known={rooms.known}
         failed={!!rooms.error}
-        back={CHAT_WORDS.feedback}
+        back={chatWordsHere.feedback}
       />
     </Screen>
   );
@@ -160,6 +165,7 @@ function RoomBody({
   back: string;
 }) {
   const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
   const chatCopyHere = chatCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -185,11 +191,11 @@ function RoomBody({
   const show = room === 'chat' && role === 'list' ? resting?.show : undefined;
   const newChat = useMemo(
     () => ({
-      label: newChatTitle(room),
+      label: newChatTitle(room, rawLocale),
       selected: !!show && beside === null,
       onPress: show ?? (() => navigation.navigate('NewChat', { room })),
     }),
-    [room, show, beside, navigation],
+    [room, show, beside, navigation, rawLocale],
   );
   if (!conversationId) {
     if (failed && !known)
@@ -211,7 +217,7 @@ function RoomBody({
           <WhombatAvatar size={44} silhouette />
         )
       }
-      text={room === 'chat' ? words.chatEmpty : CHAT_WORDS.feedbackEmpty}
+      text={room === 'chat' ? words.chatEmpty : chatWordsHere.feedbackEmpty}
     />
   );
   return (
@@ -241,8 +247,9 @@ function RoomBody({
 }
 
 /** What a room's new chat is called: its button for a screen reader, and its page's title. */
-function newChatTitle(room: ChatRoom): string {
-  return room === 'chat' ? CHAT_WORDS.newChat : CHAT_WORDS.newThread;
+function newChatTitle(room: ChatRoom, locale?: string | null): string {
+  const words = chatWords(locale);
+  return room === 'chat' ? words.newChat : words.newThread;
 }
 
 /** The new chat as a page of its own: what a list's New chat button opens (`whombat` route `NewChat`). */
@@ -258,6 +265,7 @@ export function NewChatScreen({ route }: { route: { params?: { room?: ChatRoom }
  */
 export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom; pushed?: boolean }) {
   const { rawLocale } = useI18n();
+  const chatWordsHere = chatWords(rawLocale);
   const chatCopyHere = chatCopy(rawLocale);
 
   const navigation = useAppNavigation();
@@ -277,7 +285,7 @@ export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom
     setFocusKey((k) => k + 1);
     woke?.();
   }, [pushed, waking, woke]);
-  const back = room === 'chat' ? CHAT_WORDS.chat : CHAT_WORDS.feedback;
+  const back = room === 'chat' ? chatWordsHere.chat : chatWordsHere.feedback;
   const threaded = useMemo(
     () => ({
       onThreadStarted: (rootId: string) => {
@@ -299,7 +307,7 @@ export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom
   return (
     <Screen>
       {pushed ? (
-        <ChatHeader onBack={goBack} backLabel={back} title={newChatTitle(room)} />
+        <ChatHeader onBack={goBack} backLabel={back} title={newChatTitle(room, rawLocale)} />
       ) : (
         <LinedHeader
           minHeight={ROOM_HEADER_HEIGHT}
@@ -315,7 +323,7 @@ export function NewChatPage({ room = 'chat', pushed = false }: { room?: ChatRoom
         >
           <ListToggleButton />
           <Text size={16} weight={600} numberOfLines={1} accessibilityRole="header">
-            {newChatTitle(room)}
+            {newChatTitle(room, rawLocale)}
           </Text>
         </LinedHeader>
       )}
@@ -395,9 +403,6 @@ function RoomHeader({ title, back }: { title: string; back: { label: string; onP
   );
 }
 
-/** What VoiceOver and TalkBack call Chat's ⋯ when buttons moved into it. */
-const CHAT_MORE_LABEL = 'More in Chat';
-
 /** Chat's ⋯ on a narrow page: iOS's own menu on iPhone, a sheet elsewhere. */
 function HeaderMore({
   menu,
@@ -408,6 +413,7 @@ function HeaderMore({
   onPick: (id: string) => void;
   onOpen: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const face = <Ellipsis size={20} color={theme.colors.ink2} strokeWidth={1.75} />;
   const style = {
@@ -418,7 +424,13 @@ function HeaderMore({
     justifyContent: 'center',
   } as const;
   return hasNativeMenu ? (
-    <NativeMenu spec={menu} onPick={onPick} trigger="tap" label={CHAT_MORE_LABEL} style={style}>
+    <NativeMenu
+      spec={menu}
+      onPick={onPick}
+      trigger="tap"
+      label={tMobile('screens2.chat.moreInChat')}
+      style={style}
+    >
       <View style={style}>{face}</View>
     </NativeMenu>
   ) : (
@@ -426,7 +438,7 @@ function HeaderMore({
       onPress={onOpen}
       feedback="wash"
       ringRadius={22}
-      accessibilityLabel={CHAT_MORE_LABEL}
+      accessibilityLabel={tMobile('screens2.chat.moreInChat')}
       style={style}
     >
       {face}
@@ -436,6 +448,7 @@ function HeaderMore({
 
 /** “Feedback 2”: an outlined 44pt (48dp on Android) button beside Chat's title (ink2), with an unread count. */
 function HeaderButton({ label, count = 0, onPress }: { label: string; count?: number; onPress: () => void }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   return (
     <Touchable
@@ -443,7 +456,7 @@ function HeaderButton({ label, count = 0, onPress }: { label: string; count?: nu
       feedback="wash"
       ringRadius={10}
       accessibilityRole="button"
-      accessibilityLabel={count > 0 ? `${label}, ${count} unread` : label}
+      accessibilityLabel={count > 0 ? `${label}, ${tMobile('screens2.chat.unread', { count })}` : label}
       style={{
         minHeight: Platform.OS === 'android' ? 48 : 44,
         flexDirection: 'row',
@@ -460,7 +473,7 @@ function HeaderButton({ label, count = 0, onPress }: { label: string; count?: nu
       </Text>
       {count > 0 ? (
         <View importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-          <CountBadge count={count} label={`${count} unread`} />
+          <CountBadge count={count} label={tMobile('screens2.chat.unread', { count })} />
         </View>
       ) : null}
     </Touchable>

@@ -7,7 +7,7 @@
  * and replication stay on the web (AP-1367, PX-06), and the screen says so with a link.
  */
 
-import { CHANGED_MEANWHILE, formatBytesBinary, isEmptyDraft } from '@whombat/client/hosts';
+import { formatBytesBinary, isEmptyDraft } from '@whombat/client/hosts';
 import {
   editDraft,
   editSpec,
@@ -21,7 +21,7 @@ import {
 import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
-import { useMobileT } from '../../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -30,8 +30,6 @@ import { OneSheet } from '../../ui/oneSheet';
 import { Touchable } from '../../ui/Touchable';
 import { ReviewList, RowAction, SettingLine, SwitchLine } from './parts';
 import { useManageChange } from './useServerChange';
-
-export const WEB_ONLY = 'Adding hardware, firewall rules, HA and replication: on whombat on the web.';
 
 export function GuestSettings({
   config,
@@ -49,9 +47,10 @@ export function GuestSettings({
   onEdit: (kind: GuestEditKind) => void;
   onGrow: (disk: string) => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
-  const groups = guestSettingGroups(config, guest.name);
+  const groups = guestSettingGroups(config, guest.name, rawLocale);
   return (
     <>
       {groups.map((group) => (
@@ -65,19 +64,19 @@ export function GuestSettings({
                 first={i === 0}
                 label={r.label}
                 value={r.value}
-                sub={r.locked ? 'Change this in Proxmox' : r.sub}
+                sub={r.locked ? tMobile('screens2.guest.changeInProxmox') : r.sub}
                 mono={r.mono}
                 action={
                   canChange && edit ? (
                     <RowAction
                       label={tMobile('screens.change')}
-                      spoken={`Change ${r.label.toLowerCase()}`}
+                      spoken={tMobile('screens2.guest.changeX', { what: r.label.toLowerCase() })}
                       onPress={() => onEdit(edit)}
                     />
                   ) : canChange && grow ? (
                     <RowAction
                       label={tMobile('screens.grow')}
-                      spoken={`Grow ${r.label}`}
+                      spoken={tMobile('screens2.guest.growX', { what: r.label })}
                       onPress={() => onGrow(grow)}
                     />
                   ) : null
@@ -92,17 +91,17 @@ export function GuestSettings({
           onPress={() => void Linking.openURL(webUrl)}
           feedback="fade"
           accessibilityRole="link"
-          accessibilityLabel={WEB_ONLY}
+          accessibilityLabel={tMobile('screens2.guest.webOnly')}
           accessibilityHint={tMobile('screens.opens-whombat-on-the-web')}
           style={{ minHeight: 44, justifyContent: 'center' }}
         >
           <Text size={13.5} lh={1.45} color={theme.colors.brand}>
-            {WEB_ONLY}
+            {tMobile('screens2.guest.webOnly')}
           </Text>
         </Touchable>
       ) : (
         <Text size={13.5} lh={1.45} color={theme.colors.mut}>
-          {WEB_ONLY}
+          {tMobile('screens2.guest.webOnly')}
         </Text>
       )}
     </>
@@ -123,7 +122,9 @@ export function EditSheet({
   kind: GuestEditKind;
   onClose: () => void;
 }) {
-  const spec = editSpec(kind, guest.name);
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const spec = editSpec(kind, guest.name, rawLocale);
   const [input, setInput] = useState(() => editStart(config, kind));
   const [step, setStep] = useState<'edit' | 'review'>('edit');
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -131,9 +132,9 @@ export function EditSheet({
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
   // Against the configuration as it is now: after “Changed meanwhile” the review shows the new old values.
-  const { draft, error: checkError } = editDraft(config, kind, input);
+  const { draft, error: checkError } = editDraft(config, kind, input, rawLocale);
   const empty = !draft || isEmptyDraft(draft);
-  const lines = draft ? reviewLines(config, draft) : [];
+  const lines = draft ? reviewLines(config, draft, rawLocale) : [];
 
   const apply = async () => {
     if (!draft || empty) return;
@@ -147,7 +148,7 @@ export function EditSheet({
       name: guest.name,
     });
     if (out.ok || out.waiting) return onClose();
-    if (out.conflict) setNotice(CHANGED_MEANWHILE);
+    if (out.conflict) setNotice(mobileTranslator(rawLocale).t('screens2.guest.changedMeanwhile'));
     else if (Object.keys(out.fields).length) {
       setFieldError(Object.values(out.fields).join(' '));
       setStep('edit');
@@ -162,8 +163,19 @@ export function EditSheet({
         title={spec.title}
         busy={busy ? 'apply' : null}
         buttons={[
-          { id: 'apply', label: 'Apply', variant: 'primary', disabled: empty, onPress: () => void apply() },
-          { id: 'back', label: 'Back', variant: 'quiet', onPress: () => setStep('edit') },
+          {
+            id: 'apply',
+            label: tMobile('screens2.common.apply'),
+            variant: 'primary',
+            disabled: empty,
+            onPress: () => void apply(),
+          },
+          {
+            id: 'back',
+            label: tMobile('screens2.common.back'),
+            variant: 'quiet',
+            onPress: () => setStep('edit'),
+          },
         ]}
         note={error}
       >
@@ -172,7 +184,7 @@ export function EditSheet({
             <FormMessage text={notice} />
           </View>
         ) : null}
-        <ReviewList lines={lines} note={reviewRestartNote(config)} />
+        <ReviewList lines={lines} note={reviewRestartNote(config, rawLocale)} />
       </OneSheet>
     );
 
@@ -184,7 +196,7 @@ export function EditSheet({
       buttons={[
         {
           id: 'review',
-          label: 'Review',
+          label: tMobile('screens2.common.review'),
           variant: 'primary',
           disabled: empty,
           onPress: () => {
@@ -192,9 +204,9 @@ export function EditSheet({
             setStep('review');
           },
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
-      note={draft && empty ? 'Nothing changed yet.' : null}
+      note={draft && empty ? tMobile('screens2.guest.nothingChanged') : null}
     >
       <View style={{ marginTop: 16 }}>
         {spec.kind === 'switch' ? (
@@ -233,14 +245,15 @@ export function GrowSheet({
   disk: string;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const [add, setAdd] = useState('8');
   const [step, setStep] = useState<'edit' | 'review'>('edit');
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { send, busy } = useManageChange(serverId);
-  const grow = growDisk(config, disk, add);
-  const title = `Grow ${disk} of ${guest.name}`;
+  const grow = growDisk(config, disk, add, rawLocale);
+  const title = tMobile('screens2.guest.growDisk', { disk, name: guest.name });
 
   const apply = async () => {
     if (!grow.params) return;
@@ -248,7 +261,7 @@ export function GrowSheet({
     setNotice(null);
     const out = await send({ op: 'disk.resize', guestId: guest.id, params: grow.params, name: guest.name });
     if (out.ok || out.waiting) return onClose();
-    if (out.conflict) setNotice(CHANGED_MEANWHILE);
+    if (out.conflict) setNotice(mobileTranslator(rawLocale).t('screens2.guest.changedMeanwhile'));
     else setError(out.message);
   };
 
@@ -262,12 +275,17 @@ export function GrowSheet({
         buttons={[
           {
             id: 'apply',
-            label: 'Grow',
+            label: tMobile('screens2.common.grow'),
             variant: 'primary',
             disabled: !grow.params,
             onPress: () => void apply(),
           },
-          { id: 'back', label: 'Back', variant: 'quiet', onPress: () => setStep('edit') },
+          {
+            id: 'back',
+            label: tMobile('screens2.common.back'),
+            variant: 'quiet',
+            onPress: () => setStep('edit'),
+          },
         ]}
         note={error}
       >
@@ -276,10 +294,7 @@ export function GrowSheet({
             <FormMessage text={notice} />
           </View>
         ) : null}
-        <ReviewList
-          lines={grow.line ? [grow.line] : []}
-          note="The space inside grows when its system extends the partition."
-        />
+        <ReviewList lines={grow.line ? [grow.line] : []} note={tMobile('screens2.guest.growNote')} />
       </OneSheet>
     );
 
@@ -288,16 +303,20 @@ export function GrowSheet({
       visible
       onClose={onClose}
       title={title}
-      body={`Disks only grow.${grow.now != null ? ` It’s ${formatBytesBinary(grow.now)} now.` : ''}`}
+      body={
+        grow.now != null
+          ? tMobile('screens2.guest.disksOnlyGrowNow', { size: formatBytesBinary(grow.now) })
+          : tMobile('screens2.guest.disksOnlyGrow')
+      }
       buttons={[
         {
           id: 'review',
-          label: 'Review',
+          label: tMobile('screens2.common.review'),
           variant: 'primary',
           disabled: !grow.params,
           onPress: () => setStep('review'),
         },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
     >
       <View style={{ marginTop: 16 }}>
@@ -306,7 +325,11 @@ export function GrowSheet({
           value={add}
           onChangeText={setAdd}
           error={add.trim() ? grow.error : null}
-          hint={grow.after != null ? `Then ${formatBytesBinary(grow.after)}` : null}
+          hint={
+            grow.after != null
+              ? tMobile('screens2.guest.then', { size: formatBytesBinary(grow.after) })
+              : null
+          }
           keyboardType="number-pad"
           autoFocus
         />

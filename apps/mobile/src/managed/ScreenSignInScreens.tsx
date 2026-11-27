@@ -17,17 +17,17 @@ import {
 import type { ApplianceSession } from '@whombat/client/session';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { BackHandler, View } from 'react-native';
-import { useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { Screen } from '../ui/headers';
 import { Button, Loading } from '../ui/primitives';
-import { COPY } from './copy';
+import { managedCopy } from './copy';
 import { backFrom, lettersAfter } from './screenSignIn';
 import { Card, ErrorLine, Field, Frame, Row } from './ui';
 
-const T = COPY.screen;
-
 /** “At your Whombat? Its screen can show a code for this device.” with “Use its screen”: a row like a way in. */
 export function ScreenWayRow({ onUse }: { onUse: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).screen;
   return (
     <Card>
       <Row first title={T.way} action={<Button label={T.use} variant="secondary" onPress={onUse} />} />
@@ -46,6 +46,8 @@ function ScreenStartScreen({
   onShow: () => void;
   back: { label: string; onPress: () => void };
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).screen;
   return (
     <Frame kicker={T.kicker} title={T.title} sub={T.sub} tip={T.tip} back={back}>
       <ErrorLine text={error} />
@@ -72,6 +74,8 @@ function ScreenLettersScreen({
   onNewCode: () => void;
   back: { label: string; onPress: () => void };
 }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).screen;
   // Six typed: “Let this device in” checks them (a letter the box never shows is said there).
   const ready = letters.replace(/\s/g, '').length === 6;
   return (
@@ -104,6 +108,8 @@ function ScreenLettersScreen({
 
 /** A stop the machine can't get past here (too old, no screen, not the box on the screen): what happened, and Back. */
 function ScreenStoppedScreen({ error, onBack }: { error: string; onBack: () => void }) {
+  const { rawLocale } = useI18n();
+  const T = managedCopy(rawLocale).screen;
   const { t: tMobile } = useMobileT();
   return (
     <Frame kicker={T.kicker} title={T.title} sub={error}>
@@ -128,6 +134,7 @@ export function ScreenSignInSteps({
   onIn: (accountId: string) => void;
   onAlready: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const [step, setStep] = useState<ScreenSignInStep>(() => screenSignInStart());
   const [letters, setLetters] = useState('');
   const [busy, setBusy] = useState(false);
@@ -153,17 +160,18 @@ export function ScreenSignInSteps({
   const take = async (next: Promise<ScreenSignInStep>) => {
     setBusy(true);
     const s = await next;
-    setLetters((typed) => lettersAfter(step, s, typed));
+    setLetters((typed) => lettersAfter(step, s, typed, rawLocale));
     setStep(s);
     setBusy(false);
   };
-  const back = { label: 'Back', onPress: goBack };
+  const back = { label: mobileTranslator(rawLocale).t('managed2.back'), onPress: goBack };
   // What was said about the last try goes once something new is typed.
   const typing = (set: (v: string) => void) => (v: string) => {
     set(v);
     if (step.kind === 'letters' && step.error) setStep({ ...step, error: null });
   };
 
+  const signInDeps = { ...deps, locale: rawLocale };
   if (step.kind === 'enrolled' || step.kind === 'already')
     return (
       <Screen>
@@ -176,7 +184,7 @@ export function ScreenSignInSteps({
       <ScreenStartScreen
         busy={busy}
         error={step.error}
-        onShow={() => void take(screenSignInRequest(deps, step))}
+        onShow={() => void take(screenSignInRequest(signInDeps, step))}
         back={back}
       />
     );
@@ -186,8 +194,8 @@ export function ScreenSignInSteps({
       onLetters={typing(setLetters)}
       busy={busy}
       error={step.error}
-      onGo={() => void take(screenSignInSubmit(deps, step, letters))}
-      onNewCode={() => void take(screenSignInRequest(deps, step))}
+      onGo={() => void take(screenSignInSubmit(signInDeps, step, letters))}
+      onNewCode={() => void take(screenSignInRequest(signInDeps, step))}
       back={back}
     />
   );

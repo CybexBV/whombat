@@ -15,16 +15,16 @@
  */
 
 import {
-  HISTORY_WORDS,
   type HistoryRow,
   historyView,
-  KEEP_QUIET_WORDS,
+  historyWords,
   type KeepQuietChoice,
   keepQuietBody,
   keepQuietOptions,
   keepQuietTitle,
-  LIMIT_WORDS,
+  keepQuietWords,
   type LimitView,
+  limitWords,
   parseLimit,
 } from '@whombat/client';
 import { type KeepQuietActions, useThingHistory, type WatchLimitActions } from '@whombat/client/react';
@@ -33,7 +33,7 @@ import { ScrollView, View } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { daysEdges, firstPick, monitoringCopy, pickDays, pickedValue } from '../../data/monitoring';
-import { useI18n } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, MonoLabel, OneCard } from '../../ui/assistant';
@@ -74,15 +74,17 @@ function KeepQuietBody({
   actions: KeepQuietActions;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale } = useI18n();
+  const keepQuietWordsHere = keepQuietWords(rawLocale);
   const monitoringCopyHere = monitoringCopy(rawLocale);
 
   const { timeZone } = useBurrowBase();
   const now = useNow();
   // The choices as they were when the sheet opened: the minute ticking doesn't move a choice under the finger.
   const [opened] = useState(() => now.getTime());
-  const options = useMemo(() => keepQuietOptions(opened, timeZone), [opened, timeZone]);
-  const days = useMemo(() => pickDays(opened, timeZone), [opened, timeZone]);
+  const options = useMemo(() => keepQuietOptions(opened, timeZone, rawLocale), [opened, timeZone, rawLocale]);
+  const days = useMemo(() => pickDays(opened, timeZone, undefined, rawLocale), [opened, timeZone, rawLocale]);
   const [choice, setChoice] = useState<KeepQuietChoice>('hour');
   const [pick, setPick] = useState(() => firstPick(opened, timeZone));
   const [note, setNote] = useState('');
@@ -94,6 +96,7 @@ function KeepQuietBody({
       timeZone,
       picked: pickedValue(pick.day, pick.clock),
       note,
+      locale: rawLocale,
     });
     if ('problem' in asked) return setProblem(asked.problem);
     setProblem(null);
@@ -109,17 +112,17 @@ function KeepQuietBody({
       onClose={() => !actions.busy && onClose()}
       badge={name}
       tone="mut"
-      title={keepQuietTitle(name)}
-      body={KEEP_QUIET_WORDS.body}
+      title={keepQuietTitle(name, rawLocale)}
+      body={keepQuietWordsHere.body}
       busy={actions.busy ? 'keep' : null}
       buttons={[
-        { id: 'keep', label: KEEP_QUIET_WORDS.button, variant: 'primary', onPress: keep },
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'keep', label: keepQuietWordsHere.button, variant: 'primary', onPress: keep },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
     >
       <View style={{ gap: 14, marginTop: 16 }}>
         <RadioCards<KeepQuietChoice>
-          label={keepQuietTitle(name)}
+          label={keepQuietTitle(name, rawLocale)}
           value={choice}
           onChange={(c) => {
             setChoice(c);
@@ -128,7 +131,7 @@ function KeepQuietBody({
           options={options.map((o) => ({
             value: o.choice,
             title: o.label,
-            line: o.ends ? `Until ${o.ends}` : null,
+            line: o.ends ? tMobile('screens2.monitoring.until', { when: o.ends }) : null,
           }))}
         />
         {choice === 'pick' ? (
@@ -149,7 +152,7 @@ function KeepQuietBody({
             </DaysRow>
             <ClockField
               label={monitoringCopyHere.time}
-              spoken={`${KEEP_QUIET_WORDS.pickLabel} ${monitoringCopyHere.time.toLowerCase()}`}
+              spoken={`${keepQuietWordsHere.pickLabel} ${monitoringCopyHere.time.toLowerCase()}`}
               value={pick.clock}
               onChange={(clock) => {
                 setPick((p) => ({ ...p, clock }));
@@ -161,10 +164,10 @@ function KeepQuietBody({
         {/* Why it can't keep quiet then, where the time was chosen (the sheet's own note sits under its buttons). */}
         <FormMessage text={problem} />
         <FormField
-          label={KEEP_QUIET_WORDS.note}
+          label={keepQuietWordsHere.note}
           value={note}
           onChangeText={setNote}
-          placeholder={KEEP_QUIET_WORDS.notePlaceholder}
+          placeholder={keepQuietWordsHere.notePlaceholder}
           maxLength={120}
           returnKeyType="done"
         />
@@ -349,7 +352,9 @@ const HISTORY_FIRST = 5;
 
 /** The last 30 days of a thing or server (`things.history`); nothing on a Whombat that doesn't keep it. */
 export function WhatHappenedCard({ thing }: { thing: string }) {
+  const { t: tMobile } = useMobileT();
   const { rawLocale, tClient } = useI18n();
+  const historyWordsHere = historyWords(rawLocale);
   const monitoringCopyHere = monitoringCopy(rawLocale);
 
   const theme = useTheme();
@@ -359,21 +364,21 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
   const [open, setOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
   const view = useMemo(
-    () => (history.data ? historyView(history.data, now, timeZone) : null),
-    [history.data, now, timeZone],
+    () => (history.data ? historyView(history.data, now, timeZone, rawLocale) : null),
+    [history.data, now, timeZone, rawLocale],
   );
   if (!history.supported) return null;
   const rows = view ? (open ? view.rows : view.rows.slice(0, HISTORY_FIRST)) : [];
   const more = view ? view.rows.length - rows.length : 0;
   return (
-    <OneCard label={HISTORY_WORDS.title} meta={view?.uptime ?? null}>
+    <OneCard label={historyWordsHere.title} meta={view?.uptime ?? null}>
       {history.isPending ? (
         <View style={{ paddingHorizontal: 14, paddingBottom: 12 }}>
           <SkeletonRows count={2} lines={2} label={monitoringCopyHere.historyLoading} />
         </View>
       ) : !view ? (
         <>
-          <CardQuiet text={HISTORY_WORDS.failed} />
+          <CardQuiet text={historyWordsHere.failed} />
           <FoldRow label={tClient('settings.retry')} onPress={() => void history.refetch()} />
         </>
       ) : (
@@ -384,7 +389,7 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
           ))}
           {more > 0 || (open && view.rows.length > HISTORY_FIRST) ? (
             <FoldRow
-              label={open ? HISTORY_WORDS.fewer : `Show ${more} more`}
+              label={open ? historyWordsHere.fewer : tMobile('screens2.monitoring.showMore', { count: more })}
               onPress={() => setOpen(!open)}
             />
           ) : null}
@@ -400,7 +405,7 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
                   borderTopColor: theme.colors.line,
                 }}
               >
-                <MonoLabel>{HISTORY_WORDS.fromServer}</MonoLabel>
+                <MonoLabel>{historyWordsHere.fromServer}</MonoLabel>
               </View>
               {view.alerts.map((r, i) => (
                 <HistoryLine key={r.id} row={r} first={i === 0} />
@@ -409,7 +414,7 @@ export function WhatHappenedCard({ thing }: { thing: string }) {
           ) : null}
           {view.alerts.length ? (
             <FoldRow
-              label={alertsOpen ? HISTORY_WORDS.hideAlerts : HISTORY_WORDS.alerts(view.alerts.length)}
+              label={alertsOpen ? historyWordsHere.hideAlerts : historyWordsHere.alerts(view.alerts.length)}
               onPress={() => setAlertsOpen(!alertsOpen)}
             />
           ) : null}
@@ -491,6 +496,9 @@ function LimitBody({
   actions: WatchLimitActions;
   onClose: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const limitWordsHere = limitWords(rawLocale);
   const [typed, setTyped] = useState(view.value === null ? '' : String(view.value));
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState<'save' | 'default' | null>(null);
@@ -506,7 +514,7 @@ function LimitBody({
       });
   };
   const save = () => {
-    const value = parseLimit(typed, view);
+    const value = parseLimit(typed, view, rawLocale);
     if (typeof value !== 'number') return setProblem(value.problem);
     setProblem(null);
     run('save', value);
@@ -517,28 +525,28 @@ function LimitBody({
       onClose={() => !busy && onClose()}
       badge={view.about}
       tone="mut"
-      title={LIMIT_WORDS.title}
+      title={limitWordsHere.title}
       body={`${view.defaultWords} ${view.rangeWords}`}
       busy={busy}
       buttons={[
-        { id: 'save', label: LIMIT_WORDS.save, variant: 'primary', onPress: save },
+        { id: 'save', label: limitWordsHere.save, variant: 'primary', onPress: save },
         ...(view.own
           ? [
               {
                 id: 'default',
-                label: LIMIT_WORDS.useDefault,
+                label: limitWordsHere.useDefault,
                 variant: 'secondary' as const,
                 onPress: () => run('default', null),
               },
             ]
           : []),
-        { id: 'cancel', label: 'Cancel', variant: 'quiet', onPress: onClose },
+        { id: 'cancel', label: tMobile('screens2.common.cancel'), variant: 'quiet', onPress: onClose },
       ]}
     >
       <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
         <View style={{ flex: 1 }}>
           <FormField
-            label={LIMIT_WORDS.label}
+            label={limitWordsHere.label}
             value={typed}
             onChangeText={(v) => {
               setTyped(v);
@@ -548,7 +556,7 @@ function LimitBody({
             keyboardType="decimal-pad"
             returnKeyType="done"
             onSubmitEditing={save}
-            accessibilityLabel={`${LIMIT_WORDS.label}, ${view.unit}`}
+            accessibilityLabel={`${limitWordsHere.label}, ${view.unit}`}
             maxLength={5}
             mono
           />

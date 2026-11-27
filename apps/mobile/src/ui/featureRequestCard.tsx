@@ -14,9 +14,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,
   canSendNote,
-  FEATURE_CARD_TEXT,
   FEATURE_NOTE_MAX,
   type FeatureForm,
+  featureCardText,
   featureDecideBody,
   featureDecidedToast,
 } from '@whombat/client';
@@ -28,7 +28,7 @@ import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import {
   type FeatureRequestCardView as CardView,
-  FEATURE_CARD_HINTS,
+  featureCardHints,
   featureRequestCardView,
 } from '../data/featureRequest';
 import { useI18n } from '../i18n';
@@ -57,7 +57,9 @@ export function FeatureRequestCardView({
   collapse?: (() => void) | undefined;
 }) {
   const { rawLocale } = useI18n();
+  const featureCardTextHere = featureCardText(rawLocale);
   const featureRequestWordsHere = featureRequestWords(rawLocale);
+  const featureCardHintsHere = featureCardHints(rawLocale);
 
   const theme = useTheme();
   const { slug, people } = useBurrowBase();
@@ -86,15 +88,16 @@ export function FeatureRequestCardView({
       })
       .then(
         (result) => {
-          if (result.status !== 'ok') return setProblem(outcomeText(result)?.body ?? errorText(null));
-          setAnswered(featureRequestCardView(result.data.request, people));
+          if (result.status !== 'ok')
+            return setProblem(outcomeText(result, rawLocale)?.body ?? errorText(null, rawLocale));
+          setAnswered(featureRequestCardView(result.data.request, people, rawLocale));
           setForm(null);
-          showNotice(featureDecidedToast(choice, view.agent));
+          showNotice(featureDecidedToast(choice, view.agent, rawLocale));
         },
         (error) => {
           // A request that no longer waits is a conflict, in the server's words: someone may have answered first, so
           // the messages are read again and the card shows where it is.
-          setProblem(errorText(error));
+          setProblem(errorText(error, rawLocale));
           if (error instanceof ApiError && error.status === 409) {
             void qc.invalidateQueries({ queryKey: queryKeys.scope('messages.thread') });
             void qc.invalidateQueries({ queryKey: queryKeys.scope('messages.list') });
@@ -199,7 +202,7 @@ export function FeatureRequestCardView({
           <Touchable
             onPress={() => setReadsOpen((o) => !o)}
             feedback="wash"
-            accessibilityLabel={FEATURE_CARD_TEXT.reads}
+            accessibilityLabel={featureCardTextHere.reads}
             accessibilityState={{ expanded: readsOpen }}
             ringRadius={10}
             style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10 }}
@@ -210,7 +213,7 @@ export function FeatureRequestCardView({
               <ChevronDown size={16} color={theme.colors.mut} strokeWidth={2} />
             )}
             <Text size={14} weight={600}>
-              {FEATURE_CARD_TEXT.reads}
+              {featureCardTextHere.reads}
             </Text>
           </Touchable>
           {readsOpen ? (
@@ -281,7 +284,7 @@ export function FeatureRequestCardView({
               onPress={() => send(form, note)}
               busy={busy === form}
               disabled={!canSendNote(note) || (busy !== null && busy !== form)}
-              accessibilityHint={FEATURE_CARD_HINTS[form](shown.agent)}
+              accessibilityHint={featureCardHintsHere[form](shown.agent)}
               style={GROW}
             />
             <Button
@@ -304,7 +307,7 @@ export function FeatureRequestCardView({
               onPress={() => send('approve')}
               busy={busy === 'approve'}
               disabled={busy !== null && busy !== 'approve'}
-              accessibilityHint={FEATURE_CARD_HINTS.approve(shown.agent)}
+              accessibilityHint={featureCardHintsHere.approve(shown.agent)}
               style={GROW}
             />
             {shown.canBuild ? (
@@ -314,7 +317,7 @@ export function FeatureRequestCardView({
                 onPress={() => send('build')}
                 busy={busy === 'build'}
                 disabled={busy !== null && busy !== 'build'}
-                accessibilityHint={FEATURE_CARD_HINTS.build(shown.agent)}
+                accessibilityHint={featureCardHintsHere.build(shown.agent)}
                 style={GROW}
               />
             ) : null}
@@ -323,7 +326,7 @@ export function FeatureRequestCardView({
               variant="secondary"
               onPress={() => open('decline')}
               disabled={busy !== null}
-              accessibilityHint={FEATURE_CARD_HINTS.opensDecline}
+              accessibilityHint={featureCardHintsHere.opensDecline}
               style={GROW}
             />
             <Button
@@ -331,7 +334,7 @@ export function FeatureRequestCardView({
               variant="secondary"
               onPress={() => open('ask')}
               disabled={busy !== null}
-              accessibilityHint={FEATURE_CARD_HINTS.opensAsk}
+              accessibilityHint={featureCardHintsHere.opensAsk}
               style={GROW}
             />
           </View>

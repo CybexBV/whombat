@@ -6,7 +6,7 @@
  * lives only while the sheet is open: the secret goes with it, and never into navigation params.
  */
 
-import { VAULT_AUTH_LABELS, vaultProblemOf } from '@whombat/client';
+import { vaultAuthLabels, vaultProblemOf } from '@whombat/client';
 import { useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
@@ -84,6 +84,7 @@ function AddForm({
   onAdded: (entry: { id: string; name: string }) => void;
 }) {
   const { rawLocale } = useI18n();
+  const vaultAuthLabelsHere = vaultAuthLabels(rawLocale);
   const vaultCopyHere = vaultCopy(rawLocale);
 
   const vaultFormTextHere = vaultFormText(rawLocale);
@@ -118,7 +119,7 @@ function AddForm({
 
   const save = async () => {
     if (!template || busy) return;
-    const local = vaultFormProblems(template, form);
+    const local = vaultFormProblems(template, form, rawLocale);
     setProblems(local);
     setMessage(null);
     if (Object.keys(local).length) return;
@@ -128,7 +129,7 @@ function AddForm({
         body: vaultCreateBody(template, form),
       });
       if (created.status !== 'ok') {
-        const text = outcomeText(created);
+        const text = outcomeText(created, rawLocale);
         if (text) Alert.alert(text.title, text.body);
         return;
       }
@@ -148,7 +149,7 @@ function AddForm({
       );
       onAdded({ id: entry.id, name: entry.name });
     } catch (error) {
-      const p = vaultProblemOf(error);
+      const p = vaultProblemOf(error, rawLocale);
       setProblems(p.fields);
       setMessage(p.message ?? (Object.keys(p.fields).length ? null : vaultFormTextHere.failed));
     }
@@ -176,7 +177,7 @@ function AddForm({
           }}
         >
           {phoneVaultTemplates().map((t) => {
-            const choice = vaultTemplateChoice(t);
+            const choice = vaultTemplateChoice(t, rawLocale);
             return (
               <ListRow
                 key={t}
@@ -196,8 +197,8 @@ function AddForm({
       </ScrollView>
     );
 
-  const fields = vaultFormFields(template, form);
-  const choice = vaultTemplateChoice(template);
+  const fields = vaultFormFields(template, form, rawLocale);
+  const choice = vaultTemplateChoice(template, rawLocale);
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
@@ -235,8 +236,8 @@ function AddForm({
         error={problems.url}
         hint={
           fields.httpWarning
-            ? `${fields.httpWarning} ${vaultAddressHint(networks)}`
-            : vaultAddressHint(networks)
+            ? `${fields.httpWarning} ${vaultAddressHint(networks, rawLocale)}`
+            : vaultAddressHint(networks, rawLocale)
         }
         mono
         autoCapitalize="none"
@@ -266,7 +267,7 @@ function AddForm({
             {fields.auths.map((a) => (
               <Chip
                 key={a}
-                label={VAULT_AUTH_LABELS[a]}
+                label={vaultAuthLabelsHere[a]}
                 active={form.auth === a}
                 onPress={() => set('auth', a)}
               />

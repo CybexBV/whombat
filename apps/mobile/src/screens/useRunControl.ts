@@ -13,6 +13,7 @@ import { api } from '@whombat/core/contracts';
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { runControlRefusal } from '../data/run';
+import { useI18n, useMobileT } from '../i18n';
 import { errorText, showNotice } from './feedback';
 
 export interface RunControl {
@@ -22,6 +23,8 @@ export interface RunControl {
 }
 
 export function useRunControl(burrow: string): RunControl {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
   const qc = useQueryClient();
   const pause = useApiMutation(api.runs.pause);
   const resume = useApiMutation(api.runs.resume);
@@ -35,17 +38,17 @@ export function useRunControl(burrow: string): RunControl {
     setPending(action);
     const settle = {
       onSuccess: (result: Parameters<typeof runControlRefusal>[0] & { data?: { run?: Run } }) => {
-        const refused = runControlRefusal(result);
+        const refused = runControlRefusal(result, rawLocale);
         if (refused) {
-          Alert.alert('That didn’t go through', refused);
+          Alert.alert(tMobile('screens2.feedback.failedTitle'), refused);
           return;
         }
         const next = result.status === 'ok' ? result.data?.run : undefined;
         if (next) qc.setQueryData<RunDetail>(key, (d) => (d ? { ...d, run: next } : d));
-        showNotice(runActionToast(action, agentName, run.branch));
+        showNotice(runActionToast(action, agentName, run.branch, rawLocale));
       },
       onError: (error: unknown) => {
-        Alert.alert('That didn’t go through', errorText(error));
+        Alert.alert(tMobile('screens2.feedback.failedTitle'), errorText(error, rawLocale));
         void qc.invalidateQueries({ queryKey: key });
       },
       onSettled: () => setPending(null),

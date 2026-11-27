@@ -9,7 +9,7 @@
  * didn't load say so under Only tells you, with Try again, over the rows already read.
  */
 
-import { automationListRows, automationOverview, problemText, SCHEDULE_TEXT } from '@whombat/client';
+import { automationListRows, automationOverview, problemText, scheduleText } from '@whombat/client';
 import { useAgentSchedules, useAutomations } from '@whombat/client/react';
 import { formatClock, formatDate } from '@whombat/core';
 import { type ReactNode, useMemo, useState } from 'react';
@@ -18,7 +18,7 @@ import { automationListText, onlyTellsYouRows } from '../data/automations';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useAutomationNames } from '../data/useAutomationNames';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
 import { isBeside, useBeside } from '../navigation/panes';
 import { Text } from '../theme/Text';
@@ -39,12 +39,16 @@ import { NewChatSheet } from './NewChatSheet';
 const TARGET = ROW_TARGET;
 
 /** “11:22 on 23 Sep”: when the list on screen was read. */
-function savedWhen(at: number, now: Date, timeZone: string): string {
-  return `${formatClock(at, timeZone)} on ${formatDate(at, timeZone, { now })}`;
+function savedWhen(at: number, now: Date, timeZone: string, locale?: string | null): string {
+  return mobileTranslator(locale).t('screens2.automations.savedWhen', {
+    clock: formatClock(at, timeZone),
+    date: formatDate(at, timeZone, { now }, locale),
+  });
 }
 
 export function AutomationsScreen() {
   const { rawLocale } = useI18n();
+  const scheduleTextHere = scheduleText(rawLocale);
   const automationListTextHere = automationListText(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -61,11 +65,12 @@ export function AutomationsScreen() {
   // The sheet that starts a Chat thread: empty, or with a question ready (Ask Dusty about a list that didn't load).
   const [telling, setTelling] = useState<{ text: string | null } | null>(null);
   const rows = useMemo(
-    () => (list.data ? automationListRows(list.data.automations, view.now, view.timeZone, names) : []),
-    [list.data, view.now, view.timeZone, names],
+    () =>
+      list.data ? automationListRows(list.data.automations, view.now, view.timeZone, names, rawLocale) : [],
+    [list.data, view.now, view.timeZone, names, rawLocale],
   );
   const told = schedules.data
-    ? onlyTellsYouRows(schedules.data.schedules, agent.Name, view.timeZone, view.now)
+    ? onlyTellsYouRows(schedules.data.schedules, agent.Name, view.timeZone, view.now, rawLocale)
     : [];
   // “No automations yet” only when both reads worked: schedules that didn't load say so under Only tells you.
   const overview = automationOverview(
@@ -126,7 +131,9 @@ export function AutomationsScreen() {
           <ReadProblem
             title={list.data ? T.refreshFailed : T.readFailed}
             text={
-              list.data ? T.savedAt(savedWhen(list.dataUpdatedAt, view.now, view.timeZone)) : T.readFailedText
+              list.data
+                ? T.savedAt(savedWhen(list.dataUpdatedAt, view.now, view.timeZone, rawLocale))
+                : T.readFailedText
             }
             detail={problemText(list.error, undefined, rawLocale)}
             agent={agent.Name}
@@ -168,7 +175,7 @@ export function AutomationsScreen() {
             {overview.schedules !== 'hidden' ? (
               <Group title={T.onlyTellsYou}>
                 {overview.schedules === 'failed' ? (
-                  <ErrorState text={SCHEDULE_TEXT.loadFailed} onRetry={() => void schedules.refetch()} />
+                  <ErrorState text={scheduleTextHere.loadFailed} onRetry={() => void schedules.refetch()} />
                 ) : null}
                 <CardLine text={scheduleActions.problem} tone="bad" />
                 {told.map((row) => (

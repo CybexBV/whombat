@@ -7,8 +7,8 @@
  * and *Remove*; and *Add to Overview* with what was removed. Every choice is saved at once; there is no Save.
  */
 import {
-  ARRANGE_WORDS,
   type ArrangedTile,
+  arrangeWords,
   type FigureFace,
   type HomeThingRow,
   type OverviewTile,
@@ -20,6 +20,7 @@ import { ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { type ShowChoice, tileShowChoices, topChoiceGroups } from '../../data/overviewArranged';
 import type { PhoneGlyph } from '../../data/thingLook';
+import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { ThingIcon } from '../../ui/assistant';
@@ -30,8 +31,6 @@ import { Sheet } from '../../ui/sheet';
 import { Touchable } from '../../ui/Touchable';
 import { hitSlopFor } from '../../ui/touchTarget';
 import { ConnectionTile } from './ServicesCard';
-
-const A = ARRANGE_WORDS;
 
 /** What a gear opened: a tile, one of the four figures, a pinned chart, or *Add to Overview*. */
 export type ArrangeTarget =
@@ -85,6 +84,8 @@ export function ArrangeSheet({
   /** The last save failed. */
   failed: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const { slug } = useBurrowBase();
   const theme = useTheme();
   // While the sheet slides away it keeps what it showed.
@@ -100,12 +101,12 @@ export function ArrangeSheet({
   const allFigures = useOverviewFigures(slug, null, target?.kind === 'figure');
   const label =
     target?.kind === 'tile'
-      ? A.changeTile(tile?.item.row.name ?? '')
+      ? arrangeWordsHere.changeTile(tile?.item.row.name ?? '')
       : target?.kind === 'figure'
-        ? A.figureTitle
+        ? arrangeWordsHere.figureTitle
         : target?.kind === 'pin'
-          ? A.changePin(pin?.title ?? '')
-          : A.add;
+          ? arrangeWordsHere.changePin(pin?.title ?? '')
+          : arrangeWordsHere.add;
   const visible = asked !== null && (asked.kind !== 'tile' || !!tile) && (asked.kind !== 'pin' || !!pin);
   return (
     <Sheet visible={visible} onClose={onClose} label={label} maxHeight="88%">
@@ -120,7 +121,7 @@ export function ArrangeSheet({
             last={tileAt === tiles.length - 1}
             face={faceOf(tile)}
             glyph={glyphOf(tile.tile.thing)?.glyph ?? tile.item.row.glyph}
-            choices={tileShowChoices(thingFigures.data, tile.tile.thing)}
+            choices={tileShowChoices(thingFigures.data, tile.tile.thing, rawLocale)}
             reading={thingFigures.isLoading}
             couldntRead={!!thingFigures.error && !thingFigures.data}
             actions={actions}
@@ -129,7 +130,7 @@ export function ArrangeSheet({
         ) : target?.kind === 'figure' ? (
           <FigureParts
             index={target.index}
-            groups={topChoiceGroups(allFigures.data, top, target.index)}
+            groups={topChoiceGroups(allFigures.data, top, target.index, rawLocale)}
             glyphOf={glyphOf}
             reading={allFigures.isLoading}
             couldntRead={!!allFigures.error && !allFigures.data}
@@ -149,10 +150,10 @@ export function ArrangeSheet({
         ) : null}
         {failed ? (
           <Text size={14} weight={500} lh={1.45} color={theme.colors.bad} accessibilityLiveRegion="polite">
-            {A.couldntSave}
+            {arrangeWordsHere.couldntSave}
           </Text>
         ) : null}
-        <Fine>{A.same}</Fine>
+        <Fine>{arrangeWordsHere.same}</Fine>
       </ScrollView>
     </Sheet>
   );
@@ -183,6 +184,8 @@ function TileParts({
   actions: ArrangeActions;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   const { tile, item } = at;
   const chosen = tile.panel ?? '';
@@ -198,13 +201,13 @@ function TileParts({
       <View style={{ padding: 14, borderRadius: 16, backgroundColor: theme.colors.sel }}>
         <ConnectionTile tile={item} size={tile.size} face={face} glyph={glyph} name={item.row.name} still />
       </View>
-      <Part label={A.shows}>
+      <Part label={arrangeWordsHere.shows}>
         {reading ? (
-          <Fine>{A.reading}</Fine>
+          <Fine>{arrangeWordsHere.reading}</Fine>
         ) : couldntRead ? (
-          <Fine>{A.couldntRead}</Fine>
+          <Fine>{arrangeWordsHere.couldntRead}</Fine>
         ) : (
-          <View accessibilityRole="radiogroup" accessibilityLabel={A.shows} style={{ gap: 6 }}>
+          <View accessibilityRole="radiogroup" accessibilityLabel={arrangeWordsHere.shows} style={{ gap: 6 }}>
             {choices.map((c) => (
               <Opt
                 key={c.key || 'figures'}
@@ -218,28 +221,31 @@ function TileParts({
         )}
       </Part>
       {chart ? (
-        <Part label={A.span}>
+        <Part label={arrangeWordsHere.span}>
           <Segmented
-            options={(['1h', '24h', '7d'] as const).map((value) => ({ value, label: A.ranges[value] }))}
+            options={(['1h', '24h', '7d'] as const).map((value) => ({
+              value,
+              label: arrangeWordsHere.ranges[value],
+            }))}
             value={tile.range ?? '24h'}
             onChange={(range) => actions.range(tile.thing, range)}
-            label={A.span}
+            label={arrangeWordsHere.span}
           />
         </Part>
       ) : null}
-      <Part label={A.size}>
+      <Part label={arrangeWordsHere.size}>
         <Shapes
-          label={A.size}
+          label={arrangeWordsHere.size}
           options={(['s', 'w', 'l'] as const).map((value) => ({
             value,
-            label: A.sizes[value],
+            label: arrangeWordsHere.sizes[value],
             cells: SHAPES[value],
           }))}
           value={tile.size}
           onChange={(size) => actions.size(tile.thing, size)}
         />
       </Part>
-      <Part label={A.place}>
+      <Part label={arrangeWordsHere.place}>
         <Moves
           name={item.row.name}
           earlier={first ? null : () => actions.move(tile.thing, -1)}
@@ -277,16 +283,18 @@ function FigureParts({
   actions: ArrangeActions;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <>
       <Head
         icon={<LayoutGrid size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
-        title={A.figureSub(index + 1)}
-        sub={A.figureTitle}
+        title={arrangeWordsHere.figureSub(index + 1)}
+        sub={arrangeWordsHere.figureTitle}
         onClose={onClose}
       />
-      <Part label={A.shows}>
+      <Part label={arrangeWordsHere.shows}>
         <View style={{ gap: 6 }}>
           {groups.map((g, gi) => {
             const thing = g.thing ? glyphOf(g.thing) : null;
@@ -317,7 +325,7 @@ function FigureParts({
                   <Opt
                     key={c.key}
                     name={c.name}
-                    line={c.taken ? A.shownAlready : c.line}
+                    line={c.taken ? arrangeWordsHere.shownAlready : c.line}
                     chosen={c.chosen}
                     disabled={c.taken}
                     onPress={() => actions.top(index, c.top)}
@@ -326,7 +334,11 @@ function FigureParts({
               </View>
             );
           })}
-          {reading ? <Fine>{A.reading}</Fine> : couldntRead ? <Fine>{A.couldntRead}</Fine> : null}
+          {reading ? (
+            <Fine>{arrangeWordsHere.reading}</Fine>
+          ) : couldntRead ? (
+            <Fine>{arrangeWordsHere.couldntRead}</Fine>
+          ) : null}
         </View>
       </Part>
       <View
@@ -337,7 +349,7 @@ function FigureParts({
           alignItems: 'flex-end',
         }}
       >
-        <Button label={A.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
+        <Button label={arrangeWordsHere.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
       </View>
     </>
   );
@@ -356,28 +368,30 @@ function PinParts({
   actions: ArrangeActions;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <>
       <Head
         icon={<Pin size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
         title={pin.title}
-        sub={A.pinSub}
+        sub={arrangeWordsHere.pinSub}
         onClose={onClose}
       />
-      <Part label={A.width}>
+      <Part label={arrangeWordsHere.width}>
         <Shapes
-          label={A.width}
+          label={arrangeWordsHere.width}
           options={(['half', 'full'] as const).map((value) => ({
             value,
-            label: A.pinSizes[value],
+            label: arrangeWordsHere.pinSizes[value],
             cells: value === 'half' ? [1, 0, 1, 0] : [1, 1, 1, 1],
           }))}
           value={size}
           onChange={(s) => actions.pinSize(pin.id, s)}
         />
       </Part>
-      <Part label={A.place}>
+      <Part label={arrangeWordsHere.place}>
         <Moves
           name={pin.title}
           earlier={actions.canPinMove(pin.id, -1) ? () => actions.pinMove(pin.id, -1) : null}
@@ -411,22 +425,24 @@ function AddParts({
   actions: ArrangeActions;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <>
       <Head
         icon={<Plus size={20} color={theme.colors.ink2} strokeWidth={1.75} />}
-        title={A.add}
-        sub={A.addLine(removed.length + pins.length)}
+        title={arrangeWordsHere.add}
+        sub={arrangeWordsHere.addLine(removed.length + pins.length)}
         onClose={onClose}
       />
       {removed.length + pins.length === 0 ? (
         <Text size={14.5} lh={1.45} color={theme.colors.ink2} style={{ paddingHorizontal: 2 }}>
-          {A.addEmpty}
+          {arrangeWordsHere.addEmpty}
         </Text>
       ) : null}
       {removed.length ? (
-        <Part label={A.addTiles}>
+        <Part label={arrangeWordsHere.addTiles}>
           <View style={{ gap: 6 }}>
             {removed.map((r) => {
               const look = glyphOf(r.tile.thing);
@@ -452,7 +468,7 @@ function AddParts({
         </Part>
       ) : null}
       {pins.length ? (
-        <Part label={A.addPins}>
+        <Part label={arrangeWordsHere.addPins}>
           <View style={{ gap: 6 }}>
             {pins.map((p) => (
               <Opt
@@ -474,7 +490,7 @@ function AddParts({
           alignItems: 'flex-end',
         }}
       >
-        <Button label={A.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
+        <Button label={arrangeWordsHere.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
       </View>
     </>
   );
@@ -494,6 +510,8 @@ function Head({
   sub: string;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -524,7 +542,7 @@ function Head({
         feedback="wash"
         ringRadius={10}
         accessibilityRole="button"
-        accessibilityLabel={A.close}
+        accessibilityLabel={arrangeWordsHere.close}
         hitSlop={hitSlopFor(40)}
         style={{ width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
       >
@@ -575,6 +593,8 @@ function Opt({
   icon?: ReactNode;
   onPress: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <Touchable
@@ -583,7 +603,7 @@ function Opt({
       feedback="wash"
       ringRadius={12}
       accessibilityRole={add ? 'button' : 'radio'}
-      accessibilityLabel={add ? `${A.add}: ${name}` : line ? `${name}, ${line}` : name}
+      accessibilityLabel={add ? `${arrangeWordsHere.add}: ${name}` : line ? `${name}, ${line}` : name}
       accessibilityState={add ? { disabled } : { selected: chosen, disabled }}
       style={{
         minHeight: 44,
@@ -713,22 +733,24 @@ function Moves({
   earlier: (() => void) | null;
   later: (() => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   return (
     <View style={{ flexDirection: 'row', gap: 8 }}>
       <Button
-        label={A.earlier}
+        label={arrangeWordsHere.earlier}
         variant="secondary"
         onPress={() => earlier?.()}
         disabled={!earlier}
-        accessibilityLabel={`${A.earlier}: ${name}`}
+        accessibilityLabel={`${arrangeWordsHere.earlier}: ${name}`}
         style={{ flex: 1 }}
       />
       <Button
-        label={A.later}
+        label={arrangeWordsHere.later}
         variant="secondary"
         onPress={() => later?.()}
         disabled={!later}
-        accessibilityLabel={`${A.later}: ${name}`}
+        accessibilityLabel={`${arrangeWordsHere.later}: ${name}`}
         style={{ flex: 1 }}
       />
     </View>
@@ -737,6 +759,8 @@ function Moves({
 
 /** *Remove from Overview* in `bad` and Done, under a hairline (the mock's `.dr-foot`). */
 function Foot({ remove, name, onClose }: { remove: () => void; name: string; onClose: () => void }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -755,15 +779,15 @@ function Foot({ remove, name, onClose }: { remove: () => void; name: string; onC
         feedback="fade"
         ringRadius={8}
         accessibilityRole="button"
-        accessibilityLabel={`${A.remove}: ${name}`}
+        accessibilityLabel={`${arrangeWordsHere.remove}: ${name}`}
         style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 4 }}
       >
         <Text size={14} weight={500} color={theme.colors.bad}>
-          {A.remove}
+          {arrangeWordsHere.remove}
         </Text>
       </Touchable>
       <View style={{ flex: 1 }} />
-      <Button label={A.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
+      <Button label={arrangeWordsHere.done} onPress={onClose} style={{ paddingHorizontal: 18 }} />
     </View>
   );
 }

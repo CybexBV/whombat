@@ -9,24 +9,26 @@
 import {
   holdSaysBadge,
   holdView,
-  KEEP_QUIET_WORDS,
-  LIMIT_WORDS,
+  keepQuietWords,
   type LimitView,
   limitLine,
   limitView,
+  limitWords,
   withoutHoldLine,
 } from '@whombat/client';
 import type { ThingPage, ThingWatchCheck } from '@whombat/core';
+import { formatLocaleOf } from '@whombat/core/i18n';
 import { zonedParts } from '@whombat/core/text';
 import { mobileTranslator } from '../i18n/translate';
 import { type NativeMenuSpec, plainMenu } from './nativeMenu';
-import { RENAME_COPY } from './rename';
+import { renameCopy } from './rename';
 
 export function monitoringCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
+  const quiet = keepQuietWords(locale);
   return {
-    keepQuiet: KEEP_QUIET_WORDS.menu,
-    endNow: KEEP_QUIET_WORDS.endNow,
+    keepQuiet: quiet.menu,
+    endNow: quiet.endNow,
     endNowHint: t('monitoring.monitoringCopy.endNowHint'),
     /** Pick a time's two parts. */
     day: t('monitoring.monitoringCopy.day'),
@@ -37,7 +39,7 @@ export function monitoringCopy(locale?: string) {
     openCauseHint: t('monitoring.monitoringCopy.openCauseHint'),
     history: t('monitoring.monitoringCopy.history'),
     historyLoading: t('monitoring.monitoringCopy.historyLoading'),
-    changeLimit: LIMIT_WORDS.menu,
+    changeLimit: limitWords(locale).menu,
     changeLimitHint: (name: string) => t('monitoring.monitoringCopy.changeLimitHint', { name }),
     /** The ⋯ of a page with nothing else in it. */
     more: (name: string) => t('monitoring.monitoringCopy.more', { name }),
@@ -54,7 +56,9 @@ export interface PickDay {
 const two = (n: number) => String(n).padStart(2, '0');
 
 /** The days Pick a time offers: today and the next `count - 1`, in the Whombat's zone. */
-export function pickDays(now: Date | number, timeZone: string, count = 7): PickDay[] {
+export function pickDays(now: Date | number, timeZone: string, count = 7, locale?: string): PickDay[] {
+  const copy = monitoringCopy(locale);
+  const weekdays = new Intl.DateTimeFormat(formatLocaleOf(locale), { weekday: 'short', timeZone: 'UTC' });
   const t = typeof now === 'number' ? now : now.getTime();
   const out: PickDay[] = [];
   const seen = new Set<string>();
@@ -66,11 +70,10 @@ export function pickDays(now: Date | number, timeZone: string, count = 7): PickD
     const value = `${d.getUTCFullYear()}-${two(d.getUTCMonth() + 1)}-${two(d.getUTCDate())}`;
     if (seen.has(value)) continue;
     seen.add(value);
-    const weekday = new Intl.DateTimeFormat('en-GB', { weekday: 'short', timeZone: 'UTC' }).format(d);
+    const weekday = weekdays.format(d);
     out.push({
       value,
-      label:
-        i === 0 ? MONITORING_COPY.today : i === 1 ? MONITORING_COPY.tomorrow : `${weekday} ${d.getUTCDate()}`,
+      label: i === 0 ? copy.today : i === 1 ? copy.tomorrow : `${weekday} ${d.getUTCDate()}`,
     });
   }
   return out;
@@ -149,21 +152,26 @@ export interface WatchLimitLine {
  * A check's limit as What Whombat watches lists it: the server's line, then each item with its own. Someone who can't
  * change them still reads them, as on the web; only Change is left out. Empty without a limit.
  */
-export function watchLimitLines(check: ThingWatchCheck, mayChange: boolean): WatchLimitLine[] {
-  const line = limitLine(check);
+export function watchLimitLines(
+  check: ThingWatchCheck,
+  mayChange: boolean,
+  locale?: string,
+): WatchLimitLine[] {
+  const line = limitLine(check, locale);
   if (!line) return [];
+  const copy = monitoringCopy(locale);
   return [
     {
       key: check.check,
       text: line.words,
-      spoken: MONITORING_COPY.changeLimitHint(check.name),
-      view: mayChange ? limitView(check) : null,
+      spoken: copy.changeLimitHint(check.name),
+      view: mayChange ? limitView(check, null, locale) : null,
     },
     ...line.items.map((item) => ({
       key: `${check.check}|${item.subject.id}`,
       text: `${item.subject.name} ${item.words}`,
-      spoken: MONITORING_COPY.changeLimitHint(`${check.name} · ${item.subject.name}`),
-      view: mayChange ? limitView(check, item.subject) : null,
+      spoken: copy.changeLimitHint(`${check.name} · ${item.subject.name}`),
+      view: mayChange ? limitView(check, item.subject, locale) : null,
     })),
   ];
 }
@@ -171,15 +179,15 @@ export function watchLimitLines(check: ThingWatchCheck, mayChange: boolean): Wat
 export type MonitoringPick = 'keep_quiet';
 
 /** A page's ⋯ when nothing else is in it: Keep quiet…. */
-export function thingMoreMenu(): NativeMenuSpec {
-  return plainMenu([[{ id: 'keep_quiet', title: MONITORING_COPY.keepQuiet, icon: 'bell.slash' }]]);
+export function thingMoreMenu(locale?: string): NativeMenuSpec {
+  return plainMenu([[{ id: 'keep_quiet', title: monitoringCopy(locale).keepQuiet, icon: 'bell.slash' }]]);
 }
 
 /** A server page's ⋯: Rename, then Keep quiet… where it may be kept quiet. */
-export function serverMoreMenu(keepQuiet: boolean): NativeMenuSpec {
+export function serverMoreMenu(keepQuiet: boolean, locale?: string): NativeMenuSpec {
   return plainMenu([
-    [{ id: 'rename', title: RENAME_COPY.rename, icon: 'pencil' }],
-    keepQuiet ? [{ id: 'keep_quiet', title: MONITORING_COPY.keepQuiet, icon: 'bell.slash' }] : [],
+    [{ id: 'rename', title: renameCopy(locale).rename, icon: 'pencil' }],
+    keepQuiet ? [{ id: 'keep_quiet', title: monitoringCopy(locale).keepQuiet, icon: 'bell.slash' }] : [],
   ]);
 }
 

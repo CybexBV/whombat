@@ -112,7 +112,7 @@ export function SearchScreen({ navigation, route }: Props) {
         you: youLine(youPartsHere({ mode }), rawLocale),
         screen: screenRow,
         news: newsRow,
-        advanced: advancedRowsOnPhone(words.name, { mode }),
+        advanced: advancedRowsOnPhone(words.name, { mode }, rawLocale),
       }),
     [words.Name, words.name, managed, mode, screenRow, newsRow, rawLocale],
   );

@@ -18,7 +18,7 @@ import { Alert, View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { useAgentWords } from '../data/useAgent';
 import { useClearWebSearch, useSetWebSearch, useTestWebSearch } from '../data/useWebSearch';
-import { useI18n, useMobileT } from '../i18n';
+import { mobileTranslator, useI18n, useMobileT } from '../i18n';
 import { openOutside, TextLink } from '../screens/connect/parts';
 import { errorText, outcomeText, showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
@@ -29,7 +29,6 @@ import { type WebSearchTone, webSearchCheckLine, webSearchKeyProblem, webSearchW
 
 /** A row of buttons each as wide as its word, the rest of the width shared (“Use another key” isn't cut). */
 const GROW = { flexGrow: 1 } as const;
-const CANCEL = 'Cancel';
 
 function toneColor(theme: ReturnType<typeof useTheme>, tone: WebSearchTone): string {
   return tone === 'ok'
@@ -42,8 +41,8 @@ function toneColor(theme: ReturnType<typeof useTheme>, tone: WebSearchTone): str
 }
 
 /** What a write's outcome says when it didn't go through; null when it did. */
-function refusalOf(result: Parameters<typeof outcomeText>[0]): string | null {
-  const text = outcomeText(result);
+function refusalOf(result: Parameters<typeof outcomeText>[0], locale: string): string | null {
+  const text = outcomeText(result, locale);
   return text ? `${text.title}. ${text.body}` : null;
 }
 
@@ -55,7 +54,7 @@ export function WebSearchCard() {
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
   const view = bootstrap.burrow.webSearch ?? null;
-  const words = webSearchWords(useAgentWords());
+  const words = webSearchWords(useAgentWords(), rawLocale);
   return (
     <Card>
       {view ? (
@@ -141,6 +140,7 @@ function On({
   removeBody: string;
 }) {
   const { rawLocale } = useI18n();
+  const CANCEL = mobileTranslator(rawLocale).t('settings2.cancel');
   const webSearchCopyHere = webSearchCopy(rawLocale);
 
   const theme = useTheme();
@@ -148,15 +148,15 @@ function On({
   const test = useTestWebSearch(slug);
   const clear = useClearWebSearch(slug);
   const [problem, setProblem] = useState<string | null>(null);
-  const line = webSearchCheckLine(view.check);
+  const line = webSearchCheckLine(view.check, rawLocale);
   const status = line.text ?? webSearchCopyHere.on;
   const checkAgain = () => {
     setProblem(null);
     test.mutate(
       { params: { burrow: slug } },
       {
-        onSuccess: (r) => setProblem(refusalOf(r)),
-        onError: (e) => setProblem(errorText(e)),
+        onSuccess: (r) => setProblem(refusalOf(r, rawLocale)),
+        onError: (e) => setProblem(errorText(e, rawLocale)),
       },
     );
   };
@@ -172,11 +172,11 @@ function On({
             { params: { burrow: slug } },
             {
               onSuccess: (r) => {
-                const refused = refusalOf(r);
+                const refused = refusalOf(r, rawLocale);
                 if (refused) setProblem(refused);
                 else showNotice(webSearchCopyHere.removed);
               },
-              onError: (e) => setProblem(errorText(e)),
+              onError: (e) => setProblem(errorText(e, rawLocale)),
             },
           );
         },
@@ -246,6 +246,7 @@ function On({
 /** The key field and Save (and Cancel while replacing a saved key). Save checks the key with Brave first. */
 function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void; onCancel?: () => void }) {
   const { rawLocale } = useI18n();
+  const CANCEL = mobileTranslator(rawLocale).t('settings2.cancel');
   const webSearchCopyHere = webSearchCopy(rawLocale);
 
   const set = useSetWebSearch(slug);
@@ -261,7 +262,7 @@ function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void;
       { params: { burrow: slug }, body: { apiKey: key.trim() } },
       {
         onSuccess: (r) => {
-          const refused = refusalOf(r);
+          const refused = refusalOf(r, rawLocale);
           if (refused) return setProblem(refused);
           setKey('');
           showNotice(webSearchCopyHere.saved);
@@ -270,7 +271,7 @@ function KeyForm({ slug, onDone, onCancel }: { slug: string; onDone: () => void;
         onError: (e) => {
           const onKey = webSearchKeyProblem(e);
           if (onKey) setKeyProblem(onKey);
-          else setProblem(errorText(e));
+          else setProblem(errorText(e, rawLocale));
         },
       },
     );

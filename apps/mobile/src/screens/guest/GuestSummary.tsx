@@ -63,7 +63,7 @@ export function GuestSummary({
   /** After what waits for a restart: an Incus instance's hints, snapshots and backups (AP-1620). */
   extra?: ReactNode;
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const on = g.state === 'running' || g.state === 'unhealthy';
@@ -77,10 +77,10 @@ export function GuestSummary({
     { retry: false },
   );
   const charts = guestCharts(m.data, g.memoryLimitMb);
-  const backup = guestBackupLine(g, now, timeZone);
-  const pending = pendingLines(config);
+  const backup = guestBackupLine(g, now, timeZone, rawLocale);
+  const pending = pendingLines(config, rawLocale);
   // What waits for a restart has its own card with Restart to apply; the hint would say it twice.
-  const hints = guestHints(g, now, { jobs, pending: config ? pending.length : undefined }).filter(
+  const hints = guestHints(g, now, { jobs, pending: config ? pending.length : undefined }, rawLocale).filter(
     (h) => h.id !== 'pending_changes' || !pending.length,
   );
   const notes = config?.values.description?.trim();
@@ -93,7 +93,7 @@ export function GuestSummary({
         </Text>
       ) : null}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {guestTiles(g).map((t) => (
+        {guestTiles(g, rawLocale).map((t) => (
           <Tile key={t.key} label={t.label} value={t.value} note={t.note} />
         ))}
       </View>
@@ -156,7 +156,7 @@ export function GuestSummary({
         <OneCard label={tMobile('screens.backups')}>
           <View
             accessible
-            accessibilityLabel={`Last backup: ${backup.last}`}
+            accessibilityLabel={tMobile('screens2.guest.lastBackup', { when: backup.last })}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -212,7 +212,7 @@ export function GuestSummary({
       ) : null}
       <OneCard label={tMobile('screens.about-it')}>
         <View style={{ paddingHorizontal: 14, paddingBottom: 14, paddingTop: 2 }}>
-          <Facts facts={guestSummaryFacts(g, serverName)} />
+          <Facts facts={guestSummaryFacts(g, serverName, rawLocale)} />
         </View>
       </OneCard>
     </>

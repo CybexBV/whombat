@@ -15,6 +15,7 @@ import {
 } from '@whombat/core/domain';
 import { useCallback, useEffect, useRef } from 'react';
 import type { CommitResult } from '../http/types';
+import { useI18n } from '../i18n/react';
 import { queryKeys } from '../query/keys';
 import { useWhombat } from '../react/context';
 import { useConnectionWrite } from '../react/mutations';
@@ -84,6 +85,7 @@ export type FindMyTimelineChange = { kind: 'set'; people: string[] } | { kind: '
  */
 export function useFindMyTimelineChange(burrow: string, connectionId: string) {
   const { client } = useWhombat();
+  const { rawLocale: locale } = useI18n();
   const qc = useQueryClient();
   const m = useMutation<CommitResult<FindMyTimelineChanged>, Error, FindMyTimelineChange>({
     mutationFn: (c) => {
@@ -101,13 +103,16 @@ export function useFindMyTimelineChange(burrow: string, connectionId: string) {
   });
   const mutate = useRef(m.mutateAsync);
   mutate.current = m.mutateAsync;
-  const change = useCallback(async (c: FindMyTimelineChange): Promise<string | null> => {
-    try {
-      return commitOutcomeText(await mutate.current(c));
-    } catch (error) {
-      return hostErrorInfo(error).message;
-    }
-  }, []);
+  const change = useCallback(
+    async (c: FindMyTimelineChange): Promise<string | null> => {
+      try {
+        return commitOutcomeText(await mutate.current(c), locale);
+      } catch (error) {
+        return hostErrorInfo(error, locale).message;
+      }
+    },
+    [locale],
+  );
   return { change, pending: m.isPending, asked: m.isPending ? m.variables : undefined };
 }
 
@@ -118,6 +123,7 @@ export function useFindMyTimelineChange(burrow: string, connectionId: string) {
  */
 export function useFindMyTimelineAssistant(burrow: string, connectionId: string) {
   const qc = useQueryClient();
+  const { rawLocale: locale } = useI18n();
   const setTool = useConnectionWrite(api.connections.setTool, burrow);
   const mutate = useRef(setTool.mutateAsync);
   mutate.current = setTool.mutateAsync;
@@ -128,17 +134,17 @@ export function useFindMyTimelineAssistant(burrow: string, connectionId: string)
           params: { burrow, connectionId, tool: FIND_MY_TIMELINE_TOOL.name },
           body: { tier: on ? 'can' : 'off' },
         });
-        if (result.status !== 'ok') return commitOutcomeText(result);
+        if (result.status !== 'ok') return commitOutcomeText(result, locale);
         patchTimelines(qc, connectionId, (t) => ({ ...t, assistantReads: on }));
         void qc.invalidateQueries({
           queryKey: queryKeys.scope(api.connections.findMyTimeline, { connectionId }),
         });
         return null;
       } catch (error) {
-        return hostErrorInfo(error).message;
+        return hostErrorInfo(error, locale).message;
       }
     },
-    [burrow, connectionId, qc],
+    [burrow, connectionId, qc, locale],
   );
   const asked = setTool.isPending ? setTool.variables?.body.tier === 'can' : undefined;
   return { set, pending: setTool.isPending, asked };

@@ -49,6 +49,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { type DotTone, StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
+import { useWebI18n } from '../../i18n/provider';
 import styles from '../settings/SettingsScreen.module.css';
 import k from './Catalog.module.css';
 import { ExternalLink } from './CatalogParts';
@@ -311,18 +312,38 @@ function ImapConnectForm() {
   );
 }
 
-/** “imap.fastmail.com and smtp.fastmail.com” (`imapServersLine`), the names in mono and “and” in the text face. */
+/** Stand-ins for the two names inside the line, so the words between them stay as the language orders them. */
+const IMAP_MARK = '\u0001';
+const SMTP_MARK = '\u0002';
+
+/**
+ * “imap.fastmail.com and smtp.fastmail.com” (`imapServersLine`), the names in mono and the words between them (“and”,
+ * “en”) in the text face. The line is written with stand-ins for the names and cut at them, never at its words.
+ */
 function Hosts({ imapHost, smtpHost }: { imapHost: string; smtpHost: string }) {
-  const [imap, smtp] = imapServersLine({ imapHost, smtpHost }).split(' and ');
+  const { tag } = useWebI18n();
+  if (imapHost === smtpHost)
+    return (
+      <span className={c.mailFoundHosts}>
+        <span className={c.mailHosts}>{imapHost}</span>
+      </span>
+    );
+  const line = imapServersLine({ imapHost: IMAP_MARK, smtpHost: SMTP_MARK }, tag);
   return (
     <span className={c.mailFoundHosts}>
-      <span className={c.mailHosts}>{imap}</span>
-      {smtp && (
-        <>
-          {' and '}
-          <span className={c.mailHosts}>{smtp}</span>
-        </>
-      )}
+      {line
+        .split(new RegExp(`(${IMAP_MARK}|${SMTP_MARK})`))
+        .filter(Boolean)
+        .map((part, i) =>
+          part === IMAP_MARK || part === SMTP_MARK ? (
+            // biome-ignore lint/suspicious/noArrayIndexKey: the line's parts never move.
+            <span key={i} className={c.mailHosts}>
+              {part === IMAP_MARK ? imapHost : smtpHost}
+            </span>
+          ) : (
+            part
+          ),
+        )}
     </span>
   );
 }

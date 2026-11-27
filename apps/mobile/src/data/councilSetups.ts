@@ -6,13 +6,13 @@
  * being saved. The words are the shared ones (`@whombat/client`'s `COUNCIL_SETUP_WORDS`), so the web says the same. Pure.
  */
 import {
-  COUNCIL_SETUP_WORDS,
   COUNCIL_USUAL,
   type CouncilDraft,
   type CouncilSeatView,
   councilDraft,
   councilSeatView,
   councilSetupProblem,
+  councilSetupWords,
 } from '@whombat/client';
 import {
   COUNCIL_ROUNDS_ASKED_MAX,
@@ -62,31 +62,33 @@ export interface CouncilPartView {
 function seatLines(
   seats: readonly CouncilSeatSetup[],
   options: CouncilSetupResponse['options'],
+  locale?: string,
 ): CouncilSeatLine[] {
   return seats.map((seat, i) => ({
     key: `${i}:${seat.provider}:${seat.model}`,
-    ...councilSeatView(seat, options),
+    ...councilSeatView(seat, options, locale),
   }));
 }
 
 /** The part from `councils.setup`'s answer. */
-export function councilPartView(data: CouncilSetupResponse, assistant: string): CouncilPartView {
+export function councilPartView(
+  data: CouncilSetupResponse,
+  assistant: string,
+  locale?: string,
+): CouncilPartView {
+  const w = councilSetupWords(locale);
   const known = data.options !== null;
   const { setup } = data;
-  const seats = seatLines(setup?.seats ?? data.automatic, data.options);
+  const seats = seatLines(setup?.seats ?? data.automatic, data.options, locale);
   const some = seats.length > 0;
-  const text = some ? COUNCIL_SETUP_WORDS.sits : COUNCIL_SETUP_WORDS.sitsUnknown;
-  const hint = some ? COUNCIL_SETUP_WORDS.sitsHint : null;
+  const text = some ? w.sits : w.sitsUnknown;
+  const hint = some ? w.sitsHint : null;
   const summary = some
-    ? COUNCIL_SETUP_WORDS.summary(
-        seats.length,
-        setup?.rounds ?? COUNCIL_USUAL.rounds,
-        setup?.target ?? COUNCIL_USUAL.target,
-      )
+    ? w.summary(seats.length, setup?.rounds ?? COUNCIL_USUAL.rounds, setup?.target ?? COUNCIL_USUAL.target)
     : null;
   const note = seats.find((seat) => seat.note)?.note ?? null;
   return {
-    intro: COUNCIL_SETUP_WORDS.intro(assistant),
+    intro: w.intro(assistant),
     council: {
       yours: !!setup,
       text,
@@ -98,10 +100,7 @@ export function councilPartView(data: CouncilSetupResponse, assistant: string): 
         .filter(Boolean)
         .join('. '),
     },
-    t3:
-      data.t3 === 'ready' && known
-        ? null
-        : COUNCIL_SETUP_WORDS.t3[data.t3 === 'ready' ? 'unreachable' : data.t3],
+    t3: data.t3 === 'ready' && known ? null : w.t3[data.t3 === 'ready' ? 'unreachable' : data.t3],
     editable: known && seats.length >= 2,
     canReset: known && !!setup,
   };
@@ -176,23 +175,24 @@ const menuOf = (items: NativeMenuItem[]): NativeMenuSpec => ({
 export const COUNCIL_TARGETS: readonly number[] = [7, 7.5, 8, 8.5, 9, 9.5, 10];
 
 /** “Score to reach”, 7…10 in halves (one saved outside them still shows, ticked). */
-export function councilTargetPicker(draft: CouncilDraft): CouncilPicker {
+export function councilTargetPicker(draft: CouncilDraft, locale?: string): CouncilPicker {
+  const w = councilSetupWords(locale);
   const targets = COUNCIL_TARGETS.includes(draft.target)
     ? COUNCIL_TARGETS
     : [...COUNCIL_TARGETS, draft.target].sort((a, b) => a - b);
-  const value = COUNCIL_SETUP_WORDS.score(draft.target);
+  const value = w.score(draft.target);
   return {
-    label: COUNCIL_SETUP_WORDS.target,
+    label: w.target,
     value,
     menu: menuOf(
       targets.map((t) => ({
         id: String(t),
-        title: COUNCIL_SETUP_WORDS.score(t),
+        title: w.score(t),
         checked: t === draft.target,
       })),
     ),
     enabled: true,
-    spoken: `${COUNCIL_SETUP_WORDS.target}: ${value}`,
+    spoken: `${w.target}: ${value}`,
   };
 }
 

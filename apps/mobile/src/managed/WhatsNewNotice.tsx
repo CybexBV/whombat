@@ -6,10 +6,11 @@
  * seconds while an update is being installed; no poll of its own otherwise.
  */
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { WHATS_NEW_TEXT, whatsNewRefetchInterval } from '@whombat/client/managed';
+import { whatsNewRefetchInterval, whatsNewText } from '@whombat/client/managed';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, View } from 'react-native';
+import { useI18n } from '../i18n';
 import { secureStore } from '../lib/storage';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -96,6 +97,8 @@ export function useWhatsNewNotice({
 
 /** Drawn as the passkey nudge is: a calm card with its sentence and the two buttons under it. */
 export function WhatsNewNoticeView({ notice }: { notice: WhatsNewNoticeState }) {
+  const { rawLocale } = useI18n();
+  const whatsNewTextHere = whatsNewText(rawLocale);
   const theme = useTheme();
   // Told only once it is drawn with the app in front: not while the app is still loading or in the background.
   const { onScreen } = notice;
@@ -116,11 +119,11 @@ export function WhatsNewNoticeView({ notice }: { notice: WhatsNewNoticeState }) 
       }}
     >
       <Text size={13.5} lh={1.35} color={theme.colors.ink2} style={{ paddingVertical: 8 }}>
-        {WHATS_NEW_TEXT.notice}
+        {whatsNewTextHere.notice}
       </Text>
       <View style={{ flexDirection: 'row', gap: 4, justifyContent: 'flex-end' }}>
-        <Button label={WHATS_NEW_TEXT.see} variant="secondary" onPress={notice.see} />
-        <Button label={WHATS_NEW_TEXT.dismiss} variant="quiet" onPress={notice.dismiss} />
+        <Button label={whatsNewTextHere.see} variant="secondary" onPress={notice.see} />
+        <Button label={whatsNewTextHere.dismiss} variant="quiet" onPress={notice.dismiss} />
       </View>
     </View>
   );

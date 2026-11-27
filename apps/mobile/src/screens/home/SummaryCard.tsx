@@ -6,12 +6,11 @@
  * with their bar, a thing's figure with its small chart), each with its gear while the page is arranged.
  */
 import {
-  ARRANGE_WORDS,
+  arrangeWords,
   type FigureFace,
   type HomeThingRow,
   homeGreeting,
   needsYouWords,
-  OVERVIEW_WORDS,
   type OverviewHeadline,
   overviewWords,
   ownFace,
@@ -24,7 +23,7 @@ import { formatDate, formatWeekday } from '@whombat/core/text';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, View } from 'react-native';
 import { useBurrowBase, useNow } from '../../data/BurrowProvider';
-import { ARRANGED_PHONE_WORDS } from '../../data/overviewArranged';
+import { arrangedPhoneWords } from '../../data/overviewArranged';
 import type { PhoneGlyph } from '../../data/thingLook';
 import { useAgentWords } from '../../data/useAgent';
 import { useI18n } from '../../i18n';
@@ -39,12 +38,14 @@ import { Touchable } from '../../ui/Touchable';
 import { useNeedsYouPress } from '../NeedsYouSheet';
 import { GearButton, PartsBar, Spark, useToneColor } from './ArrangedParts';
 
-const LOOK_INTO_IT = {
-  id: 'handle',
-  kind: 'handle',
-  label: OVERVIEW_WORDS.lookIntoIt,
-  look: 'primary',
-} as const;
+function lookIntoIt(locale?: string | null) {
+  return {
+    id: 'handle',
+    kind: 'handle',
+    label: overviewWords(locale).lookIntoIt,
+    look: 'primary',
+  } as const;
+}
 
 export interface TopFigureInput {
   top: readonly OverviewLayoutTop[];
@@ -76,6 +77,7 @@ export function SummaryCard({
   onGear: (index: number) => void;
 }) {
   const { rawLocale } = useI18n();
+  const ARRANGED_PHONE_WORDS = arrangedPhoneWords(rawLocale);
 
   const theme = useTheme();
   const { me, timeZone } = useBurrowBase();
@@ -133,6 +135,8 @@ export function SummaryCard({
 
 /** Live (mono 11/500 in `okText`) with its dot, which pings unless the person asked for less motion. */
 function LiveMark() {
+  const { rawLocale } = useI18n();
+  const ARRANGED_PHONE_WORDS = arrangedPhoneWords(rawLocale);
   const theme = useTheme();
   const reduced = useReducedMotion();
   const ping = useRef(new Animated.Value(0)).current;
@@ -195,7 +199,7 @@ function Broken({
   const look = () => {
     if (!item) return;
     setBusy(true);
-    void press(item, LOOK_INTO_IT).finally(() => setBusy(false));
+    void press(item, lookIntoIt(rawLocale)).finally(() => setBusy(false));
   };
   return (
     <View style={{ gap: 6 }}>
@@ -269,12 +273,14 @@ function TopFigures({
   arranging,
   onGear,
 }: TopFigureInput & { overview: HomeOverview; arranging: boolean; onGear: (index: number) => void }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const assistant = useAgentWords();
   const faces = useMemo<TopFace[]>(
     () =>
       top.map((t) => {
-        if ('own' in t) return { face: ownFace(t.own, overview, rows, fleet, assistant.name), thing: null };
+        if ('own' in t)
+          return { face: ownFace(t.own, overview, rows, fleet, assistant.name, rawLocale), thing: null };
         const thing = glyphOf(t.thing);
         const view = views?.get(showId(t));
         const face = (view && viewFace(view)) || {
@@ -288,7 +294,7 @@ function TopFigures({
         };
         return { face, thing };
       }),
-    [top, views, rows, fleet, glyphOf, overview, assistant.name],
+    [top, views, rows, fleet, glyphOf, overview, assistant.name, rawLocale],
   );
   if (!faces.length) return null;
   const cells = [faces.slice(0, 2), faces.slice(2, 4)].filter((r) => r.length);
@@ -340,6 +346,8 @@ function FigureCell({
   arranging: boolean;
   onGear: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const arrangeWordsHere = arrangeWords(rawLocale);
   const theme = useTheme();
   const toneColor = useToneColor();
   const spoken = [thing?.name, face.label, `${face.value}${face.unit ? ` ${face.unit}` : ''}`, face.line]
@@ -395,7 +403,7 @@ function FigureCell({
             </Text>
           ) : null}
         </View>
-        {arranging ? <GearButton label={ARRANGE_WORDS.changeFigure} onPress={onGear} /> : null}
+        {arranging ? <GearButton label={arrangeWordsHere.changeFigure} onPress={onGear} /> : null}
       </View>
       {face.parts ? <PartsBar parts={face.parts} /> : null}
       {face.spark ? (

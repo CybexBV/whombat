@@ -41,7 +41,7 @@ export function EditMessageSheet({
   /** Who `@Name` means: `@banjo ` is corrected to `@Banjo ` as it is typed, and saved so (AP-607). */
   mentionTargets?: readonly MentionTarget[];
 }) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const [draft, setDraft] = useState('');
@@ -51,7 +51,7 @@ export function EditMessageSheet({
   }, [target]);
   const original = target?.text ?? '';
   const hasFiles = target?.hasAttachments ?? false;
-  const problem = editProblem(original, draft, hasFiles);
+  const problem = editProblem(original, draft, hasFiles, rawLocale);
   const ready = canSaveEdit(original, draft, hasFiles);
   const input = textMetrics({ size: 15.5, lineHeight: 1.45 });
   return (

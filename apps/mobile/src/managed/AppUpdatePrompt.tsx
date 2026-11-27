@@ -40,7 +40,7 @@ function UpdateSheet({ update, onClose }: { update: AndroidDownload; onClose: ()
 
   const theme = useTheme();
   const install = useAppInstall();
-  const view = install ? installView(install.state, update, managedCopyHere.update.install) : null;
+  const view = install ? installView(install.state, update, managedCopyHere.update.install, rawLocale) : null;
   const going = view !== null && view.label !== managedCopyHere.update.install;
   return (
     <Sheet

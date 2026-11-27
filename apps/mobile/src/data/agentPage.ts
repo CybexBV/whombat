@@ -5,7 +5,8 @@
  * Advanced's (`settings/groups.ts`); an old link to one of them opens there. You change it all (Whombat one-person.md
  * OP-01). Pure.
  */
-import { type AgentGroupPart, agentGroupParts, SETTINGS_GROUP_TEXT } from '@whombat/client';
+import { type AgentGroupPart, agentGroupParts, settingsGroupText } from '@whombat/client';
+import { mobileTranslator } from '../i18n/translate';
 
 export type AgentPart = AgentGroupPart;
 
@@ -16,8 +17,9 @@ export type AgentPart = AgentGroupPart;
 export function agentParts(
   name: string,
   here: { looksAhead?: boolean } = {},
+  locale?: string,
 ): { key: AgentPart; label: string }[] {
-  const labels = SETTINGS_GROUP_TEXT.agent(name);
+  const labels = settingsGroupText(locale).agent(name);
   return agentGroupParts(here).map((key) => ({ key, label: labels[key] }));
 }
 
@@ -27,9 +29,14 @@ export function agentKeyParam(raw: unknown): string | undefined {
 }
 
 /** The page's words (the web's AgentTab). */
-export const AGENT_PAGE_TEXT = {
-  /** The tabs' name for TalkBack. */
-  parts: (name: string) => SETTINGS_GROUP_TEXT.partsLabel(name),
-  loading: (name: string) => `Loading ${name}’s settings`,
-  failed: (name: string) => `Couldn’t load ${name}’s settings. Try again in a moment.`,
-} as const;
+export function agentPageText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The tabs' name for TalkBack. */
+    parts: (name: string) => settingsGroupText(locale).partsLabel(name),
+    loading: (name: string) => t('data.agentPage.loading', { name }),
+    failed: (name: string) => t('data.agentPage.failed', { name }),
+  };
+}
+
+export const AGENT_PAGE_TEXT = agentPageText();

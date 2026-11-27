@@ -9,8 +9,8 @@
 import {
   type GuideActInput,
   VAULT_ASK_FIRST_WAY,
-  VAULT_ASK_KEY_IN,
   vaultAskKept,
+  vaultAskKeyIn,
   vaultAskProblems,
   vaultAskShownFields,
   vaultAskValues,
@@ -25,6 +25,7 @@ import { File } from 'expo-file-system';
 import { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { useAgentWords } from '../data/useAgent';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { textMetrics } from '../theme/type';
@@ -73,6 +74,8 @@ export function VaultAskForm({
   act: (input: GuideActInput) => Promise<VaultAskOutcome>;
   busy: boolean;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultAskKeyInHere = vaultAskKeyIn(rawLocale);
   const theme = useTheme();
   const assistant = useAgentWords().name;
   const [way, setWay] = useState<GuideVaultServerWay>(VAULT_ASK_FIRST_WAY);
@@ -88,8 +91,8 @@ export function VaultAskForm({
   };
 
   const takeKey = (id: string, text: string, label: string) => {
-    if (!text.trim()) return setErrors((e) => ({ ...e, [id]: VAULT_ASK_KEY_IN.nothing }));
-    if (text.length > GUIDE_VALUE_MAX) return setErrors((e) => ({ ...e, [id]: VAULT_ASK_KEY_IN.tooBig }));
+    if (!text.trim()) return setErrors((e) => ({ ...e, [id]: vaultAskKeyInHere.nothing }));
+    if (text.length > GUIDE_VALUE_MAX) return setErrors((e) => ({ ...e, [id]: vaultAskKeyInHere.tooBig }));
     set(id, text);
     setKeyIn(label);
   };
@@ -101,7 +104,7 @@ export function VaultAskForm({
     } catch {
       // nothing to paste
     }
-    takeKey(id, text, VAULT_ASK_KEY_IN.pasted);
+    takeKey(id, text, vaultAskKeyInHere.pasted);
   };
 
   const pick = async (id: string) => {
@@ -109,15 +112,15 @@ export function VaultAskForm({
     try {
       picked = await pickKeyFile();
     } catch {
-      return setErrors((e) => ({ ...e, [id]: VAULT_ASK_KEY_IN.unreadable }));
+      return setErrors((e) => ({ ...e, [id]: vaultAskKeyInHere.unreadable }));
     }
     if (!picked) return;
-    if (picked.text === null) return setErrors((e) => ({ ...e, [id]: VAULT_ASK_KEY_IN.tooBig }));
-    takeKey(id, picked.text, VAULT_ASK_KEY_IN.file(picked.name));
+    if (picked.text === null) return setErrors((e) => ({ ...e, [id]: vaultAskKeyInHere.tooBig }));
+    takeKey(id, picked.text, vaultAskKeyInHere.file(picked.name));
   };
 
   const submit = async () => {
-    const local = vaultAskProblems(ask, shown, values);
+    const local = vaultAskProblems(ask, shown, values, rawLocale);
     setErrors(local);
     setMessage(null);
     if (Object.keys(local).length) return;
@@ -138,7 +141,7 @@ export function VaultAskForm({
     <View style={{ gap: 14 }}>
       {ask.kind === 'server' ? (
         <View accessibilityRole="radiogroup" style={{ gap: 8 }}>
-          {vaultAskWays(assistant).map((w) => (
+          {vaultAskWays(assistant, rawLocale).map((w) => (
             <WayTile
               key={w.id}
               label={w.label}
@@ -326,6 +329,8 @@ function KeyField({
   onPick: () => void;
   onClear: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const vaultAskKeyInHere = vaultAskKeyIn(rawLocale);
   const theme = useTheme();
   const box = {
     flexDirection: 'row' as const,
@@ -351,11 +356,11 @@ function KeyField({
           feedback="wash"
           ringRadius={8}
           accessibilityRole="button"
-          accessibilityLabel={`${VAULT_ASK_KEY_IN.remove}, ${field.label}`}
+          accessibilityLabel={`${vaultAskKeyInHere.remove}, ${field.label}`}
           style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: 6 }}
         >
           <Text size={14} weight={500} color={theme.colors.brand}>
-            {VAULT_ASK_KEY_IN.remove}
+            {vaultAskKeyInHere.remove}
           </Text>
         </Touchable>
       </View>
@@ -368,12 +373,12 @@ function KeyField({
         feedback="wash"
         ringRadius={10}
         accessibilityRole="button"
-        accessibilityLabel={`${VAULT_ASK_KEY_IN.paste}, ${field.label}`}
+        accessibilityLabel={`${vaultAskKeyInHere.paste}, ${field.label}`}
         style={{ ...box, flex: 1 }}
       >
         <Key size={18} color={theme.colors.ink2} strokeWidth={1.75} />
         <Text size={14.5} weight={500}>
-          {VAULT_ASK_KEY_IN.paste}
+          {vaultAskKeyInHere.paste}
         </Text>
       </Touchable>
       <Touchable
@@ -382,12 +387,12 @@ function KeyField({
         feedback="wash"
         ringRadius={10}
         accessibilityRole="button"
-        accessibilityLabel={`${VAULT_ASK_KEY_IN.pick}, ${field.label}`}
+        accessibilityLabel={`${vaultAskKeyInHere.pick}, ${field.label}`}
         style={{ ...box, flex: 1 }}
       >
         <FileText size={18} color={theme.colors.ink2} strokeWidth={1.75} />
         <Text size={14.5} weight={500}>
-          {VAULT_ASK_KEY_IN.pick}
+          {vaultAskKeyInHere.pick}
         </Text>
       </Touchable>
     </View>

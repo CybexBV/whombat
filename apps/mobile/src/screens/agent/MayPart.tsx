@@ -21,6 +21,7 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { agentMayView, type MayConnectionRow, type MaySection, type MayServerRow } from '../../data/agentMay';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -34,6 +35,7 @@ import { useAsksFirstChoice } from '../server/AsksFirst';
 import { Note, type PartProps, PartScroll } from './parts';
 
 export function MayPart({ profile }: PartProps) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { slug } = useBurrowBase();
@@ -58,6 +60,7 @@ export function MayPart({ profile }: PartProps) {
         grants: profile.grants,
         deployWorkflow: host.data?.deployWorkflow,
         commands: allowances.data?.allowances.length ?? (allowances.error ? null : undefined),
+        locale: rawLocale,
       }),
     [
       name,
@@ -73,6 +76,7 @@ export function MayPart({ profile }: PartProps) {
       host.data,
       allowances.data,
       allowances.error,
+      rawLocale,
     ],
   );
   const refreshing = fleet.isRefetching || connections.isRefetching || vault.isRefetching;
@@ -172,12 +176,13 @@ export function MayPart({ profile }: PartProps) {
  * to go first, each with until when and Stop (at once: it takes something away). Shown only while there is one.
  */
 function KeptSitesSection({ agent }: { agent: string }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { slug, timeZone, clock } = useBurrowBase();
   const list = useKeptSites({ params: { burrow: slug } }, { retry: false });
   const stop = useStopKeptSite(slug);
   const [problem, setProblem] = useState<string | null>(null);
-  const t = keptSitesText(agent);
+  const t = keptSitesText(agent, rawLocale);
   const sites = list.data?.sites ?? [];
   if (sites.length === 0) return null;
   const now = clock();
@@ -186,7 +191,7 @@ function KeptSitesSection({ agent }: { agent: string }) {
       <Section title={t.title}>
         <CardLine text={problem} tone="bad" />
         {sites.map((s) => {
-          const until = keptSiteUntil(s.expiresAt, now, timeZone);
+          const until = keptSiteUntil(s.expiresAt, now, timeZone, rawLocale);
           return (
             <View
               key={s.id}

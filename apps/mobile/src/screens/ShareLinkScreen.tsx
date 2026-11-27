@@ -7,10 +7,10 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  SHARE_EXPIRY_OPTIONS,
-  SHARE_TEXT,
   shareContents,
+  shareExpiryOptions,
   shareReadyLine,
+  shareText,
   shareWarningText,
 } from '@whombat/client';
 import { shareErrorText, useCreateShare, useSharePreview } from '@whombat/client/react';
@@ -19,7 +19,7 @@ import { SHARE_DEFAULT_EXPIRY, type ShareExpiry } from '@whombat/core/share';
 import { useMemo, useState } from 'react';
 import { ScrollView, Share, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Card, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -34,6 +34,9 @@ import { switchColors } from '../ui/switchColors';
 type Props = NativeStackScreenProps<RootStackParamList, 'ShareLink'>;
 
 export function ShareLinkScreen({ route, navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const shareTextHere = shareText(rawLocale);
+  const shareExpiryOptionsHere = shareExpiryOptions(rawLocale);
   const { t: tMobile } = useMobileT();
   const { slug, timeZone } = useBurrowBase();
   const theme = useTheme();
@@ -55,7 +58,7 @@ export function ShareLinkScreen({ route, navigation }: Props) {
       <Screen>
         {back}
         <ErrorState
-          text={shareErrorText(preview.error, SHARE_TEXT.failed)}
+          text={shareErrorText(preview.error, shareTextHere.failed)}
           onRetry={() => void preview.refetch()}
         />
       </Screen>
@@ -70,7 +73,11 @@ export function ShareLinkScreen({ route, navigation }: Props) {
   const fitsWithPictures = p.fits.withPictures;
   const keepPictures = pictures && fitsWithPictures && p.pictures > 0;
   const canCreate = p.messages > 0 && (keepPictures ? p.fits.withPictures : p.fits.withoutPictures);
-  const title = made ? SHARE_TEXT.readyTitle : fromMessageId ? SHARE_TEXT.fromHere : SHARE_TEXT.title;
+  const title = made
+    ? shareTextHere.readyTitle
+    : fromMessageId
+      ? shareTextHere.fromHere
+      : shareTextHere.title;
   return (
     <Screen>
       {back}
@@ -80,7 +87,7 @@ export function ShareLinkScreen({ route, navigation }: Props) {
           {made ? (
             <>
               <Text size={15} lh={1.45} color={theme.colors.ink2}>
-                {shareReadyLine(made, timeZone)}
+                {shareReadyLine(made, timeZone, rawLocale)}
               </Text>
               <Card>
                 <Row first title={made.title} meta={made.url} />
@@ -92,31 +99,31 @@ export function ShareLinkScreen({ route, navigation }: Props) {
                   onPress={() => void Share.share({ message: made.url, url: made.url })}
                 />
                 <Button
-                  label={SHARE_TEXT.copy}
+                  label={shareTextHere.copy}
                   variant="secondary"
                   size="lg"
-                  onPress={() => void copyToClipboard(made.url, SHARE_TEXT.copied)}
+                  onPress={() => void copyToClipboard(made.url, shareTextHere.copied, rawLocale)}
                 />
               </View>
-              <Note text={SHARE_TEXT.frozen} />
+              <Note text={shareTextHere.frozen} />
             </>
           ) : (
             <>
               <Text size={15} lh={1.45} color={theme.colors.ink2}>
-                {`“${p.title}” · ${shareContents(p, keepPictures)}`}
+                {`“${p.title}” · ${shareContents(p, keepPictures, rawLocale)}`}
               </Text>
               {p.pictures > 0 ? (
                 <Card>
                   <Row
                     first
-                    title={SHARE_TEXT.pictures}
-                    body={fitsWithPictures ? null : SHARE_TEXT.noPicturesFit}
+                    title={shareTextHere.pictures}
+                    body={fitsWithPictures ? null : shareTextHere.noPicturesFit}
                     action={
                       <Switch
                         value={keepPictures}
                         disabled={!fitsWithPictures}
                         onValueChange={setPictures}
-                        accessibilityLabel={SHARE_TEXT.pictures}
+                        accessibilityLabel={shareTextHere.pictures}
                         {...switchColors(theme, keepPictures)}
                       />
                     }
@@ -125,37 +132,37 @@ export function ShareLinkScreen({ route, navigation }: Props) {
               ) : null}
               <View style={{ gap: 8 }}>
                 <Text size={13} weight={500} color={theme.colors.mut}>
-                  {SHARE_TEXT.expiry}
+                  {shareTextHere.expiry}
                 </Text>
                 <Segmented
-                  label={SHARE_TEXT.expiry}
-                  options={SHARE_EXPIRY_OPTIONS}
+                  label={shareTextHere.expiry}
+                  options={shareExpiryOptionsHere}
                   value={expiry}
                   onChange={setExpiry}
                 />
               </View>
               {p.warnings.length > 0 ? (
-                <Card label={SHARE_TEXT.lookFirst}>
+                <Card label={shareTextHere.lookFirst}>
                   {p.warnings.map((w, i) => (
-                    <Row key={w.kind} first={i === 0} title={shareWarningText(w)} />
+                    <Row key={w.kind} first={i === 0} title={shareWarningText(w, rawLocale)} />
                   ))}
                 </Card>
               ) : null}
               {!p.fits.withoutPictures ? (
                 <Text size={14} color={theme.colors.bad}>
-                  {SHARE_TEXT.tooBig}
+                  {shareTextHere.tooBig}
                 </Text>
               ) : null}
               <Note
-                text={`${SHARE_TEXT.privacy}${p.leftOut > 0 ? ` ${SHARE_TEXT.leftOutNote(p.leftOut)}` : ''}`}
+                text={`${shareTextHere.privacy}${p.leftOut > 0 ? ` ${shareTextHere.leftOutNote(p.leftOut)}` : ''}`}
               />
               {create.isError ? (
                 <Text size={14} color={theme.colors.bad} accessibilityLiveRegion="polite">
-                  {shareErrorText(create.error, SHARE_TEXT.failed)}
+                  {shareErrorText(create.error, shareTextHere.failed)}
                 </Text>
               ) : null}
               <Button
-                label={create.isPending ? SHARE_TEXT.creating : SHARE_TEXT.create}
+                label={create.isPending ? shareTextHere.creating : shareTextHere.create}
                 size="lg"
                 disabled={!canCreate || create.isPending}
                 busy={create.isPending}

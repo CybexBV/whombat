@@ -5,7 +5,6 @@
  * is `@whombat/client`'s `job.ts`; a part the box didn't give is not drawn (`data/job.ts` `jobParts`).
  */
 import {
-  JOB_WORDS,
   type JobQuestion,
   jobAnswer,
   jobChanges,
@@ -14,6 +13,7 @@ import {
   jobPullRequest,
   jobQuestion,
   jobReceipt,
+  jobWords,
 } from '@whombat/client';
 import { useJobActions } from '@whombat/client/react';
 import type { Handoff } from '@whombat/core';
@@ -21,6 +21,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Platform, TextInput, View } from 'react-native';
 import { jobParts, jobToasts, PHONE_FILES } from '../data/job';
 import { showToast } from '../data/toast';
+import { useI18n } from '../i18n';
 import { useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -33,12 +34,13 @@ import { Touchable } from './Touchable';
  * or a check. Pushes stay the assistant's own messages (job-view.md).
  */
 export function useJobToasts(handoffs: readonly Handoff[]): void {
+  const { rawLocale } = useI18n();
   const seen = useRef(new Map<string, Handoff>());
   const first = useRef(true);
   useEffect(() => {
-    for (const t of jobToasts(seen.current, handoffs, null, first.current)) showToast(t.text);
+    for (const t of jobToasts(seen.current, handoffs, null, first.current, rawLocale)) showToast(t.text);
     if (handoffs.length) first.current = false;
-  }, [handoffs]);
+  }, [handoffs, rawLocale]);
 }
 
 /** iOS's 44pt, Android's 48dp. */
@@ -115,8 +117,10 @@ function Kicker({ title, count }: { title: string; count?: string | null }) {
 const PAD = { paddingHorizontal: 14, paddingVertical: 12 } as const;
 
 function PlanPart({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
-  const plan = jobPlan(handoff);
+  const plan = jobPlan(handoff, rawLocale);
   const [open, setOpen] = useState(plan?.open ?? false);
   if (!plan) return null;
   return (
@@ -126,10 +130,10 @@ function PlanPart({ handoff }: { handoff: Handoff }) {
         feedback="fade"
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${JOB_WORDS.plan.title}, ${plan.count}`}
+        accessibilityLabel={`${jobWordsHere.plan.title}, ${plan.count}`}
         style={{ minHeight: TARGET - 12, flexDirection: 'row', alignItems: 'center' }}
       >
-        <Kicker title={JOB_WORDS.plan.title} count={plan.count} />
+        <Kicker title={jobWordsHere.plan.title} count={plan.count} />
         <View style={{ marginLeft: 'auto' }}>
           {open ? (
             <ChevronUp size={16} color={theme.colors.mut} />
@@ -211,9 +215,11 @@ function LinkButton({ label, url }: { label: string; url: string }) {
 
 /** Its pull request and whether it is merged, one tap to open it. */
 function PullRequest({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
-  const pr = jobPullRequest(handoff);
+  const pr = jobPullRequest(handoff, rawLocale);
   if (!pr) return null;
   return (
     <Touchable
@@ -224,7 +230,7 @@ function PullRequest({ handoff }: { handoff: Handoff }) {
       style={{ ...PAD, minHeight: TARGET, flexDirection: 'row', alignItems: 'center', gap: 8 }}
       testID={`job-pull-request-${pr.state}`}
     >
-      <Kicker title={JOB_WORDS.pullRequest.title} />
+      <Kicker title={jobWordsHere.pullRequest.title} />
       <GitPullRequest size={14} color={theme.colors.ink2} strokeWidth={2} />
       <Text size={13} color={theme.colors.ink2} numberOfLines={1} style={{ flexShrink: 1 }}>
         {pr.text}
@@ -234,12 +240,14 @@ function PullRequest({ handoff }: { handoff: Handoff }) {
 }
 
 function Changes({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
-  const changes = jobChanges(handoff, PHONE_FILES);
+  const changes = jobChanges(handoff, PHONE_FILES, rawLocale);
   if (!changes) return null;
   return (
     <View style={[PAD, { paddingBottom: changes.url ? 2 : 12 }]}>
-      <Kicker title={JOB_WORDS.changes.title} count={changes.summary} />
+      <Kicker title={jobWordsHere.changes.title} count={changes.summary} />
       {changes.title ? (
         <Text size={14} color={theme.colors.ink} style={{ marginTop: 6 }}>
           {changes.title}
@@ -270,15 +278,17 @@ function Changes({ handoff }: { handoff: Handoff }) {
           {changes.more}
         </Text>
       ) : null}
-      {changes.url ? <LinkButton label={JOB_WORDS.changes.open} url={changes.url} /> : null}
+      {changes.url ? <LinkButton label={jobWordsHere.changes.open} url={changes.url} /> : null}
     </View>
   );
 }
 
 function Checks({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
-  const checks = jobChecks(handoff);
+  const checks = jobChecks(handoff, rawLocale);
   if (!checks) return null;
   const tone = (t: string) =>
     t === 'ok'
@@ -290,7 +300,7 @@ function Checks({ handoff }: { handoff: Handoff }) {
           : theme.colors.line2;
   return (
     <View style={PAD}>
-      <Kicker title={JOB_WORDS.checks.title} count={checks.count} />
+      <Kicker title={jobWordsHere.checks.title} count={checks.count} />
       {checks.failure ? (
         <Text
           size={14}
@@ -339,6 +349,8 @@ function QuestionPart({
   conversationId: string;
   question: JobQuestion;
 }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const { answer } = useJobActions(slug, conversationId);
   const [sent, setSent] = useState<string | null>(null);
@@ -351,15 +363,15 @@ function QuestionPart({
       });
       if (r.status === 'ok') {
         setSent(label);
-        showToast(JOB_WORDS.question.answered(label));
-      } else showToast(JOB_WORDS.question.failed);
+        showToast(jobWordsHere.question.answered(label));
+      } else showToast(jobWordsHere.question.failed);
     } catch {
-      showToast(JOB_WORDS.question.failed);
+      showToast(jobWordsHere.question.failed);
     }
   };
   return (
     <View style={PAD}>
-      <Kicker title={JOB_WORDS.question.title} />
+      <Kicker title={jobWordsHere.question.title} />
       <Text size={15.5} weight={600} color={theme.colors.ink} style={{ marginTop: 6 }}>
         {question.text}
       </Text>
@@ -412,6 +424,8 @@ function MessageField({
   conversationId: string;
   handoffId: string;
 }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
@@ -423,14 +437,14 @@ function MessageField({
     try {
       const r = await send.mutateAsync({ handoffId, text: t, mode });
       if (r.status !== 'ok') {
-        showToast(JOB_WORDS.message.failed);
+        showToast(jobWordsHere.message.failed);
         return;
       }
-      showToast(mode === 'steer' ? JOB_WORDS.message.sentNow : JOB_WORDS.message.sentNext);
+      showToast(mode === 'steer' ? jobWordsHere.message.sentNow : jobWordsHere.message.sentNext);
       setText('');
       setOpen(false);
     } catch {
-      showToast(JOB_WORDS.message.failed);
+      showToast(jobWordsHere.message.failed);
     }
   };
   if (!open)
@@ -439,7 +453,7 @@ function MessageField({
         onPress={() => setOpen(true)}
         feedback="wash"
         accessibilityRole="button"
-        accessibilityLabel={JOB_WORDS.message.open}
+        accessibilityLabel={jobWordsHere.message.open}
         style={{
           minHeight: TARGET,
           flexDirection: 'row',
@@ -450,7 +464,7 @@ function MessageField({
       >
         <MessageSquare size={15} color={theme.colors.ink2} strokeWidth={1.75} />
         <Text size={14.5} color={theme.colors.ink2}>
-          {JOB_WORDS.message.open}
+          {jobWordsHere.message.open}
         </Text>
       </Touchable>
     );
@@ -461,9 +475,9 @@ function MessageField({
         value={text}
         onChangeText={setText}
         multiline
-        placeholder={JOB_WORDS.message.placeholder}
+        placeholder={jobWordsHere.message.placeholder}
         placeholderTextColor={theme.colors.placeholder}
-        accessibilityLabel={JOB_WORDS.message.open}
+        accessibilityLabel={jobWordsHere.message.open}
         selectionColor={theme.colors.brand}
         style={{
           minHeight: 64,
@@ -486,7 +500,7 @@ function MessageField({
             feedback="fade"
             accessibilityRole="radio"
             accessibilityState={{ checked: mode === m }}
-            accessibilityHint={m === 'steer' ? JOB_WORDS.message.nowHint : JOB_WORDS.message.nextHint}
+            accessibilityHint={m === 'steer' ? jobWordsHere.message.nowHint : jobWordsHere.message.nextHint}
             style={{
               flex: 1,
               minHeight: TARGET,
@@ -499,13 +513,13 @@ function MessageField({
             }}
           >
             <Text size={14} weight={mode === m ? 600 : 400} color={theme.colors.ink}>
-              {m === 'steer' ? JOB_WORDS.message.now : JOB_WORDS.message.next}
+              {m === 'steer' ? jobWordsHere.message.now : jobWordsHere.message.next}
             </Text>
           </Touchable>
         ))}
       </View>
       <Text size={12.5} color={theme.colors.mut}>
-        {mode === 'steer' ? JOB_WORDS.message.nowHint : JOB_WORDS.message.nextHint}
+        {mode === 'steer' ? jobWordsHere.message.nowHint : jobWordsHere.message.nextHint}
       </Text>
       <View style={{ flexDirection: 'row', gap: 8, justifyContent: 'flex-end' }}>
         <Touchable
@@ -518,7 +532,7 @@ function MessageField({
           style={{ minHeight: TARGET, paddingHorizontal: 14, justifyContent: 'center' }}
         >
           <Text size={15} color={theme.colors.ink2}>
-            {JOB_WORDS.message.close}
+            {jobWordsHere.message.close}
           </Text>
         </Touchable>
         <Touchable
@@ -538,7 +552,7 @@ function MessageField({
           }}
         >
           <Text size={15} weight={600} color={theme.colors.btnfg}>
-            {mode === 'steer' ? JOB_WORDS.message.now : JOB_WORDS.message.next}
+            {mode === 'steer' ? jobWordsHere.message.now : jobWordsHere.message.next}
           </Text>
         </Touchable>
       </View>
@@ -547,9 +561,11 @@ function MessageField({
 }
 
 function Receipt({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
-  const r = jobReceipt(handoff);
+  const r = jobReceipt(handoff, rawLocale);
   if (!r) return null;
   const mark =
     r.tone === 'bad' ? theme.colors.bad : r.tone === 'quiet' ? theme.colors.mut : theme.colors.progress;
@@ -608,7 +624,7 @@ function Receipt({ handoff }: { handoff: Handoff }) {
       {r.screenshot ? (
         <Image
           source={{ uri: r.screenshot.url }}
-          accessibilityLabel={r.screenshot.alt || JOB_WORDS.receipt.screenshot}
+          accessibilityLabel={r.screenshot.alt || jobWordsHere.receipt.screenshot}
           style={{
             marginTop: 10,
             width: '100%',
@@ -631,13 +647,15 @@ function Receipt({ handoff }: { handoff: Handoff }) {
  * the phone without T3 Code, the rest there when the thread keeps only its start.
  */
 function Answer({ handoff }: { handoff: Handoff }) {
+  const { rawLocale } = useI18n();
+  const jobWordsHere = jobWords(rawLocale);
   const theme = useTheme();
   const openUrl = useOpenUrl();
   const [open, setOpen] = useState(false);
   const answer = jobAnswer(handoff);
   if (!answer) return null;
   const url = answer.cut ? answer.url : null;
-  const word = open ? JOB_WORDS.answer.hide : JOB_WORDS.answer.read;
+  const word = open ? jobWordsHere.answer.hide : jobWordsHere.answer.read;
   return (
     <View style={{ marginTop: 4 }} testID="job-answer">
       <Touchable
@@ -687,7 +705,7 @@ function Answer({ handoff }: { handoff: Handoff }) {
               feedback="wash"
               ringRadius={theme.radii.button}
               accessibilityRole="link"
-              accessibilityLabel={JOB_WORDS.answer.rest}
+              accessibilityLabel={jobWordsHere.answer.rest}
               style={{
                 alignSelf: 'flex-start',
                 minHeight: TARGET,
@@ -698,7 +716,7 @@ function Answer({ handoff }: { handoff: Handoff }) {
               }}
             >
               <Text size={14} weight={600} color={theme.colors.brand}>
-                {JOB_WORDS.answer.rest}
+                {jobWordsHere.answer.rest}
               </Text>
             </Touchable>
           ) : null}

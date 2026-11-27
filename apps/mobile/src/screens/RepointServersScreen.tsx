@@ -9,14 +9,14 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { REPOINT_TEXT, type RepointRow, repointRowLabel } from '@whombat/client/hosts';
+import { type RepointRow, repointRowLabel, repointText } from '@whombat/client/hosts';
 import { useHostsLive, useRepointServers } from '@whombat/client/hosts/react';
 import { hostRepointWords } from '@whombat/core';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { OVERVIEW_TITLE } from '../data/shell';
+import { overviewTitle } from '../data/shell';
 import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -30,8 +30,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'RepointServers'>;
 
 export function RepointServersScreen({ route, navigation }: Props) {
   const { slug, currentBootstrap } = useBurrowBase();
+  const { rawLocale } = useI18n();
   useHostsLive(currentBootstrap().burrow.id);
-  const back = route.params?.back ?? OVERVIEW_TITLE;
+  const back = route.params?.back ?? overviewTitle(rawLocale);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   return (
     <Screen>
@@ -58,6 +59,7 @@ function Repoint({
   onAddServer: (address: string, title: string) => void;
 }) {
   const { rawLocale } = useI18n();
+  const repointTextHere = repointText(rawLocale);
   const hostRepointWordsHere = hostRepointWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -118,9 +120,9 @@ function Repoint({
             <Button label={hostRepointWordsHere.leaveThem} size="lg" variant="secondary" onPress={onBack} />
           </>
         ) : view.step === 'running' ? (
-          <Button label={REPOINT_TEXT.hide} size="lg" variant="secondary" onPress={onBack} />
+          <Button label={repointTextHere.hide} size="lg" variant="secondary" onPress={onBack} />
         ) : (
-          <Button label={REPOINT_TEXT.done} size="lg" onPress={onBack} />
+          <Button label={repointTextHere.done} size="lg" onPress={onBack} />
         )}
       </Footer>
     </>

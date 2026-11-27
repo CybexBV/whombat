@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coreWords } from '../i18n/catalog.js';
 import { BurrowId, ConversationId, PrincipalId, PullRequestId, RepoId } from '../ids.js';
 import { DiffStat, FileChange, TestCounts, Timestamp, type Tone } from './common.js';
 
@@ -77,12 +78,12 @@ export type Check = z.infer<typeof Check>;
 export const ReviewState = z.enum(['pending', 'approved', 'changes_requested', 'commented']);
 export type ReviewState = z.infer<typeof ReviewState>;
 
-export const REVIEW_STATE_LABELS: Record<ReviewState, string> = {
-  pending: 'Pending',
-  approved: 'Approved',
-  changes_requested: 'Changes requested',
-  commented: 'Commented',
-};
+/** A reviewer's state, in a locale. */
+export function reviewStateLabels(locale?: string | null): Readonly<Record<ReviewState, string>> {
+  return coreWords(locale, 'review.state', ReviewState.options);
+}
+
+export const REVIEW_STATE_LABELS: Record<ReviewState, string> = reviewStateLabels('en');
 
 export const REVIEW_STATE_TONES: Record<ReviewState, Tone> = {
   pending: 'neutral',
@@ -167,15 +168,12 @@ export function prStatus(pr: Pick<PullRequest, 'state' | 'checks' | 'reviewers'>
   return 'in_review';
 }
 
-/** Header chip: "Open · changes requested" → "Open · ready" → "Merged". */
-export const PR_STATUS_LABELS: Record<PrStatus, string> = {
-  merged: 'Merged',
-  closed: 'Closed',
-  changes_requested: 'Open · changes requested',
-  checks_failing: 'Open · checks failing',
-  ready: 'Open · ready',
-  in_review: 'Open · in review',
-};
+/** Header chip: "Open · changes requested" → "Open · ready" → "Merged", in a locale. */
+export function prStatusLabels(locale?: string | null): Readonly<Record<PrStatus, string>> {
+  return coreWords(locale, 'pr.status', PrStatus.options);
+}
+
+export const PR_STATUS_LABELS: Record<PrStatus, string> = prStatusLabels('en');
 
 /** Dot color: ready and merged are ok, everything open and unfinished is warn. */
 export const PR_STATUS_TONES: Record<PrStatus, Tone> = {

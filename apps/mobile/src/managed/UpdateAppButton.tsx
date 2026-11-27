@@ -29,7 +29,8 @@ export function UpdateAppButton({
 
   const update = useAppUpdate(useManaged()?.updates);
   const install = useAppInstall();
-  const view = update && install ? installView(install.state, update, managedCopyHere.update.label) : null;
+  const view =
+    update && install ? installView(install.state, update, managedCopyHere.update.label, rawLocale) : null;
   const button = (
     <Button
       label={view?.label ?? managedCopyHere.update.label}

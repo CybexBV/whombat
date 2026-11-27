@@ -5,18 +5,18 @@
  */
 import {
   EMOJI,
-  EMOJI_GROUP_LABELS,
   EMOJI_GROUPS,
   type Emoji,
   emojiByChar,
+  emojiGroupLabels,
   type LinkPreview,
-  plural,
   pushRecentEmoji,
   QUICK_REACTIONS,
   RECENT_EMOJI_MAX,
   type Reaction,
   searchEmoji,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 export interface ReactionPill {
   value: string;
@@ -32,7 +32,8 @@ export function reactionName(value: string): string {
   return emojiByChar(value)?.name ?? value;
 }
 
-export function reactionPills(reactions: readonly Reaction[]): ReactionPill[] {
+export function reactionPills(reactions: readonly Reaction[], locale?: string): ReactionPill[] {
+  const { t, tp } = mobileTranslator(locale);
   return reactions
     .filter((r) => r.count > 0)
     .map((r) => ({
@@ -42,9 +43,9 @@ export function reactionPills(reactions: readonly Reaction[]): ReactionPill[] {
       accessibilityLabel: `${reactionName(r.value)}, ${
         r.mine
           ? r.count > 1
-            ? `you and ${r.count - 1} more`
-            : 'you'
-          : plural(r.count, 'reaction', 'reactions')
+            ? t('data.reactions.youAndMore', { n: r.count - 1 })
+            : t('data.reactions.you')
+          : tp('data.reactions.count', r.count)
       }`,
     }));
 }
@@ -66,20 +67,22 @@ export interface EmojiSection {
  * What the emoji sheet lists: with a search only its results (best first), else the recent ones (known emoji only,
  * at most `RECENT_EMOJI_MAX`) and every group in core's order.
  */
-export function emojiSections(query: string, recent: readonly string[]): EmojiSection[] {
+export function emojiSections(query: string, recent: readonly string[], locale?: string): EmojiSection[] {
+  const { t } = mobileTranslator(locale);
   if (query.trim()) {
     const found = searchEmoji(query, 96);
-    return found.length ? [{ key: 'results', title: 'RESULTS', emoji: found }] : [];
+    return found.length ? [{ key: 'results', title: t('data.reactions.results'), emoji: found }] : [];
   }
+  const labels = emojiGroupLabels(locale);
   const known = recent
     .map((c) => emojiByChar(c))
     .filter((e): e is Emoji => !!e)
     .slice(0, RECENT_EMOJI_MAX);
   return [
-    ...(known.length ? [{ key: 'recent', title: 'RECENT', emoji: known }] : []),
+    ...(known.length ? [{ key: 'recent', title: t('data.reactions.recent'), emoji: known }] : []),
     ...EMOJI_GROUPS.map((group) => ({
       key: group,
-      title: EMOJI_GROUP_LABELS[group].toUpperCase(),
+      title: labels[group].toUpperCase(),
       emoji: EMOJI.filter((e) => e.group === group),
     })),
   ];
@@ -154,7 +157,8 @@ export function hostOf(url: string): string {
   return (m?.[1] ?? url).replace(/^www\./i, '').toLowerCase();
 }
 
-export function previewCards(previews: readonly LinkPreview[] | undefined): PreviewCard[] {
+export function previewCards(previews: readonly LinkPreview[] | undefined, locale?: string): PreviewCard[] {
+  const { t } = mobileTranslator(locale);
   return (previews ?? [])
     .filter((p) => /^https?:\/\//i.test(p.url) && p.title.trim())
     .slice(0, 3)
@@ -165,7 +169,7 @@ export function previewCards(previews: readonly LinkPreview[] | undefined): Prev
         site,
         title: p.title,
         description: p.description?.trim() || null,
-        accessibilityLabel: `Link: ${p.title}, ${site}`,
+        accessibilityLabel: t('data.reactions.link', { title: p.title, site }),
       };
     });
 }

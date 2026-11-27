@@ -47,7 +47,7 @@ export function useApplianceLine(): ApplianceLine | null | undefined {
   const { mode, timeZone } = useBurrowBase();
   const status = useQuery({ ...applianceStatusQuery(managed), refetchInterval: FIVE_MINUTES });
   return useMemo(() => {
-    if (!managed) return demoApplianceLine(mode);
+    if (!managed) return demoApplianceLine(mode, rawLocale);
     if (!status.data) return status.error ? null : undefined;
     const overview = whombatOverview(
       overviewInput({
@@ -59,7 +59,7 @@ export function useApplianceLine(): ApplianceLine | null | undefined {
         locale: rawLocale,
       }),
     );
-    return managedApplianceLine(overview, updateReady(status.data));
+    return managedApplianceLine(overview, updateReady(status.data), rawLocale);
   }, [managed, mode, status.data, status.error, timeZone, rawLocale]);
 }
 
@@ -79,7 +79,8 @@ export function useSettingsTabDot(): 'ok' | 'warn' | 'bad' | null {
   const assistant = useAssistantFacts();
   const appliance = useApplianceLine();
   const update = useAppUpdate(useManaged()?.updates) !== null;
-  return settingsTabDot({ agent: assistantLine(assistant), appliance: appliance ?? null, update });
+  const { rawLocale } = useI18n();
+  return settingsTabDot({ agent: assistantLine(assistant, rawLocale), appliance: appliance ?? null, update });
 }
 
 /** The list's rows with their lines, as far as each part has answered. */
@@ -90,7 +91,10 @@ export function useSettingsRows(): SettingsRowView[] {
   const appliance = useApplianceLine();
   // The same reads as Settings → Connections, so opening it finds them in the cache.
   const { list, rows } = useConnections();
-  const connections = useMemo(() => (list.data ? connectionsLine(rows) : undefined), [list.data, rows]);
+  const connections = useMemo(
+    () => (list.data ? connectionsLine(rows, locale) : undefined),
+    [list.data, rows, locale],
+  );
   const deskApi = useDeskApi();
   const desk = useDesk(deskApi).data;
   const asked = useDeskScreens(deskApi);

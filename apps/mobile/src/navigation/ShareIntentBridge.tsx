@@ -23,6 +23,7 @@ import {
   sharePayload,
   subscribeShare,
 } from '../data/shareInbox';
+import { deviceLocale } from '../i18n/locale';
 import { navigationRef } from './hooks';
 
 let started = false;
@@ -50,7 +51,8 @@ export function startShareCapture(): void {
   });
   native.addListener('onChange', (event) => {
     try {
-      putShare(sharePayload(parseShareIntent(event.value, {})));
+      // A share arrives outside the app's screens, so photos are named in the phone's own language.
+      putShare(sharePayload(parseShareIntent(event.value, {}), new Date(), deviceLocale()));
     } catch {
       // Not a share we can read: nothing opens.
     }

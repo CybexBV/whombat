@@ -9,7 +9,7 @@ import { backupGuestName, libvirtBackupRows, noBackupGuests } from '@whombat/cli
 import { useHostManageRead } from '@whombat/client/hosts/react';
 import type { HostBackupVolume, HostGuest, HostHint } from '@whombat/core';
 import { useState } from 'react';
-import { useMobileT } from '../../i18n';
+import { useI18n, useMobileT } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { Dot, OneCard, OneRow } from '../../ui/assistant';
@@ -36,6 +36,7 @@ export function LibvirtServerBackups({
   canChange: boolean;
   onOpenGuest: (g: HostGuest, tab: 'backups') => void;
 }) {
+  const { rawLocale } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const list = useHostManageRead(
@@ -46,7 +47,7 @@ export function LibvirtServerBackups({
   const vms = guests.filter((g) => g.platform === 'libvirt');
   const rows =
     list.data?.op === 'backup.list'
-      ? libvirtBackupRows(list.data.items, now, timeZone, (b) => backupGuestName(b, vms))
+      ? libvirtBackupRows(list.data.items, now, timeZone, (b) => backupGuestName(b, vms), rawLocale)
       : [];
   const without = noBackupGuests(hints, serverId, vms);
   const owner = open ? vms.find((g) => g.id === open.guest || g.name === open.guest) : undefined;
@@ -61,9 +62,9 @@ export function LibvirtServerBackups({
               leading={<Dot tone={null} />}
               title={g.name}
               titleMono
-              line="No backup or snapshot in 30 days"
+              line={tMobile('screens2.server.libvirtNoBackup')}
               chevron
-              label={`${g.name}: no backup or snapshot in 30 days`}
+              label={tMobile('screens2.server.libvirtNoBackupName', { name: g.name })}
               hint={tMobile('screens.opens-its-backups')}
               onPress={() => onOpenGuest(g, 'backups')}
             />
@@ -84,7 +85,9 @@ export function LibvirtServerBackups({
                 line={r.line || null}
                 chevron={canChange}
                 label={r.label}
-                {...(canChange ? { hint: 'Restore it or remove it', onPress: () => setOpen(r.backup) } : {})}
+                {...(canChange
+                  ? { hint: tMobile('screens2.backups.restoreOrRemove'), onPress: () => setOpen(r.backup) }
+                  : {})}
               />
             ))
           ) : (
@@ -100,7 +103,7 @@ export function LibvirtServerBackups({
           serverId={serverId}
           platform="libvirt"
           guestId={owner?.id ?? open.guest ?? ''}
-          guestName={owner?.name ?? backupGuestName(open, vms) ?? 'the VM'}
+          guestName={owner?.name ?? backupGuestName(open, vms) ?? tMobile('screens2.server.theVm')}
           backup={open}
           onClose={() => setOpen(null)}
         />

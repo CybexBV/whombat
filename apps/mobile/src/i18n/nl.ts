@@ -1,6 +1,13 @@
+import type { MessageValue } from '@whombat/core/i18n';
 import type { EN } from './en';
+import { DATA_NL } from './messages/data';
+import { SCREENS_NL } from './messages/screens';
+import { SETTINGS_NL } from './messages/settings';
 
 export const NL = {
+  ...DATA_NL,
+  ...SCREENS_NL,
+  ...SETTINGS_NL,
   'language.saveFailed': 'De taal is niet opgeslagen. Probeer het opnieuw.',
   'language.needsUpdate':
     'Je Whombat heeft een update nodig voordat je hier een taal kunt kiezen. Whombats werken zichzelf bij.',
@@ -1005,4 +1012,7 @@ export const NL = {
   'localClaim.account.badEmail': 'Vul een e-mailadres in, bijvoorbeeld jij@example.com.',
   'chat.lastReply': 'Laatste reactie {when}',
   'chat.lastReplyOn': 'Laatste reactie op {date}',
-} satisfies Record<keyof typeof EN, string | { one: string; other: string }>;
+  'demo.leave': 'Verlaten',
+  'places.pick.servers': 'Kies een server om die hier te zien.',
+  'places.pick.connections': 'Kies een koppeling om die hier te zien.',
+} satisfies Record<keyof typeof EN, MessageValue>;

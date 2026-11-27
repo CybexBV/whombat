@@ -6,7 +6,7 @@
  * (`CountsCard`). The words, tags and order are `data/serviceSlots.ts`'s; colours only from the theme.
  */
 
-import { handleTheseView, KEEP_QUIET_WORDS, noticeGroups, thingImageInitial } from '@whombat/client';
+import { handleTheseView, keepQuietWords, noticeGroups, thingImageInitial } from '@whombat/client';
 import type { ThingPagePanel, ThingTone } from '@whombat/core';
 import { createContext, type ReactNode, useContext, useMemo, useState } from 'react';
 import {
@@ -21,7 +21,7 @@ import { useBurrowBase, useNow } from '../../data/BurrowProvider';
 import { dashboardCopy } from '../../data/dashboard';
 import { monitoringCopy } from '../../data/monitoring';
 import { parseQuietPick, quietLineMenu } from '../../data/nativeMenu';
-import { type GalleryItemView, galleryItems, rowsOf, SERVICE_COPY } from '../../data/servicePanels';
+import { type GalleryItemView, galleryItems, rowsOf, serviceCopy } from '../../data/servicePanels';
 import {
   type CountTileView,
   countTiles,
@@ -32,10 +32,10 @@ import {
   liveRows,
   noteParts,
   SHELF_WIDTH,
-  SLOT_COPY,
   SWIPE_GAP,
   shelfShown,
   shelfTag,
+  slotCopy,
   splitHeld,
   stripOrder,
   stripSentence,
@@ -118,21 +118,22 @@ function ToneTag({ text, tone }: { text: string; tone: ThingTone | null }) {
  */
 export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelContext }) {
   const { rawLocale } = useI18n();
+  const keepQuietWordsHere = keepQuietWords(rawLocale);
   const dashboardCopyHere = dashboardCopy(rawLocale);
 
   const theme = useTheme();
   const quiet = ctx.quiet ?? null;
   const agent = useAgentWords();
   const rows = useMemo(
-    () => noticeRows(panel, ctx.tabs, { quiet: !!quiet, askLabel: agent.ask }),
-    [panel, ctx.tabs, quiet, agent.ask],
+    () => noticeRows(panel, ctx.tabs, { quiet: !!quiet, askLabel: agent.ask, locale: rawLocale }),
+    [panel, ctx.tabs, quiet, agent.ask, rawLocale],
   );
   const ordered = useMemo(() => {
     const byId = new Map(rows.map((r) => [r.id, r]));
-    return stripOrder(panel.items)
+    return stripOrder(panel.items, rawLocale)
       .map((n) => byId.get(n.id))
       .filter((r): r is NoticeRowView => !!r);
-  }, [rows, panel.items]);
+  }, [rows, panel.items, rawLocale]);
   const [open, setOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<QuietMenuTarget | null>(null);
@@ -142,7 +143,13 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
   const { shown, more } = foldStrip(lines, open);
   const tone = stripTone(panel.items);
   const color = tone === 'info' ? theme.colors.ink2 : toneOf(theme, tone);
-  const all = handleTheseView(noticeGroups(panel.items).asking, ctx.research, ctx.thing.name, agent.name);
+  const all = handleTheseView(
+    noticeGroups(panel.items, rawLocale).asking,
+    ctx.research,
+    ctx.thing.name,
+    agent.name,
+    rawLocale,
+  );
   const handOver = () => {
     if (!all) return;
     if (ctx.onHandle) return ctx.onHandle(all.fallback.question);
@@ -188,7 +195,7 @@ export function StripCard({ panel, ctx }: { panel: NoticesPanel; ctx: PanelConte
         ) : null}
         {held.length ? (
           <StripFold
-            label={heldOpen ? KEEP_QUIET_WORDS.hideHeld : KEEP_QUIET_WORDS.showHeld(held.length)}
+            label={heldOpen ? keepQuietWordsHere.hideHeld : keepQuietWordsHere.showHeld(held.length)}
             expanded={heldOpen}
             ruled={shown.length > 0}
             onPress={() => setHeldOpen(!heldOpen)}
@@ -335,6 +342,7 @@ function StripLine({
   const monitoringCopyHere = monitoringCopy(rawLocale);
   const quietLineCopyHere = quietLineCopy(rawLocale);
   const thingPageCopyHere = thingPageCopy(rawLocale);
+  const SERVICE_COPY = serviceCopy(rawLocale);
 
   const theme = useTheme();
   const toneColor = useToneColor();
@@ -506,11 +514,12 @@ const MENU_DOT = {
  * them; in a wide page's half: compact rows stacked. Each card is a link when its item has one; its buttons under it.
  */
 export function LiveCard({ panel, ctx }: { panel: GalleryPanel; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const { timeZone } = useBurrowBase();
   const now = useNow();
   const half = useContext(SlotHalfContext);
-  const rows = useMemo(() => liveRows(panel, now, timeZone), [panel, now, timeZone]);
+  const rows = useMemo(() => liveRows(panel, now, timeZone, rawLocale), [panel, now, timeZone, rawLocale]);
   const [page, setPage] = useState(0);
   const [width, setWidth] = useState(0);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) =>
@@ -577,6 +586,8 @@ function PageDots({
   color: string;
   rest: string;
 }) {
+  const { rawLocale } = useI18n();
+  const SLOT_COPY = slotCopy(rawLocale);
   return (
     <View
       accessible
@@ -743,10 +754,14 @@ function LiveItem({
  * for one wears a small tag on its picture (their initial and “Anna asked”); its title and when under it.
  */
 export function ShelfCard({ panel, ctx }: { panel: GalleryPanel; ctx: PanelContext }) {
+  const { rawLocale } = useI18n();
   const { timeZone } = useBurrowBase();
   const now = useNow();
   const half = useContext(SlotHalfContext);
-  const items = useMemo(() => galleryItems(panel, now, timeZone), [panel, now, timeZone]);
+  const items = useMemo(
+    () => galleryItems(panel, now, timeZone, rawLocale),
+    [panel, now, timeZone, rawLocale],
+  );
   const tags = useMemo(() => new Map(panel.items.map((i) => [i.id, shelfTag(i)])), [panel.items]);
   const draw = (it: GalleryItemView) => (
     <ShelfItem item={it} tag={tags.get(it.id) ?? null} shape={panel.shape} ctx={ctx} />

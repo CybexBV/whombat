@@ -16,13 +16,13 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import {
-  INBOX_WORDS,
   type InboxFilter,
   type InboxRow,
   inboxCounts,
   inboxFiltered,
   inboxRows,
-  SETTLE_WORDS,
+  inboxWords,
+  settleWords,
 } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import {
@@ -46,11 +46,11 @@ import {
   parseInboxAction,
 } from '../data/chatInbox';
 import { chatCopy } from '../data/chatRoom';
-import { COPIED_TEXT, messageLinkPath } from '../data/messageActions';
+import { copiedText, messageLinkPath } from '../data/messageActions';
 import { type NativeMenuSpec, plainMenu } from '../data/nativeMenu';
 import { pullSettled, pullTargets } from '../data/pullRefresh';
 import { threadQuery } from '../data/threadPages';
-import { SETTLE_COPY } from '../data/threadSettle';
+import { settleCopy } from '../data/threadSettle';
 import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
 import { usePrefetchThread } from '../data/useThreadOpening';
@@ -84,9 +84,6 @@ const ACTION_SYMBOLS: Record<InboxActionId, string> = {
   share: 'square.and.arrow.up',
 };
 
-/** What TalkBack calls a row's menu sheet. */
-const MENU_LABEL = 'Thread actions';
-
 /** A row's sides, and the room between its icon and its words (where the hairline under it starts). */
 const ROW_SIDE = 16;
 const ICON_GAP = 12;
@@ -108,6 +105,7 @@ export function ChatInbox({
   newChat: { label: string; selected: boolean; onPress: () => void };
 }) {
   const { rawLocale } = useI18n();
+  const inboxWordsHere = inboxWords(rawLocale);
   const chatCopyHere = chatCopy(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -144,8 +142,9 @@ export function ChatInbox({
         now,
         timeZone,
         openRootId,
+        locale: rawLocale,
       }),
-    [threads.threads, unread, me.id, people, words.Name, now, timeZone, openRootId],
+    [threads.threads, unread, me.id, people, words.Name, now, timeZone, openRootId, rawLocale],
   );
   const counts = inboxCounts(rows);
   const shown = inboxFiltered(rows, filter);
@@ -177,9 +176,9 @@ export function ChatInbox({
           const last = view.replies.at(-1)?.id ?? view.root.id;
           readThread({ conversationId, rootId, messageId: last });
         })
-        .catch((error: unknown) => showToast(errorText(error)));
+        .catch((error: unknown) => showToast(errorText(error, rawLocale)));
     },
-    [qc, queries, slug, readThread, conversationId],
+    [qc, queries, slug, readThread, conversationId, rawLocale],
   );
   const act = useCallback(
     (rootId: string, id: InboxActionId) => {
@@ -189,14 +188,14 @@ export function ChatInbox({
           return;
         case 'mark_unread':
           markUnread({ conversationId, rootId });
-          AccessibilityInfo.announceForAccessibility(INBOX_WORDS.markedUnread);
+          AccessibilityInfo.announceForAccessibility(inboxWordsHere.markedUnread);
           return;
         case 'mark_read':
           markRead(rootId);
           return;
         case 'copy_link': {
           const url = webUrl(messageLinkPath({ id: rootId, threadRootId: null }, where, slug));
-          if (url) void copyToClipboard(url, COPIED_TEXT.link);
+          if (url) void copyToClipboard(url, copiedText(rawLocale).link, rawLocale);
           return;
         }
         case 'share':
@@ -204,7 +203,19 @@ export function ChatInbox({
           return;
       }
     },
-    [settle, room, markUnread, conversationId, markRead, webUrl, where, slug, navigation],
+    [
+      settle,
+      room,
+      markUnread,
+      conversationId,
+      markRead,
+      webUrl,
+      where,
+      slug,
+      navigation,
+      inboxWordsHere.markedUnread,
+      rawLocale,
+    ],
   );
   // Elsewhere than iPhone a row's menu is a sheet, for the row it was opened on.
   const [menuFor, setMenuFor] = useState<{ rootId: string; spec: NativeMenuSpec } | null>(null);
@@ -231,7 +242,7 @@ export function ChatInbox({
         // Marked read in Unread, the row leaves that list.
         marksAway={filter === 'unread'}
         selected={isBesideThread(beside, item.rootId)}
-        actions={inboxActions(swipe, { link: canLink, share: canShare })}
+        actions={inboxActions(swipe, { link: canLink, share: canShare }, rawLocale)}
         onOpen={open}
         onPressIn={prefetch}
         onAct={act}
@@ -305,7 +316,7 @@ export function ChatInbox({
         <MenuSheet
           spec={menuFor?.spec ?? null}
           visible={menuFor !== null}
-          label={MENU_LABEL}
+          label={tMobile('screens2.chat.threadActions')}
           onClose={() => setMenuFor(null)}
           onPick={(id) => {
             const target = menuFor;
@@ -335,11 +346,14 @@ function FilterBar({
   onChange: (f: InboxFilter) => void;
   onSettled: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const inboxWordsHere = inboxWords(rawLocale);
+  const settleWordsHere = settleWords(rawLocale);
   const theme = useTheme();
   const items: { value: InboxFilter; label: string; n: number | null; tone: string }[] = [
-    { value: 'all', label: INBOX_WORDS.all, n: null, tone: theme.colors.mut },
-    { value: 'unread', label: INBOX_WORDS.unread, n: counts.unread, tone: theme.chart.chart1 },
-    { value: 'waiting', label: INBOX_WORDS.waiting, n: counts.waiting, tone: theme.colors.warnText },
+    { value: 'all', label: inboxWordsHere.all, n: null, tone: theme.colors.mut },
+    { value: 'unread', label: inboxWordsHere.unread, n: counts.unread, tone: theme.chart.chart1 },
+    { value: 'waiting', label: inboxWordsHere.waiting, n: counts.waiting, tone: theme.colors.warnText },
   ];
   return (
     <View
@@ -357,7 +371,7 @@ function FilterBar({
     >
       <View
         accessibilityRole="tablist"
-        accessibilityLabel={INBOX_WORDS.show}
+        accessibilityLabel={inboxWordsHere.show}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}
       >
         {items.map((it) => {
@@ -402,7 +416,7 @@ function FilterBar({
       <Touchable
         onPress={onSettled}
         accessibilityRole="button"
-        accessibilityLabel={SETTLE_WORDS.settled}
+        accessibilityLabel={settleWordsHere.settled}
         feedback="wash"
         ringRadius={10}
         style={{
@@ -417,7 +431,7 @@ function FilterBar({
         }}
       >
         <Text size={13} color={theme.colors.mut} numberOfLines={1}>
-          {SETTLE_WORDS.settled}
+          {settleWordsHere.settled}
         </Text>
         <ChevronRight size={14} color={theme.colors.mut} strokeWidth={1.8} />
       </Touchable>
@@ -458,21 +472,30 @@ const InboxRowView = memo(function InboxRowView({
   onAct,
   onMenu,
 }: InboxRowProps) {
+  const { rawLocale } = useI18n();
+  const inboxWordsHere = inboxWords(rawLocale);
   const theme = useTheme();
   const isNew = row.unread > 0;
   const trailing = useMemo<SwipeAction[]>(
     () =>
       swipe.settle
-        ? [{ label: SETTLE_COPY.swipe, icon: Check, leaves: true, run: () => onAct(row.rootId, 'settle') }]
+        ? [
+            {
+              label: settleCopy(rawLocale).swipe,
+              icon: Check,
+              leaves: true,
+              run: () => onAct(row.rootId, 'settle'),
+            },
+          ]
         : [],
-    [swipe.settle, onAct, row.rootId],
+    [swipe.settle, onAct, row.rootId, rawLocale],
   );
   const leading = useMemo<SwipeAction[]>(
     () =>
       swipe.mark === 'unread'
         ? [
             {
-              label: INBOX_WORDS.markUnread,
+              label: inboxWordsHere.markUnread,
               icon: Mail,
               tone: 'new',
               run: () => onAct(row.rootId, 'mark_unread'),
@@ -481,7 +504,7 @@ const InboxRowView = memo(function InboxRowView({
         : swipe.mark === 'read'
           ? [
               {
-                label: INBOX_WORDS.markRead,
+                label: inboxWordsHere.markRead,
                 icon: MailOpen,
                 tone: 'new',
                 leaves: marksAway,
@@ -489,7 +512,7 @@ const InboxRowView = memo(function InboxRowView({
               },
             ]
           : [],
-    [swipe.mark, marksAway, onAct, row.rootId],
+    [swipe.mark, marksAway, onAct, row.rootId, inboxWordsHere.markUnread, inboxWordsHere.markRead],
   );
   const spec = useMemo(
     () => plainMenu([actions.map((a) => ({ id: a.id, title: a.title, icon: ACTION_SYMBOLS[a.id] }))]),
@@ -505,7 +528,7 @@ const InboxRowView = memo(function InboxRowView({
       onPressIn={() => onPressIn(row.rootId)}
       {...(hasNativeMenu || actions.length === 0 ? null : { onLongPress: () => onMenu(row.rootId, spec) })}
       feedback="wash"
-      accessibilityLabel={inboxRowLabel(row)}
+      accessibilityLabel={inboxRowLabel(row, rawLocale)}
       accessibilityState={{ selected }}
       // Screen readers can't swipe or hold: the row's actions carry what the swipes and the menu do.
       accessibilityActions={actions.map((a) => ({ name: a.id, label: a.title }))}
@@ -620,6 +643,8 @@ function sameRow(a: InboxRowProps, b: InboxRowProps): boolean {
  * The row's label says it.
  */
 function WaitingChip() {
+  const { rawLocale } = useI18n();
+  const inboxWordsHere = inboxWords(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -633,7 +658,7 @@ function WaitingChip() {
       }}
     >
       <Text size={12} weight={600} color={theme.colors.warnText}>
-        {INBOX_WORDS.waitingForYou}
+        {inboxWordsHere.waitingForYou}
       </Text>
     </View>
   );
@@ -666,8 +691,9 @@ function NewCount({ n }: { n: number }) {
 
 /** A filter with nothing in it: a tick in a circle, its words and, for some, a line under them. */
 function InboxEmpty({ filter }: { filter: InboxFilter }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const words = inboxEmpty(filter);
+  const words = inboxEmpty(filter, rawLocale);
   return (
     <View style={{ alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingVertical: 56 }}>
       <View

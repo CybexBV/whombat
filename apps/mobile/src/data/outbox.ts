@@ -9,6 +9,7 @@
  */
 import { newClientId } from '@whombat/client/query';
 import type { ChatRuntime } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 import type { SecureBox } from './secureBox';
 
 export interface OutboxMessage {
@@ -57,11 +58,13 @@ const TRANSIENT = new Set([
  */
 export function sendOutcome(
   answer: { result: { status: string; message?: string } } | { error: unknown },
+  locale?: string,
 ): SendOutcome {
+  const { t } = mobileTranslator(locale);
   if ('result' in answer) {
     const { result } = answer;
     if (result.status === 'ok' || result.status === 'pending_approval') return { kind: 'sent' };
-    return { kind: 'failed', error: result.message?.trim() || 'Whombat didn’t accept this message.' };
+    return { kind: 'failed', error: result.message?.trim() || t('data.outbox.refused') };
   }
   const error = answer.error as {
     name?: unknown;
@@ -77,9 +80,9 @@ export function sendOutcome(
     const status = typeof error?.status === 'number' ? error.status : 0;
     if (status >= 500 || status === 408 || status === 429) return { kind: 'later' };
     const message = typeof error?.message === 'string' ? error.message.trim() : '';
-    return { kind: 'failed', error: message || 'Whombat didn’t accept this message.' };
+    return { kind: 'failed', error: message || t('data.outbox.refused') };
   }
-  return { kind: 'failed', error: 'Something went wrong. Try again.' };
+  return { kind: 'failed', error: t('data.outbox.wentWrong') };
 }
 
 /** The next message to send: the oldest waiting one whose conversation has nothing failed or sending before it. */
@@ -104,14 +107,15 @@ export function outboxFor(
 }
 
 /** The line under a waiting message. */
-export function outboxLabel(item: Pick<OutboxMessage, 'state' | 'error'>): string {
+export function outboxLabel(item: Pick<OutboxMessage, 'state' | 'error'>, locale?: string): string {
+  const { t } = mobileTranslator(locale);
   switch (item.state) {
     case 'waiting':
-      return 'Waiting to send';
+      return t('data.outbox.waiting');
     case 'sending':
-      return 'Sending…';
+      return t('data.outbox.sending');
     case 'failed':
-      return item.error ? `Not sent · ${item.error}` : 'Not sent';
+      return item.error ? t('data.outbox.notSentWhy', { error: item.error }) : t('data.outbox.notSent');
   }
 }
 
@@ -136,6 +140,8 @@ export function createOutbox(input: {
   /** A message went out (refresh its conversation). */
   onSent?(item: OutboxMessage): void;
   now?: () => number;
+  /** The app's language now, for the reason kept under a message that wasn't sent. */
+  locale?: () => string | undefined;
 }): Outbox {
   const { box, scope } = input;
   const now = input.now ?? Date.now;
@@ -163,7 +169,7 @@ export function createOutbox(input: {
       try {
         outcome = await input.send(next);
       } catch (error) {
-        outcome = sendOutcome({ error });
+        outcome = sendOutcome({ error }, input.locale?.());
       }
       if (!items.some((i) => i.id === next.id)) continue; // deleted while it was on its way
       if (outcome.kind === 'sent') {
@@ -175,7 +181,11 @@ export function createOutbox(input: {
         const attempts = next.attempts + 1;
         // Online, and still no answer after several tries: say so instead of waiting for ever.
         if (attempts >= MAX_ATTEMPTS && input.canSend())
-          update(next.id, { state: 'failed', attempts, error: 'Couldn’t reach your Whombat.' });
+          update(next.id, {
+            state: 'failed',
+            attempts,
+            error: mobileTranslator(input.locale?.()).t('data.outbox.unreachable'),
+          });
         else update(next.id, { state: 'waiting', attempts });
         return;
       }

@@ -21,6 +21,7 @@ import {
   type PicturePlan,
   picturePlan,
 } from '../../data/thingPictures';
+import { useI18n } from '../../i18n';
 import { expoFileApi } from '../../managed/expoFiles';
 import { cachedResourceFile, resourceCacheDir, resourceToCacheFile } from '../../managed/files';
 import { Text } from '../../theme/Text';
@@ -33,7 +34,7 @@ const inflight = new Map<string, Promise<string>>();
 /** The pictures streamed into the cache, the least recently shown going first (`PICTURES_KEPT`). */
 const kept = createPictureLru();
 
-function sessionPicture(plan: SessionPlan): Promise<string> {
+function sessionPicture(plan: SessionPlan, locale: string): Promise<string> {
   const dir = resourceCacheDir(expoFileApi, plan.ref, plan.scope);
   for (const old of kept.touch(dir)) expoFileApi.remove(old);
   let pending = inflight.get(dir);
@@ -42,6 +43,7 @@ function sessionPicture(plan: SessionPlan): Promise<string> {
       scope: plan.scope,
       name: PICTURE_FILE,
       maxBytes: PICTURE_MAX_BYTES,
+      locale,
     }).finally(() => inflight.delete(dir));
     inflight.set(dir, pending);
   }
@@ -54,6 +56,7 @@ function usePictureSource(
   ref: string | null,
 ): { source: ImageURISource | null; failed: boolean } {
   const { slug } = useBurrowBase();
+  const { rawLocale } = useI18n();
   const access = useFileAccess();
   const drawn = useContext(DrawnPictures);
   const plan = useMemo<PicturePlan>(
@@ -73,14 +76,14 @@ function usePictureSource(
   useEffect(() => {
     if (plan.kind !== 'session' || !sessionKey || cached) return;
     let live = true;
-    sessionPicture(plan).then(
+    sessionPicture(plan, rawLocale).then(
       (uri) => live && setFile({ key: sessionKey, uri }),
       () => live && setFile({ key: sessionKey, uri: null }),
     );
     return () => {
       live = false;
     };
-  }, [plan, sessionKey, cached]);
+  }, [plan, sessionKey, cached, rawLocale]);
   return useMemo(() => {
     switch (plan.kind) {
       case 'drawn':

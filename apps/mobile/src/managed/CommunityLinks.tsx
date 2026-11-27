@@ -4,10 +4,11 @@
  * nothing goes through control. Not mocked: the rows of Devices.
  */
 
-import { LINK_TEXT, linkErrorText, linkTimeLeft } from '@whombat/client/managed';
+import { linkErrorText, linkText, linkTimeLeft } from '@whombat/client/managed';
 import { type DeviceLinkCreated, sessionOps } from '@whombat/client/session';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useI18n } from '../i18n';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { copyToClipboard } from '../ui/clipboard';
@@ -48,9 +49,11 @@ function LinkPanel({
  * account, good for five minutes, counted down here; when it runs out, New code. Rendered inside ADD A DEVICE.
  */
 export function DeviceLinkCard() {
+  const { rawLocale } = useI18n();
+  const linkTextHere = linkText(rawLocale);
   const { session } = useManagedOrThrow();
   const theme = useTheme();
-  const t = LINK_TEXT.device;
+  const t = linkTextHere.device;
   const [made, setMade] = useState<DeviceLinkCreated | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -67,7 +70,7 @@ export function DeviceLinkCard() {
       setMade(await sessionOps.linkCreate(session));
       setNow(Date.now());
     } catch (error) {
-      setNote(linkErrorText(error));
+      setNote(linkErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -80,7 +83,7 @@ export function DeviceLinkCard() {
           <Button
             label={t.copy}
             variant="secondary"
-            onPress={() => void copyToClipboard(made.link, t.copied)}
+            onPress={() => void copyToClipboard(made.link, t.copied, rawLocale)}
           />
           <Button label={t.hide} variant="quiet" onPress={() => setMade(null)} />
         </LinkPanel>

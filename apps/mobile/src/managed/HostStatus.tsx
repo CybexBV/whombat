@@ -38,11 +38,11 @@ import {
   chartLabel,
   cpuMeasured,
   dayReadout,
-  HOST_CHARTS,
-  HOST_RANGE_OPTIONS,
   type HostChartKey,
   type HostDiskTone,
+  hostCharts,
   hostDiskTone,
+  hostRangeOptions,
   hostSectionKind,
   nearestMeasured,
   networkReadout,
@@ -126,7 +126,7 @@ export function HostStatusView({
       {kind === 'box' || kind === 'loading' ? (
         <>
           <Segmented
-            options={HOST_RANGE_OPTIONS}
+            options={hostRangeOptions(rawLocale)}
             value={state.range}
             onChange={onRange}
             label={hostStatusCopyHere.rangeGroup}
@@ -220,6 +220,7 @@ function ChartsToggle({ open, onPress }: { open: boolean; onPress: () => void })
 function ChartChips({ value, onChange }: { value: HostChartKey; onChange: (chart: HostChartKey) => void }) {
   const scroller = useRef<ScrollView>(null);
   const lefts = useRef(new Map<HostChartKey, number>());
+  const { rawLocale } = useI18n();
   return (
     <ScrollView
       ref={scroller}
@@ -229,7 +230,7 @@ function ChartChips({ value, onChange }: { value: HostChartKey; onChange: (chart
       // The chips' 7dp hit slop stays inside the row.
       contentContainerStyle={{ gap: 8, paddingVertical: 7 }}
     >
-      {HOST_CHARTS.map((c) => (
+      {hostCharts(rawLocale).map((c) => (
         <View key={c.value} onLayout={(e) => lefts.current.set(c.value, e.nativeEvent.layout.x)}>
           <Chip
             label={c.label}
@@ -302,7 +303,7 @@ function Tiles({ metrics }: { metrics: HostMetrics }) {
   const { rawLocale } = useI18n();
   const hostStatusCopyHere = hostStatusCopy(rawLocale);
 
-  const t = hostTiles(metrics);
+  const t = hostTiles(metrics, rawLocale);
   return (
     <View style={{ gap: 10 }}>
       <View style={{ flexDirection: 'row', gap: 10 }}>
@@ -418,11 +419,11 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
   const { rawLocale } = useI18n();
   const hostStatusCopyHere = hostStatusCopy(rawLocale);
 
-  const rows = hostDayRows(metrics.days);
+  const rows = hostDayRows(metrics.days, rawLocale);
   const scale = hostDayScale(rows);
   const { picked, shown, pick, step } = usePickedDay(rows);
   const row = rows[shown];
-  const readout = row ? dayReadout(row) : null;
+  const readout = row ? dayReadout(row, rawLocale) : null;
   return (
     <StatusCard title={hostStatusCopyHere.perDay} hint={hostStatusCopyHere.perDayHint}>
       <Legend
@@ -438,7 +439,7 @@ function DaysCard({ metrics }: { metrics: HostMetrics }) {
         swatches={['chart1', 'chart2']}
         max={scale.max}
         ticks={scale.ticks}
-        tickLabel={(v) => hostDayTick(v, scale.max)}
+        tickLabel={(v) => hostDayTick(v, scale.max, rawLocale)}
         axis={rows.map((r) => r.axis)}
         height={140}
         label={chartLabel(hostStatusCopyHere.perDay, hostStatusCopyHere.perDayHint)}
@@ -473,13 +474,13 @@ function LineCard({ chart, metrics }: { chart: 'processor' | 'network'; metrics:
   const point = shown === null ? undefined : points[shown];
   const readout = point
     ? processor
-      ? processorReadout(point, range, zone)
-      : networkReadout(point, range, zone)
+      ? processorReadout(point, range, zone, rawLocale)
+      : networkReadout(point, range, zone, rawLocale)
     : null;
   const pickIndex = (i: number | null) => setAt(i === null ? null : (points[i]?.at ?? null));
   const scale = processor ? HOST_CPU_SCALE : hostSpeedScale(points);
   const peak = processor ? hostPeak(metrics.series) : null;
-  const note = hostMeasuringNote(metrics);
+  const note = hostMeasuringNote(metrics, rawLocale);
   const title = processor ? hostStatusCopyHere.processor : hostStatusCopyHere.networkSpeed;
   return (
     <StatusCard
@@ -507,7 +508,7 @@ function LineCard({ chart, metrics }: { chart: 'processor' | 'network'; metrics:
         max={scale.max}
         ticks={scale.ticks}
         tickLabel={processor ? (v) => String(Math.round(v)) : hostSpeedTick}
-        timeTicks={hostTimeTicks(points, range, zone)}
+        timeTicks={hostTimeTicks(points, range, zone, rawLocale)}
         height={processor ? 150 : 140}
         label={chartLabel(
           title,
@@ -553,15 +554,15 @@ function DiskCard({ metrics }: { metrics: HostMetrics }) {
   const theme = useTheme();
   const data = metrics.disks.data;
   const known = data.parts !== null;
-  const rows = hostDiskRows(data);
-  const text = hostDiskText(metrics.disks);
+  const rows = hostDiskRows(data, rawLocale);
+  const text = hostDiskText(metrics.disks, rawLocale);
   return (
     <StatusCard title={hostStatusCopyHere.disk} hint={null}>
       <Text size={12.5} lh={1.4} color={theme.colors.mut} style={{ marginTop: 2 }}>
         {text.used}
       </Text>
       <DiskBar
-        parts={hostDiskBar(data, rows).map((r) => ({
+        parts={hostDiskBar(data, rows, rawLocale).map((r) => ({
           key: r.key,
           bytes: r.bytes,
           color: toneColor(theme, hostDiskTone(r.key, known)),

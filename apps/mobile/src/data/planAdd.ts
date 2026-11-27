@@ -5,6 +5,7 @@
  */
 import { ApiError } from '@whombat/client';
 import { PLAN_MAX_STEPS, type Plan } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /** A step's title: 1–160 characters (the contract's `StepTitle`). */
 export const PLAN_STEP_TITLE_MAX = 160;
@@ -15,10 +16,11 @@ export function canAddStep(plan: Pick<Plan, 'steps'>): boolean {
 }
 
 /** Why Add is held, or null: a title of at most 160 characters. */
-export function addStepProblem(title: string): string | null {
-  const t = title.trim();
-  if (!t) return 'Give the step a title.';
-  if (t.length > PLAN_STEP_TITLE_MAX) return `Keep the title to ${PLAN_STEP_TITLE_MAX} characters.`;
+export function addStepProblem(title: string, locale?: string): string | null {
+  const { t } = mobileTranslator(locale);
+  const trimmed = title.trim();
+  if (!trimmed) return t('data.planAdd.noTitle');
+  if (trimmed.length > PLAN_STEP_TITLE_MAX) return t('data.planAdd.tooLong', { max: PLAN_STEP_TITLE_MAX });
   return null;
 }
 
@@ -28,19 +30,21 @@ export function addStepBody(title: string): { title: string } {
 }
 
 /** The button, and what it says while busy. */
-export function addStepLabel(busy: boolean): string {
-  return busy ? 'Adding…' : 'Add step';
+export function addStepLabel(busy: boolean, locale?: string): string {
+  const { t } = mobileTranslator(locale);
+  return busy ? t('data.planAdd.adding') : t('data.planAdd.add');
 }
 
 /** What went through: “Added “Write the tests”.” */
-export function addStepDoneText(title: string): string {
-  return `Added “${title.trim()}”.`;
+export function addStepDoneText(title: string, locale?: string): string {
+  return mobileTranslator(locale).t('data.planAdd.added', { title: title.trim() });
 }
 
 /** A refusal in the server's words: a plan that's gone, a plan you can't change. */
-export function addStepRefusal(error: unknown): string | null {
+export function addStepRefusal(error: unknown, locale?: string): string | null {
   if (!(error instanceof ApiError)) return null;
-  if (error.status === 404) return 'This plan isn’t here any more.';
-  if (error.code === 'forbidden') return 'You can’t change this plan.';
+  const { t } = mobileTranslator(locale);
+  if (error.status === 404) return t('data.planAdd.gone');
+  if (error.code === 'forbidden') return t('data.planAdd.forbidden');
   return error.message || null;
 }

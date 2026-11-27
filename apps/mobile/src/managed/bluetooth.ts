@@ -6,7 +6,6 @@
  * `bluetooth.test.ts`.
  */
 import {
-  BLUETOOTH_TEXT,
   type BluetoothFoundRow,
   type BluetoothPairing,
   type BluetoothPairingView,
@@ -16,17 +15,22 @@ import {
   bluetoothFoundRows,
   bluetoothScanRunning,
   bluetoothShown,
+  bluetoothText,
 } from '@whombat/client';
-
-const D = BLUETOOTH_TEXT.dialog;
+import { mobileTranslator } from '../i18n/translate';
 
 /** The phone's own words, in BT-11's voice (AP-3758). */
-export const BLUETOOTH_MOBILE_TEXT = {
-  /** The code for TalkBack while it is typed: “4 8 2 9 1 3, 2 of 6 typed”. */
-  typed: (typed: number, total: number) => `${typed} of ${total} typed`,
-  /** What TalkBack calls a device's action sheet. */
-  deviceActions: 'Device actions',
-} as const;
+export function bluetoothMobileText(locale?: string | null) {
+  const { t } = mobileTranslator(locale);
+  return {
+    /** The code for TalkBack while it is typed: “4 8 2 9 1 3, 2 of 6 typed”. */
+    typed: (typed: number, total: number) => t('managed2.bluetooth.typed', { typed, total }),
+    /** What TalkBack calls a device's action sheet. */
+    deviceActions: t('managed2.bluetooth.deviceActions'),
+  } as const;
+}
+
+export const BLUETOOTH_MOBILE_TEXT = bluetoothMobileText();
 
 /* The card -------------------------------------------------------------------------------------------------------- */
 
@@ -77,13 +81,18 @@ export function bluetoothListView(
   now: number = Date.now(),
   /** Devices the box said aren't nearby any more (refused `not_found`): they leave the list until it looks again. */
   gone: readonly string[] = [],
+  locale?: string | null,
 ): BluetoothListView {
   const looking = look.at === 'asking' || bluetoothScanRunning(state?.scan, now);
   const rows = seen
-    ? bluetoothFoundRows(seen, state?.devices ?? []).filter((r) => !gone.includes(r.address))
+    ? bluetoothFoundRows(seen, state?.devices ?? [], locale).filter((r) => !gone.includes(r.address))
     : [];
   const note =
-    look.at === 'failed' ? look.note : !looking && rows.length === 0 && look.at === 'asked' ? D.none : null;
+    look.at === 'failed'
+      ? look.note
+      : !looking && rows.length === 0 && look.at === 'asked'
+        ? bluetoothText(locale).dialog.none
+        : null;
   return { looking, rows, note, canLookAgain: !looking };
 }
 
@@ -99,12 +108,15 @@ export function bluetoothFollowed(
 }
 
 /** The code's digits as TalkBack reads them (AP-3756): “4 8 2 9 1 3”, and while it is typed how many are. */
-export function bluetoothDigitsLabel(view: Pick<BluetoothPairingView, 'digits' | 'phase'>): string | null {
+export function bluetoothDigitsLabel(
+  view: Pick<BluetoothPairingView, 'digits' | 'phase'>,
+  locale?: string | null,
+): string | null {
   if (!view.digits) return null;
   const spoken = view.digits.map((d) => d.digit).join(' ');
   if (view.phase !== 'code') return spoken;
   const typed = view.digits.filter((d) => d.typed).length;
-  return `${spoken}, ${BLUETOOTH_MOBILE_TEXT.typed(typed, view.digits.length)}`;
+  return `${spoken}, ${bluetoothMobileText(locale).typed(typed, view.digits.length)}`;
 }
 
 /** Whether the sheet goes back to the list (AP-3757): the person answered No and that pairing ended. */

@@ -45,7 +45,7 @@ function useVoiceFailure() {
   return (error: unknown) =>
     Alert.alert(
       t('managed.that-didnt-go-through'),
-      localizedVoiceError(voiceSettingErrorText(error), rawLocale),
+      localizedVoiceError(voiceSettingErrorText(error, rawLocale), rawLocale),
     );
 }
 

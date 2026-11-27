@@ -5,7 +5,8 @@
  * receipts and links under the words stay their own elements. Pure.
  */
 import { type Inline, parseMessage, plainMessageText } from '@whombat/core';
-import { SETTLE_COPY } from './threadSettle';
+import { mobileTranslator } from '../i18n/translate';
+import { settleCopy } from './threadSettle';
 
 export interface MessageA11yInput {
   /** Shown above the words; null on the same author's next message. */
@@ -24,6 +25,7 @@ export interface MessageA11yOptions {
   settle: 'settle' | 'open_again' | null;
   /** It has a menu: More. */
   more: boolean;
+  locale?: string | undefined;
 }
 
 export type MessageA11yActionName = 'reply' | 'settle' | 'open_again' | 'more' | 'copy' | `link:${number}`;
@@ -35,15 +37,19 @@ export interface MessageA11y {
   links: string[];
 }
 
-export const MESSAGE_A11Y_WORDS = {
-  reply: 'Reply',
-  more: 'More',
-  copy: 'Copy',
-  pinned: 'Pinned',
-  /** The person's own message in Chat, which shows no name (docs/decisions/chat-threads-cards.md). */
-  yours: 'Your message',
-  open: (what: string) => `Open ${what}`,
-} as const;
+export function messageA11yWords(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    reply: t('data.messageA11y.reply'),
+    more: t('data.messageA11y.more'),
+    copy: t('data.messageA11y.copy'),
+    pinned: t('data.messageA11y.pinned'),
+    /** The person's own message in Chat, which shows no name (docs/decisions/chat-threads-cards.md). */
+    yours: t('data.messageA11y.yours'),
+    open: (what: string) => t('data.messageA11y.open', { what }),
+  } as const;
+}
+export const MESSAGE_A11Y_WORDS = messageA11yWords();
 
 function inlineLinks(nodes: readonly Inline[], out: { href: string; text: string }[]): void {
   for (const n of nodes) {
@@ -81,17 +87,19 @@ export function messageA11y(m: MessageA11yInput, o: MessageA11yOptions): Message
     : plainMessageText(m.text)
         .replace(/\s*\n+\s*/g, ' ')
         .trim();
+  const w = messageA11yWords(o.locale);
+  const settle = settleCopy(o.locale);
   const head = [m.author, m.time].filter(Boolean).join(', ');
-  const label = [head, m.pinned ? MESSAGE_A11Y_WORDS.pinned : null, words].filter(Boolean).join('. ');
+  const label = [head, m.pinned ? w.pinned : null, words].filter(Boolean).join('. ');
   const links = m.deleted ? [] : messageLinks(m.text);
   const actions: MessageA11y['actions'] = [];
-  if (o.reply) actions.push({ name: 'reply', label: MESSAGE_A11Y_WORDS.reply });
-  if (o.settle === 'settle') actions.push({ name: 'settle', label: SETTLE_COPY.swipe });
-  if (o.settle === 'open_again') actions.push({ name: 'open_again', label: SETTLE_COPY.openAgain });
-  if (o.more) actions.push({ name: 'more', label: MESSAGE_A11Y_WORDS.more });
-  if (!m.deleted && words) actions.push({ name: 'copy', label: MESSAGE_A11Y_WORDS.copy });
+  if (o.reply) actions.push({ name: 'reply', label: w.reply });
+  if (o.settle === 'settle') actions.push({ name: 'settle', label: settle.swipe });
+  if (o.settle === 'open_again') actions.push({ name: 'open_again', label: settle.openAgain });
+  if (o.more) actions.push({ name: 'more', label: w.more });
+  if (!m.deleted && words) actions.push({ name: 'copy', label: w.copy });
   links.forEach((l, n) => {
-    actions.push({ name: `link:${n}`, label: MESSAGE_A11Y_WORDS.open(l.text) });
+    actions.push({ name: `link:${n}`, label: w.open(l.text) });
   });
   return { label, actions, links: links.map((l) => l.href) };
 }

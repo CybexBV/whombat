@@ -3,10 +3,20 @@
  * docs/decisions/run-checkout.md RC-08…RC-13) and the run line (AP-668, AP-699). No DOM and no React Native here.
  */
 import type { Run } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { formatDuration } from '@whombat/core/text';
+import { clientTree } from './i18n/catalog';
+import { WORK_AREA_WORDS } from './i18n/messages/chatWork/work';
+
+const words = (locale?: string | null) => clientTree(locale, WORK_AREA_WORDS).runs;
+
+/** Shown before the server's sentence, in a locale: “Needs attention · Banjo stopped without finishing this run.” */
+export function runAttentionLabel(locale?: string | null): string {
+  return words(locale).attention;
+}
 
 /** Shown before the server's sentence: “Needs attention · Banjo stopped without finishing this run.” */
-export const RUN_ATTENTION_LABEL = 'Needs attention';
+export const RUN_ATTENTION_LABEL = runAttentionLabel();
 
 /**
  * Why a live run needs a person (`Run.attention`): the server's sentence as it is, or null when there is none, it is
@@ -37,31 +47,35 @@ export interface RunLineText {
 /** `Run #6 · Done in 1m 12s` and friends; a live run is `Checking`, with its current step (or why it needs a person). */
 export function runLineText(
   run: Pick<Run, 'number' | 'status' | 'activity' | 'summary' | 'attention' | 'startedAt' | 'finishedAt'>,
+  locale?: string | null,
 ): RunLineText {
-  const name = `Run #${run.number}`;
+  const w = words(locale);
+  const name = interpolate(w.name, { number: run.number });
   const took = run.finishedAt
-    ? ` in ${formatDuration(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime())}`
+    ? interpolate(w.tookIn, {
+        time: formatDuration(new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime(), locale),
+      })
     : '';
   const summary = run.summary?.trim() || null;
   switch (run.status) {
     case 'live': {
       const attention = runAttention(run);
       return attention
-        ? { lead: RUN_ATTENTION_LABEL, detail: attention, tone: 'warn' }
-        : { lead: 'Checking', detail: run.activity.trim() || null, tone: 'live' };
+        ? { lead: w.attention, detail: attention, tone: 'warn' }
+        : { lead: w.checking, detail: run.activity.trim() || null, tone: 'live' };
     }
     case 'paused':
-      return { lead: `${name} · Paused`, detail: run.activity.trim() || null, tone: 'warn' };
+      return { lead: interpolate(w.paused, { name }), detail: run.activity.trim() || null, tone: 'warn' };
     case 'done':
-      return { lead: `${name} · Done${took}`, detail: summary, tone: 'ok' };
+      return { lead: interpolate(w.done, { name, took }), detail: summary, tone: 'ok' };
     case 'failed':
       return {
-        lead: `${name} · Failed${took}`,
+        lead: interpolate(w.failed, { name, took }),
         detail: summary ?? (run.activity.trim() || null),
         tone: 'bad',
       };
     case 'taken_over':
-      return { lead: `${name} · Taken over`, detail: summary, tone: 'mut' };
+      return { lead: interpolate(w.takenOver, { name }), detail: summary, tone: 'mut' };
   }
 }
 
@@ -69,17 +83,23 @@ export function runLineText(
 export interface RunLineControls {
   /**
    * “Watch run” while the run is live, also while it needs a person; “Open run” once nothing moves on it any more:
-   * done, failed, taken over, or paused until someone resumes it on the run page.
+   * done, failed, taken over, or paused until someone resumes it on the run page. Always these English words, so a
+   * screen can key its own label on them; `linkText` is the link in the locale asked for.
    */
   link: 'Watch run' | 'Open run';
+  /** The link's words in the locale asked for (“Watch run”, “Uitvoering volgen”). */
+  linkText: string;
   /** Try again on a failed run: the run page's Try again (AP-596). */
   retry: boolean;
 }
 
 /** The run line's link and whether it offers Try again (a failed run). */
-export function runLineControls(run: Pick<Run, 'status'>): RunLineControls {
+export function runLineControls(run: Pick<Run, 'status'>, locale?: string | null): RunLineControls {
+  const w = words(locale);
+  const live = run.status === 'live';
   return {
-    link: run.status === 'live' ? 'Watch run' : 'Open run',
+    link: live ? 'Watch run' : 'Open run',
+    linkText: live ? w.watch : w.open,
     retry: run.status === 'failed',
   };
 }
@@ -112,15 +132,21 @@ export function runControls(status: Run['status']): RunControls {
 }
 
 /** The note after a run control went through (the mock has none; same short sentences as its other toasts). */
-export function runActionToast(action: RunControlAction, agentName: string, branch: string): string {
+export function runActionToast(
+  action: RunControlAction,
+  agentName: string,
+  branch: string,
+  locale?: string | null,
+): string {
+  const t = words(locale).toast;
   switch (action) {
     case 'pause':
-      return `Paused. ${agentName} stopped where it was.`;
+      return interpolate(t.pause, { agentName });
     case 'resume':
-      return `Resumed. ${agentName} picks up where it left off.`;
+      return interpolate(t.resume, { agentName });
     case 'take_over':
-      return `You have ${branch} now. ${agentName} has stopped.`;
+      return interpolate(t.takeOver, { agentName, branch });
     case 'retry':
-      return `Asked ${agentName} to try again.`;
+      return interpolate(t.retry, { agentName });
   }
 }

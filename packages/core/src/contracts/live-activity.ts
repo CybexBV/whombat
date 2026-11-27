@@ -21,6 +21,7 @@ import {
   liveActivityRef,
 } from '../domain/notification.js';
 import type { Run } from '../domain/run.js';
+import { tCore } from '../i18n/catalog.js';
 import { formatRunLabel } from '../text/copy.js';
 import { formatTestsPassing } from '../text/format.js';
 import type { PushPayload } from './notifications.js';
@@ -55,18 +56,22 @@ export function isRunActivityEnded(run: Pick<Run, 'status'>): boolean {
   return run.status === 'done' || run.status === 'failed' || run.status === 'taken_over';
 }
 
-function runStepText(status: Run['status'], currentStep: string | null): string {
+function runStepText(status: Run['status'], currentStep: string | null, locale?: string | null): string {
   switch (status) {
     case 'live':
-      return currentStep ? `Now: ${currentStep}` : 'Working';
+      return currentStep
+        ? tCore(locale, 'liveActivity.now', { step: currentStep })
+        : tCore(locale, 'liveActivity.working');
     case 'paused':
-      return currentStep ? `Paused: ${currentStep}` : 'Paused';
+      return currentStep
+        ? tCore(locale, 'liveActivity.pausedAt', { step: currentStep })
+        : tCore(locale, 'liveActivity.paused');
     case 'done':
-      return 'Done';
+      return tCore(locale, 'liveActivity.done');
     case 'failed':
-      return 'Stopped after an error';
+      return tCore(locale, 'liveActivity.failed');
     case 'taken_over':
-      return 'Taken over';
+      return tCore(locale, 'liveActivity.takenOver');
   }
 }
 
@@ -85,7 +90,7 @@ function runTone(status: Run['status']): Tone {
 }
 
 /** A run's live activity: agent, title, progress, current step and tests. */
-export function runLiveActivity(run: Run, agentName: string): LiveActivityState {
+export function runLiveActivity(run: Run, agentName: string, locale?: string | null): LiveActivityState {
   const currentStep = run.steps.find((s) => s.state === 'active')?.title ?? null;
   const activity: LiveActivity = {
     kind: 'run',
@@ -104,7 +109,11 @@ export function runLiveActivity(run: Run, agentName: string): LiveActivityState 
   };
   const ended = isRunActivityEnded(run);
   const progress = run.status === 'done' ? 100 : clampPercent(run.progress);
-  const text = [agentName, runStepText(run.status, currentStep), run.tests && formatTestsPassing(run.tests)]
+  const text = [
+    agentName,
+    runStepText(run.status, currentStep, locale),
+    run.tests && formatTestsPassing(run.tests, locale),
+  ]
     .filter(Boolean)
     .join(' · ');
   return {
@@ -114,7 +123,7 @@ export function runLiveActivity(run: Run, agentName: string): LiveActivityState 
       key: liveActivityRef(activity),
       kind: 'run',
       number: run.number,
-      label: formatRunLabel(run.status),
+      label: formatRunLabel(run.status, locale),
       tone: runTone(run.status),
       title: run.title,
       text,
@@ -134,7 +143,11 @@ export function isApprovalActivityEnded(approval: Approval): boolean {
 }
 
 /** An approval's live activity: question, conditions met and state (`NEEDS A PERSON` … `DEPLOYED`). */
-export function approvalLiveActivity(approval: Approval, requesterName: string): LiveActivityState {
+export function approvalLiveActivity(
+  approval: Approval,
+  requesterName: string,
+  locale?: string | null,
+): LiveActivityState {
   const conditionsMet = approval.conditions.filter((c) => c.met).length;
   const conditionsTotal = approval.conditions.length;
   const activity: LiveActivity = {
@@ -149,7 +162,12 @@ export function approvalLiveActivity(approval: Approval, requesterName: string):
     state: approval.state,
   };
   // The label and tone do not depend on names or time: the viewer-independent part of the card's copy.
-  const view = approvalView(approval, { names: () => undefined, now: approval.createdAt, timeZone: 'UTC' });
+  const view = approvalView(approval, {
+    names: () => undefined,
+    now: approval.createdAt,
+    timeZone: 'UTC',
+    locale,
+  });
   const ended = isApprovalActivityEnded(approval);
   const segments = Math.max(1, Math.min(12, conditionsTotal));
   return {
@@ -164,7 +182,11 @@ export function approvalLiveActivity(approval: Approval, requesterName: string):
       title: approval.question,
       text:
         conditionsTotal > 0
-          ? `${requesterName} · ${conditionsMet} of ${conditionsTotal} conditions met`
+          ? tCore(locale, 'liveActivity.conditions', {
+              requester: requesterName,
+              met: conditionsMet,
+              total: conditionsTotal,
+            })
           : requesterName,
       progress: conditionsTotal > 0 ? clampPercent((conditionsMet / conditionsTotal) * 100) : 0,
       segments,
@@ -199,6 +221,7 @@ export function liveActivityPush(
   state: Pick<LiveActivityState, 'activity' | 'display'>,
   event: LiveActivityEventType,
   burrowSlug: string,
+  locale?: string | null,
 ): PushPayload {
   const { activity, display } = state;
   const liveActivity = { event, activity, display };
@@ -207,7 +230,7 @@ export function liveActivityPush(
       burrow: burrowSlug,
       notificationId: null,
       kind: 'run_progress',
-      title: `${activity.agentName} · Run #${activity.number}`,
+      title: tCore(locale, 'liveActivity.runTitle', { agent: activity.agentName, number: activity.number }),
       body: activity.currentStep ?? activity.title,
       path: linkPath(burrowSlug, { type: 'run', number: activity.number }),
       run: {
@@ -223,13 +246,16 @@ export function liveActivityPush(
     burrow: burrowSlug,
     notificationId: null,
     kind: 'approval_updated',
-    title: `Approval #${activity.number}`,
+    title: tCore(locale, 'liveActivity.approvalTitle', { number: activity.number }),
     body: activity.question,
     path: linkPath(burrowSlug, { type: 'approval', number: activity.number }),
     approval: {
       number: activity.number,
       state: activity.state,
-      label: `${activity.conditionsMet} of ${activity.conditionsTotal}`,
+      label: tCore(locale, 'liveActivity.of', {
+        met: activity.conditionsMet,
+        total: activity.conditionsTotal,
+      }),
     },
     liveActivity,
   };

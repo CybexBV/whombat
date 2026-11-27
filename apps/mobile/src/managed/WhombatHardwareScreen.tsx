@@ -13,7 +13,7 @@ import type { RootStackParamList } from '../navigation/routes';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
 import { useBottomRoom } from '../ui/screenBottom';
 import { HardwareSection } from './HardwareSection';
-import { MACHINE_TEXT } from './machine';
+import { machineText } from './machine';
 import { useApplianceStatus } from './useApplianceStatus';
 import { useMachineHere } from './useMachine';
 
@@ -33,7 +33,7 @@ export function WhombatHardwareScreen() {
         onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('WhombatAbout'))}
       />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>
-        <LargeTitle title={MACHINE_TEXT.hardware} />
+        <LargeTitle title={machineText(rawLocale).hardware} />
         <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
           <HardwareSection machine={machine} runtime={status?.appliance.runtimeVersion ?? null} />
         </View>

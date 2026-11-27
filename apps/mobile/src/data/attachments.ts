@@ -11,6 +11,7 @@ import {
   formatFileSize,
   isPageSet,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /** A file chosen in the photo or document picker. */
 export interface PickedFile {
@@ -33,12 +34,13 @@ export function fromImageAsset(
   },
   index = 0,
   now: Date = new Date(),
+  locale?: string,
 ): PickedFile | null {
   if (!asset.fileSize) return null;
   const ext = asset.mimeType?.split('/')[1]?.replace('jpeg', 'jpg') ?? 'jpg';
   return {
     uri: asset.uri,
-    name: photoName(asset.fileName, ext, index, now),
+    name: photoName(asset.fileName, ext, index, now, locale),
     type: asset.mimeType ?? '',
     size: asset.fileSize,
   };
@@ -54,6 +56,7 @@ export function photoName(
   ext: string,
   index: number,
   now: Date,
+  locale?: string,
 ): string {
   const name = fileName?.trim() ?? '';
   const stem = name.replace(/\.[^.]*$/, '');
@@ -61,7 +64,8 @@ export function photoName(
   const two = (n: number) => String(n).padStart(2, '0');
   const day = `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;
   const extension = /\.([A-Za-z0-9]+)$/.exec(name)?.[1] ?? ext;
-  return `Photo ${day} ${two(now.getHours())}.${two(now.getMinutes())}${index > 0 ? ` (${index + 1})` : ''}.${extension}`;
+  const photo = mobileTranslator(locale).t('data.attachments.photo');
+  return `${photo} ${day} ${two(now.getHours())}.${two(now.getMinutes())}${index > 0 ? ` (${index + 1})` : ''}.${extension}`;
 }
 
 /**
@@ -165,8 +169,8 @@ export function fileTile(
 }
 
 /** “PDF · 2.4 MB”, “Text · 812 KB”, “File · 3 MB”. */
-export function attachmentMeta(a: Pick<Attachment, 'kind' | 'size'>): string {
-  const label = { image: 'Image', text: 'Text', document: 'PDF', file: 'File' }[a.kind];
+export function attachmentMeta(a: Pick<Attachment, 'kind' | 'size'>, locale?: string): string {
+  const label = mobileTranslator(locale).t(`data.attachments.kind.${a.kind}`);
   return `${label} · ${formatFileSize(a.size)}`;
 }
 

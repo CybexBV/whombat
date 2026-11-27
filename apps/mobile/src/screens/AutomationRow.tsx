@@ -10,7 +10,7 @@
 import type { AutomationListRow, AutomationStateTone } from '@whombat/client';
 import { useGitHubAvatar } from '@whombat/client/react';
 import type { AutomationSource } from '@whombat/core';
-import { SCHEDULE_STATUS_LABELS } from '@whombat/core';
+import { scheduleStatusLabels } from '@whombat/core';
 import { useState } from 'react';
 import { Image, Platform, View } from 'react-native';
 import {
@@ -400,6 +400,8 @@ export function OnlyTellsYouRowView({
   busy: boolean;
   onPress: (action: ScheduleAction, row: ScheduleRow) => void;
 }) {
+  const { rawLocale } = useI18n();
+  const scheduleStatusLabelsHere = scheduleStatusLabels(rawLocale);
   const theme = useTheme();
   return (
     <View
@@ -434,7 +436,7 @@ export function OnlyTellsYouRowView({
             </Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <StatusDot color={toneColor(theme, row.tone)} label={SCHEDULE_STATUS_LABELS[row.status]} />
+            <StatusDot color={toneColor(theme, row.tone)} label={scheduleStatusLabelsHere[row.status]} />
             <Text size={13} lh={1.4} color={theme.colors.ink2} style={{ flex: 1 }}>
               {row.when}
             </Text>

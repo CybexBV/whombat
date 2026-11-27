@@ -10,6 +10,7 @@ import { formatTaskDuration, taskCardElapsedMs } from '@whombat/core';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, View } from 'react-native';
 import type { TaskCardModel } from '../data/messages';
+import { useMobileT } from '../i18n';
 import { TASK_SECONDS_BELOW_MS } from '../lib/elapsed';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -67,6 +68,7 @@ export function LiveTaskCardView({
   mark?: MarkLike | null;
   onOpenServer: () => void;
 }) {
+  const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const reduced = useReducedMotion();
   const nowMs = useElapsedClock(clock, task.startedAt, TASK_SECONDS_BELOW_MS);
@@ -97,7 +99,7 @@ export function LiveTaskCardView({
     >
       <View
         accessible
-        accessibilityLabel={`${task.label}, ${task.state}, ${elapsed} so far`}
+        accessibilityLabel={`${task.label}, ${task.state}, ${tMobile('screens2.chat.soFar', { elapsed })}`}
         style={{ gap: 8 }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -125,7 +127,7 @@ export function LiveTaskCardView({
         onPress={onOpenServer}
         feedback="wash"
         accessibilityRole="link"
-        accessibilityLabel={`Open ${task.server}`}
+        accessibilityLabel={tMobile('screens2.common.openName', { name: task.server })}
         ringRadius={10}
         style={{
           alignSelf: 'flex-start',

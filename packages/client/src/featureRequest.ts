@@ -6,18 +6,26 @@
  */
 import {
   FEATURE_DECLINE_REASON_MAX,
-  FEATURE_REQUEST_WORDS,
   type FeatureDecisionChoice,
   type FeatureRequestView,
+  featureRequestWords,
   featureValueText,
   type TrackerDecideBody,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from './i18n/catalog';
+import { AUTOMATIONS_AREA_WORDS } from './i18n/messages/chatWork/automations';
+
+const words = (locale?: string | null) => clientTree(locale, AUTOMATIONS_AREA_WORDS).feature;
+
+/** The apps' own words on the card, beside core's, in a locale (English when none). */
+export function featureCardText(locale?: string | null) {
+  /** The fold with both drafts. */
+  return { reads: words(locale).reads };
+}
 
 /** The apps' own words on the card, beside core's. */
-export const FEATURE_CARD_TEXT = {
-  /** The fold with both drafts. */
-  reads: 'What the customer reads',
-} as const;
+export const FEATURE_CARD_TEXT = featureCardText();
 
 /** The longest reason or question a person sends (the contract's limit). */
 export const FEATURE_NOTE_MAX = FEATURE_DECLINE_REASON_MAX;
@@ -54,36 +62,43 @@ export function canSendNote(text: string): boolean {
 /** What the fold shows: each answer the customer could read, with its label; an empty draft is left out. */
 export function customerReads(
   view: Pick<FeatureRequestView, 'approvedMessage' | 'declinedMessage'>,
+  locale?: string | null,
 ): FeatureReadView[] {
+  const w = featureRequestWords(locale);
   const reads: FeatureReadView[] = [
-    { id: 'approved', label: FEATURE_REQUEST_WORDS.ifApproved, text: view.approvedMessage.trim() },
-    { id: 'declined', label: FEATURE_REQUEST_WORDS.ifDeclined, text: view.declinedMessage.trim() },
+    { id: 'approved', label: w.ifApproved, text: view.approvedMessage.trim() },
+    { id: 'declined', label: w.ifDeclined, text: view.declinedMessage.trim() },
   ];
   return reads.filter((r) => r.text !== '');
 }
 
 /** The value chip's name for screen readers: “Value 7 of 10”; “Not scored” without one. */
-export function featureValueLabel(value: number | null): string {
+export function featureValueLabel(value: number | null, locale?: string | null): string {
   return value === null
-    ? featureValueText(null)
-    : `${FEATURE_REQUEST_WORDS.value} ${featureValueText(value)}`;
+    ? featureValueText(null, locale)
+    : `${featureRequestWords(locale).value} ${featureValueText(value, locale)}`;
 }
 
 /** The card's and its line's name: “Feature request: Schedule rollouts for the evening”. */
-export function featureRequestLabel(view: Pick<FeatureRequestView, 'title'>): string {
-  return `${FEATURE_REQUEST_WORDS.label}: ${view.title}`;
+export function featureRequestLabel(view: Pick<FeatureRequestView, 'title'>, locale?: string | null): string {
+  return `${featureRequestWords(locale).label}: ${view.title}`;
 }
 
 /** The toast once the answer is kept: what happens next, in a sentence. */
-export function featureDecidedToast(choice: FeatureDecisionChoice, agent: string): string {
+export function featureDecidedToast(
+  choice: FeatureDecisionChoice,
+  agent: string,
+  locale?: string | null,
+): string {
+  const w = words(locale);
   switch (choice) {
     case 'approve':
-      return `Approved. ${agent} tells the customer it’s planned.`;
+      return interpolate(w.approve, { agent });
     case 'build':
-      return `Approved. ${agent} tells the customer it’s being built.`;
+      return interpolate(w.build, { agent });
     case 'decline':
-      return `Declined. ${agent} tells the customer why.`;
+      return interpolate(w.decline, { agent });
     case 'ask':
-      return `${agent} asks the customer. Their answer comes back here.`;
+      return interpolate(w.ask, { agent });
   }
 }

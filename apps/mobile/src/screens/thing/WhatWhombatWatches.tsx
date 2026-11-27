@@ -20,7 +20,7 @@ import type { ThingWatch } from '@whombat/core';
 import { useMemo, useState } from 'react';
 import { Switch, View } from 'react-native';
 import { monitoringCopy, type WatchLimitLine, watchLimitLines } from '../../data/monitoring';
-import { checkToastName, exceptionText, foldWatchRows, QUIET_COPY, watchRowSpoken } from '../../data/quiet';
+import { checkToastName, exceptionText, foldWatchRows, quietCopy, watchRowSpoken } from '../../data/quiet';
 import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -63,8 +63,13 @@ export function WhatWhombatWatches({
    */
   onLimit?: ((view: LimitView) => void) | null;
 }) {
+  const { rawLocale } = useI18n();
+  const QUIET_COPY = quietCopy(rawLocale);
   const theme = useTheme();
-  const view = useMemo(() => (watch ? thingWatchView(watch, timeZone, now) : null), [watch, timeZone, now]);
+  const view = useMemo(
+    () => (watch ? thingWatchView(watch, timeZone, now, rawLocale) : null),
+    [watch, timeZone, now, rawLocale],
+  );
   const checks = useMemo(() => new Map((watch?.checks ?? []).map((c) => [c.check as string, c])), [watch]);
   const [open, setOpen] = useState(false);
   if (!view)
@@ -142,6 +147,8 @@ function CheckRow({
   /** Its limit, and what opens Change the limit for who may change it (null: read only). */
   limit: { check: ThingWatch['checks'][number]; open: ((view: LimitView) => void) | null } | null;
 }) {
+  const { rawLocale } = useI18n();
+  const QUIET_COPY = quietCopy(rawLocale);
   const theme = useTheme();
   const busy = actions.busy({ check: row.check });
   return (
@@ -149,7 +156,7 @@ function CheckRow({
       <View
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 }}
         accessible={!mayChange}
-        {...(mayChange ? {} : { accessibilityLabel: watchRowSpoken(row, false) })}
+        {...(mayChange ? {} : { accessibilityLabel: watchRowSpoken(row, false, rawLocale) })}
       >
         <View style={{ flex: 1, minWidth: 0, gap: 2, paddingVertical: 4 }}>
           <Text size={15} lh={1.35} color={row.on ? theme.colors.ink : theme.colors.mut}>
@@ -203,6 +210,8 @@ function ExceptionLine({
   mayChange: boolean;
   actions: QuietActions;
 }) {
+  const { rawLocale } = useI18n();
+  const QUIET_COPY = quietCopy(rawLocale);
   const theme = useTheme();
   const text = exceptionText(e);
   const undo = () => {
@@ -261,7 +270,8 @@ function LimitLines({
   check: ThingWatch['checks'][number];
   open: ((view: LimitView) => void) | null;
 }) {
-  const lines = watchLimitLines(check, !!open);
+  const { rawLocale } = useI18n();
+  const lines = watchLimitLines(check, !!open, rawLocale);
   if (!lines.length) return null;
   return (
     <View style={{ paddingBottom: 4 }}>
@@ -279,6 +289,7 @@ function LimitLines({
 function LimitLine({ line, open }: { line: WatchLimitLine; open: ((view: LimitView) => void) | null }) {
   const { rawLocale } = useI18n();
   const monitoringCopyHere = monitoringCopy(rawLocale);
+  const QUIET_COPY = quietCopy(rawLocale);
 
   const theme = useTheme();
   const view = line.view;

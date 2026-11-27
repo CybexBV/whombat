@@ -64,7 +64,7 @@ export function ReadNote({
       {error ? (
         <MoreFold label={overviewWordsHere.moreDetail}>
           <Text size={13} lh={1.45} color={theme.colors.mut}>
-            {errorText(error)}
+            {errorText(error, rawLocale)}
           </Text>
         </MoreFold>
       ) : null}

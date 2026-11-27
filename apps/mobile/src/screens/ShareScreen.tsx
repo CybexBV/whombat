@@ -46,7 +46,7 @@ function TargetMark({ target, size }: { target: ShareTarget; size: number }) {
 }
 
 export function ShareScreen({ navigation }: Props) {
-  const { tClient } = useI18n();
+  const { rawLocale, tClient } = useI18n();
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -58,7 +58,10 @@ export function ShareScreen({ navigation }: Props) {
   const [text, setText] = useState(share?.text ?? '');
   const [problem, setProblem] = useState<string | null>(null);
   const words = useAgentWords();
-  const targets = useMemo(() => shareTargets(bootstrap.sidebar, words.name), [bootstrap.sidebar, words.name]);
+  const targets = useMemo(
+    () => shareTargets(bootstrap.sidebar, words.name, rawLocale),
+    [bootstrap.sidebar, words.name, rawLocale],
+  );
   const shown = targets.filter((t) => matchesShareTarget(t, q));
   const mentionTargets = useMemo(
     () => composerMentionTargets(bootstrap.principals, bootstrap.me.id),
@@ -125,7 +128,7 @@ export function ShareScreen({ navigation }: Props) {
       {
         onSuccess: (result) => {
           if (result.status !== 'ok') {
-            setProblem(outcomeText(result)?.body ?? null);
+            setProblem(outcomeText(result, rawLocale)?.body ?? null);
             return;
           }
           // The share is forgotten as this screen goes (not before: it would show “Nothing to share” on its way out).
@@ -133,7 +136,7 @@ export function ShareScreen({ navigation }: Props) {
           const route = shareTargetRoute(target);
           (navigation.replace as (name: string, params: unknown) => void)(route.name, route.params);
         },
-        onError: (error) => setProblem(errorText(error)),
+        onError: (error) => setProblem(errorText(error, rawLocale)),
       },
     );
   };
@@ -147,8 +150,8 @@ export function ShareScreen({ navigation }: Props) {
       </Screen>
     );
 
-  const note = shareNote(share);
-  const demoFiles = !canAttach && share.files.length > 0 ? 'Files can’t be sent in the demo.' : null;
+  const note = shareNote(share, rawLocale);
+  const demoFiles = !canAttach && share.files.length > 0 ? tMobile('screens2.share.demoFiles') : null;
 
   if (!target)
     return (
@@ -166,7 +169,7 @@ export function ShareScreen({ navigation }: Props) {
             }
           />
           <Text size={12} mono color={theme.colors.mut} style={{ paddingHorizontal: 22 }}>
-            {shareSummary(share)}
+            {shareSummary(share, rawLocale)}
           </Text>
           <View style={{ paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 }}>
             <View
@@ -216,7 +219,7 @@ export function ShareScreen({ navigation }: Props) {
                   leading={<TargetMark target={t} size={44} />}
                   title={t.title}
                   meta={t.meta}
-                  accessibilityLabel={`Share to ${t.title}, ${t.meta}`}
+                  accessibilityLabel={tMobile('screens2.share.shareTo', { title: t.title, meta: t.meta })}
                   onPress={() => {
                     setProblem(null);
                     setTarget(t);
@@ -246,9 +249,9 @@ export function ShareScreen({ navigation }: Props) {
             <TextInput
               value={text}
               onChangeText={setText}
-              placeholder={`Message ${target.title}`}
+              placeholder={tMobile('screens2.share.message', { title: target.title })}
               placeholderTextColor={theme.colors.mut}
-              accessibilityLabel={`Message ${target.title}`}
+              accessibilityLabel={tMobile('screens2.share.message', { title: target.title })}
               multiline
               selectionColor={theme.colors.brand}
               cursorColor={theme.colors.ink}
@@ -302,13 +305,13 @@ export function ShareScreen({ navigation }: Props) {
           }}
         >
           <Button
-            label={`Send to ${target.title}`}
+            label={tMobile('screens2.share.sendTo', { title: target.title })}
             size="lg"
             busy={send.isPending}
             disabled={!sendable}
             onPress={sendIt}
             {...(uploads.items.some((i) => i.state === 'uploading')
-              ? { accessibilityHint: 'Waits for the upload to finish' }
+              ? { accessibilityHint: tMobile('screens2.share.waitsUpload') }
               : {})}
           />
         </View>

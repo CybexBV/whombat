@@ -6,10 +6,10 @@
  */
 
 import {
-  APP_SETUP_TEXT,
   type AppMethod,
   appSavedLine,
   appSaveProblem,
+  appSetupText,
   appSummary,
   appWords,
   connectProblem,
@@ -37,15 +37,18 @@ export function AppSetup({
   method: AppMethod;
   app: CatalogAppStatus;
 }) {
+  const { t: tMobile } = useMobileT();
+  const { rawLocale } = useI18n();
+  const appSetupTextHere = appSetupText(rawLocale);
   const theme = useTheme();
-  const words = appWords(entry);
+  const words = appWords(entry, rawLocale);
   const done = app.configured;
   const [showSteps, setShowSteps] = useState(!done);
   const steps = app.source !== 'config' && (showSteps || !done);
   return (
     <View style={{ gap: 8 }}>
       <Text size={11} weight={500} mono tracking={0.05} color={theme.colors.mut} accessibilityRole="header">
-        {APP_SETUP_TEXT.section(entry.name)}
+        {appSetupTextHere.section(entry.name)}
       </Text>
       <View
         style={{
@@ -61,63 +64,67 @@ export function AppSetup({
           <View style={{ paddingTop: 6 }}>
             <StatusDot
               color={done ? theme.colors.ok : theme.colors.mut}
-              label={done ? APP_SETUP_TEXT.setUp : APP_SETUP_TEXT.notSetUp}
+              label={done ? appSetupTextHere.setUp : appSetupTextHere.notSetUp}
             />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <Text size={15} weight={600}>
-              {APP_SETUP_TEXT.forThisWhombat}
+              {appSetupTextHere.forThisWhombat}
             </Text>
             <Text size={13} lh={1.4} color={theme.colors.mut}>
-              {appSummary(entry, app)}
+              {appSummary(entry, app, rawLocale)}
             </Text>
           </View>
         </View>
         {done && app.source !== 'config' ? (
           <TextLink
-            label={showSteps ? APP_SETUP_TEXT.hideSteps : APP_SETUP_TEXT.showSteps}
+            label={showSteps ? appSetupTextHere.hideSteps : appSetupTextHere.showSteps}
             onPress={() => setShowSteps((v) => !v)}
           />
         ) : null}
         {steps ? (
           <View style={{ gap: 16 }}>
-            <Step n={1} title={APP_SETUP_TEXT.stepCreate} done={done}>
+            <Step n={1} title={appSetupTextHere.stepCreate} done={done}>
               <Note>
                 {entry.id === 'dropbox'
-                  ? APP_SETUP_TEXT.createDropbox(words.console)
-                  : APP_SETUP_TEXT.createOther(words.console)}
+                  ? appSetupTextHere.createDropbox(words.console)
+                  : appSetupTextHere.createOther(words.console)}
               </Note>
               <TextLink
-                label={APP_SETUP_TEXT.openConsole(words.console)}
+                label={appSetupTextHere.openConsole(words.console)}
                 external
                 onPress={() => openOutside(method.consoleUrl)}
               />
             </Step>
-            <Step n={2} title={APP_SETUP_TEXT.stepPermissions} done={done}>
-              <Note>{APP_SETUP_TEXT.permissions}</Note>
+            <Step n={2} title={appSetupTextHere.stepPermissions} done={done}>
+              <Note>{appSetupTextHere.permissions}</Note>
               <Text size={12.5} lh={1.6} mono selectable>
                 {method.scopes.join('  ')}
               </Text>
             </Step>
-            <Step n={3} title={APP_SETUP_TEXT.stepRedirect} done={done}>
-              <Note>{APP_SETUP_TEXT.redirect}</Note>
+            <Step n={3} title={appSetupTextHere.stepRedirect} done={done}>
+              <Note>{appSetupTextHere.redirect}</Note>
               <Text size={12.5} lh={1.5} mono selectable>
                 {app.redirectUri}
               </Text>
               <Button
-                label={`Copy ${APP_SETUP_TEXT.redirectLabel.toLowerCase()}`}
+                label={tMobile('screens2.guide.copy', {
+                  label: appSetupTextHere.redirectLabel.toLowerCase(),
+                })}
                 variant="secondary"
-                onPress={() => void copyToClipboard(app.redirectUri, APP_SETUP_TEXT.redirectCopied)}
+                onPress={() =>
+                  void copyToClipboard(app.redirectUri, appSetupTextHere.redirectCopied, rawLocale)
+                }
               />
               {/* What Dropbox's first sign-in needs on the same tab (SG-22, AP-3910): PKCE, and people other than its owner. */}
               {entry.id === 'dropbox' ? (
                 <>
-                  <Note>{APP_SETUP_TEXT.dropboxPublicClients}</Note>
-                  <Note>{APP_SETUP_TEXT.dropboxMoreUsers}</Note>
+                  <Note>{appSetupTextHere.dropboxPublicClients}</Note>
+                  <Note>{appSetupTextHere.dropboxMoreUsers}</Note>
                 </>
               ) : null}
             </Step>
-            <Step n={4} title={APP_SETUP_TEXT.stepPaste(words.id)} done={done}>
+            <Step n={4} title={appSetupTextHere.stepPaste(words.id)} done={done}>
               <AppForm entry={entry} method={method} app={app} />
             </Step>
           </View>
@@ -146,7 +153,10 @@ function Step({
       <View
         accessible
         accessibilityRole="header"
-        accessibilityLabel={`Step ${n}: ${title}. ${done ? 'Done' : 'To do'}`}
+        accessibilityLabel={tMobile(done ? 'screens2.connect.stepDone' : 'screens2.connect.stepToDo', {
+          n,
+          title,
+        })}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
       >
         <Text size={13.5} weight={600} mono color={theme.colors.mut}>
@@ -167,7 +177,9 @@ function Step({
 }
 
 function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMethod; app: CatalogAppStatus }) {
-  const words = appWords(entry);
+  const { rawLocale } = useI18n();
+  const appSetupTextHere = appSetupText(rawLocale);
+  const words = appWords(entry, rawLocale);
   const save = useConnectorAppWrite(api.connectors.setApp);
   const remove = useConnectorAppWrite(api.connectors.removeApp);
   const [editing, setEditing] = useState(!app.configured);
@@ -176,7 +188,7 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
   const [error, setError] = useState<string | null>(null);
 
   async function onSave() {
-    const refused = appSaveProblem(entry, method, app, { clientId, secret });
+    const refused = appSaveProblem(entry, method, app, { clientId, secret }, rawLocale);
     if (refused === 'unchanged') return setEditing(false);
     if (refused) return setError(refused);
     setError(null);
@@ -191,10 +203,10 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
         setClientId('');
         setSecret('');
         setEditing(false);
-        showNotice(APP_SETUP_TEXT.saved(entry.name));
+        showNotice(appSetupTextHere.saved(entry.name));
       }
     } catch (err) {
-      const p = connectProblem(err);
+      const p = connectProblem(err, undefined, undefined, rawLocale);
       setError(p.fields.clientId ?? p.fields.clientSecret ?? p.message);
     } finally {
       // The secret goes with the request: the mutation forgets its input too.
@@ -203,17 +215,17 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
   }
 
   function onRemove() {
-    Alert.alert(APP_SETUP_TEXT.removeApp, APP_SETUP_TEXT.confirmRemove(entry.name), [
-      { text: APP_SETUP_TEXT.cancel, style: 'cancel' },
+    Alert.alert(appSetupTextHere.removeApp, appSetupTextHere.confirmRemove(entry.name), [
+      { text: appSetupTextHere.cancel, style: 'cancel' },
       {
-        text: APP_SETUP_TEXT.removeApp,
+        text: appSetupTextHere.removeApp,
         style: 'destructive',
         onPress: () =>
           void remove.mutateAsync({ params: { catalogId: entry.id } }).then(
             (result) => {
-              if (result.status === 'ok') showNotice(APP_SETUP_TEXT.removed(entry.name));
+              if (result.status === 'ok') showNotice(appSetupTextHere.removed(entry.name));
             },
-            (err) => setError(connectProblem(err).message),
+            (err) => setError(connectProblem(err, undefined, undefined, rawLocale).message),
           ),
       },
     ]);
@@ -222,16 +234,16 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
   if (!editing)
     return (
       <View style={{ gap: 10 }}>
-        <Note>{appSavedLine(entry, app)}</Note>
+        <Note>{appSavedLine(entry, app, rawLocale)}</Note>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <Button
-            label={APP_SETUP_TEXT.replace}
+            label={appSetupTextHere.replace}
             variant="secondary"
             onPress={() => setEditing(true)}
             style={{ flex: 1 }}
           />
           <Button
-            label={APP_SETUP_TEXT.remove}
+            label={appSetupTextHere.remove}
             variant="secondary"
             disabled={remove.isPending}
             onPress={onRemove}
@@ -244,7 +256,7 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
 
   return (
     <View style={{ gap: 12 }}>
-      <Note>{`${APP_SETUP_TEXT.copyThem}${method.clientSecretOptional ? APP_SETUP_TEXT.optionalSecret(words.secret) : ''}`}</Note>
+      <Note>{`${appSetupTextHere.copyThem}${method.clientSecretOptional ? appSetupTextHere.optionalSecret(words.secret) : ''}`}</Note>
       <FormField
         label={words.id}
         value={clientId}
@@ -252,7 +264,7 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
           setClientId(v);
           setError(null);
         }}
-        placeholder={app.configured ? APP_SETUP_TEXT.keepId : 'a1b2c3d4e5f6g7h'}
+        placeholder={app.configured ? appSetupTextHere.keepId : 'a1b2c3d4e5f6g7h'}
         mono
         {...PLAIN_INPUT}
       />
@@ -263,20 +275,20 @@ function AppForm({ entry, method, app }: { entry: CatalogEntry; method: AppMetho
           setSecret(v);
           setError(null);
         }}
-        placeholder={app.secretSet ? APP_SETUP_TEXT.keepSecret : ''}
+        placeholder={app.secretSet ? appSetupTextHere.keepSecret : ''}
         secret
       />
       <FormMessage text={error} />
       <View style={{ flexDirection: 'row', gap: 8 }}>
         <Button
-          label={APP_SETUP_TEXT.save}
+          label={appSetupTextHere.save}
           busy={save.isPending}
           onPress={() => void onSave()}
           style={{ flex: 1 }}
         />
         {app.configured ? (
           <Button
-            label={APP_SETUP_TEXT.cancel}
+            label={appSetupTextHere.cancel}
             variant="quiet"
             onPress={() => {
               setEditing(false);

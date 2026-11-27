@@ -12,7 +12,7 @@ import {
   agentUpdatesView,
   agentUpdateWords,
   agentUpdating,
-  COMMAND_COPY,
+  commandCopy,
   commitOutcomeText,
   hostErrorInfo,
   updateCommand,
@@ -35,8 +35,6 @@ import { copyToClipboard } from '../../ui/clipboard';
 import { Button } from '../../ui/primitives';
 import { showNotice } from '../feedback';
 
-export const AGENT_CARD_LABEL = 'Whombat’s helper';
-
 export function AgentUpdatesCard({
   serverId,
   serverName,
@@ -47,6 +45,7 @@ export function AgentUpdatesCard({
   detail: HostServerDetail;
 }) {
   const { rawLocale } = useI18n();
+  const commandCopyHere = commandCopy(rawLocale);
   const agentUpdateWordsHere = agentUpdateWords(rawLocale);
 
   const { t: tMobile } = useMobileT();
@@ -79,6 +78,7 @@ export function AgentUpdatesCard({
     autoUpdate: auto.data?.autoUpdate ?? null,
     connected: detail.server.agent.connected !== false && detail.server.status !== 'offline',
     now: Date.parse(detail.asOf),
+    locale: rawLocale,
   });
   if (!view) return null;
   const W = agentUpdateWordsHere;
@@ -110,7 +110,7 @@ export function AgentUpdatesCard({
   };
 
   return (
-    <OneCard label={AGENT_CARD_LABEL}>
+    <OneCard label={tMobile('screens2.server.helper')}>
       <OneRow
         first
         leading={<Dot tone={view.tone === 'mut' ? null : view.tone} />}
@@ -140,9 +140,9 @@ export function AgentUpdatesCard({
                 {W.commandNote}
               </Text>
               <Button
-                label={COMMAND_COPY.copy}
+                label={commandCopyHere.copy}
                 variant="secondary"
-                onPress={() => void copyToClipboard(command, COMMAND_COPY.copied)}
+                onPress={() => void copyToClipboard(command, commandCopyHere.copied, rawLocale)}
               />
             </>
           ) : view.command ? (

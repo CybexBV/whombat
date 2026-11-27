@@ -21,37 +21,45 @@ import {
   type ThingWatchCheck,
   zonedInstant,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { daysAgo, formatClock, formatDate, formatShortWeekday, toDate, zonedParts } from '@whombat/core/text';
-import { clientTranslator } from '../i18n/catalog';
+import { clientTranslator, clientTree } from '../i18n/catalog';
+import { HOME_AREA_WORDS } from '../i18n/messages/chatWork/home';
 import { localAt, untilText } from './time';
 
 /* Keep quiet… --------------------------------------------------------------------------------------------- */
 
-export const KEEP_QUIET_WORDS = {
-  /** The ⋯ item; it opens the sheet. */
-  menu: 'Keep quiet…',
-  title: 'Keep {name} quiet',
-  body: 'Until then Whombat won’t warn you about it, look into it or send a push. What is still wrong counts again when it ends.',
-  hour: 'For an hour',
-  tonight: 'Until tonight',
-  morning: 'Until tomorrow morning',
-  pick: 'Pick a time',
-  pickLabel: 'Until',
-  note: 'Note (optional)',
-  notePlaceholder: 'Moving the NAS',
-  button: 'Keep quiet',
-  endNow: 'End now',
-  /** The toast after Keep quiet, with Undo (which ends it). */
-  kept: 'Quiet until {time}.',
-  /** The toast after End now. */
-  ended: 'Whombat watches {name} again.',
-  pickPast: 'Pick a time that is still ahead.',
-  pickFar: 'Pick a time within a month.',
-  pickEmpty: 'Pick a day and a time.',
-  /** Worth a look's lines quiet with the whole thing, folded under one row. */
-  showHeld: (n: number) => `Show ${n} on hold`,
-  hideHeld: 'Hide what’s on hold',
-} as const;
+/** Keep quiet…'s words, in a locale (English when none). */
+export function keepQuietWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    /** The ⋯ item; it opens the sheet. */
+    menu: tr.raw('keepQuiet.menu'),
+    title: tr.raw('keepQuiet.title'),
+    body: tr.raw('keepQuiet.body'),
+    hour: tr.raw('keepQuiet.hour'),
+    tonight: tr.raw('keepQuiet.tonight'),
+    morning: tr.raw('keepQuiet.morning'),
+    pick: tr.raw('keepQuiet.pick'),
+    pickLabel: tr.raw('keepQuiet.pickLabel'),
+    note: tr.raw('keepQuiet.note'),
+    notePlaceholder: tr.raw('keepQuiet.notePlaceholder'),
+    button: tr.raw('keepQuiet.button'),
+    endNow: tr.raw('keepQuiet.endNow'),
+    /** The toast after Keep quiet, with Undo (which ends it). */
+    kept: tr.raw('keepQuiet.kept'),
+    /** The toast after End now. */
+    ended: tr.raw('keepQuiet.ended'),
+    pickPast: tr.raw('keepQuiet.pickPast'),
+    pickFar: tr.raw('keepQuiet.pickFar'),
+    pickEmpty: tr.raw('keepQuiet.pickEmpty'),
+    /** Worth a look's lines quiet with the whole thing, folded under one row. */
+    showHeld: (n: number) => tr.t('keepQuiet.showHeld', { count: n }),
+    hideHeld: tr.raw('keepQuiet.hideHeld'),
+  };
+}
+
+export const KEEP_QUIET_WORDS = keepQuietWords();
 
 export type KeepQuietChoice = 'hour' | 'tonight' | 'morning' | 'pick';
 
@@ -126,13 +134,16 @@ export interface KeepQuietOption {
 }
 
 /** The sheet's choices now, in order; “Until tonight” only while it is ahead and still tonight. */
-export function keepQuietOptions(now: Date | number, timeZone: string): KeepQuietOption[] {
+export function keepQuietOptions(
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): KeepQuietOption[] {
+  const w = keepQuietWords(locale);
   return (['hour', 'tonight', 'morning', 'pick'] as const).flatMap((choice): KeepQuietOption[] => {
-    if (choice === 'pick') return [{ choice, label: KEEP_QUIET_WORDS.pick, ends: null }];
+    if (choice === 'pick') return [{ choice, label: w.pick, ends: null }];
     const until = keepQuietUntil(choice, now, timeZone);
-    return until
-      ? [{ choice, label: KEEP_QUIET_WORDS[choice], ends: quietEndWords(until, now, timeZone) }]
-      : [];
+    return until ? [{ choice, label: w[choice], ends: quietEndWords(until, now, timeZone, locale) }] : [];
   });
 }
 
@@ -142,33 +153,39 @@ export function keepQuietOptions(now: Date | number, timeZone: string): KeepQuie
  */
 export function keepQuietBody(
   choice: KeepQuietChoice,
-  input: { now: Date | number; timeZone: string; picked?: string; note?: string },
+  input: { now: Date | number; timeZone: string; picked?: string; note?: string; locale?: string | null },
 ): { body: KeepQuietBody } | { problem: string } {
+  const w = keepQuietWords(input.locale);
   const note = input.note?.trim().slice(0, 120);
   const withNote = note ? { note } : {};
   if (choice === 'hour') return { body: { minutes: 60, ...withNote } };
-  if (choice === 'pick' && !input.picked?.trim()) return { problem: KEEP_QUIET_WORDS.pickEmpty };
+  if (choice === 'pick' && !input.picked?.trim()) return { problem: w.pickEmpty };
   const until = keepQuietUntil(choice, input.now, input.timeZone, input.picked);
-  if (!until) return { problem: choice === 'pick' ? KEEP_QUIET_WORDS.pickEmpty : KEEP_QUIET_WORDS.pickPast };
+  if (!until) return { problem: choice === 'pick' ? w.pickEmpty : w.pickPast };
   const ahead = Date.parse(until) - toDate(input.now).getTime();
-  if (ahead < KEEP_QUIET_MIN_MINUTES * 60_000) return { problem: KEEP_QUIET_WORDS.pickPast };
-  if (ahead > KEEP_QUIET_MAX_MINUTES * 60_000) return { problem: KEEP_QUIET_WORDS.pickFar };
+  if (ahead < KEEP_QUIET_MIN_MINUTES * 60_000) return { problem: w.pickPast };
+  if (ahead > KEEP_QUIET_MAX_MINUTES * 60_000) return { problem: w.pickFar };
   return { body: { until, ...withNote } };
 }
 
 /** The toast after Keep quiet: “Quiet until 23:00.” */
-export function keptToast(until: string, now: Date | number, timeZone: string): string {
-  return fillQuietWords(KEEP_QUIET_WORDS.kept, { time: quietEndWords(until, now, timeZone) });
+export function keptToast(
+  until: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  return fillQuietWords(keepQuietWords(locale).kept, { time: quietEndWords(until, now, timeZone, locale) });
 }
 
 /** The toast after End now: “Whombat watches the NAS again.” */
-export function endedToast(name: string): string {
-  return fillQuietWords(KEEP_QUIET_WORDS.ended, { name });
+export function endedToast(name: string, locale?: string | null): string {
+  return fillQuietWords(keepQuietWords(locale).ended, { name });
 }
 
 /** The sheet's title: “Keep pve-02 quiet”. */
-export function keepQuietTitle(name: string): string {
-  return fillQuietWords(KEEP_QUIET_WORDS.title, { name });
+export function keepQuietTitle(name: string, locale?: string | null): string {
+  return fillQuietWords(keepQuietWords(locale).title, { name });
 }
 
 /* The line under a page's head -------------------------------------------------------------------- */
@@ -189,19 +206,23 @@ export interface HoldView {
  * What a page says under its head while it is held: kept quiet (with End now when `canEnd`), else down or quiet
  * because of something else (with a link to the cause). Null while neither holds.
  */
-export function holdView(page: {
-  keptQuiet?: KeptQuiet | null;
-  causedBy?: ThingCause | null;
-}): HoldView | null {
+export function holdView(
+  page: {
+    keptQuiet?: KeptQuiet | null;
+    causedBy?: ThingCause | null;
+  },
+  locale?: string | null,
+): HoldView | null {
+  const tr = clientTranslator(locale);
   const kept = page.keptQuiet;
   if (kept)
     return {
       kind: 'window',
       words: kept.words,
       who: kept.whombat
-        ? 'Whombat keeps it quiet for its own work'
+        ? tr.raw('keepQuiet.whombatOwnWork')
         : kept.by
-          ? `Kept quiet by ${kept.by.name}`
+          ? tr.t('keepQuiet.keptByName', { name: kept.by.name })
           : null,
       endNow: kept.canEnd,
       link: null,
@@ -213,7 +234,9 @@ export function holdView(page: {
       words: cause.words,
       who: null,
       endNow: false,
-      link: cause.href ? { href: cause.href, label: `Open ${cause.name}` } : null,
+      link: cause.href
+        ? { href: cause.href, label: tr.t('keepQuiet.openCause', { name: cause.name }) }
+        : null,
     };
   return null;
 }
@@ -282,41 +305,54 @@ export function thingStateWords(
 
 /* What happened ------------------------------------------------------------------------------------------- */
 
-export const HISTORY_WORDS = {
-  title: 'What happened',
-  empty: (days: number) => `Nothing went wrong in the last ${days} days.`,
-  still: 'still going',
-  /** The fold under the incidents with a server's own alerts. */
-  alerts: (n: number) => `Show ${n} ${n === 1 ? 'alert' : 'alerts'} from the server`,
-  hideAlerts: 'Hide the alerts from the server',
-  /** The small heading over a server's own alerts once they are shown. */
-  fromServer: 'From the server',
-  fewer: 'Show fewer',
-  failed: 'What happened couldn’t load. Try again.',
-} as const;
+/** What happened's words, in a locale (English when none). */
+export function historyWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    title: tr.raw('history.title'),
+    empty: (days: number) => tr.t('history.empty', { days }),
+    still: tr.raw('history.still'),
+    /** The fold under the incidents with a server's own alerts. */
+    alerts: (n: number) => tr.tp('history.alerts', n),
+    hideAlerts: tr.raw('history.hideAlerts'),
+    /** The small heading over a server's own alerts once they are shown. */
+    fromServer: tr.raw('history.fromServer'),
+    fewer: tr.raw('history.fewer'),
+    failed: tr.raw('history.failed'),
+  };
+}
+
+export const HISTORY_WORDS = historyWords();
 
 /** “41 min”, “2 h 5 min”, “1 d 3 h”: at least a minute (the server's words for the same). */
-export function durationWords(minutes: number): string {
+export function durationWords(minutes: number, locale?: string | null): string {
+  const w = clientTree(locale, HOME_AREA_WORDS).duration;
   const m = Math.max(1, Math.round(minutes));
-  if (m < 60) return `${m} min`;
+  if (m < 60) return interpolate(w.min, { m });
   if (m < 24 * 60) {
     const h = Math.floor(m / 60);
     const rest = m % 60;
-    return rest ? `${h} h ${rest} min` : `${h} h`;
+    return rest ? interpolate(w.hMin, { h, m: rest }) : interpolate(w.h, { h });
   }
   const d = Math.floor(m / (24 * 60));
   const h = Math.floor((m % (24 * 60)) / 60);
-  return h ? `${d} d ${h} h` : `${d} d`;
+  return h ? interpolate(w.dH, { d, h }) : interpolate(w.d, { d });
 }
 
 /** “Today 07:31”, “Yesterday 22:10”, “Mon 07:31”, “17 Nov 07:31”: when something started. */
-export function historyWhen(at: string, now: Date | number, timeZone: string): string {
+export function historyWhen(
+  at: string,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, HOME_AREA_WORDS).history;
   const days = daysAgo(at, now, timeZone);
   const clock = formatClock(at, timeZone);
-  if (days <= 0) return `Today ${clock}`;
-  if (days === 1) return `Yesterday ${clock}`;
-  if (days < 7) return `${formatShortWeekday(at, timeZone)} ${clock}`;
-  return `${formatDate(at, timeZone, { now: toDate(now) })} ${clock}`;
+  if (days <= 0) return interpolate(w.today, { clock });
+  if (days === 1) return interpolate(w.yesterday, { clock });
+  if (days < 7) return interpolate(w.dayClock, { day: formatShortWeekday(at, timeZone, locale), clock });
+  return interpolate(w.dayClock, { day: formatDate(at, timeZone, { now: toDate(now) }, locale), clock });
 }
 
 export interface HistoryRow {
@@ -343,19 +379,31 @@ export interface HistoryView {
   empty: string | null;
 }
 
-function incidentRow(i: ThingIncident, now: Date | number, timeZone: string): HistoryRow {
+function incidentRow(
+  i: ThingIncident,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): HistoryRow {
   const open = i.endedAt === null;
+  const tr = clientTranslator(locale);
   return {
     id: i.id,
     tone: i.nature === 'down' ? 'bad' : 'warn',
     words: i.words,
-    when: `${historyWhen(i.startedAt, now, timeZone)} · ${open ? HISTORY_WORDS.still : durationWords(i.minutes)}`,
-    cause: i.cause ? `While ${i.cause.name} was down` : null,
+    when: `${historyWhen(i.startedAt, now, timeZone, locale)} · ${open ? tr.raw('history.still') : durationWords(i.minutes, locale)}`,
+    cause: i.cause ? tr.t('history.whileDown', { name: i.cause.name }) : null,
     open,
   };
 }
 
-function alertRow(a: ThingHistoryAlert, index: number, now: Date | number, timeZone: string): HistoryRow {
+function alertRow(
+  a: ThingHistoryAlert,
+  index: number,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): HistoryRow {
   const open = a.resolvedAt === null;
   const minutes =
     ((a.resolvedAt ? Date.parse(a.resolvedAt) : toDate(now).getTime()) - Date.parse(a.openedAt)) / 60_000;
@@ -363,7 +411,7 @@ function alertRow(a: ThingHistoryAlert, index: number, now: Date | number, timeZ
     id: `${a.rule}|${a.openedAt}|${index}`,
     tone: a.severity === 'critical' ? 'bad' : 'warn',
     words: a.title,
-    when: `${historyWhen(a.openedAt, now, timeZone)} · ${open ? HISTORY_WORDS.still : durationWords(minutes)}`,
+    when: `${historyWhen(a.openedAt, now, timeZone, locale)} · ${open ? clientTranslator(locale).raw('history.still') : durationWords(minutes, locale)}`,
     cause: null,
     open,
   };
@@ -397,16 +445,22 @@ export function sameOutage(
  * `things.history` as the list draws it: newest first, its uptime line, and the empty words. A server's alert that is the
  * same outage as one of its incidents is left out: the incident already says it.
  */
-export function historyView(history: ThingHistory, now: Date | number, timeZone: string): HistoryView {
-  const rows = history.incidents.map((i) => incidentRow(i, now, timeZone));
+export function historyView(
+  history: ThingHistory,
+  now: Date | number,
+  timeZone: string,
+  locale?: string | null,
+): HistoryView {
+  const tr = clientTranslator(locale);
+  const rows = history.incidents.map((i) => incidentRow(i, now, timeZone, locale));
   const alerts = (history.alerts ?? [])
     .filter((a) => !sameOutage(a, history.incidents, now))
-    .map((a, i) => alertRow(a, i, now, timeZone));
+    .map((a, i) => alertRow(a, i, now, timeZone, locale));
   const empty = history.alertsUnavailable
-    ? `Whombat couldn’t read ${history.alertsUnavailable.serverName}’s own alerts just now.`
+    ? tr.t('history.alertsUnavailable', { name: history.alertsUnavailable.serverName })
     : rows.length || alerts.length
       ? null
-      : HISTORY_WORDS.empty(history.days);
+      : tr.t('history.empty', { days: history.days });
   return {
     uptime: history.uptime?.text ?? null,
     rows,
@@ -417,18 +471,24 @@ export function historyView(history: ThingHistory, now: Date | number, timeZone:
 
 /* Change the limit ---------------------------------------------------------------------------------------- */
 
-export const LIMIT_WORDS = {
-  menu: 'Change the limit',
-  title: 'Change the limit',
-  useDefault: 'Use the default',
-  save: 'Save',
-  label: 'Warn above',
-  range: (min: number, max: number, unit: string) => `From ${min} to ${max} ${unit}.`,
-  problem: (min: number, max: number, unit: string) => `Choose a limit from ${min} to ${max} ${unit}.`,
-  /** The toasts, with Undo. */
-  set: (name: string, value: string) => `${name}: warns above ${value} now.`,
-  cleared: (name: string) => `${name} uses the default again.`,
-} as const;
+/** Change the limit's words, in a locale (English when none). */
+export function limitWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    menu: tr.raw('limit.menu'),
+    title: tr.raw('limit.title'),
+    useDefault: tr.raw('limit.useDefault'),
+    save: tr.raw('limit.save'),
+    label: tr.raw('limit.label'),
+    range: (min: number, max: number, unit: string) => tr.t('limit.range', { min, max, unit }),
+    problem: (min: number, max: number, unit: string) => tr.t('limit.problem', { min, max, unit }),
+    /** The toasts, with Undo. */
+    set: (name: string, value: string) => tr.t('limit.set', { name, value }),
+    cleared: (name: string) => tr.t('limit.cleared', { name }),
+  };
+}
+
+export const LIMIT_WORDS = limitWords();
 
 /** “90 %”, “80 °C”. */
 export function limitText(value: number, unit: string): string {
@@ -463,7 +523,9 @@ export interface LimitView {
 export function limitView(
   check: Pick<ThingWatchCheck, 'check' | 'name' | 'limit'>,
   subject?: NoticeSubject | null,
+  locale?: string | null,
 ): LimitView | null {
+  const tr = clientTranslator(locale);
   const limit = check.limit;
   if (!limit) return null;
   const item = subject ? limit.items.find((i) => i.subject.id === subject.id) : undefined;
@@ -472,10 +534,10 @@ export function limitView(
   const fallback = subject ? (limit.value ?? limit.defaultValue ?? null) : (limit.defaultValue ?? null);
   const defaultWords =
     fallback === null
-      ? 'Without one, each sensor uses its own limit.'
+      ? tr.raw('limit.eachSensorOwn')
       : subject && limit.value !== null
-        ? `Without its own it follows the server: ${limitText(fallback, limit.unit)}.`
-        : `The default is ${limitText(fallback, limit.unit)}.`;
+        ? tr.t('limit.followsServer', { value: limitText(fallback, limit.unit) })
+        : tr.t('limit.defaultIs', { value: limitText(fallback, limit.unit) });
   return {
     name: subject?.name ?? check.name,
     about: subject ? `${check.name} · ${subject.name}` : check.name,
@@ -488,7 +550,7 @@ export function limitView(
     own,
     defaultWords,
     defaultValue: fallback,
-    rangeWords: LIMIT_WORDS.range(limit.min, limit.max, limit.unit),
+    rangeWords: tr.t('limit.range', { min: limit.min, max: limit.max, unit: limit.unit }),
   };
 }
 
@@ -498,34 +560,43 @@ export function limitView(
  */
 export function limitLine(
   check: Pick<ThingWatchCheck, 'limit'>,
+  locale?: string | null,
 ): { words: string; items: { subject: NoticeSubject; words: string }[] } | null {
   const l = check.limit;
   if (!l) return null;
+  const tr = clientTranslator(locale);
   const words =
     l.value !== null
-      ? `Warns above ${limitText(l.value, l.unit)}`
+      ? tr.t('limit.warnsAbove', { value: limitText(l.value, l.unit) })
       : l.defaultValue !== undefined
-        ? `Warns above ${limitText(l.defaultValue, l.unit)}, the default`
-        : 'Each sensor warns at its own limit';
+        ? tr.t('limit.warnsAboveDefault', { value: limitText(l.defaultValue, l.unit) })
+        : tr.raw('limit.eachSensorWarns');
   return {
     words,
-    items: l.items.map((i) => ({ subject: i.subject, words: `above ${limitText(i.value, l.unit)}` })),
+    items: l.items.map((i) => ({
+      subject: i.subject,
+      words: tr.t('limit.above', { value: limitText(i.value, l.unit) }),
+    })),
   };
 }
 
 /** The limit that applies now, under Change the limit in a line's ⋯: “Now 90 %”, “Each sensor has its own now”. */
-export function limitNow(view: Pick<LimitView, 'value' | 'unit'>): string {
-  return view.value === null ? 'Each sensor has its own now' : `Now ${limitText(view.value, view.unit)}`;
+export function limitNow(view: Pick<LimitView, 'value' | 'unit'>, locale?: string | null): string {
+  const tr = clientTranslator(locale);
+  return view.value === null
+    ? tr.raw('limit.eachSensorNow')
+    : tr.t('limit.now', { value: limitText(view.value, view.unit) });
 }
 
 /** What was typed as a limit, or the problem to show under the field. */
 export function parseLimit(
   typed: string,
   view: Pick<LimitView, 'min' | 'max' | 'unit'>,
+  locale?: string | null,
 ): number | { problem: string } {
   const n = Number(typed.trim().replace(',', '.'));
   if (!typed.trim() || !Number.isFinite(n) || n < view.min || n > view.max)
-    return { problem: LIMIT_WORDS.problem(view.min, view.max, view.unit) };
+    return { problem: limitWords(locale).problem(view.min, view.max, view.unit) };
   return Math.round(n * 10) / 10;
 }
 
@@ -533,9 +604,10 @@ export function parseLimit(
 export function lineLimit(
   line: Pick<ThingPageNotice, 'check' | 'subject'>,
   checks: readonly Pick<ThingWatchCheck, 'check' | 'name' | 'limit' | 'perItem'>[] | null | undefined,
+  locale?: string | null,
 ): LimitView | null {
   if (!line.check || !checks) return null;
   const c = checks.find((x) => x.check === line.check);
   if (!c?.limit) return null;
-  return limitView(c, c.perItem && line.subject ? line.subject : null);
+  return limitView(c, c.perItem && line.subject ? line.subject : null, locale);
 }

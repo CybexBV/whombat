@@ -6,6 +6,7 @@
  * `FIND_MY_WATCH_HOURS` and says so. Pure: the contract, the rule that decides it happened, and its words.
  */
 import { z } from 'zod';
+import { tCore } from '../i18n/catalog.js';
 import { FindMyWatchId } from '../ids.js';
 import { type DateInput, dayKey, formatClock, toDate } from '../text/time.js';
 import { Timestamp } from './common.js';
@@ -140,11 +141,11 @@ export function findMyWatchArrived(place: string, now: Pick<HostFindMyPerson, 'p
 const AT_PLACES: ReadonlySet<string> = new Set(['home', 'work', 'school', 'gym']);
 
 /** “at Home”, “in Lelystad”. */
-export function findMyWhere(place: string): string {
-  return AT_PLACES.has(findMyPlaceKey(place)) ? `at ${place}` : `in ${place}`;
+export function findMyWhere(place: string, locale?: string | null): string {
+  return tCore(locale, AT_PLACES.has(findMyPlaceKey(place)) ? 'findMyWatch.at' : 'findMyWatch.in', { place });
 }
 
-/** “Noor Visser leaves Keizersgracht”, “Noor Visser arrives at Home”. */
+/** “Noor Visser leaves Keizersgracht”, “Noor Visser arrives at Home”: the card's text for agents, in English. */
 function what(watch: Pick<FindMyWatchView, 'name' | 'change' | 'place'>): string {
   return watch.change === 'leaves'
     ? `${watch.name} leaves ${watch.place}`
@@ -152,8 +153,14 @@ function what(watch: Pick<FindMyWatchView, 'name' | 'change' | 'place'>): string
 }
 
 /** The started watch's message, under its card: “I’ll tell you when Noor Visser leaves Keizersgracht.” */
-export function findMyWatchStartText(watch: Pick<FindMyWatchView, 'name' | 'change' | 'place'>): string {
-  return `I’ll tell you when ${what(watch)}.`;
+export function findMyWatchStartText(
+  watch: Pick<FindMyWatchView, 'name' | 'change' | 'place'>,
+  locale?: string | null,
+): string {
+  const { name, place } = watch;
+  return watch.change === 'leaves'
+    ? tCore(locale, 'findMyWatch.start.leaves', { name, place })
+    : tCore(locale, 'findMyWatch.start.arrives', { name, where: findMyWhere(place, locale) });
 }
 
 /**
@@ -163,20 +170,23 @@ export function findMyWatchStartText(watch: Pick<FindMyWatchView, 'name' | 'chan
  */
 export function findMyWatchEndText(
   watch: Pick<FindMyWatchView, 'name' | 'change' | 'place' | 'status' | 'to'>,
+  locale?: string | null,
 ): string | null {
   const { name, place } = watch;
+  const hours = FIND_MY_WATCH_HOURS;
   switch (watch.status) {
     case 'happened':
-      if (watch.change === 'arrives') return `${name} has arrived ${findMyWhere(place)}.`;
+      if (watch.change === 'arrives')
+        return tCore(locale, 'findMyWatch.end.arrived', { name, where: findMyWhere(place, locale) });
       return watch.to && key(watch.to) !== key(place)
-        ? `${name} has left ${place} and is now ${findMyWhere(watch.to)}.`
-        : `${name} has left ${place}.`;
+        ? tCore(locale, 'findMyWatch.end.leftTo', { name, place, where: findMyWhere(watch.to, locale) })
+        : tCore(locale, 'findMyWatch.end.left', { name, place });
     case 'expired':
       return watch.change === 'leaves'
-        ? `${name} is still at ${place} after ${FIND_MY_WATCH_HOURS} hours, so I’ve stopped watching.`
-        : `${name} didn’t arrive ${findMyWhere(place)} within ${FIND_MY_WATCH_HOURS} hours, so I’ve stopped watching.`;
+        ? tCore(locale, 'findMyWatch.end.expiredLeaves', { name, place, hours })
+        : tCore(locale, 'findMyWatch.end.expiredArrives', { name, where: findMyWhere(place, locale), hours });
     case 'stopped':
-      return `I’ve stopped watching ${name} because Find My isn’t connected any more.`;
+      return tCore(locale, 'findMyWatch.end.stopped', { name });
     default:
       return null;
   }
@@ -190,11 +200,13 @@ export interface FindMyWatchCardLines {
 }
 
 /** “14:05”, or “tomorrow at 14:05” when it isn't today where the person is. */
-function when(at: DateInput, timeZone: string, now: DateInput): string {
+function when(at: DateInput, timeZone: string, now: DateInput, locale?: string | null): string {
   const clock = formatClock(at, timeZone);
   if (dayKey(at, timeZone) === dayKey(now, timeZone)) return clock;
   const tomorrow = new Date(toDate(now).getTime() + 86_400_000);
-  return dayKey(at, timeZone) === dayKey(tomorrow, timeZone) ? `tomorrow at ${clock}` : clock;
+  return dayKey(at, timeZone) === dayKey(tomorrow, timeZone)
+    ? tCore(locale, 'findMyWatch.card.tomorrow', { time: clock })
+    : clock;
 }
 
 /**
@@ -205,6 +217,7 @@ export function findMyWatchCardLines(
   watch: FindMyWatchView,
   timeZone: string,
   now: DateInput = new Date(),
+  locale?: string | null,
 ): FindMyWatchCardLines {
   const { name, place } = watch;
   const ended = watch.endedAt ?? now;
@@ -213,30 +226,32 @@ export function findMyWatchCardLines(
       return {
         title:
           watch.change === 'leaves'
-            ? `Watching for ${name} to leave ${place}`
-            : `Watching for ${name} to arrive ${findMyWhere(place)}`,
-        detail: `Until ${when(watch.endsAt, timeZone, now)}`,
+            ? tCore(locale, 'findMyWatch.card.watchingLeaves', { name, place })
+            : tCore(locale, 'findMyWatch.card.watchingArrives', { name, where: findMyWhere(place, locale) }),
+        detail: tCore(locale, 'findMyWatch.card.until', { when: when(watch.endsAt, timeZone, now, locale) }),
         canCancel: true,
       };
-    case 'happened':
+    case 'happened': {
+      const time = formatClock(ended, timeZone);
       return {
         title:
           watch.change === 'leaves'
-            ? `${name} left ${place} · ${formatClock(ended, timeZone)}`
-            : `${name} arrived ${findMyWhere(place)} · ${formatClock(ended, timeZone)}`,
+            ? tCore(locale, 'findMyWatch.card.left', { name, place, time })
+            : tCore(locale, 'findMyWatch.card.arrived', { name, where: findMyWhere(place, locale), time }),
         detail: null,
         canCancel: false,
       };
+    }
     case 'cancelled':
-      return { title: `Stopped watching ${name}`, detail: null, canCancel: false };
+      return { title: tCore(locale, 'findMyWatch.card.cancelled', { name }), detail: null, canCancel: false };
     case 'expired':
       return {
-        title: `Stopped watching ${name} after ${FIND_MY_WATCH_HOURS} hours`,
+        title: tCore(locale, 'findMyWatch.card.expired', { name, hours: FIND_MY_WATCH_HOURS }),
         detail: null,
         canCancel: false,
       };
     case 'stopped':
-      return { title: `Stopped watching ${name}: Find My isn’t connected`, detail: null, canCancel: false };
+      return { title: tCore(locale, 'findMyWatch.card.stopped', { name }), detail: null, canCancel: false };
   }
 }
 

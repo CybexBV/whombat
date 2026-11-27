@@ -23,100 +23,123 @@ import {
   normalizeFilesFolder,
   sameFilesFolder,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { sidebarSummaries } from './conversations';
 import type { WhombatClient } from './http/client';
 import { ApiError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 import { UploadError, type UploadSource, uploadFile } from './uploads';
 
 /* Words ------------------------------------------------------------------------------------------ */
 
-export const FILES_COPY = {
-  title: 'Files',
-  intro: 'Files shared in your conversations. You see the ones in conversations you’re in.',
-  noneYet: 'No files yet. Files you and your agent share in a conversation show up here.',
-  spaceEmpty: 'No files here yet. Upload one, or attach one to a message.',
-  folderEmpty: 'Nothing in this folder yet. It stays once a file is in it.',
-  inMessage: 'In a message',
-  savedToFiles: 'Saved to Files',
-  upload: 'Upload',
-  newFolder: 'New folder',
-  download: 'Download',
-  openMessage: 'Open message',
-  rename: 'Rename',
-  move: 'Move to folder…',
-  remove: 'Remove from Files',
-  top: 'Top of Files',
-  dropHere: 'Drop files to upload them here',
-  loadError: 'Couldn’t load these files. Try again in a moment.',
-  listError: 'Couldn’t load your files. Try again in a moment.',
-  notHere: 'These files aren’t here, or you’re not in this conversation.',
-  saved: 'Saved',
-  saving: 'Saving…',
-  /** A message's file (AP-834): put it into its conversation's Files, it's there, and the note after a save. */
-  saveToFiles: 'Save to Files',
-  inFiles: 'In Files',
-  savedNote: 'Saved to Files',
-  open: 'Open',
-  /** The Files home's read states (docs/decisions/final-settings-vault-files-usage.md). */
-  loading: 'Loading your files…',
-  readFailed: 'Couldn’t read your files',
-  readFailedLine: 'There’s no saved copy to show on this device yet.',
-  retry: 'Try again',
-  emptyTitle: 'No files yet',
-  /** Under it, the assistant by its name (`agentWords(…).Name`). */
-  emptyLine: (agent: string) => `Files you and ${agent} share in a conversation show up here.`,
-  goToChat: 'Go to Chat',
-} as const;
+const words = (locale?: string | null) => clientTree(locale, SETTINGS_AREA_WORDS).files;
+
+/** Files' words, in a locale (English when none). */
+export function filesCopy(locale?: string | null) {
+  const w = words(locale);
+  return {
+    title: w.title,
+    intro: w.intro,
+    noneYet: w.noneYet,
+    spaceEmpty: w.spaceEmpty,
+    folderEmpty: w.folderEmpty,
+    inMessage: w.inMessage,
+    savedToFiles: w.savedToFiles,
+    upload: w.upload,
+    newFolder: w.newFolder,
+    download: w.download,
+    openMessage: w.openMessage,
+    rename: w.rename,
+    move: w.move,
+    remove: w.remove,
+    top: w.top,
+    dropHere: w.dropHere,
+    loadError: w.loadError,
+    listError: w.listError,
+    notHere: w.notHere,
+    saved: w.saved,
+    saving: w.saving,
+    /** A message's file: put it into its conversation's Files, it's there, and the note after a save. */
+    saveToFiles: w.saveToFiles,
+    inFiles: w.inFiles,
+    savedNote: w.savedNote,
+    open: w.open,
+    /** The Files home's read states. */
+    loading: w.loading,
+    readFailed: w.readFailed,
+    readFailedLine: w.readFailedLine,
+    retry: w.retry,
+    emptyTitle: w.emptyTitle,
+    /** Under it, the assistant by its name (`agentWords(…).Name`). */
+    emptyLine: (agent: string) => interpolate(w.emptyLine, { agent }),
+    goToChat: w.goToChat,
+  };
+}
+
+export const FILES_COPY = filesCopy();
 
 /** “1 file”, “12 files”. */
-export function filesCountText(count: number): string {
-  return count === 1 ? '1 file' : `${count} files`;
+export function filesCountText(count: number, locale?: string | null): string {
+  return words(locale).count(count);
 }
 
 /** “12 files · 4.1 MB”: a conversation's or a folder's line. */
-export function filesSizeLine(count: number, bytes: number): string {
-  return `${filesCountText(count)} · ${formatFileSize(bytes)}`;
+export function filesSizeLine(count: number, bytes: number, locale?: string | null): string {
+  return `${filesCountText(count, locale)} · ${formatFileSize(bytes)}`;
 }
 
 /** “23 Sep 11:20”: when the last file was added, always with its day so a row reads on its own. */
-export function filesLastAddedText(at: string, timeZone: string): string {
-  return `Last added ${formatDate(at, timeZone, { year: 'never' })} ${formatClock(at, timeZone)}`;
+export function filesLastAddedText(at: string, timeZone: string, locale?: string | null): string {
+  return interpolate(words(locale).lastAdded, {
+    date: formatDate(at, timeZone, { year: 'never' }, locale),
+    clock: formatClock(at, timeZone),
+  });
 }
 
 /** A conversation's line on the Files home: “4 files · 136 MB · Last added 23 Sep 11:20”. */
 export function filesSpaceLine(
   row: { count: number; bytes: number; lastAddedAt: string | null },
   timeZone: string,
+  locale?: string | null,
 ): string {
-  const size = filesSizeLine(row.count, row.bytes);
-  return row.lastAddedAt ? `${size} · ${filesLastAddedText(row.lastAddedAt, timeZone)}` : size;
+  const size = filesSizeLine(row.count, row.bytes, locale);
+  return row.lastAddedAt ? `${size} · ${filesLastAddedText(row.lastAddedAt, timeZone, locale)}` : size;
 }
 
 /** Where a file came from: “In a message” or “Saved to Files”. */
-export function fileOriginText(entry: Pick<FileEntry, 'messageId'>): string {
-  return entry.messageId ? FILES_COPY.inMessage : FILES_COPY.savedToFiles;
+export function fileOriginText(entry: Pick<FileEntry, 'messageId'>, locale?: string | null): string {
+  const w = words(locale);
+  return entry.messageId ? w.inMessage : w.savedToFiles;
 }
 
 /** “Moved to Drawings/2024.” / “Moved to the top of Files.” */
-export function movedText(folder: string): string {
-  return folder ? `Moved to ${folder}.` : 'Moved to the top of Files.';
+export function movedText(folder: string, locale?: string | null): string {
+  const w = words(locale);
+  return folder ? interpolate(w.movedTo, { folder }) : w.movedTop;
 }
 
 /** “Renamed to “plan.pdf”.” */
-export function renamedText(name: string): string {
-  return `Renamed to “${name}”.`;
+export function renamedText(name: string, locale?: string | null): string {
+  return interpolate(words(locale).renamed, { name });
 }
 
 /** “Saved 1 file to Files.” / “Saved 3 files to Drawings.” */
-export function uploadedText(count: number, folder: string): string {
-  return `Saved ${filesCountText(count)} to ${folder ? folderName(folder) : 'Files'}.`;
+export function uploadedText(count: number, folder: string, locale?: string | null): string {
+  return interpolate(words(locale).uploaded, {
+    count: filesCountText(count, locale),
+    folder: folderName(folder, locale),
+  });
 }
 
 /** The confirm dialog's sentence: a message's file stays on its message; a saved file is deleted. */
-export function removeFileText(entry: Pick<FileEntry, 'messageId'>, where: string): string {
-  return entry.messageId
-    ? `It stays on its message in ${where}; only Files lets go of it.`
-    : `It’s deleted from ${where}. This can’t be undone.`;
+export function removeFileText(
+  entry: Pick<FileEntry, 'messageId'>,
+  where: string,
+  locale?: string | null,
+): string {
+  const w = words(locale);
+  return interpolate(entry.messageId ? w.removeKept : w.removeDeleted, { where });
 }
 
 /** Words for a refused or failed Files write: the Whombat's own for a 4xx, else ours. */
@@ -140,16 +163,20 @@ export function saveActionOf(attachment: Pick<Attachment, 'inFiles'>): SaveToFil
 }
 
 /** The buttons' names for assistive technology: “Save plan.pdf to Files”, “plan.pdf is in Files. Open Files”. */
-export function saveToFilesLabel(name: string): string {
-  return `Save ${name} to Files`;
+export function saveToFilesLabel(name: string, locale?: string | null): string {
+  return interpolate(words(locale).saveLabel, { name });
 }
 
-export function inFilesLabel(name: string): string {
-  return `${name} is in Files. Open Files`;
+export function inFilesLabel(name: string, locale?: string | null): string {
+  return interpolate(words(locale).inFilesLabel, { name });
 }
 
-/** When the Whombat gives no words of its own for a refused save. */
-export const SAVE_TO_FILES_FAILED = 'Couldn’t save it to Files. Try again.';
+/** When the Whombat gives no words of its own for a refused save, in a locale (English when none). */
+export function saveToFilesFailed(locale?: string | null): string {
+  return words(locale).saveFailed;
+}
+
+export const SAVE_TO_FILES_FAILED = saveToFilesFailed();
 
 /**
  * The message with one of its files marked in or out of Files (the click's optimistic flip, a removal in Files); the
@@ -226,14 +253,18 @@ export function filesConversationRows(
 }
 
 /** The conversation in a sentence: “your Chat”, “your Feedback”, a branch name. */
-export function filesWhereText(row: Pick<FilesConversationRow, 'kind' | 'label'>): string {
+export function filesWhereText(
+  row: Pick<FilesConversationRow, 'kind' | 'label'>,
+  locale?: string | null,
+): string {
+  const w = words(locale);
   switch (row.kind) {
     case 'dm':
-      return `your ${row.label}`;
+      return interpolate(w.whereYour, { label: row.label });
     case 'branch':
       return row.label;
     default:
-      return 'this conversation';
+      return w.whereThis;
   }
 }
 
@@ -301,8 +332,8 @@ export function fileMessageLink(
 /* Folders (FS-03) -------------------------------------------------------------------------------- */
 
 /** A folder's last segment: “2024” for `Drawings/2024`; “Files” for the top. */
-export function folderName(folder: string): string {
-  return folder ? (folder.split('/').pop() ?? folder) : FILES_COPY.title;
+export function folderName(folder: string, locale?: string | null): string {
+  return folder ? (folder.split('/').pop() ?? folder) : words(locale).title;
 }
 
 /** The folder above (`''` above a top-level folder and above the top). */
@@ -333,30 +364,31 @@ export function folderCrumbs(folder: string): FolderCrumb[] {
 }
 
 /** Why a folder name a person typed can't be one, or null when it can (FS-03). */
-export function folderNameProblem(raw: string, parent: string): string | null {
+export function folderNameProblem(raw: string, parent: string, locale?: string | null): string | null {
+  const w = words(locale);
   const name = raw.trim();
-  if (!name) return 'Give the folder a name.';
-  if (name.includes('/')) return 'A folder name can’t hold a /. Make the folder, then one inside it.';
-  if (name === '.' || name === '..' || name.includes('\\'))
-    return 'A folder can’t be called . or .., or hold a \\.';
+  if (!name) return w.nameEmpty;
+  if (name.includes('/')) return w.nameSlash;
+  if (name === '.' || name === '..' || name.includes('\\')) return w.nameDots;
   if ([...name].length > FILES_FOLDER_SEGMENT_MAX)
-    return `A folder name is at most ${FILES_FOLDER_SEGMENT_MAX} characters.`;
+    return interpolate(w.nameLong, { max: FILES_FOLDER_SEGMENT_MAX });
   const path = normalizeFilesFolder(parent ? `${parent}/${name}` : name);
   if (path === null) {
     if (parent.split('/').length >= FILES_FOLDER_DEPTH_MAX)
-      return `Folders go at most ${FILES_FOLDER_DEPTH_MAX} levels deep.`;
-    return 'That can’t be a folder name.';
+      return interpolate(w.tooDeep, { max: FILES_FOLDER_DEPTH_MAX });
+    return w.notAName;
   }
-  if (!path || sameFilesFolder(path, parent)) return 'That can’t be a folder name.';
+  if (!path || sameFilesFolder(path, parent)) return w.notAName;
   return null;
 }
 
 /** Why a folder path a person typed (the Move dialog) can’t be a folder; null when it can. */
-export function folderPathProblem(raw: string): string | null {
+export function folderPathProblem(raw: string, locale?: string | null): string | null {
   if (normalizeFilesFolder(raw) !== null) return null;
+  const w = words(locale);
   if (raw.split('/').filter((s) => s.trim()).length > FILES_FOLDER_DEPTH_MAX)
-    return `Folders go at most ${FILES_FOLDER_DEPTH_MAX} levels deep.`;
-  return `Each folder name is 1–${FILES_FOLDER_SEGMENT_MAX} characters, not . or .., without a \\.`;
+    return interpolate(w.tooDeep, { max: FILES_FOLDER_DEPTH_MAX });
+  return interpolate(w.pathRule, { max: FILES_FOLDER_SEGMENT_MAX });
 }
 
 /** `parent/name`, normalized (null when it can't be a folder). */
@@ -571,25 +603,31 @@ export function filesUploading(items: readonly FilesUpload[]): boolean {
 }
 
 /** The row's status: “Uploading 42%”, “Saving…”, “Saved · 2.4 MB”, or why it failed. */
-export function filesUploadStatusText(item: FilesUpload): string {
+export function filesUploadStatusText(item: FilesUpload, locale?: string | null): string {
+  const w = words(locale);
   switch (item.state) {
     case 'uploading':
-      return `Uploading ${Math.round(item.progress * 100)}%`;
+      return interpolate(w.uploading, { percent: Math.round(item.progress * 100) });
     case 'saving':
-      return FILES_COPY.saving;
+      return w.saving;
     case 'saved':
-      return `${FILES_COPY.saved} · ${formatFileSize(item.attachment?.size ?? item.size)}`;
+      return `${w.saved} · ${formatFileSize(item.attachment?.size ?? item.size)}`;
     case 'failed':
-      return item.error ?? 'Upload failed. Try again.';
+      return item.error ?? w.uploadFailed;
   }
 }
 
 /** A file larger than the Whombat takes (its reservation's `maxBytes`), said before anything is sent. */
-export function tooLargeText(name: string, maxBytes: number): string {
-  return `${name} is larger than ${formatFileSize(maxBytes)}, the most this Whombat takes.`;
+export function tooLargeText(name: string, maxBytes: number, locale?: string | null): string {
+  return interpolate(words(locale).tooLarge, { name, size: formatFileSize(maxBytes) });
 }
 
-export const SAVE_FAILED = 'Uploaded, but couldn’t save it to Files. Try again.';
+/** The bytes are up but Files refused the save without words of its own, in a locale (English when none). */
+export function saveFailedText(locale?: string | null): string {
+  return words(locale).uploadedNotSaved;
+}
+
+export const SAVE_FAILED = saveFailedText();
 
 export interface FilesUploadOptions {
   burrow: string;

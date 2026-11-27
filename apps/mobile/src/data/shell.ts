@@ -4,14 +4,17 @@
  * Pure.
  */
 
-import { CHAT_WORDS } from '@whombat/client';
+import { chatWords } from '@whombat/client';
 import { mobileTranslator } from '../i18n/translate';
 
 /**
  * What the Overview tab and its page are called (sidebar-tabs.md; the web's sidebar row): the bar's word, the page's
  * title and the “‹ Overview” of a screen opened from it. Connections are what is connected: Overview's tab, Settings'.
  */
-export const OVERVIEW_TITLE = CHAT_WORDS.dashboard;
+export function overviewTitle(locale?: string): string {
+  return chatWords(locale).dashboard;
+}
+export const OVERVIEW_TITLE = overviewTitle();
 
 /** The bar's tabs, in its order. The first is the one the app opens on (CHT-22). */
 export const TABS = ['ChatRoom', 'NeedsYou', 'Dashboard', 'Automations', 'Settings'] as const;

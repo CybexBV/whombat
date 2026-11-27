@@ -5,8 +5,11 @@
  * (AP-13).
  */
 import { type Attachment, formatFileSize } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import type { WhombatClient } from './http/client';
 import { ApiError, NetworkError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { WORK_AREA_WORDS } from './i18n/messages/chatWork/work';
 import { type ChunkSource, StreamError } from './session/types';
 
 export type UploadState = 'uploading' | 'ready' | 'failed';
@@ -75,10 +78,26 @@ export function anyUploading(items: readonly UploadItem[]): boolean {
   return items.some((i) => i.state === 'uploading');
 }
 
+const words = (locale?: string | null) => clientTree(locale, WORK_AREA_WORDS).uploads;
+
+/** An upload's own English words (`UploadError`) in a locale; anyone else's words as they are. */
+function ownWords(message: string, locale?: string | null): string {
+  if (!locale) return message;
+  const en = words();
+  const w = words(locale);
+  if (message === en.tryAgain) return w.tryAgain;
+  if (message === en.connection) return w.connection;
+  if (message === en.cancelled) return w.cancelled;
+  if (message === en.failed) return w.failed;
+  return message;
+}
+
 /** “Uploading 42%” / “Ready · 2.4 MB” / the error: the chip's status line. */
-export function uploadStatusText(item: UploadItem): string {
-  if (item.state === 'uploading') return `Uploading ${Math.round(item.progress * 100)}%`;
-  if (item.state === 'failed') return item.error ?? 'Upload failed.';
+export function uploadStatusText(item: UploadItem, locale?: string | null): string {
+  const w = words(locale);
+  if (item.state === 'uploading')
+    return interpolate(w.uploading, { percent: Math.round(item.progress * 100) });
+  if (item.state === 'failed') return item.error ? ownWords(item.error, locale) : w.failed;
   return formatFileSize(item.attachment?.size ?? item.size);
 }
 
@@ -96,11 +115,11 @@ export class UploadError extends Error {
 const CONNECTION = 'Upload failed. Check your connection and try again.';
 
 /** Words for a failed upload (the server's own message for 4xx answers, which are written for people). */
-export function uploadErrorText(error: unknown): string {
-  if (error instanceof UploadError) return error.message;
+export function uploadErrorText(error: unknown, locale?: string | null): string {
+  if (error instanceof UploadError) return ownWords(error.message, locale);
   if (error instanceof ApiError && error.status < 500) return error.message;
-  if (error instanceof NetworkError) return CONNECTION;
-  return 'Upload failed. Try again.';
+  if (error instanceof NetworkError) return locale ? words(locale).connection : CONNECTION;
+  return words(locale).tryAgain;
 }
 
 /** What the transfer needs from the platform's file. */

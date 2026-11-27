@@ -10,23 +10,23 @@
  * entries it kept in step stay in the Vault). Before, a button opened the web page.
  */
 
-import { disconnectQuery, ONEPASSWORD_APP_TEXT, ONEPASSWORD_DISCONNECT_OPTIONS } from '@whombat/client';
+import { disconnectQuery, onePasswordAppText, onePasswordDisconnectOptions } from '@whombat/client';
 import {
   accessChoices,
   type ChoiceSetting,
-  CONNECT_FORM_TEXT,
   type ConnectionWords,
   choiceSavedText,
   choiceSettings,
   codeProblem,
   codeSignInOf,
+  connectFormText,
   connectionWords,
   connectProblem,
   connectReturnTo,
   guidedSteps,
   reconnectServiceLoginBody,
-  SIGN_IN_AGAIN_TEXT,
   setSecretBody,
+  signInAgainText,
   usedByAgents,
   usedByVaultSync,
 } from '@whombat/client/connections';
@@ -45,7 +45,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, View } from 'react-native';
 import { elsewhereWay, opensItself, type PendingLogin } from '../../data/connectForm';
 import {
-  CONNECTION_CHANGE_TEXT,
+  connectionChangeText,
   raisedNote,
   reconnectWay,
   removeAsk,
@@ -71,6 +71,8 @@ import { useLoginWait } from './useLoginWait';
 
 /** NAME: the label, and Rename for those who may change it. */
 export function NameBlock({ slug, conn }: { slug: string; conn: ConnectionView }) {
+  const { rawLocale } = useI18n();
+  const connectionChangeTextHere = connectionChangeText(rawLocale);
   const update = useConnectionWrite(api.connections.update, slug);
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(conn.label);
@@ -78,7 +80,7 @@ export function NameBlock({ slug, conn }: { slug: string; conn: ConnectionView }
 
   async function save() {
     const next = label.trim();
-    if (!next) return setProblem(CONNECTION_CHANGE_TEXT.giveName);
+    if (!next) return setProblem(connectionChangeTextHere.giveName);
     if (next === conn.label) return setEditing(false);
     try {
       const result = await update.mutateAsync({
@@ -87,22 +89,22 @@ export function NameBlock({ slug, conn }: { slug: string; conn: ConnectionView }
       });
       if (result.status === 'ok') {
         setEditing(false);
-        showNotice(CONNECTION_CHANGE_TEXT.renamed(result.data.connection.label));
+        showNotice(connectionChangeTextHere.renamed(result.data.connection.label));
       }
     } catch (err) {
-      const p = connectProblem(err);
+      const p = connectProblem(err, undefined, undefined, rawLocale);
       setProblem(p.fields.label ?? p.message);
     }
   }
 
   return (
-    <Section title={CONNECTION_CHANGE_TEXT.name}>
+    <Section title={connectionChangeTextHere.name}>
       <View style={{ padding: 14, gap: 10 }}>
         {editing ? (
           <>
             <FormField
               label={
-                CONNECTION_CHANGE_TEXT.name.charAt(0) + CONNECTION_CHANGE_TEXT.name.slice(1).toLowerCase()
+                connectionChangeTextHere.name.charAt(0) + connectionChangeTextHere.name.slice(1).toLowerCase()
               }
               value={label}
               onChangeText={(v) => {
@@ -117,13 +119,13 @@ export function NameBlock({ slug, conn }: { slug: string; conn: ConnectionView }
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button
-                label={CONNECTION_CHANGE_TEXT.save}
+                label={connectionChangeTextHere.save}
                 busy={update.isPending}
                 onPress={() => void save()}
                 style={{ flex: 1 }}
               />
               <Button
-                label={CONNECTION_CHANGE_TEXT.cancel}
+                label={connectionChangeTextHere.cancel}
                 variant="quiet"
                 onPress={() => setEditing(false)}
                 style={{ flex: 1 }}
@@ -136,7 +138,7 @@ export function NameBlock({ slug, conn }: { slug: string; conn: ConnectionView }
               {conn.label}
             </Text>
             <Button
-              label={CONNECTION_CHANGE_TEXT.rename}
+              label={connectionChangeTextHere.rename}
               variant="secondary"
               onPress={() => {
                 setLabel(conn.label);
@@ -164,18 +166,19 @@ export function LevelBlock({
   onSignInAgain: () => void;
 }) {
   const { rawLocale } = useI18n();
+  const connectionChangeTextHere = connectionChangeText(rawLocale);
   const connectionAccessLabelsHere = connectionAccessLabels(rawLocale);
 
   const assistant = useAgentWords();
-  const words: ConnectionWords = connectionWords(assistant.name);
+  const words: ConnectionWords = connectionWords(assistant.name, { locale: rawLocale });
   const update = useConnectionWrite(api.connections.update, slug);
   const [editing, setEditing] = useState(false);
   const [level, setLevel] = useState<ConnectionAccessLevel>(conn.access);
   const [raised, setRaised] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const choices = accessChoices(entry).map((x) => ({ ...x, text: words.access(x.text) }));
+  const choices = accessChoices(entry, rawLocale).map((x) => ({ ...x, text: words.access(x.text) }));
   const current = choices.find((x) => x.value === conn.access);
-  const note = raisedNote(entry, raised, conn.access);
+  const note = raisedNote(entry, raised, conn.access, rawLocale);
 
   async function save() {
     if (level === conn.access) return setEditing(false);
@@ -188,10 +191,10 @@ export function LevelBlock({
       if (result.status === 'ok') {
         setEditing(false);
         setRaised(level === 'manage');
-        showNotice(CONNECTION_CHANGE_TEXT.levelSaved(conn.label, level));
+        showNotice(connectionChangeTextHere.levelSaved(conn.label, level));
       }
     } catch (err) {
-      setProblem(connectProblem(err).message);
+      setProblem(connectProblem(err, undefined, undefined, rawLocale).message);
     }
   }
 
@@ -210,13 +213,13 @@ export function LevelBlock({
             />
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button
-                label={CONNECTION_CHANGE_TEXT.save}
+                label={connectionChangeTextHere.save}
                 busy={update.isPending}
                 onPress={() => void save()}
                 style={{ flex: 1 }}
               />
               <Button
-                label={CONNECTION_CHANGE_TEXT.cancel}
+                label={connectionChangeTextHere.cancel}
                 variant="quiet"
                 onPress={() => setEditing(false)}
                 style={{ flex: 1 }}
@@ -232,7 +235,7 @@ export function LevelBlock({
               {current ? <Note>{current.text}</Note> : null}
             </View>
             <Button
-              label={CONNECTION_CHANGE_TEXT.change}
+              label={connectionChangeTextHere.change}
               variant="secondary"
               onPress={() => {
                 setLevel(conn.access);
@@ -245,7 +248,11 @@ export function LevelBlock({
         {note ? (
           <View style={{ gap: 8 }}>
             <Note>{note}</Note>
-            <Button label={CONNECTION_CHANGE_TEXT.signInAgain} variant="secondary" onPress={onSignInAgain} />
+            <Button
+              label={connectionChangeTextHere.signInAgain}
+              variant="secondary"
+              onPress={onSignInAgain}
+            />
           </View>
         ) : null}
         <FormMessage text={problem} />
@@ -288,6 +295,8 @@ function ChoiceBlock({
   conn: ConnectionView;
   setting: ChoiceSetting;
 }) {
+  const { rawLocale } = useI18n();
+  const connectionChangeTextHere = connectionChangeText(rawLocale);
   const update = useConnectionWrite(api.connections.update, slug);
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(setting.value);
@@ -306,7 +315,7 @@ function ChoiceBlock({
         showNotice(choiceSavedText(setting, value));
       }
     } catch (err) {
-      const p = connectProblem(err);
+      const p = connectProblem(err, undefined, undefined, rawLocale);
       setProblem(p.fields[setting.field] ?? p.message);
     }
   }
@@ -326,13 +335,13 @@ function ChoiceBlock({
             {setting.help ? <Note>{setting.help}</Note> : null}
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button
-                label={CONNECTION_CHANGE_TEXT.save}
+                label={connectionChangeTextHere.save}
                 busy={update.isPending}
                 onPress={() => void save()}
                 style={{ flex: 1 }}
               />
               <Button
-                label={CONNECTION_CHANGE_TEXT.cancel}
+                label={connectionChangeTextHere.cancel}
                 variant="quiet"
                 onPress={() => setEditing(false)}
                 style={{ flex: 1 }}
@@ -345,9 +354,9 @@ function ChoiceBlock({
               {setting.valueLabel}
             </Text>
             <Button
-              label={CONNECTION_CHANGE_TEXT.change}
+              label={connectionChangeTextHere.change}
               variant="secondary"
-              accessibilityLabel={`${CONNECTION_CHANGE_TEXT.change} ${setting.label}`}
+              accessibilityLabel={`${connectionChangeTextHere.change} ${setting.label}`}
               onPress={() => {
                 setValue(setting.value);
                 setProblem(null);
@@ -364,6 +373,8 @@ function ChoiceBlock({
 
 /** The last check and Check again (CX-72). */
 export function CheckRow({ slug, entry, conn }: { slug: string; entry: CatalogEntry; conn: ConnectionView }) {
+  const { rawLocale } = useI18n();
+  const connectionChangeTextHere = connectionChangeText(rawLocale);
   const theme = useTheme();
   const recheck = useConnectionWrite(api.connections.recheck, slug);
   const [problem, setProblem] = useState<string | null>(null);
@@ -372,10 +383,10 @@ export function CheckRow({ slug, entry, conn }: { slug: string; entry: CatalogEn
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Text size={13} color={theme.colors.mut} style={{ flex: 1 }}>
           {/* The state line above says when it was checked; this says only that it is checking now. */}
-          {recheck.isPending ? CONNECTION_CHANGE_TEXT.checking(entry.name) : ''}
+          {recheck.isPending ? connectionChangeTextHere.checking(entry.name) : ''}
         </Text>
         <Button
-          label={CONNECTION_CHANGE_TEXT.checkAgain}
+          label={connectionChangeTextHere.checkAgain}
           variant="secondary"
           disabled={recheck.isPending}
           onPress={async () => {
@@ -383,7 +394,7 @@ export function CheckRow({ slug, entry, conn }: { slug: string; entry: CatalogEn
             try {
               await recheck.mutateAsync({ params: { burrow: slug, connectionId: conn.id } });
             } catch (err) {
-              setProblem(connectProblem(err).message);
+              setProblem(connectProblem(err, undefined, undefined, rawLocale).message);
             }
           }}
         />
@@ -416,6 +427,12 @@ export function SignInBlock({
   /** The form asked that way is laid out: the screen brings it into sight. */
   onAgainShown?: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const connectionChangeTextHere = connectionChangeText(rawLocale);
+  const connectFormTextHere = connectFormText(rawLocale);
+  const signInAgainTextHere = signInAgainText(rawLocale);
+  const onepasswordAppTextHere = onePasswordAppText(rawLocale);
+  const onepasswordDisconnectOptionsHere = onePasswordDisconnectOptions(rawLocale);
   const { t: tMobile } = useMobileT();
   const agent = useAgentWords();
   const managed = useManaged();
@@ -436,7 +453,7 @@ export function SignInBlock({
   // Removing the Vault's sync (1Password) asks in place what becomes of the entries it kept in step.
   const [confirming, setConfirming] = useState(false);
   const [vaultEntries, setVaultEntries] = useState<OnePasswordDisconnectChoice>('keep');
-  const view = signInView(entry, conn, true, agent.Name);
+  const view = signInView(entry, conn, true, agent.Name, rawLocale);
   const method = catalogSignIn(entry, conn.signIn);
   // Made with a code (T3 Code's pairing code): a refusal is in that sign-in's words.
   const withCode = view.action?.kind === 'code';
@@ -449,7 +466,7 @@ export function SignInBlock({
     startService.isPending ||
     disconnect.isPending;
   const needs = conn.status !== 'active';
-  const stacked = stacksActions(view);
+  const stacked = stacksActions(view, rawLocale);
   const half = stacked ? undefined : { flex: 1 };
   // The demo world opens no sign-in page by itself (AP-3953).
   const opens = opensItself(elsewhereWay(!!managed, webUrl('/')));
@@ -459,7 +476,7 @@ export function SignInBlock({
   useLoginWait(slug, login, {
     onConnected: (c) => {
       setLogin(null);
-      showNotice(CONNECT_FORM_TEXT.connected(c.label));
+      showNotice(connectFormTextHere.connected(c.label));
     },
     onFailed: (message) => {
       setLogin(null);
@@ -483,9 +500,9 @@ export function SignInBlock({
   }
 
   async function replace() {
-    const refused = replaceProblem(view, secret);
+    const refused = replaceProblem(view, secret, rawLocale);
     if (refused) return setProblem(refused);
-    const codeRefused = codeProblem(code, codeAsked !== null);
+    const codeRefused = codeProblem(code, codeAsked !== null, rawLocale);
     if (codeRefused) return setCodeError(codeRefused);
     setProblem(null);
     setCodeError(null);
@@ -497,11 +514,11 @@ export function SignInBlock({
       });
       if (result.status === 'ok') {
         stopReplacing();
-        showNotice(replacedText(entry, conn, view));
+        showNotice(replacedText(entry, conn, view, rawLocale));
       }
     } catch (err) {
       // A session's password keeps the server's words for a refusal (AP-3805).
-      const p = connectProblem(err, undefined, tried);
+      const p = connectProblem(err, undefined, tried, rawLocale);
       // The service asks for its two-step code (Synology, SG-09): the password stays typed, the code goes with it next.
       if (p.secondFactor) return setCodeAsked(p.secondFactor);
       if (p.fields.code) return setCodeError(p.fields.code);
@@ -524,7 +541,7 @@ export function SignInBlock({
       setLogin({ kind: 'service', flow: result.data, name: entry.name });
       if (opens) openOutside(result.data.loginUrl);
     } catch (err) {
-      setProblem(connectProblem(err).message);
+      setProblem(connectProblem(err, undefined, undefined, rawLocale).message);
     }
   }
 
@@ -558,7 +575,7 @@ export function SignInBlock({
       });
       if (result.status === 'ok') openOutside(result.data.authorizeUrl);
     } catch (err) {
-      setProblem(connectProblem(err).message);
+      setProblem(connectProblem(err, undefined, undefined, rawLocale).message);
     }
   }
 
@@ -573,10 +590,10 @@ export function SignInBlock({
           if (result.status !== 'ok') return;
           // A Fusebox that didn't answer keeps Whombat's client: the server says so.
           const notice = (result.data as { notice?: string | null }).notice?.trim();
-          showNotice(notice || CONNECTION_CHANGE_TEXT.removed(conn.label));
+          showNotice(notice || connectionChangeTextHere.removed(conn.label));
           onRemoved();
         },
-        (err) => setProblem(connectProblem(err).message),
+        (err) => setProblem(connectProblem(err, undefined, undefined, rawLocale).message),
       );
   }
 
@@ -586,14 +603,22 @@ export function SignInBlock({
       setConfirming(true);
       return;
     }
-    Alert.alert(CONNECTION_CHANGE_TEXT.removeNamed(conn.label), removeAsk(entry, conn, agent.Name), [
-      { text: CONNECTION_CHANGE_TEXT.cancel, style: 'cancel' },
-      { text: CONNECTION_CHANGE_TEXT.removeNamed(conn.label), style: 'destructive', onPress: disconnectNow },
-    ]);
+    Alert.alert(
+      connectionChangeTextHere.removeNamed(conn.label),
+      removeAsk(entry, conn, agent.Name, rawLocale),
+      [
+        { text: connectionChangeTextHere.cancel, style: 'cancel' },
+        {
+          text: connectionChangeTextHere.removeNamed(conn.label),
+          style: 'destructive',
+          onPress: disconnectNow,
+        },
+      ],
+    );
   }
 
   return (
-    <Section title={CONNECTION_CHANGE_TEXT.signIn}>
+    <Section title={connectionChangeTextHere.signIn}>
       <View style={{ padding: 14, gap: 12 }}>
         {login ? (
           <LoginWaitView login={login} onCancel={() => setLogin(null)} />
@@ -615,7 +640,7 @@ export function SignInBlock({
                 }}
               >
                 <GuideSteps
-                  label={CONNECT_FORM_TEXT.making(view.action.secretLabel)}
+                  label={connectFormTextHere.making(view.action.secretLabel)}
                   steps={guidedSteps(entry, view.action, conn.fields)}
                 />
                 <FormField
@@ -635,13 +660,13 @@ export function SignInBlock({
                 />
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Button
-                    label={SIGN_IN_AGAIN_TEXT.submit}
+                    label={signInAgainTextHere.submit}
                     busy={setSecret.isPending}
                     onPress={() => void replace()}
                     style={{ flex: 1 }}
                   />
                   <Button
-                    label={CONNECTION_CHANGE_TEXT.cancel}
+                    label={connectionChangeTextHere.cancel}
                     variant="quiet"
                     onPress={stopReplacing}
                     style={{ flex: 1 }}
@@ -665,13 +690,13 @@ export function SignInBlock({
                 {codeAsked !== null ? (
                   // The code the service asked for, under the password it goes with (CS-03's field, SG-09).
                   <FormField
-                    label={CONNECT_FORM_TEXT.code}
+                    label={connectFormTextHere.code}
                     value={code}
                     onChangeText={(v) => {
                       setCode(v);
                       setCodeError(null);
                     }}
-                    placeholder={CONNECT_FORM_TEXT.codePlaceholder}
+                    placeholder={connectFormTextHere.codePlaceholder}
                     hint={codeAsked}
                     error={codeError}
                     autoFocus
@@ -685,13 +710,13 @@ export function SignInBlock({
                 ) : null}
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Button
-                    label={CONNECTION_CHANGE_TEXT.save}
+                    label={connectionChangeTextHere.save}
                     busy={setSecret.isPending}
                     onPress={() => void replace()}
                     style={{ flex: 1 }}
                   />
                   <Button
-                    label={CONNECTION_CHANGE_TEXT.cancel}
+                    label={connectionChangeTextHere.cancel}
                     variant="quiet"
                     onPress={stopReplacing}
                     style={{ flex: 1 }}
@@ -701,22 +726,22 @@ export function SignInBlock({
             ) : confirming ? (
               // Keep the entries in your Vault (the default) or Remove them too; 1Password itself never changes.
               <View style={{ gap: 10 }}>
-                <Note>{removeAsk(entry, conn, agent.Name)}</Note>
+                <Note>{removeAsk(entry, conn, agent.Name, rawLocale)}</Note>
                 <RadioCards
-                  label={ONEPASSWORD_APP_TEXT.removeChoice}
+                  label={onepasswordAppTextHere.removeChoice}
                   value={vaultEntries}
                   onChange={setVaultEntries}
                   disabled={disconnect.isPending}
-                  options={ONEPASSWORD_DISCONNECT_OPTIONS.map((o) => ({ value: o.value, title: o.label }))}
+                  options={onepasswordDisconnectOptionsHere.map((o) => ({ value: o.value, title: o.label }))}
                 />
                 <Button
-                  label={CONNECTION_CHANGE_TEXT.removeNamed(conn.label)}
+                  label={connectionChangeTextHere.removeNamed(conn.label)}
                   variant="secondary"
                   busy={disconnect.isPending}
                   onPress={disconnectNow}
                 />
                 <Button
-                  label={CONNECTION_CHANGE_TEXT.cancel}
+                  label={connectionChangeTextHere.cancel}
                   variant="quiet"
                   disabled={disconnect.isPending}
                   onPress={() => setConfirming(false)}
@@ -760,7 +785,7 @@ export function SignInBlock({
                     />
                   ) : null}
                   <Button
-                    label={CONNECTION_CHANGE_TEXT.remove}
+                    label={connectionChangeTextHere.remove}
                     variant="secondary"
                     disabled={busy}
                     onPress={remove}
@@ -772,7 +797,7 @@ export function SignInBlock({
             <FormMessage text={problem} />
             {entry.docsUrl && !replacing ? (
               <TextLink
-                label={CONNECTION_CHANGE_TEXT.documentation(entry.name)}
+                label={connectionChangeTextHere.documentation(entry.name)}
                 external
                 onPress={() => openOutside(entry.docsUrl)}
               />

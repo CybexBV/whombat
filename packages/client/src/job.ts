@@ -12,91 +12,117 @@ import {
   type HandoffPlanStep,
   type HandoffPullRequest,
 } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { handoffMinutes, pullRequestLabel, T3_CODE_NAME } from './handoff';
+import { clientTree } from './i18n/catalog';
+import { WORK_AREA_WORDS } from './i18n/messages/chatWork/work';
 
-export const JOB_WORDS = {
-  /** Waiting for its pull request's checks, after “T3 Code ·” in a row. */
-  waitingChecks: 'waiting for the checks',
-  fixing: 'fixing a failed check',
-  plan: {
-    title: 'Plan',
-    count: (done: number, of: number) => `${done} of ${of} done`,
-    show: 'Show the plan',
-    hide: 'Hide the plan',
-    state: { done: 'done', now: 'doing now', next: 'to do' } satisfies Record<
-      HandoffPlanStep['state'],
-      string
-    >,
-  },
-  pullRequest: {
-    title: 'Pull request',
-    state: { open: 'open', draft: 'draft', merged: 'merged', closed: 'closed' } satisfies Record<
-      HandoffPullRequest['state'],
-      string
-    >,
-    line: (n: number, state: string) => `#${n} · ${state}`,
-    spoken: (n: number, state: string) => `Pull request #${n}, ${state}`,
-  },
-  changes: {
-    title: 'Changes',
-    summary: (files: number, plus: number, minus: number) =>
-      `${files} ${files === 1 ? 'file' : 'files'} · +${plus} −${minus}`,
-    more: (n: number) => `${n} more ${n === 1 ? 'file' : 'files'}`,
-    open: 'See the changes',
-    spokenFile: (path: string, plus: number, minus: number) => `${path}, ${plus} added, ${minus} removed`,
-  },
-  checks: {
-    title: 'Checks',
-    state: {
-      queued: 'Waiting',
-      running: 'Running',
-      passed: 'Passed',
-      failed: 'Failed',
-      skipped: 'Skipped',
-    } satisfies Record<HandoffCheckState, string>,
-    count: (passed: number, of: number) => `${passed} of ${of} passed`,
-    fixing: (attempt: number) => `${T3_CODE_NAME} is fixing it · attempt ${attempt}`,
-    failed: (name: string) => `${name} failed`,
-  },
-  question: {
-    title: `${T3_CODE_NAME} asks`,
-    answered: (label: string) => `Answered: ${label}`,
-    failed: 'Couldn’t answer it. Try again.',
-  },
-  message: {
-    open: `Message ${T3_CODE_NAME}`,
-    placeholder: `Tell ${T3_CODE_NAME} what to change`,
-    now: 'Send now',
-    next: 'Send next',
-    nowHint: 'It reads it while it works.',
-    nextHint: 'It reads it when it’s done with this.',
-    sentNow: `Sent to ${T3_CODE_NAME}.`,
-    sentNext: `${T3_CODE_NAME} reads it next.`,
-    failed: 'Couldn’t send it. Try again.',
-    close: 'Close',
-  },
-  receipt: {
-    title: { completed: 'Done', merged: 'Merged', failed: 'Ran into a problem', stopped: 'Stopped' },
-    testsPassed: 'Tests passed',
-    testsFailed: 'Tests failed',
-    pullRequest: (label: string, state: string) => `Pull request ${label} ${state}`,
-    prState: { open: 'open', draft: 'is a draft', merged: 'merged', closed: 'closed' },
-    took: (time: string) => `Took ${time}`,
-    screenshot: 'Screenshot',
-  },
-  /** T3 Code's whole answer under the receipt, folded until the person opens it. */
-  answer: {
-    read: 'Read the answer',
-    hide: 'Hide the answer',
-    rest: `The rest is in ${T3_CODE_NAME}`,
-  },
-  /** A phone notification's words, one per moment worth one. */
-  notice: {
-    needsYou: (title: string) => `${title} needs your OK in ${T3_CODE_NAME}`,
-    done: (title: string) => `${title} is done`,
-    failed: (title: string) => `${title} ran into a problem`,
-  },
-} as const;
+/** The job view's words, in a locale (English when none). */
+export function jobWords(locale?: string | null) {
+  const w = clientTree(locale, WORK_AREA_WORDS).job;
+  const t3 = T3_CODE_NAME;
+  return {
+    /** Waiting for its pull request's checks, after “T3 Code ·” in a row. */
+    waitingChecks: w.waitingChecks,
+    waitingChecksOn: (pr: string) => interpolate(w.waitingChecksOn, { pr }),
+    fixing: w.fixing,
+    plan: {
+      title: w.plan.title,
+      count: (done: number, of: number) => interpolate(w.plan.count, { done, of }),
+      show: w.plan.show,
+      hide: w.plan.hide,
+      state: { done: w.plan.state.done, now: w.plan.state.now, next: w.plan.state.next } satisfies Record<
+        HandoffPlanStep['state'],
+        string
+      >,
+    },
+    pullRequest: {
+      title: w.pullRequest.title,
+      state: {
+        open: w.pullRequest.state.open,
+        draft: w.pullRequest.state.draft,
+        merged: w.pullRequest.state.merged,
+        closed: w.pullRequest.state.closed,
+      } satisfies Record<HandoffPullRequest['state'], string>,
+      line: (n: number, state: string) => `#${n} · ${state}`,
+      spoken: (n: number, state: string) => interpolate(w.pullRequest.spoken, { n, state }),
+    },
+    changes: {
+      title: w.changes.title,
+      summary: (files: number, plus: number, minus: number) => w.changes.summary(files, { plus, minus }),
+      more: (n: number) => w.changes.more(n),
+      open: w.changes.open,
+      spokenFile: (path: string, plus: number, minus: number) =>
+        interpolate(w.changes.spokenFile, { path, plus, minus }),
+    },
+    checks: {
+      title: w.checks.title,
+      state: {
+        queued: w.checks.state.queued,
+        running: w.checks.state.running,
+        passed: w.checks.state.passed,
+        failed: w.checks.state.failed,
+        skipped: w.checks.state.skipped,
+      } satisfies Record<HandoffCheckState, string>,
+      count: (passed: number, of: number) => interpolate(w.checks.count, { passed, of }),
+      fixing: (attempt: number) => interpolate(w.checks.fixing, { t3, attempt }),
+      failed: (name: string) => interpolate(w.checks.failed, { name }),
+    },
+    question: {
+      title: interpolate(w.question.title, { t3 }),
+      answered: (label: string) => interpolate(w.question.answered, { label }),
+      failed: w.question.failed,
+    },
+    message: {
+      open: interpolate(w.message.open, { t3 }),
+      placeholder: interpolate(w.message.placeholder, { t3 }),
+      now: w.message.now,
+      next: w.message.next,
+      nowHint: w.message.nowHint,
+      nextHint: w.message.nextHint,
+      sentNow: interpolate(w.message.sentNow, { t3 }),
+      sentNext: interpolate(w.message.sentNext, { t3 }),
+      failed: w.message.failed,
+      close: w.message.close,
+    },
+    receipt: {
+      title: {
+        completed: w.receipt.title.completed,
+        merged: w.receipt.title.merged,
+        failed: w.receipt.title.failed,
+        stopped: w.receipt.title.stopped,
+      },
+      testsPassed: w.receipt.testsPassed,
+      testsFailed: w.receipt.testsFailed,
+      pullRequest: (label: string, state: string) => interpolate(w.receipt.pullRequest, { label, state }),
+      prState: {
+        open: w.receipt.prState.open,
+        draft: w.receipt.prState.draft,
+        merged: w.receipt.prState.merged,
+        closed: w.receipt.prState.closed,
+      },
+      took: (time: string) => interpolate(w.receipt.took, { time }),
+      screenshot: w.receipt.screenshot,
+    },
+    /** T3 Code's whole answer under the receipt, folded until the person opens it. */
+    answer: {
+      read: w.answer.read,
+      hide: w.answer.hide,
+      rest: interpolate(w.answer.rest, { t3 }),
+    },
+    /** A phone notification's words, one per moment worth one. */
+    notice: {
+      needsYou: (title: string) => interpolate(w.notice.needsYou, { title, t3 }),
+      done: (title: string) => interpolate(w.notice.done, { title }),
+      failed: (title: string) => interpolate(w.notice.failed, { title }),
+    },
+  };
+}
+
+/** The job view's words, in English. */
+export const JOB_WORDS = jobWords();
+
+const wordsIn = (locale?: string | null) => (locale ? jobWords(locale) : JOB_WORDS);
 
 /** `40s`, `6m`, `1h 05m`: how long a job took. */
 export function stageTime(durationMs: number): string {
@@ -128,7 +154,8 @@ export interface JobPlan {
   open: boolean;
 }
 
-export function jobPlan(h: Handoff): JobPlan | null {
+export function jobPlan(h: Handoff, locale?: string | null): JobPlan | null {
+  const JOB_WORDS = wordsIn(locale);
   const plan = h.plan ?? [];
   if (!plan.length || jobInMessage(h)) return null;
   return {
@@ -153,7 +180,8 @@ export interface JobPullRequest {
  * The job's pull request and whether it is merged, as GitHub says, until the receipt says it; null without one. Facts
  * only: what the job does before it has one is its step, in T3 Code's line.
  */
-export function jobPullRequest(h: Handoff): JobPullRequest | null {
+export function jobPullRequest(h: Handoff, locale?: string | null): JobPullRequest | null {
+  const JOB_WORDS = wordsIn(locale);
   const pr = h.pullRequest ?? null;
   if (!pr || jobReceipt(h) || jobInMessage(h)) return null;
   const state = JOB_WORDS.pullRequest.state[pr.state];
@@ -180,7 +208,8 @@ export interface JobChanges {
 }
 
 /** What the job changed; `shown`: how many files the list shows (the rest are counted). */
-export function jobChanges(h: Handoff, shown = 20): JobChanges | null {
+export function jobChanges(h: Handoff, shown = 20, locale?: string | null): JobChanges | null {
+  const JOB_WORDS = wordsIn(locale);
   const c = h.changes ?? null;
   if (!c || jobInMessage(h)) return null;
   const files = c.files.slice(0, shown).map((f) => {
@@ -230,7 +259,8 @@ const CHECK_TONE: Record<HandoffCheckState, JobChecks['rows'][number]['tone']> =
   skipped: 'quiet',
 };
 
-export function jobChecks(h: Handoff): JobChecks | null {
+export function jobChecks(h: Handoff, locale?: string | null): JobChecks | null {
+  const JOB_WORDS = wordsIn(locale);
   const c = h.checks ?? null;
   if (!c?.runs.length || jobInMessage(h)) return null;
   const rows = c.runs.map((r) => ({
@@ -319,7 +349,8 @@ export interface JobReceipt {
   screenshot: { url: string; alt: string } | null;
 }
 
-export function jobReceipt(h: Handoff): JobReceipt | null {
+export function jobReceipt(h: Handoff, locale?: string | null): JobReceipt | null {
+  const JOB_WORDS = wordsIn(locale);
   const r = h.receipt ?? null;
   if (!r || h.state !== 'ended' || jobInMessage(h)) return null;
   const merged = h.pullRequest?.state === 'merged';
@@ -396,7 +427,9 @@ export type JobNoticeKind = 'needsYou' | 'done' | 'failed';
 export function jobNotice(
   before: Handoff | null | undefined,
   after: Handoff,
+  locale?: string | null,
 ): { kind: JobNoticeKind; text: string } | null {
+  const JOB_WORDS = wordsIn(locale);
   const title = jobTitle(after);
   if (after.state === 'needs_ok' && before?.state !== 'needs_ok')
     return { kind: 'needsYou', text: JOB_WORDS.notice.needsYou(title) };
@@ -413,11 +446,12 @@ export function jobNotice(
  * once its run ended; null otherwise, and the step T3 Code is on says it. Never the furthest stage it reached: work goes
  * back and forth, and most jobs (a look, a sync) never get near a pull request.
  */
-export function jobDoing(h: Handoff): string | null {
+export function jobDoing(h: Handoff, locale?: string | null): string | null {
+  const JOB_WORDS = wordsIn(locale);
   if (h.checks?.failing && h.state === 'working') return JOB_WORDS.fixing;
   if (h.state !== 'checks') return null;
   const pr = h.pullRequest
     ? `#${h.pullRequest.number}`
     : (h.pullRequests.map(pullRequestLabel).find(Boolean) ?? null);
-  return pr ? `${JOB_WORDS.waitingChecks} on ${pr}` : JOB_WORDS.waitingChecks;
+  return pr ? JOB_WORDS.waitingChecksOn(pr) : JOB_WORDS.waitingChecks;
 }

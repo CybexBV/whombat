@@ -12,20 +12,31 @@ import type {
   StartServiceLoginResponse,
 } from '@whombat/core/contracts';
 import { NEXTCLOUD_LOGIN_MAX_MS, SERVICE_LOGIN_MAX_MS, type SignInKind } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { CONN_PARTS_WORDS } from '../i18n/messages/connectionsHosts/connections';
 
 /* A Custom MCP server's probe (CX-61) ------------------------------------------------------------------------------- */
 
 /** What the Custom MCP probe found, in a line: the sign-in it picked, or why it couldn't tell. */
-export function probeNote(probed: ProbeConnectionResponse): { tone: 'ok' | 'bad'; text: string } {
-  const name = probed.serverName ? `${probed.serverName} ` : 'The server ';
+export function probeNote(
+  probed: ProbeConnectionResponse,
+  locale?: string | null,
+): { tone: 'ok' | 'bad'; text: string } {
+  const w = clientTree(locale, CONN_PARTS_WORDS).probe;
+  const name = probed.serverName ? `${probed.serverName} ` : w.theServer;
   const text =
     probed.needs === 'open'
-      ? `${name}answers without a sign-in.`
+      ? interpolate(w.open, { name })
       : probed.needs === 'oauth'
-        ? `${name}asks you to sign in${probed.issuer ? ` at ${probed.issuer}` : ''}. Continue to sign in there.`
+        ? probed.issuer
+          ? interpolate(w.oauthAt, { name, issuer: probed.issuer })
+          : interpolate(w.oauth, { name })
         : probed.needs === 'token'
-          ? `${name}wants a token. Paste the one its documentation tells you to send.`
-          : `Whombat couldn’t reach the server${probed.message ? `: ${probed.message}` : '.'}`;
+          ? interpolate(w.token, { name })
+          : probed.message
+            ? interpolate(w.unreachableWhy, { message: probed.message })
+            : w.unreachable;
   return { tone: probed.needs === 'unreachable' ? 'bad' : 'ok', text };
 }
 
@@ -46,15 +57,11 @@ export function probedSignIn(probed: Pick<ProbeConnectionResponse, 'needs'>): Si
 /* Waiting for Nextcloud (CX-11) ------------------------------------------------------------------------------------- */
 
 /** The wait's words: the web's, with the phone's browser where the web says “the tab” (AP-2914). */
-export const NEXTCLOUD_WAIT_TEXT = {
-  title: 'Waiting for Nextcloud…',
-  web: 'Log in and choose Grant access in the tab that opened. This page carries on by itself',
-  phone: 'Log in and choose Grant access in the browser that opened. This screen carries on by itself',
-  open: 'Open the Nextcloud login',
-  cancel: 'Cancel',
-  tooLong: 'The sign-in took too long. Start again.',
-  failed: 'Nextcloud didn’t finish the sign-in.',
-} as const;
+export function nextcloudWaitText(locale?: string | null) {
+  return { ...clientTree(locale, CONN_PARTS_WORDS).nextcloud };
+}
+
+export const NEXTCLOUD_WAIT_TEXT = nextcloudWaitText('en');
 
 /** When the wait gives up: the flow's own expiry, at most 10 minutes from now. */
 export function nextcloudEnds(login: Pick<StartNextcloudLoginResponse, 'expiresAt'>, now: number): number {
@@ -62,9 +69,9 @@ export function nextcloudEnds(login: Pick<StartNextcloudLoginResponse, 'expiresA
 }
 
 /** “1 minute left”, “7 minutes left” (never less than one). */
-export function minutesLeftText(ends: number, now: number): string {
+export function minutesLeftText(ends: number, now: number, locale?: string | null): string {
   const minutes = Math.max(1, Math.ceil((ends - now) / 60_000));
-  return minutes === 1 ? '1 minute left' : `${minutes} minutes left`;
+  return clientTree(locale, CONN_PARTS_WORDS).minutesLeft(minutes);
 }
 
 /** What a poll's answer means: connected (with the connection), failed (with why), or ask again. */
@@ -76,29 +83,35 @@ export type NextcloudPollStep =
   | { kind: 'failed'; message: string }
   | { kind: 'wait' };
 
-export function nextcloudPollStep(r: PollNextcloudLoginResponse): NextcloudPollStep {
+export function nextcloudPollStep(r: PollNextcloudLoginResponse, locale?: string | null): NextcloudPollStep {
+  const w = nextcloudWaitText(locale);
   if (r.state === 'connected') return { kind: 'connected', connection: r.connection };
-  if (r.state === 'expired') return { kind: 'failed', message: NEXTCLOUD_WAIT_TEXT.tooLong };
-  if (r.state === 'failed') return { kind: 'failed', message: r.message || NEXTCLOUD_WAIT_TEXT.failed };
+  if (r.state === 'expired') return { kind: 'failed', message: w.tooLong };
+  if (r.state === 'failed') return { kind: 'failed', message: r.message || w.failed };
   return { kind: 'wait' };
 }
 
 /* Waiting for the service's own page (SG-01, SG-05) ----------------------------------------------------------------- */
 
 /** The wait's words: Nextcloud's, in the service's name (SG-05: “While waiting: as Nextcloud's”). */
-export const SERVICE_LOGIN_WAIT_TEXT = {
-  title: (name: string) => `Waiting for ${name}…`,
-  web: 'Sign in and allow Whombat in the tab that opened. This page carries on by itself',
-  phone: 'Sign in and allow Whombat in the browser that opened. This screen carries on by itself',
-  open: (name: string) => `Open the ${name} sign-in`,
-  /** A device-code service's code to type there (`userCode`, CT-738), its label and its copy toast. */
-  userCode: (name: string) => `Enter this code when ${name} asks for it.`,
-  codeLabel: 'Code',
-  codeCopied: 'Code copied.',
-  cancel: 'Cancel',
-  tooLong: NEXTCLOUD_WAIT_TEXT.tooLong,
-  failed: (name: string) => `${name} didn’t finish the sign-in.`,
-} as const;
+export function serviceLoginWaitText(locale?: string | null) {
+  const w = clientTree(locale, CONN_PARTS_WORDS).service;
+  return {
+    title: (name: string) => interpolate(w.title, { name }),
+    web: w.web,
+    phone: w.phone,
+    open: (name: string) => interpolate(w.open, { name }),
+    /** A device-code service's code to type there (`userCode`), its label and its copy toast. */
+    userCode: (name: string) => interpolate(w.userCode, { name }),
+    codeLabel: w.codeLabel,
+    codeCopied: w.codeCopied,
+    cancel: w.cancel,
+    tooLong: nextcloudWaitText(locale).tooLong,
+    failed: (name: string) => interpolate(w.failed, { name }),
+  };
+}
+
+export const SERVICE_LOGIN_WAIT_TEXT = serviceLoginWaitText('en');
 
 /** When the wait gives up: the flow's own expiry, at most `SERVICE_LOGIN_MAX_MS` (10 minutes) from now. */
 export function serviceLoginEnds(login: Pick<StartServiceLoginResponse, 'expiresAt'>, now: number): number {
@@ -111,8 +124,12 @@ export function serviceLoginCode(login: Pick<StartServiceLoginResponse, 'userCod
 }
 
 /** What a service-login poll's answer means (the very schema Nextcloud's is, CT-738), in the service's name. */
-export function serviceLoginPollStep(r: PollServiceLoginResponse, name: string): NextcloudPollStep {
+export function serviceLoginPollStep(
+  r: PollServiceLoginResponse,
+  name: string,
+  locale?: string | null,
+): NextcloudPollStep {
   if (r.state === 'failed')
-    return { kind: 'failed', message: r.message || SERVICE_LOGIN_WAIT_TEXT.failed(name) };
-  return nextcloudPollStep(r);
+    return { kind: 'failed', message: r.message || serviceLoginWaitText(locale).failed(name) };
+  return nextcloudPollStep(r, locale);
 }

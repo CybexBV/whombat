@@ -5,31 +5,37 @@
  * saves. Who it is (`theAgentOf`) and the words that mean it (`agentWords`: “Ask Neo…”, “your agent” while none is
  * known) are `@whombat/client`'s, the web's too. Pure.
  */
-import { type AgentWords, agentFaceLabel, agentFaceStyle } from '@whombat/client';
+import { type AgentWords, agentFaceLabelIn, agentFaceStyleIn } from '@whombat/client';
 import {
   AGENT_FACES,
-  AGENT_NAME_FORM_TEXT,
   AGENT_NAME_PATTERN,
-  AGENT_NAME_RESERVED_TEXT,
   type AgentFace,
   agentCharacter,
+  agentNameFormText,
+  agentNameReservedText,
   isReservedAgentName,
 } from '@whombat/core';
+import { mobileTranslator } from '../i18n/translate';
 
 /**
  * Name and character's words (the web's Profile part, AP-4924): the face is the character, how the agent looks and
  * talks (agent-voices.md AP-5500), from the agent's next reply on (AP-5504).
  */
-export const NAME_AND_FACE_TEXT = {
-  name: 'NAME',
-  save: 'Save',
-  face: 'Character',
-  faceLine: (w: AgentWords) => `How ${w.name} looks and talks.`,
-} as const;
+export function nameAndFaceText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    name: t('data.agentName.name'),
+    save: t('data.agentName.save'),
+    face: t('data.agentName.face'),
+    faceLine: (w: AgentWords) => t('data.agentName.faceLine', { name: w.name }),
+  };
+}
+
+export const NAME_AND_FACE_TEXT = nameAndFaceText();
 
 /** The line under the faces (AP-5501): the picked character's name, shown bold, and how it talks. */
-export function characterLine(face: AgentFace): { name: string; style: string } {
-  return { name: agentCharacter(face).name, style: agentFaceStyle(face) };
+export function characterLine(face: AgentFace, locale?: string): { name: string; style: string } {
+  return { name: agentCharacter(face).name, style: agentFaceStyleIn(face, locale) };
 }
 
 /** One of the five faces in the picker: its key, “Neo’s face”, whether the agent wears it. */
@@ -40,9 +46,9 @@ export interface FaceChoice {
 }
 
 /** The five faces in `AGENT_FACES` order, the one it wears now (or is being given) selected. */
-export function faceChoices(wears: AgentFace, picked?: AgentFace | null): FaceChoice[] {
+export function faceChoices(wears: AgentFace, picked?: AgentFace | null, locale?: string): FaceChoice[] {
   const shown = picked ?? wears;
-  return AGENT_FACES.map((key) => ({ key, label: agentFaceLabel(key), selected: key === shown }));
+  return AGENT_FACES.map((key) => ({ key, label: agentFaceLabelIn(key, locale), selected: key === shown }));
 }
 
 /** The name from the field: trimmed. */
@@ -60,10 +66,10 @@ export function canSaveName(draft: string, current: string): boolean {
  * What is wrong with a new name before it is sent, in the server's own words: not “Whombat”
  * (`AGENT_NAME_RESERVED_TEXT`), one capitalised word (`AGENT_NAME_FORM_TEXT`). The server checks again on save.
  */
-export function agentNameProblem(draft: string): string | null {
+export function agentNameProblem(draft: string, locale?: string): string | null {
   const name = cleanAgentName(draft);
-  if (isReservedAgentName(name)) return AGENT_NAME_RESERVED_TEXT;
-  if (!AGENT_NAME_PATTERN.test(name)) return AGENT_NAME_FORM_TEXT;
+  if (isReservedAgentName(name)) return agentNameReservedText(locale);
+  if (!AGENT_NAME_PATTERN.test(name)) return agentNameFormText(locale);
   return null;
 }
 

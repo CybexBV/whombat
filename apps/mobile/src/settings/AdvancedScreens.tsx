@@ -50,7 +50,11 @@ export function SettingsAdvancedScreen() {
   // Running says what runs, or why nothing can, once the host answers; a host that can't be asked has none.
   const host = useHostInfo({ params: { burrow: slug } }, { retry: false });
   const services = host.data ? true : host.error ? false : undefined;
-  const rows = advancedRowsOnPhone(words.name, { mode, ...(services === undefined ? {} : { services }) });
+  const rows = advancedRowsOnPhone(
+    words.name,
+    { mode, ...(services === undefined ? {} : { services }) },
+    rawLocale,
+  );
   const labels = settingsGroupTextHere.advanced.sections(words.name);
   return (
     <SettingsPage title={settingsGroupTextHere.groups(words.name).advanced}>
@@ -171,7 +175,7 @@ function ProfilePartPage({
       : part === 'keys'
         ? navigation.navigate('SettingsAgent', { part: 'may' })
         : navigation.navigate('SettingsAdvanced');
-  const problem = !profile && query.error ? agentLoadProblem(query.error) : null;
+  const problem = !profile && query.error ? agentLoadProblem(query.error, rawLocale) : null;
   const props: PartProps | null = profile
     ? { profile, refetch: () => void query.refetch(), onDirtyChange: guard.onDirtyChange }
     : null;

@@ -20,7 +20,7 @@ export function useBackupPasskeyTap(): BackupPasskeyTap | null {
           platform: PASSKEYS,
           appliance: managed.appliancePeerId,
           me: s?.status === 'open' ? (s.info.account?.id ?? null) : null,
-          name: passkeyName(phoneLabel()),
+          name: passkeyName(phoneLabel(rawLocale)),
           whombats: managed.whombats,
         }
       : null,

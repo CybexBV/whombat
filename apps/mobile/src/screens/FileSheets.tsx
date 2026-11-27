@@ -122,7 +122,7 @@ export function RenameFileSheet({
     if (entry) setDraft(entry.attachment.name);
   }, [entry]);
   const original = entry?.attachment.name ?? '';
-  const problem = draft ? renameProblem(draft) : null;
+  const problem = draft ? renameProblem(draft, rawLocale) : null;
   return (
     <Sheet
       visible={entry !== null}

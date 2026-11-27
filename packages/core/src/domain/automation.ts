@@ -8,6 +8,7 @@
  * change them.
  */
 import { z } from 'zod';
+import { coreWords, tCore } from '../i18n/catalog.js';
 import {
   ApprovalId,
   AutomationPlanId,
@@ -1458,26 +1459,34 @@ export type AutomationRun = z.infer<typeof AutomationRun>;
 export const AutomationTemplateId = z.enum(['suspected_bug', 'repo_check']);
 export type AutomationTemplateId = z.infer<typeof AutomationTemplateId>;
 
+const STEP_KINDS = [
+  'dispatch_agent',
+  'post_message',
+  'request_approval',
+  'wait',
+  'condition',
+  'open_pull_request',
+  'http_callback',
+  'github_comment',
+  'tracker_update',
+  'merge_pull_request',
+  'tracker_reply',
+  'tracker_decision',
+  'connection_actions',
+] as const satisfies readonly AutomationStepKind[];
+
+/** Human-readable labels of the step kinds, in a locale (the plan's own words for them). */
+export function stepKindLabels(locale?: string | null): Record<AutomationStepKind, string> {
+  return coreWords(locale, 'plan.stepKind', STEP_KINDS);
+}
+
 /** Human-readable label of a step kind. */
-export const STEP_KIND_LABELS: Record<AutomationStepKind, string> = {
-  dispatch_agent: 'Ask the agent',
-  post_message: 'Post a message',
-  request_approval: 'Ask a person to approve',
-  wait: 'Wait',
-  condition: 'Check a condition',
-  open_pull_request: 'Open a pull request',
-  http_callback: 'Call a URL',
-  github_comment: 'Comment on GitHub',
-  tracker_update: 'Write back to the tracker',
-  merge_pull_request: 'Merge a pull request',
-  tracker_reply: 'Reply to the customer',
-  tracker_decision: 'Ask you about a feature request',
-  connection_actions: 'Run approved actions',
-};
+export const STEP_KIND_LABELS: Record<AutomationStepKind, string> = stepKindLabels('en');
 
 /** What a step kind is called; a kind this version doesn't know (an older version's) is “An earlier step”. */
-export function stepKindLabel(kind: string): string {
-  return (STEP_KIND_LABELS as Record<string, string>)[kind] ?? 'An earlier step';
+export function stepKindLabel(kind: string, locale?: string | null): string {
+  const labels: Record<string, string> = stepKindLabels(locale);
+  return Object.hasOwn(labels, kind) ? (labels[kind] as string) : tCore(locale, 'stepKind.earlier');
 }
 
 export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {

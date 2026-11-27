@@ -7,7 +7,8 @@
  *
  * - The steps (`ScreenSignInStep`): “Show a code”, the letters, then let in (or already in), or stopped (the box is too old,
  *   has no screen, or isn't the one whose screen the person sees). `screenSignInRequest` and `screenSignInSubmit` take
- *   one step and never throw: a refusal is the step it leaves the person on, with its words (`COPY.screen.errors`).
+ *   one step and never throw: a refusal is the step it leaves the person on, with its words (`managedCopyText().screen.errors`, in
+ *   `ScreenSignInDeps.locale`).
  * - The identity (`screenSignInPeer`): a pinned device connects with its pin (a pin that differs from the directory is
  *   still the hard stop); one without a pin connects with the directory's PeerId for this exchange only and pins it
  *   after the tag checks (`screenSignedInRecord`).
@@ -21,7 +22,7 @@ import {
 import { type EndpointPlatform, ScreenBackoffDetails } from '@whombat/protocol/session';
 import { OperationError, type ScreenEnrolledOutput, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
-import { COPY } from './copy';
+import { managedCopyText } from './copy';
 import { pinnedRecord } from './pin';
 import type { KnownAppliance } from './registry';
 
@@ -131,6 +132,8 @@ export interface ScreenSignInDeps {
   endpoint: { label: string; platform: EndpointPlatform };
   randomBytes?: (n: number) => Uint8Array;
   now?: () => number;
+  /** The reader's language for a refusal's words (English when none is given). */
+  locale?: string | null;
 }
 
 /** “Show a code” or “Show a new code” (from the letters): the box shows letters for this device. */
@@ -148,7 +151,7 @@ export async function screenSignInRequest(
       error: null,
     };
   } catch (error) {
-    return screenSignInFailed(from, error, deps.now?.() ?? Date.now());
+    return screenSignInFailed(from, error, deps.now?.() ?? Date.now(), deps.locale);
   }
 }
 
@@ -158,11 +161,12 @@ export async function screenSignInSubmit(
   at: ScreenSignInLettersStep,
   typed: string,
 ): Promise<ScreenSignInStep> {
+  const copy = managedCopyText(deps.locale ?? 'en');
   const letters = normalizeScreenSignInLetters(typed);
-  if (!letters) return { ...at, error: COPY.screen.errors.letters };
+  if (!letters) return { ...at, error: copy.screen.errors.letters };
   const device = deps.device ?? at.device;
   // A box that doesn't say which device it is can't be signed in to from its own page.
-  if (!device) return { kind: 'stopped', error: COPY.screen.errors.old };
+  if (!device) return { kind: 'stopped', error: copy.screen.errors.old };
   try {
     const output = await screenSignInEnroll({
       session: deps.session,
@@ -175,7 +179,7 @@ export async function screenSignInSubmit(
     });
     return { kind: 'enrolled', output };
   } catch (error) {
-    return screenSignInFailed(at, error, deps.now?.() ?? Date.now());
+    return screenSignInFailed(at, error, deps.now?.() ?? Date.now(), deps.locale);
   }
 }
 
@@ -196,8 +200,10 @@ export function screenSignInFailed(
   at: ScreenSignInAsking,
   error: unknown,
   now: number = Date.now(),
+  locale?: string | null,
 ): ScreenSignInStep {
-  const e = COPY.screen.errors;
+  const copy = managedCopyText(locale ?? 'en');
+  const e = copy.screen.errors;
   const stay = (text: string): ScreenSignInStep => ({ ...at, error: text });
   if (error instanceof ScreenSignInMismatchError) return { kind: 'stopped', error: e.notThisOne };
   if (error instanceof OperationError)
@@ -209,24 +215,24 @@ export function screenSignInFailed(
       case 'endpoint_enrolled':
         return { kind: 'already' };
       case 'screen_code_invalid':
-        return stay(at.kind === 'letters' ? e.screen_code_invalid : COPY.claim.errors.failed);
+        return stay(at.kind === 'letters' ? e.screen_code_invalid : copy.claim.errors.failed);
       case 'screen_signin_missing':
-        return stay(at.kind === 'letters' ? e.screen_signin_missing : COPY.claim.errors.failed);
+        return stay(at.kind === 'letters' ? e.screen_signin_missing : copy.claim.errors.failed);
       case 'screen_backoff':
         return stay(e.screen_backoff(screenBackoffMinutes(error, now) ?? 1));
       case 'screen_rate_limited':
         return stay(e.screen_rate_limited);
       case 'rate_limited':
-        return stay(COPY.claim.errors.rate_limited);
+        return stay(copy.claim.errors.rate_limited);
       default:
         // `screen_begin_missing` (the begin was lost), `screen_share_invalid` (not a guess) and the rest: again.
-        return stay(COPY.claim.errors.failed);
+        return stay(copy.claim.errors.failed);
     }
   const reason = (error as { reason?: string } | undefined)?.reason;
   // The handshake reached a key other than the one connected with (a directory that lies, BX-03): nothing was sent.
   if (reason === 'identity_mismatch') return { kind: 'stopped', error: e.notThisOne };
-  if (reason === 'appliance_offline') return stay(COPY.claim.errors.offline);
-  return stay(COPY.claim.errors.failed);
+  if (reason === 'appliance_offline') return stay(copy.claim.errors.offline);
+  return stay(copy.claim.errors.failed);
 }
 
 /* The identity (BX-03) ------------------------------------------------------------------------------------------- */

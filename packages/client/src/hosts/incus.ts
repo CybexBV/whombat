@@ -9,7 +9,6 @@
 import {
   HOST_ERROR_WORDS,
   HOST_SELF_GUEST_LABEL,
-  HOST_SELF_SERVER_POWER_TEXT,
   type HostBackupVolume,
   type HostChoices,
   type HostGuest,
@@ -27,10 +26,15 @@ import {
   type HostServerInfo,
   type HostStorageVolume,
   type HostTask,
+  hostSelfWords,
   INCUS_NAME_PATTERN,
   selfGuestAllows,
 } from '@whombat/core/domain';
-import { formatBytesBinary, plural } from './format';
+import { interpolate } from '@whombat/core/i18n';
+import { clientTree } from '../i18n/catalog';
+import { HOSTS_ACTIONS_WORDS } from '../i18n/messages/connectionsHosts/actions';
+import { HOSTS_INCUS_WORDS } from '../i18n/messages/connectionsHosts/incus';
+import { formatBytesBinary } from './format';
 import { parseProps } from './props';
 
 /* Contract shapes (contracts 0.83.0, CT-363…CT-368) ------------------------------------------------- */
@@ -110,8 +114,16 @@ export function incusGuestId(project: string, name: string): string {
 
 /** The chip on the guest Whombat runs in. */
 export const SELF_GUEST_CHIP = HOST_SELF_GUEST_LABEL;
+/** The chip on the guest Whombat runs in, in a locale (English when none is given). */
+export function selfGuestChip(locale?: string | null): string {
+  return hostSelfWords(locale).guestLabel;
+}
+/** The one line where its changing actions would be, in a locale (English when none is given). */
+export function selfGuestLine(locale?: string | null): string {
+  return clientTree(locale, HOSTS_INCUS_WORDS).selfLine;
+}
 /** The one line where its changing actions would be. */
-export const SELF_GUEST_LINE = 'This is your Whombat itself.';
+export const SELF_GUEST_LINE = selfGuestLine('en');
 /** The hub's and the server's refusal (`self_guest`). */
 export const SELF_GUEST_REFUSED = HOST_ERROR_WORDS.self_guest;
 
@@ -129,11 +141,14 @@ export function selfAllowsOp(g: Pick<HostGuest, 'self'>, op: HostManageOp, asNew
  * What the host's power question says (ONE-12, IU-02): the guests stop, and on a server that runs this Whombat,
  * “This Whombat goes down too.”
  */
-export function hostPowerBody(action: 'host_reboot' | 'host_shutdown', thisWhombat: boolean): string {
-  const down = thisWhombat ? ` ${HOST_SELF_SERVER_POWER_TEXT}` : '';
-  return action === 'host_reboot'
-    ? `Its guests stop while it restarts and start again if they’re set to start on boot.${down} It’s usually back within a few minutes.`
-    : `Its guests stop too.${down} Whombat can’t switch it back on: someone has to press its power button.`;
+export function hostPowerBody(
+  action: 'host_reboot' | 'host_shutdown',
+  thisWhombat: boolean,
+  locale?: string | null,
+): string {
+  const w = clientTree(locale, HOSTS_ACTIONS_WORDS).power;
+  const down = thisWhombat ? ` ${hostSelfWords(locale).serverPower}` : '';
+  return interpolate(action === 'host_reboot' ? w.reboot : w.shutdown, { down });
 }
 
 /* Tabs ---------------------------------------------------------------------------------------------- */
@@ -248,88 +263,85 @@ export function incusSizeString(bytes: number): string {
 }
 
 /** “4 CPUs”, “CPUs 0-3”, “1 CPU”. */
-export function cpuWords(v: string | undefined): string {
+export function cpuWords(v: string | undefined, locale?: string | null): string {
   const s = (v ?? '').trim();
-  if (/^\d+$/.test(s)) return plural(Number(s), 'CPU');
-  return s ? `CPUs ${s}` : '';
+  const w = clientTree(locale, HOSTS_INCUS_WORDS);
+  if (/^\d+$/.test(s)) return w.cpus(Number(s));
+  return s ? interpolate(w.cpuSet, { set: s }) : '';
 }
 
 /** “16 GiB”, “half of the server’s” (50%), the raw value otherwise. */
-export function memoryWords(v: string | undefined): string {
+export function memoryWords(v: string | undefined, locale?: string | null): string {
   const s = (v ?? '').trim();
   const pct = /^(\d+)%$/.exec(s);
-  if (pct) return `${pct[1]} % of the server’s`;
+  if (pct) return interpolate(clientTree(locale, HOSTS_INCUS_WORDS).memoryPct, { pct: pct[1] ?? '' });
   const b = incusSizeBytes(s);
   return b != null ? formatBytesBinary(b) : s;
 }
 
-const SCHEDULE_ALIASES: Record<string, string> = {
-  '@hourly': 'Every hour',
-  '@daily': 'Every day',
-  '@midnight': 'Every day at midnight',
-  '@weekly': 'Every week',
-  '@monthly': 'Every month',
-  '@annually': 'Every year',
-  '@yearly': 'Every year',
-  '@startup': 'When it starts',
-  '@never': 'Never',
-};
-
 const pad2 = (n: string) => n.padStart(2, '0');
 
+const ALIAS_KEYS = {
+  '@hourly': 'hourly',
+  '@daily': 'daily',
+  '@midnight': 'midnight',
+  '@weekly': 'weekly',
+  '@monthly': 'monthly',
+  '@annually': 'yearly',
+  '@yearly': 'yearly',
+  '@startup': 'startup',
+  '@never': 'never',
+} as const;
+const CRON_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
 /** A snapshot schedule in words: “Every day at 03:00”, “Every 6 hours”, “cron 0 3 * * 1” for the rest. */
-export function scheduleWords(v: string | undefined): string {
+export function scheduleWords(v: string | undefined, locale?: string | null): string {
   const s = (v ?? '').trim();
   if (!s) return '';
-  if (SCHEDULE_ALIASES[s]) return SCHEDULE_ALIASES[s] as string;
+  const w = clientTree(locale, HOSTS_INCUS_WORDS).schedule;
+  const alias = Object.hasOwn(ALIAS_KEYS, s) ? ALIAS_KEYS[s as keyof typeof ALIAS_KEYS] : undefined;
+  if (alias) return w.aliases[alias];
   const f = s.split(/\s+/);
   if (f.length === 5) {
     const [min, hour, dom, mon, dow] = f as [string, string, string, string, string];
     const num = (x: string) => /^\d{1,2}$/.test(x);
+    const time = `${pad2(hour)}:${pad2(min)}`;
     if (num(min) && num(hour) && dom === '*' && mon === '*' && dow === '*')
-      return `Every day at ${pad2(hour)}:${pad2(min)}`;
+      return interpolate(w.everyDayAt, { time });
     const every = /^\*\/(\d+)$/.exec(hour);
     if (num(min) && every && dom === '*' && mon === '*' && dow === '*')
-      return every[1] === '1' ? 'Every hour' : `Every ${every[1]} hours`;
-    if (num(min) && hour === '*' && dom === '*' && mon === '*' && dow === '*') return 'Every hour';
-    const days = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
-    if (num(min) && num(hour) && dom === '*' && mon === '*' && /^[0-7]$/.test(dow))
-      return `${days[Number(dow) % 7]} at ${pad2(hour)}:${pad2(min)}`;
+      return every[1] === '1' ? w.aliases.hourly : interpolate(w.everyHours, { hours: every[1] ?? '' });
+    if (num(min) && hour === '*' && dom === '*' && mon === '*' && dow === '*') return w.aliases.hourly;
+    const day = CRON_DAYS[Number(dow) % 7];
+    if (num(min) && num(hour) && dom === '*' && mon === '*' && /^[0-7]$/.test(dow) && day)
+      return interpolate(w.dayAt, { day: w.days[day], time });
   }
-  return `cron ${s}`;
+  return interpolate(w.cron, { cron: s });
 }
 
 /** A schedule Incus takes: a cron line (5 fields) or one of its @words; empty is fine (none). */
 export function scheduleError(v: string): string | null {
   const s = v.trim();
   if (!s) return null;
-  if (s.startsWith('@')) return SCHEDULE_ALIASES[s] ? null : 'Use @hourly, @daily, @weekly or @monthly.';
+  if (s.startsWith('@'))
+    return Object.hasOwn(ALIAS_KEYS, s) ? null : 'Use @hourly, @daily, @weekly or @monthly.';
   const f = s.split(/\s+/);
   if (f.length !== 5 || !f.every((x) => /^[0-9*/,-]+$/.test(x)))
     return 'Five parts: minute hour day month weekday, like 0 3 * * *.';
   return null;
 }
 
-const EXPIRY_UNITS: Record<string, [string, string]> = {
-  M: ['minute', 'minutes'],
-  H: ['hour', 'hours'],
-  d: ['day', 'days'],
-  w: ['week', 'weeks'],
-  m: ['month', 'months'],
-  y: ['year', 'years'],
-};
-
 /** How long Incus keeps a snapshot (“2w” → “2 weeks”, “1d 12H” → “1 day 12 hours”); Incus's M is minutes, m months. */
-export function expiryWords(v: string | undefined): string {
+export function expiryWords(v: string | undefined, locale?: string | null): string {
   const s = (v ?? '').trim();
   if (!s) return '';
   const parts = s.split(/\s+/).map((p) => /^(\d+)([MHdwmy])$/.exec(p));
   if (parts.some((p) => !p)) return s;
+  const units = clientTree(locale, HOSTS_INCUS_WORDS).expiry;
   return parts
     .map((p) => {
       const [, n, u] = p as RegExpExecArray;
-      const w = EXPIRY_UNITS[u as string] as [string, string];
-      return `${n} ${Number(n) === 1 ? w[0] : w[1]}`;
+      return units[u as keyof typeof units](Number(n));
     })
     .join(' ');
 }
@@ -373,12 +385,13 @@ export function userKeyError(key: string): string | null {
 }
 
 /** An instance name Incus takes (§2.2: `^[a-zA-Z][a-zA-Z0-9-]{0,62}$`). */
-export function incusNameError(name: string): string | null {
+export function incusNameError(name: string, locale?: string | null): string | null {
+  const w = clientTree(locale, HOSTS_INCUS_WORDS).name;
   const n = name.trim();
-  if (!n) return 'Give it a name.';
-  if (!/^[a-zA-Z]/.test(n)) return 'Start with a letter.';
-  if (!INCUS_NAME_PATTERN.test(n)) return 'Letters, digits and “-”, at most 63.';
-  if (n.endsWith('-')) return 'End with a letter or a digit.';
+  if (!n) return w.empty;
+  if (!/^[a-zA-Z]/.test(n)) return w.letter;
+  if (!INCUS_NAME_PATTERN.test(n)) return w.chars;
+  if (n.endsWith('-')) return w.end;
   return null;
 }
 
@@ -635,7 +648,12 @@ export function isInherited(cfg: Pick<HostGuestConfig, 'inherited'> | undefined,
 }
 
 /** The words a locked Incus key shows (“Change this with the incus command”). */
-export const INCUS_LOCK_WORDS = 'Change this with the incus command';
+export function incusLockWords(locale?: string | null): string {
+  return clientTree(locale, HOSTS_INCUS_WORDS).lockWords;
+}
+
+/** The words a locked Incus key shows, in English. */
+export const INCUS_LOCK_WORDS = incusLockWords('en');
 
 /* Devices ------------------------------------------------------------------------------------------------ */
 
@@ -827,15 +845,15 @@ export function backupNameError(name: string): string | null {
 }
 
 /** “expires in 6 days”, “expired”, “kept until deleted”. */
-export function expiryText(at: string | null, now: number): string {
-  if (!at) return 'Kept until deleted';
+export function expiryText(at: string | null, now: number, locale?: string | null): string {
+  const w = clientTree(locale, HOSTS_INCUS_WORDS).expires;
+  if (!at) return w.kept;
   const ms = Date.parse(at) - now;
   if (!Number.isFinite(ms)) return '';
-  if (ms <= 0) return 'Expired';
+  if (ms <= 0) return w.expired;
   const days = Math.round(ms / 86_400_000);
-  if (days >= 1) return `Expires in ${plural(days, 'day')}`;
-  const hours = Math.max(1, Math.round(ms / 3_600_000));
-  return `Expires in ${plural(hours, 'hour')}`;
+  if (days >= 1) return w.days(days);
+  return w.hours(Math.max(1, Math.round(ms / 3_600_000)));
 }
 
 /** Whether a snapshot schedule covers the instance (its own or a profile's: `config.get` reads the expanded one). */

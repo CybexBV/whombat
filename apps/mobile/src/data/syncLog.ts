@@ -10,6 +10,7 @@
  */
 import type { Query, QueryCache } from '@tanstack/query-core';
 import { parseKey } from '@whombat/client/query';
+import { mobileTranslator } from '../i18n/translate';
 
 /** The most notes kept: a few days of a phone's sync. */
 export const SYNC_LOG_MAX = 400;
@@ -20,13 +21,16 @@ export const SYNC_OLD_MS = 60_000;
 /** A read that took longer than this is noted, whatever it read over. */
 export const SYNC_SLOW_MS = 5_000;
 
-export const SYNC_LOG_TEXT = {
-  intro:
-    'This phone’s sync log says what it read from your Whombat and when over the last days: which lists, how long each took and what failed. Nothing from your conversations.',
-  share: 'Share this phone’s sync log…',
-  dialogTitle: 'This phone’s sync log',
-  empty: 'Nothing noted yet.',
-} as const;
+export function syncLogText(locale?: string) {
+  const { t } = mobileTranslator(locale);
+  return {
+    intro: t('data.syncLog.intro'),
+    share: t('data.syncLog.share'),
+    dialogTitle: t('data.syncLog.dialogTitle'),
+    empty: t('data.syncLog.empty'),
+  } as const;
+}
+export const SYNC_LOG_TEXT = syncLogText();
 
 export interface SyncEntry {
   at: number;
@@ -159,7 +163,10 @@ export function watchReads(cache: QueryCache, log: SyncLog, now: () => number = 
   });
 }
 
-/** The text file the person shares: what it is, which app and Whombat, then a note a line, oldest first. */
+/**
+ * The text file the person shares: what it is, which app and Whombat, then a note a line, oldest first. It stays in
+ * English whatever the phone's language, like the notes in it: it is read by whoever helps.
+ */
 export function syncLogFile(input: { entries: readonly SyncEntry[]; app: string; whombat: string }): string {
   const lines = input.entries.map((e) => `${new Date(e.at).toISOString()} ${e.text}`);
   return [

@@ -18,7 +18,10 @@ import {
   type MailSecurity,
   mailDefaultPort,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { ApiError, InvalidRequestError } from './http/errors';
+import { clientTree } from './i18n/catalog';
+import { SETTINGS_AREA_WORDS } from './i18n/messages/chatWork/settings';
 
 /** Whether this Whombat connects other email (`ConnectorsStatus.imap`, 0.97): an older one leaves it out. */
 export function imapAvailable(status: Pick<ConnectorsStatus, 'imap'> | undefined): boolean {
@@ -94,19 +97,21 @@ const HOST =
 /** The fields as settings, or what is wrong under each field. */
 export function settingsFromDraft(
   draft: MailServersDraft,
+  locale?: string | null,
 ):
   | { settings: ImapServerSettings; errors: null }
   | { settings: null; errors: Partial<Record<MailDraftField, string>> } {
   const errors: Partial<Record<MailDraftField, string>> = {};
+  const copy = words(locale);
   const host = (key: 'imapHost' | 'smtpHost') => {
     const value = draft[key].trim();
-    if (!value) errors[key] = IMAP_COPY.hostMissing;
-    else if (!HOST.test(value) || value.length > 253) errors[key] = IMAP_COPY.hostWrong;
+    if (!value) errors[key] = copy.hostMissing;
+    else if (!HOST.test(value) || value.length > 253) errors[key] = copy.hostWrong;
     return value;
   };
   const port = (key: 'imapPort' | 'smtpPort') => {
     const value = Number(draft[key].trim());
-    if (!/^\d+$/.test(draft[key].trim()) || value < 1 || value > 65535) errors[key] = IMAP_COPY.portWrong;
+    if (!/^\d+$/.test(draft[key].trim()) || value < 1 || value > 65535) errors[key] = copy.portWrong;
     return value;
   };
   const settings: ImapServerSettings = {
@@ -154,7 +159,8 @@ export function imapFailureReason(error: unknown): ImapConnectFailure | null {
  * it, a server that can't be reached, a home-network address that isn't allowed and a certificate that can't be checked
  * open the server fields with the sentence above the button. The server's own sentence says which side, in words.
  */
-export function imapConnectProblem(error: unknown): ImapConnectProblem {
+export function imapConnectProblem(error: unknown, locale?: string | null): ImapConnectProblem {
+  const failed = words(locale).failed;
   if (
     error instanceof InvalidRequestError ||
     (error instanceof ApiError && error.code === 'validation_failed')
@@ -171,86 +177,61 @@ export function imapConnectProblem(error: unknown): ImapConnectProblem {
         openServers: Object.keys(fields).some((k) => k !== 'email' && k !== 'password'),
       };
   }
-  if (!(error instanceof ApiError)) return { message: IMAP_COPY.failed, fields: {}, openServers: false };
+  if (!(error instanceof ApiError)) return { message: failed, fields: {}, openServers: false };
   const failure = imapFailure(error);
   const reason = failure?.reason ?? null;
   // The server's sentence; the contracts' words for its reason only when it sends none.
   const message =
-    error.message || (failure ? imapConnectFailureText(failure.reason, failure) : IMAP_COPY.failed);
+    error.message || (failure ? imapConnectFailureText(failure.reason, failure, locale) : failed);
   if (reason === 'imap_refused') return { message: null, fields: { password: message }, openServers: false };
   return { message, fields: {}, openServers: reason !== null };
 }
 
 /* Words ------------------------------------------------------------------------------------------------- */
 
-export const IMAP_COPY = {
-  name: 'Email (IMAP)',
-  /** The provider's line (the catalog entry's words, CM-19). */
-  description: 'Mail from any other provider, like Fastmail, iCloud or your own server, for your agent.',
-  notConnected: 'Your agent works with your mail, as you, when you ask.',
-  email: 'EMAIL ADDRESS',
-  password: 'PASSWORD',
-  passwordHint: 'An app password if your provider has them.',
-  looking: 'Looking for your mail servers…',
-  found: 'Mail servers',
-  change: 'Change',
-  guessed: 'Whombat couldn’t find your mail servers. Check these with your provider.',
-  incoming: 'INCOMING MAIL (IMAP)',
-  outgoing: 'OUTGOING MAIL (SMTP)',
-  server: 'Server',
-  port: 'Port',
-  security: 'Security',
-  username: 'USERNAME',
-  usernameHint: 'Only when it isn’t your email address.',
-  emailMissing: 'Enter your email address.',
-  passwordMissing: 'Enter the password.',
-  hostMissing: 'Enter the server’s name.',
-  hostWrong: 'That isn’t a server name.',
-  portWrong: 'Enter a port from 1 to 65535.',
-  connect: 'Connect email',
-  connecting: 'Signing in to your mail servers…',
-  failed: 'That didn’t work. Try again in a moment.',
-  connected: 'Connected',
-  needsPassword: 'Needs a new password',
-  reauth: 'The mail server no longer accepts the password. Enter it again to keep using it.',
-  changePassword: 'Change password',
-  newPassword: 'Enter the new password',
-  connectAgain: 'Sign in again',
-  cancel: 'Cancel',
-  disconnect: 'Disconnect',
-  disconnectAsk: 'Disconnect your email? Your agent can’t use your mail until you connect again.',
-  disconnectConfirm: 'Disconnect email',
-  checking: 'Checking your mail servers…',
-  notChecked: 'Not checked yet',
-  checkAgain: 'Check again',
-  update: 'Update this Whombat to connect other email.',
-} as const;
+const words = (locale?: string | null) => clientTree(locale, SETTINGS_AREA_WORDS).imap;
 
-/** The toast after connecting: “Email connected: mara@fastmail.com.” */
-export function imapConnectedText(email: string): string {
-  return `Email connected: ${email}.`;
+/** Email (IMAP)'s words, in a locale (English when none). */
+export function imapCopy(locale?: string | null) {
+  return words(locale);
 }
 
-export const IMAP_DISCONNECTED_TEXT = 'Email disconnected.';
+export const IMAP_COPY = imapCopy();
+
+/** The toast after connecting: “Email connected: mara@fastmail.com.” */
+export function imapConnectedText(email: string, locale?: string | null): string {
+  return interpolate(words(locale).connectedText, { email });
+}
+
+/** The toast after disconnecting, in a locale (English when none). */
+export function imapDisconnectedText(locale?: string | null): string {
+  return words(locale).disconnected;
+}
+
+export const IMAP_DISCONNECTED_TEXT = imapDisconnectedText();
 
 /** The connected account's line: “Connected · imap.fastmail.com and smtp.fastmail.com”, or why it needs you. */
-export function mailAccountLine(connection: Pick<Connection, 'status' | 'mail'>): string {
-  if (connection.status !== 'active') return IMAP_COPY.reauth;
-  return connection.mail
-    ? `${IMAP_COPY.connected} · ${imapServersLine(connection.mail)}`
-    : IMAP_COPY.connected;
+export function mailAccountLine(
+  connection: Pick<Connection, 'status' | 'mail'>,
+  locale?: string | null,
+): string {
+  const w = words(locale);
+  if (connection.status !== 'active') return w.reauth;
+  return connection.mail ? `${w.connected} · ${imapServersLine(connection.mail, locale)}` : w.connected;
 }
 
 /** A check's name on an IMAP account: the server it is about (`ConnectionCheck.side`, 0.97), else “Mail”. */
-export function mailCheckName(check: Pick<ConnectionCheck, 'side'>): string {
-  return check.side === 'imap' ? 'Receiving' : check.side === 'smtp' ? 'Sending' : 'Mail';
+export function mailCheckName(check: Pick<ConnectionCheck, 'side'>, locale?: string | null): string {
+  const w = words(locale);
+  return check.side === 'imap' ? w.receiving : check.side === 'smtp' ? w.sending : w.mail;
 }
 
 /** The link under a provider's hint: Google's or Microsoft 365's page instead, else the provider's own page. */
-export function hintLinkText(hint: ImapProviderHint): string | null {
-  if (hint.useInstead === 'google') return 'Connect Google instead';
-  if (hint.useInstead === 'microsoft') return 'Connect Microsoft 365 instead';
-  return hint.url ? `Open ${hint.name}` : null;
+export function hintLinkText(hint: ImapProviderHint, locale?: string | null): string | null {
+  const w = words(locale);
+  if (hint.useInstead === 'google') return w.useGoogle;
+  if (hint.useInstead === 'microsoft') return w.useMicrosoft;
+  return hint.url ? interpolate(w.openProvider, { name: hint.name }) : null;
 }
 
 /** The links under a provider's hint (AP-3915): the connection to use instead, and the provider's page. */
@@ -265,10 +246,16 @@ export interface HintLinks {
  * Both links a hint may carry (Whombat connection-signin.md SG-18d, contracts 0.111 CT-747): Gmail offers the Google
  * connection and, for mail only, its app password page (“Make an app password”); the others one or none.
  */
-export function hintLinks(hint: ImapProviderHint): HintLinks {
-  const instead = hint.useInstead ? { text: hintLinkText(hint) ?? '', connection: hint.useInstead } : null;
+export function hintLinks(hint: ImapProviderHint, locale?: string | null): HintLinks {
+  const w = words(locale);
+  const instead = hint.useInstead
+    ? { text: hintLinkText(hint, locale) ?? '', connection: hint.useInstead }
+    : null;
   const page = hint.url
-    ? { text: hint.useInstead ? 'Make an app password' : `Open ${hint.name}`, url: hint.url }
+    ? {
+        text: hint.useInstead ? w.appPassword : interpolate(w.openProvider, { name: hint.name }),
+        url: hint.url,
+      }
     : null;
   return { instead, page };
 }

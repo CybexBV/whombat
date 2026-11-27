@@ -12,13 +12,13 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
-  SKILL_LIBRARY_TEXT,
   type SkillFold,
   type SkillFoldId,
   type SkillGroup,
   type SkillLibraryItem,
   type SkillRow,
   skillLibraryEndpoints,
+  skillLibraryText,
   skillLibraryView,
 } from '@whombat/client/skill-library';
 import { useSkillLibrary, useSkillLibraryWrite } from '@whombat/client/skill-library/react';
@@ -26,9 +26,9 @@ import { memo, useCallback, useDeferredValue, useMemo, useState } from 'react';
 import { FlatList, RefreshControl, Switch, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase, useViewContext } from '../data/BurrowProvider';
-import { SKILLS_PHONE_TEXT, skillRowLabel } from '../data/skillLibrary';
+import { skillRowLabel, skillsPhoneText } from '../data/skillLibrary';
 import { useSkillLibraryAgent, useSkillsAbsentText } from '../data/useSkillLibraryHere';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -46,6 +46,9 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Skills'>;
 type Block = { kind: 'group'; group: SkillGroup } | { kind: 'folds'; folds: SkillFold[] };
 
 export function SkillsScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const skillLibraryTextHere = skillLibraryText(rawLocale);
+  const phone = skillsPhoneText(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -64,9 +67,14 @@ export function SkillsScreen({ navigation }: Props) {
   const view = useMemo(
     () =>
       query.data
-        ? skillLibraryView(query.data, { query: search, now: ctx.now, timeZone: ctx.timeZone })
+        ? skillLibraryView(query.data, {
+            query: search,
+            now: ctx.now,
+            timeZone: ctx.timeZone,
+            locale: rawLocale,
+          })
         : null,
-    [query.data, search, ctx.now, ctx.timeZone],
+    [query.data, search, ctx.now, ctx.timeZone, rawLocale],
   );
   // The groups, then the folds.
   const blocks = useMemo<Block[]>(
@@ -118,10 +126,10 @@ export function SkillsScreen({ navigation }: Props) {
     <View>
       <View style={{ paddingHorizontal: 22, paddingBottom: 12, gap: 4 }}>
         <Text size={25} weight={700} lh={1.15} tracking={-0.02} accessibilityRole="header">
-          {view?.title ?? SKILLS_PHONE_TEXT.title}
+          {view?.title ?? phone.title}
         </Text>
         <Text size={14} lh={1.45} color={theme.colors.ink2}>
-          {SKILL_LIBRARY_TEXT.help(name)}
+          {skillLibraryTextHere.help(name)}
         </Text>
       </View>
       <View style={{ paddingHorizontal: 16 }}>
@@ -143,9 +151,9 @@ export function SkillsScreen({ navigation }: Props) {
           <TextInput
             value={q}
             onChangeText={setQ}
-            placeholder={SKILL_LIBRARY_TEXT.search}
+            placeholder={skillLibraryTextHere.search}
             placeholderTextColor={theme.colors.mut}
-            accessibilityLabel={SKILL_LIBRARY_TEXT.search}
+            accessibilityLabel={skillLibraryTextHere.search}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
@@ -178,16 +186,16 @@ export function SkillsScreen({ navigation }: Props) {
 
   const empty =
     query.error && !query.data ? (
-      <ErrorState text={SKILLS_PHONE_TEXT.failed} onRetry={() => void query.refetch()} />
+      <ErrorState text={phone.failed} onRetry={() => void query.refetch()} />
     ) : !view ? (
-      <SkeletonRows count={6} lines={2} label={SKILLS_PHONE_TEXT.loading} />
+      <SkeletonRows count={6} lines={2} label={phone.loading} />
     ) : view.nothingMatches ? (
       search.trim() ? (
         <Section>
-          <CardNote>{SKILL_LIBRARY_TEXT.noMatch(search.trim())}</CardNote>
+          <CardNote>{skillLibraryTextHere.noMatch(search.trim())}</CardNote>
         </Section>
       ) : (
-        <QuietText>{view.empty ?? SKILL_LIBRARY_TEXT.empty(name)}</QuietText>
+        <QuietText>{view.empty ?? skillLibraryTextHere.empty(name)}</QuietText>
       )
     ) : null;
 
@@ -284,6 +292,8 @@ const SkillRowView = memo(
     onSwitch: (item: SkillLibraryItem, on: boolean) => void;
   }) {
     const theme = useTheme();
+    const { rawLocale } = useI18n();
+    const phone = useMemo(() => skillsPhoneText(rawLocale), [rawLocale]);
     const { item } = row;
     return (
       <View
@@ -301,7 +311,7 @@ const SkillRowView = memo(
           feedback="wash"
           accessibilityRole="button"
           accessibilityLabel={skillRowLabel(row)}
-          accessibilityHint={SKILLS_PHONE_TEXT.opens}
+          accessibilityHint={phone.opens}
           style={{ flex: 1, minWidth: 0, minHeight: 44, gap: 3, paddingVertical: 12, paddingLeft: 16 }}
         >
           <Text size={14.5} weight={500} mono numberOfLines={1}>
@@ -324,7 +334,7 @@ const SkillRowView = memo(
             value={row.on}
             onValueChange={(v) => onSwitch(item, v)}
             accessibilityLabel={item.name}
-            accessibilityHint={SKILLS_PHONE_TEXT.switchHint(item.name, agent, row.on)}
+            accessibilityHint={phone.switchHint(item.name, agent, row.on)}
             accessibilityRole="switch"
             {...switchColors(theme, row.on)}
             style={{ minHeight: 44 }}
@@ -361,6 +371,8 @@ function FoldRow({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const phone = skillsPhoneText(rawLocale);
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
     <Touchable
@@ -369,7 +381,7 @@ function FoldRow({
       accessibilityRole="button"
       accessibilityState={{ expanded: open }}
       accessibilityLabel={fold.label}
-      accessibilityHint={SKILLS_PHONE_TEXT.foldHint(open)}
+      accessibilityHint={phone.foldHint(open)}
       style={{
         flexDirection: 'row',
         alignItems: 'center',

@@ -8,14 +8,14 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { PROMPT_WORDS } from '@whombat/client';
+import { promptWords } from '@whombat/client';
 import { useMemo } from 'react';
 import { Alert, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { councilActionProblem } from '../data/council';
 import { canRestorePrompts, promptListLine } from '../data/prompts';
 import { usePrompts, usePromptWrites } from '../data/usePrompts';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { Card, LinkRow, Note, Row } from '../managed/ui';
 import type { RootStackParamList } from '../navigation/routes';
 import { showFailure } from '../screens/feedback';
@@ -29,6 +29,8 @@ import { useBottomRoom } from '../ui/screenBottom';
 type Props = NativeStackScreenProps<RootStackParamList, 'SettingsPrompts'>;
 
 export function PromptsScreen({ navigation }: Props) {
+  const { rawLocale } = useI18n();
+  const promptWordsHere = promptWords(rawLocale);
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const { clock, slug } = useBurrowBase();
@@ -38,7 +40,10 @@ export function PromptsScreen({ navigation }: Props) {
   const now = clock();
   const day = now.toDateString();
   // biome-ignore lint/correctness/useExhaustiveDependencies: the lines change with the day (“Ran today”), read from the clock then
-  const lines = useMemo(() => here.prompts?.map((p) => promptListLine(p, now)) ?? null, [here.prompts, day]);
+  const lines = useMemo(
+    () => here.prompts?.map((p) => promptListLine(p, now, rawLocale)) ?? null,
+    [here.prompts, day, rawLocale],
+  );
   const back = <BackBar label={tMobile('managed.back')} onPress={() => navigation.goBack()} />;
   if (!here.prompts)
     return (
@@ -46,7 +51,7 @@ export function PromptsScreen({ navigation }: Props) {
         {back}
         {here.error ? (
           <ErrorState
-            text={councilActionProblem(here.error)}
+            text={councilActionProblem(here.error, rawLocale)}
             {...(here.older ? {} : { onRetry: here.refetch })}
           />
         ) : (
@@ -55,16 +60,17 @@ export function PromptsScreen({ navigation }: Props) {
       </Screen>
     );
   const onRestore = () =>
-    Alert.alert(PROMPT_WORDS.restore, PROMPT_WORDS.restoreHint, [
-      { text: PROMPT_WORDS.cancel, style: 'cancel' },
+    Alert.alert(promptWordsHere.restore, promptWordsHere.restoreHint, [
+      { text: promptWordsHere.cancel, style: 'cancel' },
       {
-        text: PROMPT_WORDS.restore,
+        text: promptWordsHere.restore,
         onPress: () =>
           restore.mutate(
             { params: { burrow: slug }, body: {} },
             {
-              onSuccess: (r) => (r.status === 'ok' ? haptic('success') : showFailure(PROMPT_WORDS.failed)),
-              onError: (e) => showFailure(councilActionProblem(e)),
+              onSuccess: (r) =>
+                r.status === 'ok' ? haptic('success') : showFailure(promptWordsHere.failed, rawLocale),
+              onError: (e) => showFailure(councilActionProblem(e, rawLocale), rawLocale),
             },
           ),
       },
@@ -76,12 +82,12 @@ export function PromptsScreen({ navigation }: Props) {
         contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
         refreshControl={<RefreshControl refreshing={here.refreshing} onRefresh={here.refetch} />}
       >
-        <LargeTitle title={PROMPT_WORDS.title} />
+        <LargeTitle title={promptWordsHere.title} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
-          <Note text={PROMPT_WORDS.intro} />
+          <Note text={promptWordsHere.intro} />
           <Card>
             {!lines?.length ? (
-              <Row first title={PROMPT_WORDS.empty} />
+              <Row first title={promptWordsHere.empty} />
             ) : (
               lines.map((l, i) => (
                 <LinkRow
@@ -97,21 +103,21 @@ export function PromptsScreen({ navigation }: Props) {
             )}
           </Card>
           <Button
-            label={PROMPT_WORDS.add}
+            label={promptWordsHere.add}
             variant="secondary"
             onPress={() => navigation.navigate('PromptEdit', {})}
           />
           {canRestorePrompts(here.prompts) ? (
             <View style={{ gap: 6, paddingTop: 4 }}>
               <Button
-                label={PROMPT_WORDS.restore}
+                label={promptWordsHere.restore}
                 variant="quiet"
                 busy={restore.isPending}
-                accessibilityHint={PROMPT_WORDS.restoreHint}
+                accessibilityHint={promptWordsHere.restoreHint}
                 onPress={onRestore}
               />
               <Text size={13} lh={1.4} color={theme.colors.mut} style={{ paddingHorizontal: 6 }}>
-                {PROMPT_WORDS.restoreHint}
+                {promptWordsHere.restoreHint}
               </Text>
             </View>
           ) : null}

@@ -124,8 +124,9 @@ export function featureDecisionStatus(
 }
 
 /** “7 of 10”; “Not scored” without a value. */
-export function featureValueText(value: number | null): string {
-  return value === null ? 'Not scored' : `${value} of 10`;
+export function featureValueText(value: number | null, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return value === null ? tr.t('featureRequest.score.none') : tr.t('featureRequest.score.value', { value });
 }
 
 /** The card's own words (TA-45): the buttons, the two forms and the line under them. */
@@ -158,9 +159,12 @@ export const FEATURE_REQUEST_WORDS = featureRequestWords('en');
 /** “From HollowMere College · Acme Desk dev #21”. */
 export function featureRequestFrom(
   view: Pick<FeatureRequestView, 'organization' | 'connection' | 'number'>,
+  locale?: string | null,
 ): string {
   const where = `${view.connection} #${view.number}`;
-  return view.organization ? `From ${view.organization} · ${where}` : where;
+  return view.organization
+    ? coreTranslator(locale).t('featureRequest.from', { organization: view.organization, where })
+    : where;
 }
 
 /**
@@ -172,33 +176,49 @@ export function featureRequestFrom(
 export function featureRequestOutcome(
   view: Pick<FeatureRequestView, 'state' | 'choice' | 'note' | 'declineReason'>,
   decider: string | null,
+  locale?: string | null,
 ): { lead: string; detail: string | null; tone: 'ok' | 'bad' | 'mut' | 'warn' } | null {
-  const who = decider ?? 'you';
+  const tr = coreTranslator(locale);
+  const who = decider ?? tr.t('featureRequest.outcome.you');
   switch (view.state) {
     case 'waiting':
       return null;
     case 'replaced':
-      return { lead: 'Replaced by a newer assessment', detail: null, tone: 'mut' };
+      return { lead: tr.t('featureRequest.outcome.replaced'), detail: null, tone: 'mut' };
     case 'stopped':
-      return { lead: 'No longer waiting', detail: view.note || null, tone: 'mut' };
+      return { lead: tr.t('featureRequest.outcome.stopped'), detail: view.note || null, tone: 'mut' };
     case 'decided':
       switch (view.choice) {
         case 'approve':
-          return { lead: `Approved by ${who}`, detail: 'Planned', tone: 'ok' };
+          return {
+            lead: tr.t('featureRequest.outcome.approved', { who }),
+            detail: tr.t('featureRequest.outcome.planned'),
+            tone: 'ok',
+          };
         case 'build':
-          return { lead: `Approved by ${who}`, detail: 'Being built', tone: 'ok' };
+          return {
+            lead: tr.t('featureRequest.outcome.approved', { who }),
+            detail: tr.t('featureRequest.outcome.building'),
+            tone: 'ok',
+          };
         case 'decline': {
           const reason = view.note || view.declineReason;
-          return { lead: `Declined by ${who}`, detail: reason ? `“${reason}”` : null, tone: 'bad' };
+          return {
+            lead: tr.t('featureRequest.outcome.declined', { who }),
+            detail: reason ? `“${reason}”` : null,
+            tone: 'bad',
+          };
         }
         case 'ask':
           return {
-            lead: decider ? `${decider} asked the customer` : 'You asked the customer',
+            lead: decider
+              ? tr.t('featureRequest.outcome.asked', { who: decider })
+              : tr.t('featureRequest.outcome.youAsked'),
             detail: view.note ? `“${view.note}”` : null,
             tone: 'warn',
           };
         default:
-          return { lead: 'Decided', detail: null, tone: 'mut' };
+          return { lead: tr.t('featureRequest.outcome.decided'), detail: null, tone: 'mut' };
       }
   }
 }

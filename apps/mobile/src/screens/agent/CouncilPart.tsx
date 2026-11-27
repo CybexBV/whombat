@@ -7,7 +7,7 @@
  * (`unknown_op`) says it needs an update.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { COUNCIL_SETUP_WORDS } from '@whombat/client';
+import { councilSetupWords } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import { queryHook, useApiMutation } from '@whombat/client/react';
 import { api } from '@whombat/core';
@@ -16,6 +16,7 @@ import { Alert, View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
 import { councilActionProblem, olderWhombat } from '../../data/council';
 import { type CouncilSeatLine, type CouncilShown, councilPartView } from '../../data/councilSetups';
+import { useI18n } from '../../i18n';
 import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -30,34 +31,39 @@ import { Note, type PartProps, PartScroll } from './parts';
 export const useCouncilSetup = queryHook(api.councils.setup);
 
 export function CouncilPart({ profile }: PartProps) {
+  const { rawLocale } = useI18n();
+  const councilSetupWordsHere = councilSetupWords(rawLocale);
   const theme = useTheme();
   const navigation = useAppNavigation();
   const qc = useQueryClient();
   const { slug } = useBurrowBase();
   const name = profile.agent.name;
   const query = useCouncilSetup({ params: { burrow: slug } }, { retry: false });
-  const view = useMemo(() => (query.data ? councilPartView(query.data, name) : null), [query.data, name]);
+  const view = useMemo(
+    () => (query.data ? councilPartView(query.data, name, rawLocale) : null),
+    [query.data, name, rawLocale],
+  );
   const reset = useApiMutation(api.councils.resetSetup);
   const open = () => navigation.navigate('SettingsCouncil');
 
   const onReset = () =>
-    Alert.alert(COUNCIL_SETUP_WORDS.resetAsk, COUNCIL_SETUP_WORDS.resetBody, [
-      { text: COUNCIL_SETUP_WORDS.cancel, style: 'cancel' },
+    Alert.alert(councilSetupWordsHere.resetAsk, councilSetupWordsHere.resetBody, [
+      { text: councilSetupWordsHere.cancel, style: 'cancel' },
       {
-        text: COUNCIL_SETUP_WORDS.reset,
+        text: councilSetupWordsHere.reset,
         style: 'destructive',
         onPress: () =>
           reset.mutate(
             { params: { burrow: slug }, body: {} },
             {
               onSuccess: (result) => {
-                const text = outcomeText(result);
+                const text = outcomeText(result, rawLocale);
                 if (text) return Alert.alert(text.title, text.body);
                 haptic('success');
-                showNotice(COUNCIL_SETUP_WORDS.wasReset);
+                showNotice(councilSetupWordsHere.wasReset);
                 void qc.invalidateQueries({ queryKey: queryKeys.scope('councils.setup', { burrow: slug }) });
               },
-              onError: (error) => showFailure(councilActionProblem(error)),
+              onError: (error) => showFailure(councilActionProblem(error, rawLocale), rawLocale),
             },
           ),
       },
@@ -67,20 +73,23 @@ export function CouncilPart({ profile }: PartProps) {
     <PartScroll refreshing={query.isRefetching} onRefresh={() => void query.refetch()}>
       <View style={{ paddingHorizontal: 22, paddingBottom: 14 }}>
         <Text size={15} lh={1.5} color={theme.colors.ink2}>
-          {COUNCIL_SETUP_WORDS.intro(name)}
+          {councilSetupWordsHere.intro(name)}
         </Text>
       </View>
       {!view ? (
         query.error ? (
           olderWhombat(query.error) ? (
             <Section>
-              <Note>{councilActionProblem(query.error)}</Note>
+              <Note>{councilActionProblem(query.error, rawLocale)}</Note>
             </Section>
           ) : (
-            <ErrorState text={councilActionProblem(query.error)} onRetry={() => void query.refetch()} />
+            <ErrorState
+              text={councilActionProblem(query.error, rawLocale)}
+              onRetry={() => void query.refetch()}
+            />
           )
         ) : (
-          <SkeletonRows count={1} lines={4} label={COUNCIL_SETUP_WORDS.title} />
+          <SkeletonRows count={1} lines={4} label={councilSetupWordsHere.title} />
         )
       ) : (
         <>
@@ -98,11 +107,11 @@ export function CouncilPart({ profile }: PartProps) {
                 onPress={onReset}
                 disabled={reset.isPending}
                 feedback="wash"
-                accessibilityLabel={COUNCIL_SETUP_WORDS.reset}
+                accessibilityLabel={councilSetupWordsHere.reset}
                 style={{ minHeight: 52, justifyContent: 'center', paddingHorizontal: 16 }}
               >
                 <Text size={15.5} weight={500} color={theme.colors.ink2}>
-                  {COUNCIL_SETUP_WORDS.reset}
+                  {councilSetupWordsHere.reset}
                 </Text>
               </Touchable>
             </Section>
@@ -115,6 +124,8 @@ export function CouncilPart({ profile }: PartProps) {
 
 /** The council: who T3 Code's council sits, where to change that, its summary; a tap opens its rounds and score. */
 function CouncilView({ council, onOpen }: { council: CouncilShown; onOpen: (() => void) | null }) {
+  const { rawLocale } = useI18n();
+  const councilSetupWordsHere = councilSetupWords(rawLocale);
   const theme = useTheme();
   const content = (
     <>
@@ -154,7 +165,7 @@ function CouncilView({ council, onOpen }: { council: CouncilShown; onOpen: (() =
       onPress={onOpen}
       feedback="wash"
       accessibilityLabel={council.label}
-      accessibilityHint={COUNCIL_SETUP_WORDS.edit}
+      accessibilityHint={councilSetupWordsHere.edit}
       style={style}
     >
       {content}

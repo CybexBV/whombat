@@ -4,9 +4,8 @@
  * no newer build is out, that it is on its way (AP-701). Never a list with something left out.
  */
 
-import { NEEDS_NEWER_APP } from '@whombat/client';
 import { View } from 'react-native';
-import { useI18n } from '../i18n';
+import { mobileTranslator, useI18n } from '../i18n';
 import { QuietText } from '../ui/primitives';
 import { useManaged } from './context';
 import { managedCopy } from './copy';
@@ -15,6 +14,7 @@ import { useAppUpdate } from './useAppUpdate';
 
 export function NeedsNewerApp({ inline }: { inline?: boolean }) {
   const { rawLocale } = useI18n();
+  const needsNewerAppTextHere = mobileTranslator(rawLocale).t('managed2.needsNewerApp');
   const managedCopyHere = managedCopy(rawLocale);
 
   const newer = useAppUpdate(useManaged()?.updates) !== null;
@@ -27,7 +27,7 @@ export function NeedsNewerApp({ inline }: { inline?: boolean }) {
       }
     >
       <QuietText style={{ paddingVertical: 0 }}>
-        {`${NEEDS_NEWER_APP} ${newer ? managedCopyHere.update.phoneTooOld : managedCopyHere.update.soon}`}
+        {`${needsNewerAppTextHere} ${newer ? managedCopyHere.update.phoneTooOld : managedCopyHere.update.soon}`}
       </QuietText>
       {newer ? <UpdateAppButton variant="secondary" withNote /> : null}
     </View>

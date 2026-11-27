@@ -14,6 +14,7 @@ import {
   type GuideVaultRefusal,
   type GuideVaultServerWay,
 } from '../domain/guides.js';
+import { coreTranslator, coreTree } from '../i18n/catalog.js';
 
 /** The form block's id: what `guides.act` names when the person saves (or signs in). */
 export const VAULT_ASK_FORM = 'save';
@@ -49,60 +50,74 @@ export function vaultAskWay(value: string | undefined): GuideVaultServerWay {
   return value === 'keep_password' || value === 'own_key' ? value : 'key_once';
 }
 
+const SERVER_WAYS = [
+  'key_once',
+  'keep_password',
+  'own_key',
+] as const satisfies readonly GuideVaultServerWay[];
+
 /** The card's words: plain, the assistant by name, curly quotes. */
-export const VAULT_ASK_TEXT = {
+export interface VaultAskText {
   /** Under the field of every kind but `code`. */
-  under: (assistant: string) => `It goes straight to your Vault. ${assistant} never sees it.`,
+  under: (assistant: string) => string;
   /** Under a `code` card's field. */
-  underCode: 'Used once, not kept.',
+  underCode: string;
   /** A card that gives a saved entry a new secret. */
-  replaces: (name: string) => `It replaces the one saved as “${name}”.`,
-  save: 'Save',
-  signIn: 'Sign in',
+  replaces: (name: string) => string;
+  save: string;
+  signIn: string;
   /** A `code` card's button: the code isn't saved anywhere, so it isn't “Save”. */
-  send: 'Send',
-  notNow: 'Not now',
+  send: string;
+  notNow: string;
   /** The desk screen in place of the form: it never takes a secret. */
-  desk: 'Answer on your phone or computer',
-  fields: {
-    username: 'Username',
-    password: 'Password',
-    token: 'Sign-in key',
-    totp: 'Authenticator key',
-    privateKey: 'Private key',
-    passphrase: 'Passphrase',
-    code: 'Code',
-  },
-  placeholders: {
-    totp: 'Optional: the setup key or otpauth:// link',
-    privateKey: 'Paste it or pick the file',
-    passphrase: 'Only if the key has one',
-  },
+  desk: string;
+  fields: Readonly<
+    Record<'username' | 'password' | 'token' | 'totp' | 'privateKey' | 'passphrase' | 'code', string>
+  >;
+  placeholders: Readonly<Record<'totp' | 'privateKey' | 'passphrase', string>>;
   /** A `server` card's ways, as the choice lists them. */
-  ways: {
-    key_once: (assistant: string) => `Use the password once to put ${assistant}’s key on it`,
-    keep_password: () => 'Keep the password',
-    own_key: () => 'Use my own private key',
-  } satisfies Record<GuideVaultServerWay, (assistant: string) => string>,
+  ways: Readonly<Record<GuideVaultServerWay, (assistant: string) => string>>;
   /** The line under each way. */
-  wayDetails: {
-    key_once: (assistant: string) =>
-      `Whombat signs in once, adds ${assistant}’s key and forgets the password.`,
-    keep_password: () => 'For servers that don’t take keys. Kept in your Vault with this server.',
-    own_key: () => 'Paste it or pick the file. A passphrase is used once and not kept.',
-  } satisfies Record<GuideVaultServerWay, (assistant: string) => string>,
+  wayDetails: Readonly<Record<GuideVaultServerWay, (assistant: string) => string>>;
   /** After the last try failed: the card closes. */
-  tooManyTries: `That didn’t work ${GUIDE_VAULT_SERVER_TRIES} times, so this card is closed.`,
+  tooManyTries: string;
   /** A field left empty. */
-  empty: {
-    username: 'Type the username.',
-    secret: 'Type the password.',
-    token: 'Type the sign-in key.',
-    password: 'Type the password.',
-    privateKey: 'Paste the private key or pick its file.',
-    code: 'Type the code.',
-  },
-} as const;
+  empty: Readonly<Record<'username' | 'secret' | 'token' | 'password' | 'privateKey' | 'code', string>>;
+}
+
+/** The card's words in a locale. */
+export function vaultAskText(locale?: string | null): VaultAskText {
+  const tr = coreTranslator(locale);
+  const words = coreTree(locale, 'vaultAsk.text', {
+    underCode: 0,
+    save: 0,
+    signIn: 0,
+    send: 0,
+    notNow: 0,
+    desk: 0,
+    fields: { username: 0, password: 0, token: 0, totp: 0, privateKey: 0, passphrase: 0, code: 0 },
+    placeholders: { totp: 0, privateKey: 0, passphrase: 0 },
+    empty: { username: 0, secret: 0, token: 0, password: 0, privateKey: 0, code: 0 },
+  });
+  const byWay = (group: 'ways' | 'wayDetails') =>
+    Object.fromEntries(
+      SERVER_WAYS.map((way) => [
+        way,
+        (assistant: string) => tr.t(`vaultAsk.text.${group}.${way}`, { assistant }),
+      ]),
+    ) as Record<GuideVaultServerWay, (assistant: string) => string>;
+  return {
+    ...words,
+    under: (assistant: string) => tr.t('vaultAsk.text.under', { assistant }),
+    replaces: (name: string) => tr.t('vaultAsk.text.replaces', { name }),
+    ways: byWay('ways'),
+    wayDetails: byWay('wayDetails'),
+    tooManyTries: tr.t('vaultAsk.text.tooManyTries', { count: GUIDE_VAULT_SERVER_TRIES }),
+  };
+}
+
+/** The card's words in English. */
+export const VAULT_ASK_TEXT: VaultAskText = vaultAskText('en');
 
 /** The card's title: “Dusty needs the password for github.com”, “Type the code github.com sent you”. */
 export function vaultAskTitle(
@@ -110,59 +125,51 @@ export function vaultAskTitle(
   ask: Pick<GuideVaultAsk, 'kind' | 'name'> & {
     server?: Pick<NonNullable<GuideVaultAsk['server']>, 'reason'>;
   },
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
+  const vars = { assistant, name: ask.name };
   const text = (() => {
     switch (ask.kind) {
       case 'token':
-        return `${assistant} needs a sign-in key for ${ask.name}`;
+        return tr.t('vaultAsk.title.token', vars);
       case 'server':
         return ask.server?.reason === 'key_refused'
-          ? `${assistant} couldn’t sign in to ${ask.name} with its key`
-          : `${assistant} needs to sign in to ${ask.name}`;
+          ? tr.t('vaultAsk.title.keyRefused', vars)
+          : tr.t('vaultAsk.title.server', vars);
       case 'code':
-        return `Type the code ${ask.name} sent you`;
+        return tr.t('vaultAsk.title.code', vars);
       default:
-        return `${assistant} needs the password for ${ask.name}`;
+        return tr.t('vaultAsk.title.password', vars);
     }
   })();
   return text.slice(0, 120);
 }
 
 /** The line under the field: where it goes, or that a code isn't kept. */
-export function vaultAskUnder(assistant: string, kind: GuideVaultKind): string {
-  return kind === 'code' ? VAULT_ASK_TEXT.underCode : VAULT_ASK_TEXT.under(assistant);
+export function vaultAskUnder(assistant: string, kind: GuideVaultKind, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  return kind === 'code' ? tr.t('vaultAsk.text.underCode') : tr.t('vaultAsk.text.under', { assistant });
 }
 
 /** The form's button: Sign in for a server, Send for a code, else Save. */
-export function vaultAskSubmitLabel(kind: GuideVaultKind): string {
-  if (kind === 'server') return VAULT_ASK_TEXT.signIn;
-  if (kind === 'code') return VAULT_ASK_TEXT.send;
-  return VAULT_ASK_TEXT.save;
+export function vaultAskSubmitLabel(kind: GuideVaultKind, locale?: string | null): string {
+  const tr = coreTranslator(locale);
+  if (kind === 'server') return tr.t('vaultAsk.text.signIn');
+  if (kind === 'code') return tr.t('vaultAsk.text.send');
+  return tr.t('vaultAsk.text.save');
 }
 
 /**
  * A try that didn't sign in, on its field, with the server's name: “That password didn’t work. Try again.”,
  * “prod-1 refused that key.”
  */
-export function vaultAskErrorText(refusal: GuideVaultRefusal, server: string): string {
-  switch (refusal) {
-    case 'password_wrong':
-      return 'That password didn’t work. Try again.';
-    case 'password_login_off':
-      return `${server} doesn’t take passwords. Use your own private key instead.`;
-    case 'key_refused':
-      return `${server} refused that key.`;
-    case 'passphrase_wrong':
-      return 'That passphrase doesn’t open the key.';
-    case 'key_invalid':
-      return 'That isn’t a private key Whombat can use.';
-    case 'host_key_changed':
-      return `Something else answers at ${server}’s address now, so Whombat sent nothing. Check the server in the Vault.`;
-    case 'unreachable':
-      return `Couldn’t reach ${server}. Check it’s on and try again.`;
-    case 'not_allowed':
-      return `Whombat can’t reach ${server}’s address.`;
-  }
+export function vaultAskErrorText(
+  refusal: GuideVaultRefusal,
+  server: string,
+  locale?: string | null,
+): string {
+  return coreTranslator(locale).t(`vaultAsk.error.${refusal}`, { server });
 }
 
 /** The field a try's refusal shows on, for the way the person chose. */
@@ -179,28 +186,12 @@ export function vaultAskErrorField(refusal: GuideVaultRefusal, way: GuideVaultSe
 export function vaultAskLockedLabel(
   outcome: GuideVaultOutcome,
   at: { name: string; server?: string | null },
+  locale?: string | null,
 ): string {
+  const tr = coreTranslator(locale);
   const server = at.server || at.name;
-  switch (outcome) {
-    case 'saved':
-      return `Saved to your Vault · ${at.name}`;
-    case 'signed_in':
-      return `Signed in to ${server}`;
-    case 'key_added':
-      return `Signed in to ${server} · key added`;
-    case 'password_saved':
-      return `Signed in to ${server} · password saved`;
-    case 'key_imported':
-      return `Signed in to ${server} · your key saved`;
-    case 'code_given':
-      return 'Code used once · not kept';
-    case 'refused':
-      return `Couldn’t sign in to ${server}`;
-    case 'declined':
-      return VAULT_ASK_TEXT.notNow;
-    case 'too_late':
-      return 'Too late for that sign-in · not used';
-  }
+  if (outcome === 'declined') return tr.t('vaultAsk.text.notNow');
+  return tr.t(`vaultAsk.locked.${outcome}`, { name: at.name, server });
 }
 
 const field = (
@@ -217,8 +208,8 @@ const field = (
 });
 
 /** The form's fields for a card (the username only when it isn't known; a server's for every way, all optional). */
-export function vaultAskFields(ask: GuideVaultAsk): GuideField[] {
-  const t = VAULT_ASK_TEXT;
+export function vaultAskFields(ask: GuideVaultAsk, locale?: string | null): GuideField[] {
+  const t = vaultAskText(locale);
   switch (ask.kind) {
     case 'server':
       // Which are needed depends on the way (`VAULT_ASK_WAY_FIELDS`): the server checks that, not the form.
@@ -259,29 +250,35 @@ export function vaultAskFields(ask: GuideVaultAsk): GuideField[] {
  * `replace` when a saved entry gets a new secret, else the kind's (`new`, `server`, `code`). Server-made; `vaultAsk`
  * rides along so the form's values can only go where the card says.
  */
-export function vaultAskCard(assistant: string, ask: GuideVaultAsk, why: string | null): GuideCard {
+export function vaultAskCard(
+  assistant: string,
+  ask: GuideVaultAsk,
+  why: string | null,
+  locale?: string | null,
+): GuideCard {
+  const t = vaultAskText(locale);
   const lines: string[] = [];
   if (why?.trim()) lines.push(why.trim());
   if (ask.kind === 'code' && ask.hint?.trim()) lines.push(ask.hint.trim());
-  if (ask.entryId && ask.kind !== 'server') lines.push(VAULT_ASK_TEXT.replaces(ask.name));
-  lines.push(vaultAskUnder(assistant, ask.kind));
+  if (ask.entryId && ask.kind !== 'server') lines.push(t.replaces(ask.name));
+  lines.push(vaultAskUnder(assistant, ask.kind, locale));
   const node = ask.kind === 'server' || ask.kind === 'code' ? ask.kind : ask.entryId ? 'replace' : 'new';
   const card = GuideCard.parse({
     kind: 'guide',
     guide: 'secret',
     node,
-    title: vaultAskTitle(assistant, ask),
+    title: vaultAskTitle(assistant, ask, locale),
     body: lines.join('\n\n').slice(0, 1200),
     blocks: [
       {
         type: 'form',
         id: VAULT_ASK_FORM,
-        fields: vaultAskFields(ask),
-        submitLabel: vaultAskSubmitLabel(ask.kind),
+        fields: vaultAskFields(ask, locale),
+        submitLabel: vaultAskSubmitLabel(ask.kind, locale),
       },
       {
         type: 'actions',
-        actions: [{ id: VAULT_ASK_DECLINE, label: VAULT_ASK_TEXT.notNow, style: 'quiet', href: null }],
+        actions: [{ id: VAULT_ASK_DECLINE, label: t.notNow, style: 'quiet', href: null }],
       },
     ],
     state: 'open',
