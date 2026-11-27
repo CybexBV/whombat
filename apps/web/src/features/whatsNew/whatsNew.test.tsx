@@ -14,7 +14,7 @@ import {
 import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { WHATS_NEW_PATH, WHATS_NEW_TEXT, whatsNewSeenKey } from '@whombat/client/managed';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '../../components/Toast';
 
@@ -69,7 +69,7 @@ vi.mock('../settings/AgentUpdatesSwitch', () => ({
 
 const { whatsNewMarkdown, WHATS_NEW_MARKDOWN } = await import('./changelog');
 const { WhatsNewScreen } = await import('./WhatsNewScreen');
-const { WhatsNewNotice } = await import('../../managed/WhatsNewNotice');
+const { WhatsNewNotice, claimRelease, forgetWhatsNewNotices } = await import('../../managed/WhatsNewNotice');
 const { ManagedAbout } = await import('../settings/ManagedTabs');
 const { APPLIANCE_STATUS_KEY } = await import('../settings/version');
 
@@ -145,6 +145,7 @@ function seenRelease(): string | null {
 }
 
 beforeEach(() => {
+  forgetWhatsNewNotices();
   window.localStorage.clear();
   ops.status.mockReset();
 });
@@ -248,7 +249,9 @@ describe('the notice after an update', () => {
     ops.status.mockResolvedValue(status('whombat-20261127.2'));
     const first = renderAt(<WhatsNewNotice onWhatsNew={false} />);
     await screen.findByTestId('whats-new-notice');
+    // The page is closed (what it held goes with it) and opened again.
     first.unmount();
+    forgetWhatsNewNotices();
     await renderAt(<WhatsNewNotice onWhatsNew={false} />).statusRead();
     expect(notice()).toBeNull();
   });
@@ -328,16 +331,12 @@ describe('the notice after an update', () => {
 
   it('two pages that hear of the same update at the same moment: only one tells', async () => {
     window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
-    ops.status.mockResolvedValue(status('whombat-20261127.2'));
-    renderAt(
-      <>
-        <WhatsNewNotice onWhatsNew={false} />
-        <WhatsNewNotice onWhatsNew={false} />
-      </>,
-    );
-    await screen.findByTestId('whats-new-notice');
-    await act(async () => {});
-    expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
+    const answer = status('whombat-20261127.2') as never;
+    const told = await Promise.all([
+      claimRelease(seenEntry, answer, true),
+      claimRelease(seenEntry, answer, true),
+    ]);
+    expect(told.filter(Boolean)).toHaveLength(1);
     expect(seenRelease()).toBe('whombat-20261127.2');
   });
 
@@ -352,7 +351,7 @@ describe('the notice after an update', () => {
     expect(seenRelease()).toBe('whombat-20261127.2');
   });
 
-  it('a page gone before the browser lets it claim the update keeps nothing, so another can tell', async () => {
+  it('a notice won while the shell is drawn afresh still shows (the hosted app does as the session opens)', async () => {
     const queued: (() => void)[] = [];
     const locks = {
       request: (_name: string, take: () => unknown) =>
@@ -362,11 +361,16 @@ describe('the notice after an update', () => {
     try {
       window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
       ops.status.mockResolvedValue(status('whombat-20261127.2'));
-      const view = renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      const first = renderAt(<WhatsNewNotice onWhatsNew={false} />);
       await vi.waitFor(() => expect(queued).toHaveLength(1));
-      view.unmount();
+      first.unmount();
+      renderAt(<WhatsNewNotice onWhatsNew={false} />);
+      await vi.waitFor(() => expect(queued).toHaveLength(2));
       await act(async () => queued.shift()?.());
-      expect(seenRelease()).toBe('whombat-20261126.5');
+      await act(async () => queued.shift()?.());
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+      expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
+      expect(seenRelease()).toBe('whombat-20261127.2');
     } finally {
       vi.unstubAllGlobals();
     }
@@ -390,6 +394,40 @@ describe('the notice after an update', () => {
         JSON.stringify({ release: 'whombat-20261126.5', at: installedAt('whombat-20261126.5') }),
       );
       await act(async () => queued.shift()?.());
+      expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
+      expect(seenRelease()).toBe('whombat-20261127.2');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('a page that redraws while the browser hands it its turn still tells', async () => {
+    const queued: (() => void)[] = [];
+    let redraw = () => {};
+    const locks = {
+      request: (_name: string, take: () => unknown) =>
+        new Promise((resolve) =>
+          queued.push(() => {
+            const mine = take();
+            // Something else on the page changes (a query, a realtime frame) before the claim's answer arrives.
+            act(() => redraw());
+            resolve(mine);
+          }),
+        ),
+    };
+    function Redrawing() {
+      const [, set] = useState(0);
+      redraw = () => set((n) => n + 1);
+      return <WhatsNewNotice onWhatsNew={false} />;
+    }
+    vi.stubGlobal('navigator', { ...navigator, locks });
+    try {
+      window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
+      ops.status.mockResolvedValue(status('whombat-20261127.2'));
+      renderAt(<Redrawing />);
+      await vi.waitFor(() => expect(queued).toHaveLength(1));
+      queued.shift()?.();
+      await act(async () => {});
       expect(await screen.findByTestId('whats-new-notice')).toBeTruthy();
       expect(seenRelease()).toBe('whombat-20261127.2');
     } finally {
@@ -522,17 +560,13 @@ describe('the notice after an update', () => {
     vi.stubGlobal('navigator', { ...navigator, locks });
     try {
       window.localStorage.setItem(seenEntry, 'whombat-20261126.5');
-      ops.status.mockResolvedValue(status('whombat-20261127.2'));
-      renderAt(
-        <>
-          <WhatsNewNotice onWhatsNew={false} />
-          <WhatsNewNotice onWhatsNew={false} />
-        </>,
-      );
-      await screen.findByTestId('whats-new-notice');
-      await vi.waitFor(() => expect(claims).toBeGreaterThanOrEqual(2));
-      await act(() => last);
-      expect(screen.getAllByTestId('whats-new-notice')).toHaveLength(1);
+      const answer = status('whombat-20261127.2') as never;
+      const both = Promise.all([
+        claimRelease(seenEntry, answer, true),
+        claimRelease(seenEntry, answer, true),
+      ]);
+      await vi.waitFor(() => expect(claims).toBe(2));
+      expect((await both).filter(Boolean)).toHaveLength(1);
       expect(seenRelease()).toBe('whombat-20261127.2');
     } finally {
       vi.unstubAllGlobals();

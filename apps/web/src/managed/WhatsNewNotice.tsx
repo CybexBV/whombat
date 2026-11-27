@@ -20,7 +20,7 @@ import {
   whatsNewSeenKey,
 } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useAppServices } from '../app/providers';
 import styles from '../app/shell/ShellLayout.module.css';
 import { cx } from '../components/cx';
@@ -50,17 +50,15 @@ function keepSeen(key: string, value: string): boolean {
 /**
  * Decides again from what this browser keeps now and keeps the update as seen when it is new to it: true when this
  * page should tell. Pages that hear of an update at the same moment ask in turn (the browser's lock, where it has one),
- * so one tells; a page gone before its turn keeps nothing, so another can tell, and an older answer (a page still
- * holding a status from before the update) never replaces a newer one.
+ * so one tells; an older answer (a page still holding a status from before the update) never replaces a newer one.
+ * Exported for tests.
  */
-async function claimRelease(
+export async function claimRelease(
   key: string,
   status: Parameters<typeof whatsNewNotice>[0],
   tell: boolean,
-  live: () => boolean,
 ): Promise<boolean> {
   const take = () => {
-    if (!live()) return false;
     const seen = readSeen(key);
     if (seen === undefined) return false;
     const notice = whatsNewNotice(status, seen);
@@ -76,6 +74,30 @@ async function claimRelease(
   } catch {
     return take();
   }
+}
+
+/**
+ * The notice this page won, per Whombat, until See what’s new or Dismiss. Kept outside the notice: the shell may be
+ * drawn afresh between winning it and showing it (the hosted app does as the box's session opens), and the update is
+ * already kept as seen by then, so a notice holding it itself would lose it for good.
+ */
+const won = new Map<string, string>();
+const wonListeners = new Set<() => void>();
+
+function setWon(key: string, release: string | null) {
+  if (release) won.set(key, release);
+  else won.delete(key);
+  for (const listener of wonListeners) listener();
+}
+
+function onWon(listener: () => void): () => void {
+  wonListeners.add(listener);
+  return () => wonListeners.delete(listener);
+}
+
+/** For tests: forgets the notices this page won. */
+export function forgetWhatsNewNotices() {
+  won.clear();
 }
 
 export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
@@ -106,30 +128,29 @@ export function WhatsNewNotice({ onWhatsNew }: { onWhatsNew: boolean }) {
   // Kept per Whombat: without its id there is nowhere to keep it, so no notice.
   const key = id ? whatsNewSeenKey(id) : null;
   // The notice on screen: it stays until it is tapped, though its release is already kept.
-  const [shown, setShown] = useState<{ key: string; release: string } | null>(null);
+  const shown = useSyncExternalStore(onWon, () => (key ? (won.get(key) ?? null) : null));
   // Read from storage each time: another page of this browser may have shown the notice already.
   const seen = key ? readSeen(key) : undefined;
   const notice = status.data && seen !== undefined ? whatsNewNotice(status.data, seen) : null;
   const action = notice?.action;
   const release = notice?.release;
   const data = status.data;
+  // Whether What's new is open when a claim answers: a claim answers after its turn, when the page may have redrawn.
+  const reading = useRef(onWhatsNew);
+  reading.current = onWhatsNew;
   useEffect(() => {
     if (!key || !data || !release || action === 'none' || action === undefined) return;
-    let live = true;
     // Whether to tell is decided again in the lock, from what is kept by then.
-    void claimRelease(key, data, !onWhatsNew, () => live).then((mine) => {
-      if (live && mine) setShown({ key, release });
+    void claimRelease(key, data, !onWhatsNew).then((mine) => {
+      if (mine && !reading.current) setWon(key, release);
     });
-    return () => {
-      live = false;
-    };
   }, [key, data, action, release, onWhatsNew]);
   // Reading What's new is what the notice asked for: it doesn't come back after.
   useEffect(() => {
-    if (onWhatsNew) setShown(null);
-  }, [onWhatsNew]);
-  if (!key || shown?.key !== key || onWhatsNew) return null;
-  const close = () => setShown(null);
+    if (onWhatsNew && key) setWon(key, null);
+  }, [onWhatsNew, key]);
+  if (!key || !shown || onWhatsNew) return null;
+  const close = () => setWon(key, null);
   return (
     <div className={styles.notice} role="status" data-testid="whats-new-notice">
       <StatusDot tone="ok" size={7} label={null} />
