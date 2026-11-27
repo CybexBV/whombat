@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -313,6 +314,103 @@ func TestRetriedPushReallyPushes(t *testing.T) {
 	}
 	if out, _ := exec.Command("git", "-C", e.dir, "rev-list", "--count", "FETCH_HEAD..HEAD").Output(); strings.TrimSpace(string(out)) != "0" {
 		t.Fatalf("the clone is still ahead of the remote: %s", out)
+	}
+}
+
+// countedPushes makes origin fail its first n pushes with words, as a remote's own message, and returns how many
+// pushes it got so far.
+func countedPushes(t *testing.T, origin string, n int, words string) func() int {
+	t.Helper()
+	count := filepath.Join(t.TempDir(), "pushes")
+	script := fmt.Sprintf("#!/bin/sh\nn=$(cat %q 2>/dev/null || echo 0)\necho $((n+1)) > %q\nif [ \"$n\" -lt %d ]; then echo %q >&2; exit 1; fi\n",
+		count, count, n, words)
+	if err := os.WriteFile(filepath.Join(origin, "hooks", "pre-receive"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return func() int {
+		b, _ := os.ReadFile(count)
+		got, _ := strconv.Atoi(strings.TrimSpace(string(b)))
+		return got
+	}
+}
+
+// What GitHub says when a push fails on its own side, while its check of the branch's rules broke.
+const githubsOwnWords = "fatal error in commit_refs_rules"
+
+// A push GitHub fails on its own side is made again by the same run, and the publish finishes.
+func TestPushGitHubFailedIsMadeAgain(t *testing.T) {
+	e := setupWith(t, 0, func(c *ghpublish.Config) { c.PushWait = time.Millisecond })
+	pushes := countedPushes(t, e.origin, 2, githubsOwnWords)
+	id := "whombat-dev-20261118.1"
+	before := pushedFiles(t, e.dir)
+	r, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, id, fakeRelease(id, "26.05.1", "1.0.0", 0))
+	if err != nil || !r.MetadataPushed {
+		t.Fatalf("the publish: %+v %v", r, err)
+	}
+	if pushes() != 3 {
+		t.Fatalf("pushes: %d, want 3 (two failed, then one)", pushes())
+	}
+	if pushedFiles(t, e.dir) == before {
+		t.Fatal("nothing reached the remote")
+	}
+	if _, err := os.Stat(filepath.Join(e.dir, ".publish-pending.json")); !os.IsNotExist(err) {
+		t.Fatalf("still pending after the push: %v", err)
+	}
+}
+
+// The tries end: a publish GitHub keeps failing stops as one whose push failed, and running it again finishes it.
+func TestPushGitHubKeepsFailingStops(t *testing.T) {
+	e := setupWith(t, 0, func(c *ghpublish.Config) { c.PushTries, c.PushWait = 3, time.Millisecond })
+	pushes := countedPushes(t, e.origin, 1000, githubsOwnWords)
+	id := "whombat-dev-20261118.1"
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, id, fakeRelease(id, "26.05.1", "1.0.0", 0)); err == nil {
+		t.Fatal("published although every push failed")
+	}
+	if pushes() != 3 {
+		t.Fatalf("pushes: %d, want the 3 tries", pushes())
+	}
+	if _, err := os.Stat(filepath.Join(e.dir, ".publish-pending.json")); err != nil {
+		t.Fatalf("the failed push isn't pending: %v", err)
+	}
+	os.Remove(filepath.Join(e.origin, "hooks", "pre-receive"))
+	if r, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, id, nil); err != nil || !r.MetadataPushed {
+		t.Fatalf("running it again: %+v %v", r, err)
+	}
+}
+
+// Any other refusal is the remote's answer: one push, no second try.
+func TestPushRefusedIsNotMadeAgain(t *testing.T) {
+	e := setupWith(t, 0, func(c *ghpublish.Config) { c.PushWait = time.Millisecond })
+	pushes := countedPushes(t, e.origin, 1000, "a rule of this branch refuses the push")
+	id := "whombat-dev-20261118.1"
+	if _, err := e.pub.Publish(e.ctx, trust.ChannelDevelopment, id, fakeRelease(id, "26.05.1", "1.0.0", 0)); err == nil {
+		t.Fatal("published although the remote refused the push")
+	}
+	if pushes() != 1 {
+		t.Fatalf("pushes: %d, want 1", pushes())
+	}
+}
+
+// An emergency pause gets through a push GitHub fails on its own side, and stops at once on another refusal.
+func TestPauseGitHubFailedIsMadeAgain(t *testing.T) {
+	e := setupWith(t, 0, func(c *ghpublish.Config) { c.PushWait = time.Millisecond })
+	pushes := countedPushes(t, e.origin, 2, githubsOwnWords)
+	res, pr, err := e.pub.PauseChannel(e.ctx, trust.ChannelProduction, nil)
+	if err != nil || !res.MetadataPushed || pr == nil || !pr.Paused {
+		t.Fatalf("pause: %+v %+v %v", res, pr, err)
+	}
+	if pushes() != 3 {
+		t.Fatalf("pushes: %d, want 3 (two failed, then one)", pushes())
+	}
+	if files := pushedFiles(t, e.dir); !strings.Contains(files, fmt.Sprintf("metadata/%d.production.json", pr.Version)) {
+		t.Fatalf("the paused role isn't on the remote:\n%s", files)
+	}
+	refused := countedPushes(t, e.origin, 1000, "a rule of this branch refuses the push")
+	if _, _, err := e.pub.ResumeChannel(e.ctx, trust.ChannelProduction, nil); err == nil {
+		t.Fatal("resumed although the remote refused the push")
+	}
+	if refused() != 1 {
+		t.Fatalf("pushes of the refused resume: %d, want 1", refused())
 	}
 }
 
