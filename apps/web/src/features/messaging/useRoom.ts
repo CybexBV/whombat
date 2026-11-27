@@ -144,10 +144,10 @@ export function useTypingLines(
       const at = (nowMs: number) => {
         const entry = agentNowFor(agentNow, t.principalId, threadRootId, nowMs);
         // Without the clock: measured at the action's own start, the label leaves it out.
-        const label = workingLabel(name, entry, nowMs);
+        const label = workingLabel(name, entry, nowMs, currentLocale());
         return {
           label,
-          spoken: entry ? workingLabel(name, entry, entry.since) : label,
+          spoken: entry ? workingLabel(name, entry, entry.since, currentLocale()) : label,
           state: workingFaceState(entry),
         };
       };

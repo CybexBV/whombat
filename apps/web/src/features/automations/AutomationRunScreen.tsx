@@ -35,6 +35,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot, StatusPill } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
+import { liveTranslator } from '../../i18n/live';
 import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { usePrHref } from '../branch/usePrHref';
 import { MessageText } from '../messaging/MessageRow';
@@ -61,9 +62,6 @@ export function pullRequestUrl(step: AutomationRunStep): string | null {
 
 /** What the server adds to an assessment beside its fields: the line, and a GitHub comment's parts (0.68). */
 const SERVER_PARTS = new Set(['line', 'heading', 'detailsBlock']);
-
-/** The tag beside an assessment's line when the agent recommends a change (0.71, AR-51; AP-1053). */
-export const SUGGESTS_A_CHANGE = 'Suggests a change';
 
 /**
  * An agent step's assessment (0.67, CT-323; AP-991): its line — the server's `line`, else said again with
@@ -156,8 +154,11 @@ export function foldSkipped(run: Pick<AutomationRun, 'status' | 'steps'>): {
     : { shown: all, skipped: [] };
 }
 
+/** The tag beside an assessment's line when the agent recommends a change, in English (the screen reads its own). */
+export const SUGGESTS_A_CHANGE = 'Suggests a change';
+
 /** “8 more steps skipped” (two or more: one is shown as itself). */
-export const skippedLine = (n: number) => `${n} more steps skipped`;
+export const skippedLine = (n: number) => liveTranslator().tp('automations.run.skipped', n);
 
 /**
  * What a step produced, in a sentence or two (full agent text in the box below it). `steps`: the run's, so a condition
@@ -171,34 +172,45 @@ export function stepOutcome(
   words: TrackerWords = unknownTrackerWords(currentLocale()),
 ): string | null {
   const o = step.output as Record<string, unknown>;
+  const { t, tp } = liveTranslator();
   switch (step.kind) {
-    case 'request_approval':
+    case 'request_approval': {
+      const by = typeof o.decidedById === 'string' ? nameOf(o.decidedById) : null;
       if (o.decision === 'approved')
-        return `Approved${typeof o.decidedById === 'string' ? ` by ${nameOf(o.decidedById)}` : ''}.`;
+        return by ? t('automations.outcome.approvedBy', { name: by }) : t('automations.outcome.approved');
       if (o.decision === 'declined')
-        return `Declined${typeof o.decidedById === 'string' ? ` by ${nameOf(o.decidedById)}` : ''}.`;
+        return by ? t('automations.outcome.declinedBy', { name: by }) : t('automations.outcome.declined');
       return null;
+    }
     case 'condition': {
       if (typeof o.result !== 'boolean') return null;
       // A step named as a question (“A bug worth fixing?”) is answered Yes or No.
       const question = step.name.trim().endsWith('?');
-      if (o.result) return question ? 'Yes: it went on.' : 'True: it went on.';
-      const no = question ? 'No' : 'False';
+      if (o.result) return t(question ? 'automations.outcome.yesWentOn' : 'automations.outcome.trueWentOn');
       // Skipped ahead (`else: {skipTo}`): the first later step that wasn't skipped is where it went on.
       const next = steps.find((s) => s.index > step.index && s.state !== 'skipped');
-      return next ? `${no}: it skipped to “${next.name}”.` : `${no}: it stopped here.`;
+      if (next)
+        return t(question ? 'automations.outcome.noSkippedTo' : 'automations.outcome.falseSkippedTo', {
+          step: next.name,
+        });
+      return t(question ? 'automations.outcome.noStopped' : 'automations.outcome.falseStopped');
     }
     case 'wait':
-      return typeof o.waited === 'number' ? `Waited ${o.waited} min.` : null;
+      return typeof o.waited === 'number' ? t('automations.outcome.waited', { n: String(o.waited) }) : null;
     case 'open_pull_request':
-      if (o.opened === true && typeof o.prNumber === 'number') return `Opened pull request #${o.prNumber}.`;
+      if (o.opened === true && typeof o.prNumber === 'number')
+        return t('automations.outcome.openedPr', { n: String(o.prNumber) });
       return typeof o.text === 'string' ? `${o.text.charAt(0).toUpperCase()}${o.text.slice(1)}.` : null;
     case 'http_callback':
-      return typeof o.status === 'number' ? `It answered ${o.status}.` : null;
+      return typeof o.status === 'number'
+        ? t('automations.outcome.answered', { status: String(o.status) })
+        : null;
     case 'github_comment':
       // 0.66 (AP-974): the comment on the issue or pull request, or why it was left out.
       if (typeof o.reason === 'string' && o.reason) return o.reason;
-      return typeof o.number === 'number' ? `Commented on #${o.number}.` : null;
+      return typeof o.number === 'number'
+        ? t('automations.outcome.commented', { n: String(o.number) })
+        : null;
     case 'tracker_update':
       // 0.69 (AP-1026): what it wrote on the report, or why it wrote nothing.
       return trackerWriteOutcome(o, words);
@@ -217,9 +229,13 @@ export function stepOutcome(
       const ws = o.workspace as { branch?: string } | undefined;
       const parts: string[] = [];
       if (typeof o.commits === 'number')
-        parts.push(`${o.commits} new commit${o.commits === 1 ? '' : 's'} on ${ws?.branch ?? 'its branch'}.`);
-      if (o.verdict === 'approve') parts.push('Verdict: Approve.');
-      if (o.verdict === 'changes_needed') parts.push('Verdict: Changes needed.');
+        parts.push(
+          tp('automations.outcome.commits', o.commits, {
+            branch: ws?.branch ?? t('automations.outcome.itsBranch'),
+          }),
+        );
+      if (o.verdict === 'approve') parts.push(t('automations.outcome.approve'));
+      if (o.verdict === 'changes_needed') parts.push(t('automations.outcome.changesNeeded'));
       return parts.length ? parts.join(' ') : null;
     }
     default:
@@ -233,7 +249,7 @@ export function stepOutcome(
  * Pause / Resume / Cancel. A step whose outcome is uncertain after a crash waits for a person to say what happened.
  */
 export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps) {
-  const { tag: uiLocale } = useWebI18n();
+  const { t, tag: uiLocale, locale } = useWebI18n();
   const params = { burrow, number };
   const { data, error, isPending, refetch } = useAutomationRun({ params });
   const { rooms } = useAutomationRooms(burrow);
@@ -263,16 +279,12 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
     return (
       <ScreenPlaceholder
         screen="automation-run"
-        title={`Automation run #${number}`}
-        subtitle={
-          notFound
-            ? 'This run doesn’t exist, or it’s in a room you’re not in.'
-            : 'Couldn’t load this run. Try again in a moment.'
-        }
+        title={t('automations.run.title', { n: String(number) })}
+        subtitle={t(notFound ? 'automations.run.notFound' : 'automations.run.loadFailed')}
       >
         {!notFound && (
           <Button variant="secondary" size="sm" onClick={() => void refetch()}>
-            Retry
+            {t('automations.run.retry')}
           </Button>
         )}
       </ScreenPlaceholder>
@@ -293,7 +305,7 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
     if (res.status === 'ok') {
       qc.setQueryData(queryKeys.automations.run({ params }), res.data);
       toast.show(message);
-    } else toast.show(res.status === 'blocked' ? res.message : 'That needs a person to approve first.');
+    } else toast.show(res.status === 'blocked' ? res.message : t('automations.run.needsApproval'));
   };
   const control = (action: 'pause' | 'resume' | 'cancel') => {
     const m = action === 'pause' ? pause : action === 'resume' ? resume : cancel;
@@ -302,11 +314,13 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
       { params },
       {
         onSuccess: done(
-          action === 'pause'
-            ? 'Paused. It holds after the step in progress.'
-            : action === 'resume'
-              ? 'Resumed.'
-              : 'Stopped. Any agent working for it stops too.',
+          t(
+            action === 'pause'
+              ? 'automations.run.pausedNote'
+              : action === 'resume'
+                ? 'automations.run.resumedNote'
+                : 'automations.run.stoppedNote',
+          ),
         ),
         onError: (err) => toast.show(problemText(err, undefined, uiLocale)),
         onSettled: () => setPending(null),
@@ -319,7 +333,7 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
       { params: { ...params, stepId: step.stepId }, body: { resolution } },
       {
         onSuccess: done(
-          resolution === 'retry' ? 'It tries that step again.' : 'Thanks. It goes on from there.',
+          t(resolution === 'retry' ? 'automations.run.retryNote' : 'automations.run.goesOnNote'),
         ),
         onError: (err) => toast.show(problemText(err, undefined, uiLocale)),
         onSettled: () => setPending(null),
@@ -367,37 +381,42 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
               )}
               <span aria-hidden="true">/</span>
               <span>
-                RUN #{run.number}
-                {run.test ? ' · TEST' : ''} · VERSION {run.version || 'DRAFT'}
+                {t('automations.run.kicker', { n: String(run.number) })}
+                {run.test ? ` ${t('automations.run.kickerTest')}` : ''}{' '}
+                {t('automations.run.kickerVersion', {
+                  version: run.version ? String(run.version) : t('automations.run.draft'),
+                })}
               </span>
             </div>
-            <h1 className={styles.title}>Run #{run.number}</h1>
+            <h1 className={styles.title}>{t('automations.run.heading', { n: String(run.number) })}</h1>
             <p className={styles.subtitle}>
               {run.trigger.summary} ·{' '}
               {formatRecent(run.startedAt ?? run.createdAt, now, viewer.timeZone, uiLocale)}
-              {run.tokens !== null ? ` · ${run.tokens.toLocaleString('en-GB')} tokens` : ''}
+              {run.tokens !== null
+                ? ` ${t('automations.run.tokens', { n: run.tokens.toLocaleString(locale) })}`
+                : ''}
             </p>
           </div>
           <div className={styles.actions}>
             <StatusPill tone={status.tone}>{automationRunLabel(run)}</StatusPill>
             {threadHref && (
               <Button variant="secondary" onClick={() => navigate(threadHref)}>
-                Open the thread
+                {t('automations.run.openThread')}
               </Button>
             )}
             {runActive(run.status) && run.status !== 'paused' && run.status !== 'needs_review' && (
               <Button variant="secondary" disabled={pending !== null} onClick={() => control('pause')}>
-                Pause
+                {t('automations.run.pause')}
               </Button>
             )}
             {run.status === 'paused' && (
               <Button variant="secondary" disabled={pending !== null} onClick={() => control('resume')}>
-                Resume
+                {t('automations.run.resume')}
               </Button>
             )}
             {runActive(run.status) && (
               <Button variant="secondary" disabled={pending !== null} onClick={() => control('cancel')}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             )}
           </div>
@@ -405,7 +424,7 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
 
         {automation.deletedAt && (
           <p className={styles.note} data-automation-deleted="">
-            This automation was deleted.
+            {t('automations.run.deleted')}
           </p>
         )}
         {run.error && (
@@ -427,10 +446,10 @@ export function AutomationRunScreen({ burrow, number }: AutomationRunScreenProps
 
         <section className={styles.section} aria-labelledby="run-steps">
           <SectionLabel as="h2" id="run-steps">
-            STEPS
+            {t('automations.run.steps')}
           </SectionLabel>
           <div className={styles.card}>
-            <ol className={styles.timeline} aria-label="Steps">
+            <ol className={styles.timeline} aria-label={t('automations.run.stepsLabel')}>
               {shown.map(stepItem)}
               {skipped.length > 0 && (
                 <li className={styles.timelineItem} data-skipped-steps="">
@@ -487,6 +506,7 @@ function StepItem({
   onNavigate: (href: string) => void;
   onSettle: (resolution: 'done' | 'failed' | 'retry') => void;
 }) {
+  const { t } = useWebI18n();
   const state = STEP_STATE[step.state];
   const o = step.output as Record<string, unknown>;
   // A comment repeats the agent's answer above it: its outcome line says where it went instead. A write-back to the
@@ -531,21 +551,23 @@ function StepItem({
     </a>
   );
   const links = [
-    ...(step.messageIds.length && threadHref ? [link(threadHref, 'Messages')] : []),
-    ...(approvalHref && !awaiting ? [link(approvalHref, `Request #${step.approvalNumber}`)] : []),
-    ...step.runNumbers.map((n) => link(`/runs/${n}`, `Agent run #${n}`)),
+    ...(step.messageIds.length && threadHref ? [link(threadHref, t('automations.run.messages'))] : []),
+    ...(approvalHref && !awaiting
+      ? [link(approvalHref, t('automations.run.request', { n: String(step.approvalNumber) }))]
+      : []),
+    ...step.runNumbers.map((n) => link(`/runs/${n}`, t('automations.run.agentRun', { n: String(n) }))),
     ...(step.prNumber ? [link(prHref(step.prNumber), `PR #${step.prNumber}`)] : []),
     ...(prUrl
       ? [
           <a key={prUrl} className={styles.stepLink} href={prUrl} target="_blank" rel="noreferrer">
-            The pull request on GitHub
+            {t('automations.run.prOnGitHub')}
           </a>,
         ]
       : []),
     ...(commentUrl
       ? [
           <a key={commentUrl} className={styles.stepLink} href={commentUrl} target="_blank" rel="noreferrer">
-            The comment on GitHub
+            {t('automations.run.commentOnGitHub')}
           </a>,
         ]
       : []),
@@ -560,13 +582,15 @@ function StepItem({
           <span className={styles.timelineName}>{step.name.trim() || stepKindLabel(step.kind)}</span>
           <span className={styles.mono}>
             {state.label.toUpperCase()}
-            {step.attempt > 0 ? ` · TRY ${step.attempt + 1}` : ''}
+            {step.attempt > 0 ? ` ${t('automations.run.try', { n: String(step.attempt + 1) })}` : ''}
             {step.finishedAt
               ? ` · ${formatClock(step.finishedAt, timeZone)}`
               : step.startedAt
                 ? ` · ${formatClock(step.startedAt, timeZone)}`
                 : ''}
-            {step.state === 'waiting' && step.wakeAt ? ` · UNTIL ${formatClock(step.wakeAt, timeZone)}` : ''}
+            {step.state === 'waiting' && step.wakeAt
+              ? ` ${t('automations.run.until', { clock: formatClock(step.wakeAt, timeZone) })}`
+              : ''}
           </span>
         </div>
         {/* A feature request's step says its input as its outcome: once is enough. */}
@@ -575,7 +599,7 @@ function StepItem({
           <span
             className={step.kind === 'condition' ? `${styles.rowMeta} ${styles.expression}` : styles.rowMeta}
           >
-            {step.inputSummary || `Asked ${agentName}`}
+            {step.inputSummary || t('automations.run.asked', { name: agentName ?? '' })}
           </span>
         )}
         {asked && (
@@ -592,7 +616,9 @@ function StepItem({
           <div className={styles.assessment} data-step-assessment="">
             <ul
               className={styles.assessmentLine}
-              aria-label={`Assessment: ${assessment.line}${assessment.suggests ? ` · ${SUGGESTS_A_CHANGE.toLowerCase()}` : ''}`}
+              aria-label={t('automations.run.assessment', {
+                line: `${assessment.line}${assessment.suggests ? ` · ${t('automations.run.suggestsChange').toLowerCase()}` : ''}`,
+              })}
             >
               {/* The line's parts differ (kind, importance, confidence, size), so each is its own key. */}
               {assessment.line.split(' · ').map((part, i) => (
@@ -603,7 +629,7 @@ function StepItem({
               {/* The agent recommends a change (AP-1053): what the card in the thread offers. */}
               {assessment.suggests && (
                 <li data-suggests="">
-                  <Tag tone="brand">{SUGGESTS_A_CHANGE}</Tag>
+                  <Tag tone="brand">{t('automations.run.suggestsChange')}</Tag>
                 </li>
               )}
             </ul>
@@ -622,7 +648,7 @@ function StepItem({
           <details className={styles.techDetails} data-step-details="">
             <summary>
               <Icon name="chevronDown" size={15} className={styles.chevron} />
-              Technical details
+              {t('automations.run.technicalDetails')}
             </summary>
             <MessageText text={assessment.details} className={styles.detailsText} />
           </details>
@@ -632,20 +658,20 @@ function StepItem({
         {awaiting && approvalHref && (
           <div className={styles.actions}>
             <Button variant="secondary" size="sm" onClick={() => onNavigate(approvalHref)}>
-              Review request #{step.approvalNumber}
+              {t('automations.run.reviewRequest', { n: String(step.approvalNumber) })}
             </Button>
           </div>
         )}
         {step.state === 'uncertain' && canReview && run.status === 'needs_review' && (
           <div className={styles.actions}>
             <Button variant="secondary" size="sm" disabled={pending} onClick={() => onSettle('done')}>
-              It happened
+              {t('automations.run.happened')}
             </Button>
             <Button variant="secondary" size="sm" disabled={pending} onClick={() => onSettle('failed')}>
-              It didn’t
+              {t('automations.run.didntHappen')}
             </Button>
             <Button variant="ghost" size="sm" disabled={pending} onClick={() => onSettle('retry')}>
-              Try it again
+              {t('automations.run.tryAgain')}
             </Button>
           </div>
         )}
@@ -656,6 +682,7 @@ function StepItem({
 
 /** A recipe's check in plain words, and a toggle that shows the rule it evaluated (AP-1003). */
 function ConditionStory({ story, rule }: { story: string; rule: string }) {
+  const { t } = useWebI18n();
   const [open, setOpen] = useState(false);
   const ruleId = useId();
   return (
@@ -671,7 +698,7 @@ function ConditionStory({ story, rule }: { story: string; rule: string }) {
             onClick={() => setOpen((o) => !o)}
           >
             <Icon name="chevronDown" size={14} className={styles.chevron} />
-            Show the rule
+            {t('automations.run.showRule')}
           </button>
           <code id={ruleId} className={styles.rule} hidden={!open}>
             {rule}

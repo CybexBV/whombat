@@ -19,6 +19,8 @@ interface Pattern {
   weight: number;
   /** The template held a plural form: its count is captured as a number. */
   counted: boolean;
+  /** Open slots that must look like a name (see `looksLikeName`). */
+  guarded: Set<string>;
 }
 
 interface Book {
@@ -34,12 +36,49 @@ const HAS_SLOT = /\{\w+\}/;
 
 let book: Book | null = null;
 
-/** Slots that hold a count: they capture only a number, and the reader's language writes it its own way. */
-const COUNT_SLOTS = new Set(['n', 'count']);
+/**
+ * What each kind of slot may capture. A slot that holds a figure, a time or a duration captures only that, so a
+ * template never takes ordinary English words for a value (“at least 3” is not “at {time}”, “Today by the hour” is
+ * not “Today {time}”).
+ */
+const NUMBER = '(\\d+(?:[.,]\\d+)*)';
+const SIZE = '(\\d+(?:[.,]\\d+)*(?:\\s?(?:[KMGTPE]i?B|B|bytes?))?)';
+const PCT = '(\\d+(?:[.,]\\d+)?\\s?%)';
+const TIME = '(\\d{1,2}[:.]\\d{2}(?:\\s?[aApP][mM])?)';
+const UNIT = '(?:ms|s|secs?|seconds?|min|mins|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|months?|years?)';
+const DURATION = `(\\d+(?:[.,]\\d+)?\\s?${UNIT}(?:\\s\\d+(?:[.,]\\d+)?\\s?${UNIT})?)`;
+const AMOUNT = '(\\d+(?:[.,]\\d+)*(?:\\s?[^\\s\\d]\\S*)?)';
+
+/** Slots that hold a count: the count picks the plural form, and the reader's language writes the number. */
+const COUNT_SLOTS = new Set(['n', 'count', 'days', 'hours', 'minutes', 'seconds']);
 /** Slots that hold an amount (“1.2 GB”, “40”): a number with an optional unit, never words. */
 const SIZE_SLOTS = new Set(['size', 'used', 'total']);
-const NUMBER = '(\\d[\\d.,]*)';
-const SIZE = '(\\d[\\d.,]*(?:\\s?(?:[KMGTPE]i?B|B|bytes?))?)';
+const SLOT_SHAPES: Readonly<Record<string, string>> = {
+  ...Object.fromEntries([...COUNT_SLOTS].map((name) => [name, NUMBER])),
+  ...Object.fromEntries([...SIZE_SLOTS].map((name) => [name, SIZE])),
+  pct: PCT,
+  time: TIME,
+  duration: DURATION,
+  range: DURATION,
+  value: AMOUNT,
+};
+/** Slots whose own words are said again in the reader's language (“3 hours” in “Didn’t answer for 3 hours”). */
+const SAID_AGAIN_SLOTS = new Set(['duration', 'range', 'value', 'what']);
+
+/**
+ * Phrases that are a button's words only. In Dutch an open door is “Open” and the button that opens it is “Openen”,
+ * so outside a button these stay as they were (which is the Dutch state word too).
+ */
+const BUTTON_ONLY = new Set<ServerMessageKey>(['phrase.open']);
+
+/**
+ * Whether what an open slot caught can be a name. A short one-sided template (“Update {name}”, “Part of {server}”)
+ * would otherwise take any English after its fixed words for a name (“Update lists”, “Update homebrew on your PS5”),
+ * so there every word of a name must look like a name's: a capital, a digit or a sign that ordinary lower-case words
+ * don't have. A name with an ordinary word in it stays English, which is never wrong, only untranslated.
+ */
+const looksLikeName = (captured: string): boolean =>
+  captured.split(/\s+/).every((word) => /[^a-z'’,-]/.test(word));
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -65,7 +104,7 @@ function compile(key: ServerMessageKey, template: string, counted: boolean): Pat
     if (seen >= 0) source += `\\${seen + 1}`;
     else {
       names.push(name);
-      source += COUNT_SLOTS.has(name) ? NUMBER : SIZE_SLOTS.has(name) ? SIZE : '(.+?)';
+      source += SLOT_SHAPES[name] ?? '(.+?)';
     }
     last = (m.index ?? 0) + m[0].length;
   }
@@ -75,7 +114,11 @@ function compile(key: ServerMessageKey, template: string, counted: boolean): Pat
   if (names.length === 0) return null;
   // A template that is all slots would match anything.
   if (weight < 3) return null;
-  return { key, re: new RegExp(`^${source}$`, 's'), names, weight, counted };
+  const literal = template.replace(SLOT, ' ').trim();
+  const oneSided = template.startsWith('{') || template.endsWith('}');
+  const short = literal.split(/\s+/).filter(Boolean).length < 3;
+  const guarded = new Set(oneSided && short ? names.filter((name) => !SLOT_SHAPES[name]) : []);
+  return { key, re: new RegExp(`^${source}$`, 's'), names, weight, counted, guarded };
 }
 
 function phrasebook(): Book {
@@ -99,8 +142,9 @@ function phrasebook(): Book {
   return book;
 }
 
+/** An English number: a comma groups thousands (“1,250”), a point is the decimal point (“1.250” is one and a quarter). */
 function countOf(raw: string): number {
-  const n = Number(raw.replace(/[.,](?=\d{3}\b)/g, '').replace(',', '.'));
+  const n = Number(raw.replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -110,33 +154,53 @@ function numberIn(raw: string, locale: string): string {
   if (!m) return raw;
   const digits = m[1] ?? '';
   const n = countOf(digits);
-  const decimals = /\.(\d{1,2})$/.exec(digits)?.[1]?.length ?? 0;
-  const said = formatLocaleNumber(n, locale, { maximumFractionDigits: decimals });
+  // Keep every decimal the English had (“1.250” stays three places, “1,250”).
+  const decimals = /\.(\d+)$/.exec(digits)?.[1]?.length ?? 0;
+  const said = formatLocaleNumber(n, locale, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
   return `${said}${m[2] ?? ''}`;
 }
 
+/** Where a string is shown: a button's words may differ from the same word as a state. */
+export interface PhraseOptions {
+  /** The string is a button's (or a link's) words. */
+  button?: boolean;
+}
+
+/** The phrase an exact English string names, when it may be used here. */
+function exactKey(text: string, button: boolean): ServerMessageKey | null {
+  const key = phrasebook().exact.get(text);
+  if (!key) return null;
+  return BUTTON_ONLY.has(key) && !button ? null : key;
+}
+
 /** One whole string, by an exact phrase or a template; null when the book has nothing for it. */
-function whole(text: string, locale: string): string | null {
+function whole(text: string, locale: string, button: boolean): string | null {
   const tr = serverTranslator(locale);
-  const { exact, patterns } = phrasebook();
-  const key = exact.get(text);
+  const key = exactKey(text, button);
   if (key) return tr.t(key);
-  for (const p of patterns) {
+  for (const p of phrasebook().patterns) {
     const m = p.re.exec(text);
     if (!m) continue;
+    const captured = p.names.map((_, i) => m[i + 1] ?? '');
+    if (p.names.some((name, i) => p.guarded.has(name) && !looksLikeName(captured[i] ?? ''))) continue;
     const vars: Record<string, string | number> = {};
     let count: number | undefined;
     p.names.forEach((name, i) => {
-      const captured = m[i + 1] ?? '';
-      if (COUNT_SLOTS.has(name) && /^\d/.test(captured)) {
-        count = countOf(captured);
-        vars[name] = numberIn(captured, locale);
-      } else if (SIZE_SLOTS.has(name) && /^\d/.test(captured)) {
-        vars[name] = numberIn(captured, locale);
+      const value = captured[i] ?? '';
+      if (COUNT_SLOTS.has(name)) {
+        count = countOf(value);
+        vars[name] = numberIn(value, locale);
+      } else if (SIZE_SLOTS.has(name)) {
+        vars[name] = numberIn(value, locale);
+      } else if (SAID_AGAIN_SLOTS.has(name)) {
+        // A duration or a known word in a slot is said in the reader's language too (“Look into it · {what}”).
+        vars[name] = whole(value, locale, false) ?? value;
       } else {
-        // What a slot holds may itself be a known word (“Look into it · {what}”).
-        const known = exact.get(captured);
-        vars[name] = known ? tr.t(known) : captured;
+        // A name is the thing's own: never translated, even when it happens to be an English word.
+        vars[name] = value;
       }
     });
     if (p.counted && count !== undefined) return tr.tp(p.key, count, vars);
@@ -149,15 +213,20 @@ function whole(text: string, locale: string): string | null {
  * A finished English string in `locale`: the whole of it when the phrasebook knows it, else each part between ` · `
  * on its own, else as it was. English locales get it back untouched.
  */
-export function localizePhrase(text: string, locale: string | null | undefined): string {
+export function localizePhrase(
+  text: string,
+  locale: string | null | undefined,
+  options: PhraseOptions = {},
+): string {
   if (!text || isEnglish(locale)) return text;
-  const own = whole(text, locale ?? '');
+  const button = options.button === true;
+  const own = whole(text, locale ?? '', button);
   if (own !== null) return own;
   if (text.includes(' · ')) {
     const parts = text.split(' · ');
     let changed = false;
     const said = parts.map((part) => {
-      const found = whole(part, locale ?? '');
+      const found = whole(part, locale ?? '', false);
       if (found === null) return part;
       changed = true;
       return found;
@@ -170,7 +239,7 @@ export function localizePhrase(text: string, locale: string | null | undefined):
     if (sentences.length > 1) {
       let changed = false;
       const said = sentences.map((s) => {
-        const found = whole(s, locale ?? '');
+        const found = whole(s, locale ?? '', false);
         if (found === null) return s;
         changed = true;
         return found;
@@ -273,7 +342,8 @@ const MACHINE_FIELDS = new Set([
 
 /**
  * The most characters a word field may hold, by its name: the tightest any page shape allows, so a longer translation
- * never breaks a shape's limit. A field not listed may grow no longer than its English.
+ * never breaks a shape's limit. A field not listed has no limit of its own, so its translation is used whatever its
+ * length.
  */
 const FIELD_MAX: Readonly<Record<string, number>> = {
   label: 30,
@@ -306,6 +376,7 @@ const FIELD_MAX: Readonly<Record<string, number>> = {
   summary: 240,
   plan: 120,
   fix: 32,
+  meta: 120,
 };
 
 function fits(
@@ -316,7 +387,7 @@ function fits(
 ): boolean {
   if (said.length <= english.length) return true;
   const max = field ? (limits[field] ?? FIELD_MAX[field]) : undefined;
-  return max !== undefined && said.length <= max;
+  return max === undefined || said.length <= max;
 }
 
 export interface LocalizeTreeOptions {
@@ -326,10 +397,67 @@ export interface LocalizeTreeOptions {
   max?: Readonly<Record<string, number>>;
 }
 
+/** Fields whose objects are buttons or links: their words are a button's (“Open” is “Openen”). */
+const BUTTON_HOLDERS = new Set(['actions', 'buttons', 'toggle', 'link', 'links', 'open', 'confirm']);
+
+/** Where the walk is: what it means for the words below. */
+interface Where {
+  /** Inside a button or a choice: its `value` is what it sends back, never a word. */
+  sends: boolean;
+  /** Inside a button or a link: its words are a button's. */
+  button: boolean;
+  /** The kind of panel the walk is in (`list`, `gallery`, `table` …), when it is in one. */
+  panel: string | null;
+  /** A table's first column: it names each row's thing. */
+  firstColumn: string | null;
+}
+
+const OUTSIDE: Where = { sends: false, button: false, panel: null, firstColumn: null };
+
+/**
+ * The fields of an object that hold the name of one of the service's own things (a door, a film, a light, a disk, a
+ * container), which stay exactly as the service named them: a door called “Open” is not a button. Everything else in
+ * the same rows (states, details, buttons) is still said in the reader's language.
+ */
+function ownNames(obj: Record<string, unknown>, field: string | null, where: Where): ReadonlySet<string> {
+  if (field !== 'items') return NO_FIELDS;
+  switch (where.panel) {
+    // A picture's title is always what it shows: a film, a camera, a request.
+    case 'gallery':
+      return TITLE;
+    // A line with its own buttons, picture or page is one of the service's things; other lines are our words.
+    case 'list':
+      return 'actions' in obj || 'image' in obj || 'url' in obj ? TITLE : NO_FIELDS;
+    // A control's label is the light's, switch's or lock's own name.
+    case 'controls':
+      return 'groups' in obj ? NO_FIELDS : LABEL;
+    // A bar for a person, a mono name or a page of its own names a disk, a volume or someone.
+    case 'bars':
+      return obj.person === true || obj.mono === true || 'href' in obj ? LABEL : NO_FIELDS;
+    default:
+      return NO_FIELDS;
+  }
+}
+
+const NO_FIELDS: ReadonlySet<string> = new Set();
+const TITLE: ReadonlySet<string> = new Set(['title']);
+const LABEL: ReadonlySet<string> = new Set(['label']);
+
+/** The key of a table panel's first column, when the object is a table with columns. */
+function firstColumnOf(obj: Record<string, unknown>): string | null {
+  if (obj.kind !== 'table' || !Array.isArray(obj.columns)) return null;
+  const first: unknown = obj.columns[0];
+  if (first && typeof first === 'object' && typeof (first as { key?: unknown }).key === 'string') {
+    return (first as { key: string }).key;
+  }
+  return null;
+}
+
 /**
  * A copy of a finished tree (a service's page, a glance, a desk view) with every word field said in `locale`. Fields of
- * machine data stay as they were, and so does a button's or a choice's `value` (what it sends back); a translation
- * longer than its field allows stays English. English gets the tree back as it is.
+ * machine data stay as they were, and so do a button's or a choice's `value` (what it sends back) and the names the
+ * service gave its own things; a translation longer than its field allows stays English. English gets the tree back
+ * as it is.
  */
 export function localizeTree<T>(
   tree: T,
@@ -339,27 +467,56 @@ export function localizeTree<T>(
   if (isEnglish(locale)) return tree;
   const keep = options.keep ?? MACHINE_FIELDS;
   const limits = options.max ?? {};
-  const walk = (value: unknown, field: string | null, machineValue: boolean): unknown => {
+  const walk = (value: unknown, field: string | null, where: Where): unknown => {
     if (typeof value === 'string') {
       if (field !== null && keep.has(field)) return value;
-      if (field === 'value' && machineValue) return value;
-      const said = localizePhrase(value, locale);
+      if (field === 'value' && where.sends) return value;
+      const said = localizePhrase(value, locale, { button: where.button });
       return fits(field, value, said, limits) ? said : value;
     }
-    if (Array.isArray(value)) return value.map((v) => walk(v, field, field === 'choices'));
+    if (Array.isArray(value)) {
+      const inArray = field === 'choices' ? { ...where, sends: true } : where;
+      return value.map((v) => walk(v, field, inArray));
+    }
     if (value && typeof value === 'object') {
       if (field !== null && keep.has(field)) return value;
       const obj = value as Record<string, unknown>;
       // A button (it says whether it is allowed) or a choice sends its value back: never a word.
-      const sends = machineValue || typeof obj.allowed === 'boolean' || 'target' in obj;
+      const sends = where.sends || typeof obj.allowed === 'boolean' || 'target' in obj;
+      const button =
+        where.button ||
+        typeof obj.allowed === 'boolean' ||
+        (field !== null && BUTTON_HOLDERS.has(field)) ||
+        obj.button === true;
+      const isPanel = typeof obj.kind === 'string' && typeof obj.id === 'string' && field !== 'items';
+      const inside: Where = {
+        sends,
+        button,
+        panel: isPanel ? (obj.kind as string) : where.panel,
+        firstColumn: isPanel ? firstColumnOf(obj) : where.firstColumn,
+      };
+      const names = ownNames(obj, field, where);
       const out: Record<string, unknown> = {};
-      // A table's cells are keyed by column, not by field: a column called `status` still holds words.
-      for (const [k, v] of Object.entries(obj)) out[k] = walk(v, field === 'cells' ? null : k, sends);
+      for (const [k, v] of Object.entries(obj)) {
+        if (names.has(k)) {
+          out[k] = v;
+          continue;
+        }
+        if (field === 'cells') {
+          // A table's cells are keyed by column, not by field: a column called `status` still holds words. The first
+          // column names the row's thing, which stays as the service named it unless the cell is a button.
+          const cell = v as Record<string, unknown> | null;
+          const named = k === where.firstColumn && cell && cell.button !== true && !('action' in cell);
+          out[k] = named ? v : walk(v, null, inside);
+          continue;
+        }
+        out[k] = walk(v, k, inside);
+      }
       return out;
     }
     return value;
   };
-  return walk(tree, null, false) as T;
+  return walk(tree, null, OUTSIDE) as T;
 }
 
 /** The fields `localizeTree` keeps as they are, for a caller that needs a few more (or fewer). */

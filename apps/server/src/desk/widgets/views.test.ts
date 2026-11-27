@@ -2,7 +2,7 @@ import { type DeskWidgetView, DeskWidgetView as DeskWidgetViewSchema, type Widge
 import { describe, expect, it } from 'vitest';
 import type { DeskFleet } from '../glance';
 import type { DeskServer } from '../shapes';
-import { homeWidgetsGroup, ownGroup, serverGroups } from './catalog';
+import { deskCatalog, homeWidgetsGroup, ownGroup, serverGroups } from './catalog';
 import { homeWidgetView } from './home';
 import { comingView, doneView, workView } from './own';
 import { serverLineOf, serverSay, serverStats, serverView, uptimeWords } from './servers';
@@ -273,5 +273,30 @@ describe('Add a widget (DK-139)', () => {
     const widgets = homeWidgetsGroup([homeWidget()], 'Dusty');
     expect(widgets?.items[0]).toMatchObject({ type: 'widget', ref: 'widget:wdg_1', view: 'figures' });
     expect(widgets?.label).toContain('Dusty');
+  });
+
+  it('says everything in the person’s language', () => {
+    const fleet: DeskFleet = {
+      cards: [card()],
+      rows: new Map([['pve-01', { platform: 'proxmox', os: null, cpu: { cores: 16 } } as never]]),
+    };
+    const groups = deskCatalog({
+      assistant: 'Dusty',
+      fleet,
+      things: [],
+      widgets: [homeWidget()],
+      locale: 'nl-NL',
+    });
+    const own = groups.find((g) => g.key === 'own');
+    expect(own?.label).toBe('Whombat en Dusty');
+    expect(own?.items.find((i) => i.type === 'work')?.name).toContain('Werk van');
+    const server = groups.find((g) => g.key === 'server:pve-01');
+    expect(server?.items[0]?.line).toContain('kernen');
+    expect(server?.items.find((i) => i.opts.show === 'memory')?.name).toBe('Geheugen');
+    expect(groups.find((g) => g.key === 'widgets')?.label).toContain('Gemaakt door');
+    // English without a language, as before.
+    const english = deskCatalog({ assistant: 'Dusty', fleet, things: [], widgets: [] });
+    expect(english[0]?.label).toBe('Whombat and Dusty');
+    expect(english[1]?.items.find((i) => i.opts.show === 'memory')?.name).toBe('Memory');
   });
 });

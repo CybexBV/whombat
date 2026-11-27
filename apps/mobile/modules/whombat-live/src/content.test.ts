@@ -82,7 +82,10 @@ describe('an approval’s live button', () => {
     const attributes = readFileSync(join(__dirname, '../ios/WhombatLiveAttributes.swift'), 'utf8');
     expect(kotlin).toMatch(/"approve" -> words.getString\(R.string.whombat_action_review\)/);
     expect(widget).toContain('state.actionLabel(action)');
-    expect(attributes).toMatch(/case "approve": return dutch \? "Bekijken" : "Review"/);
+    expect(attributes).toContain('case "approve": return words.review');
+    expect(attributes).toMatch(/"nl": Self\(review: "Bekijken"/);
+    expect(attributes).toMatch(/english = Self\(review: "Review"/);
+    expect(attributes).toContain('byLanguage[language] ?? ActivityActionWords.english');
     for (const source of [kotlin, widget, attributes]) expect(source).not.toContain('decide=');
   });
 });

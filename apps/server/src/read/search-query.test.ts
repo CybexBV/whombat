@@ -43,9 +43,16 @@ describe('withoutStopwords', () => {
     expect(withoutStopwords('andere, factuur?', dutch)).toBe('factuur?');
   });
 
-  it('keeps quoted phrases whole and a minus before a kept word', () => {
-    expect(withoutStopwords('"de andere klant" -het factuur', dutch)).toBe('"de andere klant" factuur');
+  it('keeps quoted phrases whole and every word with a minus before it', () => {
+    expect(withoutStopwords('"de andere klant" -het factuur', dutch)).toBe('"de andere klant" -het factuur');
     expect(withoutStopwords('-Jansen de factuur', dutch)).toBe('-Jansen factuur');
+  });
+
+  it('keeps a left-out stopword left out, so neither half brings it back', () => {
+    expect(withoutStopwords('backup -andere', dutch)).toBe('backup -andere');
+    expect(withoutStopwords('backup -Andere, de factuur', dutch)).toBe('backup -Andere, factuur');
+    // A minus alone is not a word to leave out.
+    expect(withoutStopwords('backup - andere', dutch)).toBe('backup');
   });
 
   it('keeps or between words and drops an or left alone', () => {

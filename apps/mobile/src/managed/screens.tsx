@@ -17,9 +17,9 @@ import {
   formatClaimLettersInput,
   isKitBackupGap,
   isRetired,
-  KIT_BACKUP_TEXT,
   type KitBackup,
   type KitBackupGap,
+  kitBackupText,
   type LocalLinkParts,
   lettersRequestOf,
   listedAppliances,
@@ -1081,7 +1081,7 @@ export function RecoveryKitScreen({
 
   return (
     <>
-      {isKitBackupGap(backup) ? <Note text={KIT_BACKUP_TEXT[backup.gap]} /> : null}
+      {isKitBackupGap(backup) ? <Note text={kitBackupText(rawLocale)[backup.gap]} /> : null}
       <KitWays
         session={session}
         applianceName={applianceName}

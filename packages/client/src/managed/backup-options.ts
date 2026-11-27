@@ -5,7 +5,8 @@
  * words of keeping a way back in and bringing a Whombat back. Pure and shared, so both apps say the same.
  */
 import { placeOfDisplay } from '@whombat/core';
-import { formatBytes } from '@whombat/core/text';
+import { interpolate, tCore } from '@whombat/core/i18n';
+import { formatBytes, monthName, shortMonthName, shortWeekdayName, weekdayName } from '@whombat/core/text';
 import {
   BACKUP_KEEP_90_DAYS,
   BACKUP_KEEP_YEAR,
@@ -19,373 +20,181 @@ import {
   type BackupServiceStatus,
   type BackupStatus,
 } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { BACKUP_OPTIONS_WORDS } from '../i18n/messages/backupOptions';
 import { ago } from './status-copy';
 
 /* Words ------------------------------------------------------------------------------------------------------- */
 
-export const BACKUP_OPTIONS_TEXT = {
-  backedUp: (when: string) => `Backed up ${when}`,
-  /** Right after Back up now finished. */
-  justNow: 'Backed up just now',
-  /** A backup is being made now (Back up now, or the schedule's). */
-  running: 'Backing up now…',
-  notYet: 'No backup yet',
-  /** The box's last attempts failed: the title, then its own reason and when the last one finished. */
-  failing: 'The last backup didn’t work',
-  /** No backup finished for longer than the schedule allows. */
-  behind: 'Backups are behind',
-  /** The backup service isn't answering and nothing says when the last backup was (the notice says why). */
-  unknown: 'Can’t see your backups right now',
-  lastFinished: (when: string) => `The last one finished ${when}.`,
-  noneFinished: 'None has finished yet.',
-  /** The Inbox's *Ask {assistant} to fix it*, here on the card itself. */
-  askFix: (agent: string) => `Ask ${agent} to fix it`,
-  on: (place: string) => `On ${place}`,
-  next: (time: string) => `next one at ${time}`,
-  oldest: (date: string) => `the oldest is from ${date}`,
-  backUpNow: 'Back up now',
-  backingUp: 'Backing up…',
-  options: 'Options',
-  /** The chips' list, for screen readers (not “Options”, the button's name). */
-  chipsLabel: 'How backups are set up',
-  chips: {
-    frequency: { nightly: 'Every night', '6h': 'Every 6 hours', hourly: 'Every hour' } as Record<
-      BackupFrequency,
-      string
-    >,
-    keptYear: 'Kept up to a year',
-    kept90: 'Kept 90 days',
-    keptFor: (span: string) => `Kept up to ${span}`,
-    space: (used: string, free: string | null) => (free ? `${used} used · ${free} free` : `${used} used`),
-    checked: (day: string) => `Checked ${day}`,
-    checkFailed: (day: string) => `The check ${day} failed`,
-  },
-  /** Bringing this Whombat back, as part of being backed up (Whombat backup-passkey.md BPK-08). */
-  wayBack: {
-    ready: 'Can be brought back with your passkey',
-    paper: 'Can be brought back with the paper copy',
-    /** Backups use the same passkey setup as sign-in and appliance access. */
-    ask: 'Set up your passkey',
-    askMeta: 'One passkey to sign in, open all your Whombats and unlock your backups.',
-    use: 'Set up my passkey',
-    using: 'Waiting for your passkey…',
-    /** The box's own page has no passkeys: they belong to the app's address. */
-    elsewhere: 'Open Whombat on your phone or computer and set up your passkey there.',
-  },
-  /** What the last backup left out, when it was made with a gap (its plain reason follows). */
-  leftOut: 'The last backup left something out.',
-  /** What it left out when the service's own words aren't for people (a path, an error): said from what is known. */
-  leftOutWhy: {
-    servers: 'The servers couldn’t be backed up this time; everything else was.',
-    files: (n: number) =>
-      `${n} file${n === 1 ? ' wasn’t' : 's weren’t'} on this Whombat any more, so ${n === 1 ? 'it isn’t' : 'they aren’t'} in it; everything else was.`,
-    other: 'Part of it couldn’t be backed up this time; everything else was.',
-  },
-  needsYou: 'Needs you',
-  local: {
-    title: (n: number) => `${n} older backup${n === 1 ? ' is' : 's are'} still on this Whombat`,
-    meta: (range: string, size: string, place: string | null) =>
-      `From before ${place ?? 'the place'} (${range}, ${size}). If this Whombat breaks, they go with it.`,
-    move: (place: string | null) => (place ? `Move to ${place}` : 'Move them'),
-    moving: 'Moving…',
-    moved: (n: number) => `Moved ${n} backup${n === 1 ? '' : 's'}.`,
-    remove: 'Remove',
-    removeTitle: 'Remove the older backups?',
-    removeLead: (size: string) =>
-      `They’re deleted from this Whombat and ${size} is freed. You can’t go back to them afterwards.`,
-    removeConfirm: 'Remove them',
-  },
-  list: {
-    label: (n: number) => `Backups · ${n}`,
-    newestFirst: 'Newest first',
-    today: 'TODAY',
-    yesterday: 'YESTERDAY',
-    later: 'LATER ON',
-    thinned: (keep: BackupKeep) => thinnedLine(keep),
-    showAll: 'Show all',
-    empty: 'No backups here yet.',
-    reasons: {
-      scheduled: 'Scheduled',
-      manual: 'You asked',
-      'pre-migration': 'Before an update',
-      test: 'Test',
-      unknown: 'Backup',
+/** Backups' words in a locale (English when none is given). */
+export function backupOptionsText(locale?: string | null) {
+  const {
+    span: _span,
+    fixAsk: _fixAsk,
+    and: _and,
+    chips: { spaceFree, ...chips },
+    wayBack: { saving: _saving, verify: _verify, ...wayBack },
+    local: { thePlace, moveThem, ...local },
+    dialog: {
+      summarySize,
+      summarySizeOn,
+      summarySizeFree,
+      summarySizeOnFree,
+      thePlace: ThePlace,
+      weeklyCheckMetaLast,
+      ...dialog
     },
-    beforeUpdate: (version: string) => `Before the update to ${version}`,
-    first: 'First backup',
-    checkedOk: 'Checked: it restores',
-    checkedBad: 'The check failed',
-    /** A backup made with a gap (what it left out is on its page). */
-    leftOut: 'Left something out',
-    earlier: (name: string) => `From ${name}`,
-    /** Under the list: the backups made on the places used before stay there (the list shows the place in use). */
-    earlierPlaces: (places: string) =>
-      `Older backups stay on ${places}. They show here again if backups go back there.`,
-  },
-  dusty: (agent: string) => `You can also tell ${agent} “back up now” or “keep backups longer”.`,
-  dialog: {
-    title: 'Backup options',
-    cancel: 'Cancel',
-    save: 'Save',
-    saving: 'Saving…',
-    saved: 'Saved.',
-    summary: (span: string, size: string | null, place: string | null, free: string | null) =>
-      `Backups are kept ${span}.${size ? ` That takes about ${size}${place ? ` on ${place}` : ''}` : ''}${
-        size && free ? `, which has ${free} free.` : size ? '.' : ''
-      }`,
-    howOften: 'How often',
-    frequency: { nightly: 'Every night', '6h': 'Every 6 hours', hourly: 'Every hour' } as Record<
-      BackupFrequency,
-      string
-    >,
-    frequencyHint: {
-      nightly: 'Once a night in the quiet hours. At most a day of work can be lost.',
-      '6h': 'Recommended. Each one takes about 15 seconds and you won’t notice it. At most 6 hours of work can be lost.',
-      hourly: 'Each one takes about 15 seconds. At most an hour of work can be lost.',
-    } as Record<BackupFrequency, string>,
-    howLong: 'How long to keep them',
-    keepYear: 'Up to a year',
-    keepYearMeta:
-      'All of the last 2 days, one a day for 2 weeks, one a week for 2 months, one a month for a year.',
-    keep90: 'Everything for 90 days',
-    keep90Meta: 'Every backup, then nothing older.',
-    keepChoose: 'Choose…',
-    keepFields: {
-      allDays: 'Every backup for (days)',
-      dailyDays: 'One a day for (days)',
-      weeklyWeeks: 'One a week for (weeks)',
-      monthlyMonths: 'One a month for (months)',
+    detail: { added, onPlace, ...detail },
+    details: {
+      clears: { thePlace: ClearsPlace, ...clears },
+      ...details
     },
-    timeline: { yearAgo: 'a year ago', months: '2 months', weeks: '2 weeks', now: 'now' },
-    recommended: 'RECOMMENDED',
-    space: 'Space',
-    limit: 'Limit the space',
-    /** The limit off: the place's real free space when it says it, else nothing more. */
-    limitOff: (place: string | null, free: string | null) =>
-      free ? `Off. ${place ?? 'The place'} has ${free} free.` : 'Off.',
-    limitOffPlain: 'Off.',
-    limitOn: (size: string) => `Use at most ${size}. The oldest backups go first, never the last 7 days.`,
-    limitGb: 'GB',
-    checking: 'Checking',
-    weeklyCheck: 'Check a backup every week',
-    weeklyCheckMeta: (last: string | null) =>
-      `Whombat restores one on the side to prove it works.${last ? ` Last: ${last}.` : ''}`,
-    lastGood: (day: string) => `${day}, all good`,
-    lastBad: (day: string) => `${day}, it failed`,
-    clearedByNone:
-      'This place doesn’t let Whombat delete anything, so old backups stay until you clear them there.',
-  },
-  detail: {
-    back: 'Backups',
-    meta: (reason: string, added: string | null, place: string | null) =>
-      [reason, added ? `${added} new` : null, place ? `on ${place}` : null].filter(Boolean).join(' · '),
-    checked: (day: string) => `Checked ${day}: it restores`,
-    checkFailed: (day: string) => `The check ${day} failed`,
-    inIt: 'What’s in it',
-    /** “What’s in it”'s lines, from the backup's own coverage (`backupContents`). */
-    lines: {
-      conversations: 'Conversations, your assistant’s memory and skills',
-      files: 'Files and photos',
-      filesMissing: (n: number) =>
-        `${n} file${n === 1 ? ' wasn’t' : 's weren’t'} on this Whombat any more, so ${n === 1 ? 'it isn’t' : 'they aren’t'} in it`,
-      projects: 'Projects and code',
-      projectsNote: 'Including work not pushed yet',
-      servers: 'Servers and what your assistant may do on them',
-      serversMissing: 'Left out of this backup',
-      settings: 'Settings, keys and the Vault',
-      signIns: 'Sign-ins (Claude, Codex, GitHub, Google)',
-      signInsNote: 'Some may ask you to sign in again',
-      network: 'Wi-Fi and Bluetooth',
-      networkNote: 'Set up again on a new Whombat',
-      voices: 'Voices',
-      voicesNote: 'They download again in the background',
-      notIncluded: 'Not included',
-      included: 'Included',
+    bringBack: {
+      yourPrefix,
+      chooseLeadOn,
+      steps: { copyFrom, ...steps },
+      workingFootOn,
+      thatPlace,
+      doneServersFind,
+      doneBackupsTo,
+      ...bringBack
     },
-    checkNow: 'Check this backup now',
-    checkQueued: 'Checking it now. This takes a few minutes.',
-    checking: 'Checking…',
-  },
-  /** Backups' less-used details, folded under “Details”. */
-  details: {
-    show: 'Details',
-    hide: 'Hide details',
-    where: (where: string) => `Kept at ${where}`,
-    clears: {
-      place: (place: string | null) => `${place ?? 'The place'} clears old backups the way your options say.`,
-      box: 'This Whombat clears old backups the way your options say.',
-      none: 'Nothing clears old backups there: they stay until you clear them yourself.',
+    ...w
+  } = clientTree(locale, BACKUP_OPTIONS_WORDS);
+  const f = interpolate;
+  return {
+    ...w,
+    backedUp: (when: string) => f(w.backedUp, { when }),
+    lastFinished: (when: string) => f(w.lastFinished, { when }),
+    askFix: (agent: string) => f(w.askFix, { agent }),
+    on: (place: string) => f(w.on, { place }),
+    next: (time: string) => f(w.next, { time }),
+    oldest: (date: string) => f(w.oldest, { date }),
+    chips: {
+      ...chips,
+      frequency: chips.frequency as Record<BackupFrequency, string>,
+      keptFor: (span: string) => f(chips.keptFor, { span }),
+      space: (used: string, free: string | null) =>
+        free ? f(spaceFree, { used, free }) : f(chips.space, { used }),
+      checked: (day: string) => f(chips.checked, { day }),
+      checkFailed: (day: string) => f(chips.checkFailed, { day }),
     },
-    /** One phrase for a place that refuses the box's deletes. */
-    noDelete: 'Can’t be deleted from here',
-    checkNewest: 'Check the newest backup now',
-  },
-  /** The paper copy, optional (Whombat backup-passkey.md BPK-07): only what opens the backups, printed any time. */
-  paper: {
-    title: 'Paper copy',
-    meta: 'Optional. With it, a new Whombat opens these backups without your passkey. Anyone who has it can read them.',
-    saved: (date: string) => `Saved ${date}. You can print it again whenever you like.`,
-    print: 'Print it',
-    file: 'Save as a file',
-    making: 'Making it…',
-    failed: 'The paper copy couldn’t be made. Try again.',
-    printTitle: (name: string) => `Backup details for ${name}`,
-    printLead:
-      'Keep this page somewhere safe and offline. With it, a new Whombat can open this one’s backups. Anyone who has it can read them.',
-    printScan: 'Scan this on a new Whombat',
-  },
-  /** Bringing back a Whombat you had, later (on a box that started fresh). */
-  later: {
-    title: 'Bring back a Whombat you had',
-    meta: 'If you meant to bring one back, you still can: with your passkey or the paper copy.',
-    button: 'Bring back',
-    confirmTitle: 'Replace what’s on this Whombat?',
-    confirmLead: (name: string) =>
-      `Bringing back a Whombat you had puts everything of it on ${name}. What’s on ${name} now is set aside, and its own backups stay where they are.`,
-    confirm: 'Choose the Whombat',
-    cancel: 'Cancel',
-  },
-  kit: {
-    title: 'Keep a way back in',
-    lead: (name: string) =>
-      `If ${name} ever breaks, this lets a new Whombat open its backups. Choose one or more.`,
-    passkey: 'Your passkey',
-    passkeyMeta: 'One touch on any phone or computer that has it. Locked so only your passkey can open it.',
-    print: 'Print it too',
-    printMeta: 'For the day you can’t reach your passkey. Keep it with your papers.',
-    file: 'Save as a file',
-    fileMeta: 'For a password manager or a USB stick.',
-    usePasskey: 'Use my passkey',
-    noPasskey: (name: string) => `No passkey yet? This adds one for ${name} first.`,
-    saved: 'Saved. Whombat asks again only when the kit changes.',
-    lockedWith: (when: string) => `Locked with your passkey ${when}`,
-    noPrf:
-      'This passkey can’t lock the kit (its password manager doesn’t offer it). Print the kit or save it as a file instead.',
-    printTitle: (name: string) => `Recovery kit for ${name}`,
-    printLead:
-      'Keep this page somewhere safe and offline. With it, a new Whombat can open this one’s backups. Anyone holding it can read them, so treat it like a key.',
-    printScan: 'Scan this on a new Whombat',
-    kicker: 'RECOVERY KIT',
-    tip: 'Your passkey opens the kit on any device that has it. The printed page works even without Whombat’s servers.',
-    save: 'Save',
-    saving: 'Saving…',
-    printAgain: 'Print again',
-    downloadAgain: 'Download again',
-    done: 'Done',
-    /** Settings → This Whombat → Backups: the quiet row saying how the kit is kept. */
-    row: 'Recovery kit',
-    printed: 'printed',
-    asFile: 'saved as a file',
-    savedPlain: 'Saved',
-    saveAgain: 'Save again',
-  },
-  bringBack: {
-    question: 'Is this a new Whombat?',
-    questionLead: 'Start with an empty one, or bring back everything from one you had.',
-    fresh: 'Start fresh',
-    freshMeta: 'A new Whombat with nothing in it yet.',
-    back: 'Bring back a Whombat',
-    backMeta:
-      'From its backups: conversations, your assistant’s memory, files, projects, servers and settings.',
-    found: (name: string, when: string) => `Your passkey can bring back ${name} (its backups from ${when}).`,
-    /** A Whombat to bring back without a name of its own (never its device id). */
-    yourWhombat: 'your Whombat',
-    continue: 'Continue',
-    /** The web has no camera: the paper copy's file or its text. */
-    noKitHintWeb: 'No passkey? Use the paper copy’s file or its text.',
-    /** The phone scans the printed paper copy too. */
-    noKitHintPhone: 'No passkey? Scan the paper copy, or use its file or text.',
-    openTitle: (name: string) => `Open ${name}’s backups`,
-    openLead: (name: string) => `${capital(name)}’s backups are locked with your passkey.`,
-    unlock: 'Unlock with passkey',
-    /** No passkey's backups at the account: look next to the backups on this network (it can take a minute). */
-    findTitle: 'Find your Whombat’s backups',
-    findLead: 'Look for them on this network, or use the paper copy.',
-    look: 'Look on my network',
-    looking: 'Looking on your network. This can take about a minute.',
-    lookAgain: 'Look again',
-    nothingNear: 'No backups locked with a passkey were found on this network.',
-    foundNear: (date: string) => `Found on your network · saved ${date}`,
-    paperTitle: 'Or use the paper copy',
-    scan: 'Scan the paper copy',
-    openFile: 'Open the paper copy’s file',
-    pasteTitle: 'Paste the paper copy',
-    wrongKit: 'That isn’t a paper copy Whombat can read. Check it’s the whole text.',
-    unlockFailed: 'That passkey didn’t open them. Try another passkey, or the paper copy.',
-    noPrf:
-      'This passkey can’t open backups (its password manager doesn’t offer it). Use the paper copy instead.',
-    opening: 'Opening the backups…',
-    adoptFailed:
-      'Whombat couldn’t reach those backups. Is the place they’re on switched on and on this network?',
-    chooseTitle: (name: string) => `${capital(name)}’s backups`,
-    chooseLead: (place: string | null) =>
-      `${place ? `Found on ${place}. ` : ''}The newest is usually the one you want.`,
-    newest: 'NEWEST',
-    /** A backup the old Whombat made after another took its place (never picked first). */
-    afterReplaced: 'Made by the old Whombat after you replaced it',
-    olderBackups: 'Older backups…',
-    restore: (name: string) => `Bring ${name} back`,
-    restoreHint: 'Takes about 5 minutes. What’s on this Whombat now is set aside, not deleted.',
-    workingTitle: (name: string) => `Bringing ${name} back`,
-    workingLead: 'You can put this down. We’ll tell you when it’s ready.',
-    steps: {
-      check: 'Checking the backup is whole',
-      copy: (place: string | null) => (place ? `Copying it from ${place}` : 'Copying it'),
-      put: 'Putting everything back',
-      servers: 'Reconnecting your servers',
+    wayBack,
+    leftOutWhy: { ...w.leftOutWhy, files: (n: number) => w.leftOutWhy.files(n) },
+    local: {
+      ...local,
+      title: (n: number) => local.title(n),
+      meta: (range: string, size: string, place: string | null) =>
+        f(local.meta, { range, size, place: place ?? thePlace }),
+      move: (place: string | null) => (place ? f(local.move, { place }) : moveThem),
+      moved: (n: number) => local.moved(n),
+      removeLead: (size: string) => f(local.removeLead, { size }),
     },
-    workingFoot: (place: string | null) =>
-      `If something goes wrong, nothing is lost: the backup stays${place ? ` on ${place}` : ''} and you can try again.`,
-    failedTitle: 'It didn’t finish',
-    failedLead:
-      'Nothing was lost: the backup is untouched and this Whombat is as it was. Try again, or start over.',
-    tryAgain: 'Try again',
-    startOver: 'Start over',
-    almostTitle: 'Almost there',
-    almostLead: (name: string, time: string) =>
-      `${capital(name)} is back as it was at ${time}. One question before it starts working again:`,
-    oldGone: 'Is the old Whombat gone?',
-    oldGoneMeta: 'So it can’t act on your accounts or add to these backups any more.',
-    /** The backups are on a place only the person can give a new password: nothing promised about them. */
-    oldGoneMetaYou: 'So it can’t act on your accounts any more.',
-    oldWiped: 'It’s broken or wiped',
-    oldLost: 'Lost or stolen',
-    oldLostMeta:
-      'Whombat gives the backups a new password so it can’t add to them. Also sign out of Claude, Codex, GitHub and Google everywhere, so its sign-ins stop working.',
-    /** Lost or stolen, on a place set up by hand or typed in: Whombat can't change that password, the person can. */
-    oldLostMetaYou: (place: string | null) =>
-      `Whombat can’t change the password of the backups on ${place ?? 'that place'}, so change it there afterwards: the Inbox says how. Also sign out of Claude, Codex, GitHub and Google everywhere, so its sign-ins stop working.`,
-    start: (name: string) => `Start ${name}`,
-    starting: 'Starting…',
-    doneTitle: (name: string) => `${capital(name)} is back`,
-    doneLead: (agent: string, time: string) => `${agent} remembers everything up to ${time}.`,
-    doneServers: (n: number | null) =>
-      n === null ? 'Your servers find it again' : `${n} server${n === 1 ? '' : 's'} found it again`,
-    doneBackups: (place: string | null) => (place ? `Backups carry on to ${place}` : 'Backups carry on'),
-    doneVoices: 'Voices download again in the background',
-    /** The old Whombat is switched off at Whombat's servers once this one says where it came from. */
-    doneOldOff: (name: string) => `The old ${name.replace(/^your /, '')} can’t reach your account any more`,
-    /** Lost or stolen on a place Whombat can't give a new password. */
-    donePassword: (place: string | null) =>
-      `Change the backup password on ${place ?? 'that place'}: the Inbox says how`,
-    /** The last line: a passkey for this Whombat, whose touch makes it the key to its backups. */
-    doneKey: (name: string) => `Make your passkey the key to ${name}’s backups`,
-    doneKeyButton: 'Add my passkey',
-    /** Once that touch made the passkey the key. */
-    doneKeyDone: (name: string) => `Your passkey is the key to ${name}’s backups`,
-    openChat: 'Open Chat',
-    doneFoot: (agent: string, time: string) =>
-      `Ask ${agent} in Chat to look in GitHub and your accounts for anything after ${time}.`,
-    kicker: 'BRING BACK',
-    tip: 'Your passkey opens the old Whombat’s backups. Nothing in them changes until you choose one.',
-    goBack: 'Back',
-    pasteLabel: 'The paper copy’s text',
-    openIt: 'Open the backups',
-    checkedLower: 'checked: it restores',
-    reconnecting: 'Waiting for this Whombat to answer again…',
-    savedOn: (date: string) => `Saved ${date}`,
-  },
-} as const;
+    list: {
+      ...w.list,
+      label: (n: number) => f(w.list.label, { n }),
+      thinned: (keep: BackupKeep) => thinnedLine(keep, locale),
+      reasons: { ...w.list.reasons },
+      beforeUpdate: (version: string) => f(w.list.beforeUpdate, { version }),
+      earlier: (name: string) => f(w.list.earlier, { name }),
+      earlierPlaces: (places: string) => f(w.list.earlierPlaces, { places }),
+    },
+    dusty: (agent: string) => f(w.dusty, { agent }),
+    dialog: {
+      ...dialog,
+      summary: (span: string, size: string | null, place: string | null, free: string | null) =>
+        f(
+          !size
+            ? dialog.summary
+            : place
+              ? free
+                ? summarySizeOnFree
+                : summarySizeOn
+              : free
+                ? summarySizeFree
+                : summarySize,
+          { span, size: size ?? '', place: place ?? '', free: free ?? '' },
+        ),
+      frequency: dialog.frequency as Record<BackupFrequency, string>,
+      frequencyHint: dialog.frequencyHint as Record<BackupFrequency, string>,
+      limitOff: (place: string | null, free: string | null) =>
+        free ? f(dialog.limitOff, { place: place ?? ThePlace, free }) : dialog.limitOffPlain,
+      limitOn: (size: string) => f(dialog.limitOn, { size }),
+      weeklyCheckMeta: (last: string | null) =>
+        last ? f(weeklyCheckMetaLast, { last }) : dialog.weeklyCheckMeta,
+      lastGood: (day: string) => f(dialog.lastGood, { day }),
+      lastBad: (day: string) => f(dialog.lastBad, { day }),
+    },
+    detail: {
+      ...detail,
+      meta: (reason: string, addedBytes: string | null, place: string | null) =>
+        [reason, addedBytes ? f(added, { added: addedBytes }) : null, place ? f(onPlace, { place }) : null]
+          .filter(Boolean)
+          .join(' · '),
+      checked: (day: string) => f(detail.checked, { day }),
+      checkFailed: (day: string) => f(detail.checkFailed, { day }),
+      lines: { ...detail.lines, filesMissing: (n: number) => detail.lines.filesMissing(n) },
+    },
+    details: {
+      ...details,
+      where: (where: string) => f(details.where, { where }),
+      clears: {
+        ...clears,
+        place: (place: string | null) => f(clears.place, { place: place ?? ClearsPlace }),
+      },
+    },
+    paper: {
+      ...w.paper,
+      saved: (date: string) => f(w.paper.saved, { date }),
+      printTitle: (name: string) => f(w.paper.printTitle, { name }),
+    },
+    later: { ...w.later, confirmLead: (name: string) => f(w.later.confirmLead, { name }) },
+    kit: {
+      ...w.kit,
+      lead: (name: string) => f(w.kit.lead, { name }),
+      noPasskey: (name: string) => f(w.kit.noPasskey, { name }),
+      lockedWith: (when: string) => f(w.kit.lockedWith, { when }),
+      printTitle: (name: string) => f(w.kit.printTitle, { name }),
+    },
+    bringBack: {
+      ...bringBack,
+      found: (name: string, when: string) => f(bringBack.found, { name, when }),
+      openTitle: (name: string) => f(bringBack.openTitle, { name }),
+      openLead: (name: string) => f(bringBack.openLead, { name, Name: capital(name) }),
+      foundNear: (date: string) => f(bringBack.foundNear, { date }),
+      chooseTitle: (name: string) => f(bringBack.chooseTitle, { name, Name: capital(name) }),
+      chooseLead: (place: string | null) => (place ? f(chooseLeadOn, { place }) : bringBack.chooseLead),
+      restore: (name: string) => f(bringBack.restore, { name }),
+      workingTitle: (name: string) => f(bringBack.workingTitle, { name }),
+      steps: {
+        ...steps,
+        copy: (place: string | null) => (place ? f(copyFrom, { place }) : steps.copy),
+      },
+      workingFoot: (place: string | null) => (place ? f(workingFootOn, { place }) : bringBack.workingFoot),
+      almostLead: (name: string, time: string) =>
+        f(bringBack.almostLead, { name, Name: capital(name), time }),
+      oldLostMetaYou: (place: string | null) => f(bringBack.oldLostMetaYou, { place: place ?? thatPlace }),
+      start: (name: string) => f(bringBack.start, { name }),
+      doneTitle: (name: string) => f(bringBack.doneTitle, { name, Name: capital(name) }),
+      doneLead: (agent: string, time: string) => f(bringBack.doneLead, { agent, time }),
+      doneServers: (n: number | null) => (n === null ? doneServersFind : bringBack.doneServers(n)),
+      doneBackups: (place: string | null) => (place ? f(doneBackupsTo, { place }) : bringBack.doneBackups),
+      doneOldOff: (name: string) =>
+        f(bringBack.doneOldOff, {
+          name: name.startsWith(`${yourPrefix} `) ? name.slice(yourPrefix.length + 1) : name,
+        }),
+      donePassword: (place: string | null) => f(bringBack.donePassword, { place: place ?? thatPlace }),
+      doneKey: (name: string) => f(bringBack.doneKey, { name }),
+      doneKeyDone: (name: string) => f(bringBack.doneKeyDone, { name }),
+      doneFoot: (agent: string, time: string) => f(bringBack.doneFoot, { agent, time }),
+      savedOn: (date: string) => f(bringBack.savedOn, { date }),
+    },
+  };
+}
+
+export type BackupOptionsWords = ReturnType<typeof backupOptionsText>;
+
+export const BACKUP_OPTIONS_TEXT: BackupOptionsWords = backupOptionsText('en');
 
 /** “your Whombat” at the start of a sentence or a title. */
 export function capital(text: string): string {
@@ -399,9 +208,9 @@ const DEVICE_ID = /^wb-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/i;
  * The name a Whombat to bring back goes by: its own (the account's, the network copy's, the paper copy's), else “your
  * Whombat”, never its device id.
  */
-export function bringBackName(name: string | null | undefined): string {
+export function bringBackName(name: string | null | undefined, locale?: string | null): string {
   const n = name?.trim();
-  return n && !DEVICE_ID.test(n) ? n : BACKUP_OPTIONS_TEXT.bringBack.yourWhombat;
+  return n && !DEVICE_ID.test(n) ? n : backupOptionsText(locale).bringBack.yourWhombat;
 }
 
 /** A place as people read it when it has no name (`10.0.2.2:8747`). */
@@ -417,43 +226,27 @@ function hhmm(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-const MONTHS = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
-];
-const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
 /** “3 November” (local). */
-export function longDate(iso: string): string {
+export function longDate(iso: string, locale?: string | null): string {
   const d = new Date(iso);
-  return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  return `${d.getDate()} ${monthName(d.getMonth() + 1, locale)}`;
 }
 
 /** “Sun 25 Oct” (local). */
-export function shortDay(iso: string): string {
+export function shortDay(iso: string, locale?: string | null): string {
   const d = new Date(iso);
-  return `${DAYS[d.getDay()]?.slice(0, 3)} ${d.getDate()} ${MONTHS[d.getMonth()]?.slice(0, 3)}`;
+  return `${shortWeekdayName(d.getDay(), locale)} ${d.getDate()} ${shortMonthName(d.getMonth() + 1, locale)}`;
 }
 
 /** “today”, “yesterday”, “Sunday” within a week, else “3 November”. */
-export function relativeDay(iso: string, now = new Date()): string {
+export function relativeDay(iso: string, now = new Date(), locale?: string | null): string {
   const d = new Date(iso);
-  if (dayKey(d) === dayKey(now)) return 'today';
+  if (dayKey(d) === dayKey(now)) return tCore(locale, 'time.todayLower');
   const y = new Date(now);
   y.setDate(y.getDate() - 1);
-  if (dayKey(d) === dayKey(y)) return 'yesterday';
-  if (now.getTime() - d.getTime() < 6 * 86_400_000) return DAYS[d.getDay()] as string;
-  return longDate(iso);
+  if (dayKey(d) === dayKey(y)) return tCore(locale, 'time.yesterdayLower');
+  if (now.getTime() - d.getTime() < 6 * 86_400_000) return weekdayName(d.getDay(), locale);
+  return longDate(iso, locale);
 }
 
 /** The person's hour and minute in `timeZone` at `at` (Intl; the device's own zone when it doesn't know it). */
@@ -533,15 +326,23 @@ export interface BackupHero {
   askPasskey: boolean;
 }
 
-/** How far back a policy reaches, in words (“up to a year”, “90 days”, “up to 3 months”). */
-export function keepSpan(keep: BackupKeep): string {
-  if (sameKeep(keep, BACKUP_KEEP_YEAR)) return 'up to a year';
-  if (sameKeep(keep, BACKUP_KEEP_90_DAYS)) return '90 days';
+/** How far back a custom policy reaches, without “up to” (“3 months”); null for the dialog's two choices. */
+function customSpan(keep: BackupKeep, locale?: string | null): string | null {
+  if (sameKeep(keep, BACKUP_KEEP_YEAR) || sameKeep(keep, BACKUP_KEEP_90_DAYS)) return null;
+  const S = clientTree(locale, BACKUP_OPTIONS_WORDS).span;
   const days = keepDays(keep);
-  if (days >= 365 && days % 365 < 31) return `up to ${Math.round(days / 365)} year${days >= 730 ? 's' : ''}`;
-  if (days >= 60) return `up to ${Math.round(days / 30.4)} months`;
-  if (days >= 14 && days % 7 === 0) return `up to ${days / 7} weeks`;
-  return `up to ${days} day${days === 1 ? '' : 's'}`;
+  if (days >= 365 && days % 365 < 31) return S.years(Math.round(days / 365));
+  if (days >= 60) return S.months(Math.round(days / 30.4));
+  if (days >= 14 && days % 7 === 0) return S.weeks(days / 7);
+  return S.days(days);
+}
+
+/** How far back a policy reaches, in words (“up to a year”, “90 days”, “up to 3 months”). */
+export function keepSpan(keep: BackupKeep, locale?: string | null): string {
+  const S = clientTree(locale, BACKUP_OPTIONS_WORDS).span;
+  if (sameKeep(keep, BACKUP_KEEP_YEAR)) return interpolate(S.upTo, { span: S.year });
+  if (sameKeep(keep, BACKUP_KEEP_90_DAYS)) return S.days90;
+  return interpolate(S.upTo, { span: customSpan(keep, locale) ?? '' });
 }
 
 /** The longest window of a policy, in days. */
@@ -567,20 +368,27 @@ export function keepChoice(keep: BackupKeep): 'year' | 'days90' | 'custom' {
       : 'custom';
 }
 
-function thinnedLine(keep: BackupKeep): string {
+function thinnedLine(keep: BackupKeep, locale?: string | null): string {
+  const S = clientTree(locale, BACKUP_OPTIONS_WORDS).span;
   const parts: string[] = [];
-  if (keep.dailyDays > keep.allDays) parts.push(`one a day for ${spanOf(keep.dailyDays, 'day')}`);
+  if (keep.dailyDays > keep.allDays)
+    parts.push(interpolate(S.dailyFirst, { span: spanOf(keep.dailyDays, 'day', locale) }));
   if (keep.weeklyWeeks * 7 > Math.max(keep.allDays, keep.dailyDays))
-    parts.push(`then one a week for ${spanOf(keep.weeklyWeeks * 7, 'week')}`);
+    parts.push(
+      interpolate(parts.length ? S.weekly : S.weeklyFirst, {
+        span: spanOf(keep.weeklyWeeks * 7, 'week', locale),
+      }),
+    );
   if (keep.monthlyMonths * 30 > Math.max(keep.allDays, keep.dailyDays, keep.weeklyWeeks * 7))
-    parts.push('then one a month');
-  return parts.join(', ').replace(/^then /, '');
+    parts.push(parts.length ? S.monthly : S.monthlyFirst);
+  return parts.join(', ');
 }
 
-function spanOf(days: number, unit: 'day' | 'week'): string {
-  if (unit === 'week' && days >= 56 && days % 28 === 0) return `${days / 28} months`;
-  if (days >= 14 && days % 7 === 0) return `${days / 7} weeks`;
-  return `${days} days`;
+function spanOf(days: number, unit: 'day' | 'week', locale?: string | null): string {
+  const S = clientTree(locale, BACKUP_OPTIONS_WORDS).span;
+  if (unit === 'week' && days >= 56 && days % 28 === 0) return S.months(days / 28);
+  if (days >= 14 && days % 7 === 0) return S.weeks(days / 7);
+  return S.days(days);
 }
 
 export interface BackupHeroInput {
@@ -600,6 +408,8 @@ export interface BackupHeroInput {
   /** When the last backup finished as the Whombat last said it (`appliance.status`), for when the service can't say. */
   lastKnownAt?: string | null;
   now?: Date;
+  /** The language its words are in (English when none is given). */
+  locale?: string | null;
 }
 
 function sentence(text: string): string {
@@ -626,9 +436,10 @@ const RAW_REASON = [
  */
 export function plainLeftOut(
   gap: { reason?: string | null; attachments?: number; servers?: boolean } | null | undefined,
+  locale?: string | null,
 ): string | null {
   if (!gap) return null;
-  const T = BACKUP_OPTIONS_TEXT.leftOutWhy;
+  const T = backupOptionsText(locale).leftOutWhy;
   const reason = gap.reason?.replace(/\s+/g, ' ').trim() ?? '';
   if (reason && !RAW_REASON.some((r) => r.test(reason))) return sentence(reason.replace(/'/g, '’'));
   if (gap.servers) return T.servers;
@@ -674,7 +485,9 @@ export function backupPasskeyAsked(summary: Pick<BackupStatus, 'bringBack'> | nu
  * notice and offers *Ask {assistant} to fix it*; without the service's word its shield says it can't tell.
  */
 export function backupHero(input: BackupHeroInput): BackupHero {
-  const T = BACKUP_OPTIONS_TEXT;
+  const locale = input.locale;
+  const T = backupOptionsText(locale);
+  const W = clientTree(locale, BACKUP_OPTIONS_WORDS).wayBack;
   const now = input.now ?? new Date();
   const notice = input.notice?.trim() ? sentence(input.notice) : null;
   const heroState = notice && !input.status && !input.running ? 'unknown' : backupHeroState(input);
@@ -695,12 +508,12 @@ export function backupHero(input: BackupHeroInput): BackupHero {
           : state === 'justNow'
             ? T.justNow
             : last
-              ? T.backedUp(ago(last))
+              ? T.backedUp(ago(last, locale))
               : state === 'unknown'
                 ? T.unknown
                 : T.notYet;
   const reason = input.status?.lastFailure?.reason ?? '';
-  const finished = last ? T.lastFinished(ago(last)) : T.noneFinished;
+  const finished = last ? T.lastFinished(ago(last, locale)) : T.noneFinished;
   const problem =
     [
       state === 'failing'
@@ -716,7 +529,7 @@ export function backupHero(input: BackupHeroInput): BackupHero {
   const sub = [
     input.placeName ? T.on(input.placeName) : null,
     input.policy ? T.next(hhmm(nextBackupAt(input.policy, now))) : null,
-    oldest ? T.oldest(longDate(oldest)) : null,
+    oldest ? T.oldest(longDate(oldest, locale)) : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -730,17 +543,19 @@ export function backupHero(input: BackupHeroInput): BackupHero {
           ? T.chips.keptYear
           : choice === 'days90'
             ? T.chips.kept90
-            : T.chips.keptFor(keepSpan(input.policy.keep).replace(/^up to /, '')),
+            : T.chips.keptFor(customSpan(input.policy.keep, locale) ?? ''),
     });
   }
   const used = input.list?.space?.usedBytes ?? null;
   if (used !== null) {
     const free = input.list?.space?.freeBytes ?? null;
-    chips.push({ text: T.chips.space(formatBytes(used), free === null ? null : formatBytes(free)) });
+    chips.push({
+      text: T.chips.space(formatBytes(used, locale), free === null ? null : formatBytes(free, locale)),
+    });
   }
   const drill = input.status?.recoverability.lastDrill ?? null;
   if (drill) {
-    const day = relativeDay(drill.at, now);
+    const day = relativeDay(drill.at, now, locale);
     chips.push(
       drill.ok ? { text: T.chips.checked(day), dot: 'ok' } : { text: T.chips.checkFailed(day), dot: 'bad' },
     );
@@ -756,13 +571,13 @@ export function backupHero(input: BackupHeroInput): BackupHero {
       state === 'failing' ? 'bad' : state === 'behind' || notice ? 'warn' : state === 'none' ? 'mut' : 'ok',
     problem,
     askFix: state === 'failing' || state === 'behind' || notice !== null,
-    leftOut: incomplete ? plainLeftOut(incomplete) : null,
+    leftOut: incomplete ? plainLeftOut(incomplete, locale) : null,
     wayBackReady: canBeBroughtBack(bringBack),
     wayBack:
       bringBack?.setup === 'saving'
-        ? 'Your backup details are being saved.'
+        ? W.saving
         : bringBack?.setup === 'verify'
-          ? 'Passkey setup isn’t finished.'
+          ? W.verify
           : bringBack?.state === 'ready'
             ? T.wayBack.ready
             : bringBack?.state === 'paper_only'
@@ -792,14 +607,19 @@ export function backupPageShown(input: {
 }
 
 /** The quiet line under the list about older backups on the places used before; null when there were none. */
-export function earlierPlacesLine(places: readonly { name: string }[] | null | undefined): string | null {
+export function earlierPlacesLine(
+  places: readonly { name: string }[] | null | undefined,
+  locale?: string | null,
+): string | null {
   const names = [...new Set((places ?? []).map((p) => p.name))];
-  return names.length ? BACKUP_OPTIONS_TEXT.list.earlierPlaces(andList(names)) : null;
+  return names.length ? backupOptionsText(locale).list.earlierPlaces(andList(names, locale)) : null;
 }
 
 /** What *Ask {assistant} to fix it* on the card says: what is wrong, then the ask (as the Inbox's own button does). */
-export function backupFixText(hero: Pick<BackupHero, 'title' | 'problem'>): string {
-  return [hero.title, hero.problem, 'Can you fix it?'].filter(Boolean).join('\n');
+export function backupFixText(hero: Pick<BackupHero, 'title' | 'problem'>, locale?: string | null): string {
+  return [hero.title, hero.problem, clientTree(locale, BACKUP_OPTIONS_WORDS).fixAsk]
+    .filter(Boolean)
+    .join('\n');
 }
 
 /* The list ---------------------------------------------------------------------------------------------------- */
@@ -826,8 +646,8 @@ export interface BackupGroup {
 }
 
 /** What a backup is, in words (“Scheduled”, “You asked”, “Before the update to 0.198”, “First backup”). */
-export function backupLabel(cp: BackupCheckpoint, isFirst: boolean): string {
-  const L = BACKUP_OPTIONS_TEXT.list;
+export function backupLabel(cp: BackupCheckpoint, isFirst: boolean, locale?: string | null): string {
+  const L = backupOptionsText(locale).list;
   if (isFirst) return L.first;
   if (cp.reason === 'pre-migration') {
     const v = cp.releaseId?.match(/\d+\.\d+(?:\.\d+)?/)?.[0];
@@ -855,10 +675,11 @@ export function firstBackups(list: {
 export function backupGroups(
   list: BackupCheckpointsOutput,
   keep: BackupKeep | null,
-  options: { now?: Date; limit?: number } = {},
+  options: { now?: Date; limit?: number; locale?: string | null } = {},
 ): BackupGroup[] {
   const now = options.now ?? new Date();
-  const L = BACKUP_OPTIONS_TEXT.list;
+  const locale = options.locale;
+  const L = backupOptionsText(locale).list;
   const today = dayKey(now);
   const yd = new Date(now);
   yd.setDate(yd.getDate() - 1);
@@ -867,7 +688,7 @@ export function backupGroups(
   const groups: BackupGroup[] = [
     { key: 'today', label: L.today, note: null, rows: [] },
     { key: 'yesterday', label: L.yesterday, note: null, rows: [] },
-    { key: 'later', label: L.later, note: keep ? thinnedLine(keep) || null : null, rows: [] },
+    { key: 'later', label: L.later, note: keep ? thinnedLine(keep, locale) || null : null, rows: [] },
   ];
   let n = 0;
   for (const cp of list.checkpoints) {
@@ -879,9 +700,10 @@ export function backupGroups(
     const added = cp.bytesAdded;
     group?.rows.push({
       id: cp.id,
-      time: group.key === 'later' ? shortDay(cp.createdAt) : hhmm(d),
-      label: backupLabel(cp, isFirst),
-      size: isFirst || added === null ? formatBytes(added ?? cp.bytes) : `+${formatBytes(added)}`,
+      time: group.key === 'later' ? shortDay(cp.createdAt, locale) : hhmm(d),
+      label: backupLabel(cp, isFirst, locale),
+      size:
+        isFirst || added === null ? formatBytes(added ?? cp.bytes, locale) : `+${formatBytes(added, locale)}`,
       check: cp.check ? (cp.check.ok ? 'ok' : 'bad') : null,
       leftOut: !!cp.incomplete && (!!cp.incomplete.attachments || !!cp.incomplete.servers),
       checkpoint: cp,
@@ -917,8 +739,11 @@ const CONTENT_SCOPES: Record<string, readonly string[]> = {
  * (`incomplete`). A backup service that doesn't list it yet: what every backup holds. The servers' line shows only where
  * the Whombat backs servers up. Wi-Fi, Bluetooth and voices are never in a backup, worded as the done screen says them.
  */
-export function backupContents(cp: Pick<BackupCheckpoint, 'covered' | 'incomplete'>): BackupContentsRow[] {
-  const L = BACKUP_OPTIONS_TEXT.detail.lines;
+export function backupContents(
+  cp: Pick<BackupCheckpoint, 'covered' | 'incomplete'>,
+  locale?: string | null,
+): BackupContentsRow[] {
+  const L = backupOptionsText(locale).detail.lines;
   const covered = cp.covered ? new Set(cp.covered) : null;
   const has = (key: string) => !covered || (CONTENT_SCOPES[key] ?? []).some((id) => covered.has(id));
   const missing = cp.incomplete?.attachments ?? 0;
@@ -951,8 +776,9 @@ export function backupDetailLines(input: {
   status: BackupServiceStatus | null;
   clearedBy: 'place' | 'box' | 'none' | null;
   placeName: string | null;
+  locale?: string | null;
 }): string[] {
-  const D = BACKUP_OPTIONS_TEXT.details;
+  const D = backupOptionsText(input.locale).details;
   const display = input.status?.destination.display?.trim() || null;
   const where =
     input.placeName && display && display !== input.placeName
@@ -1025,14 +851,15 @@ export function policySummary(
   keep: BackupKeep,
   list: BackupCheckpointsOutput | null,
   placeName: string | null,
+  locale?: string | null,
 ): string {
   const est = estimateBytes(list, keep);
   const free = list?.space?.freeBytes ?? null;
-  return BACKUP_OPTIONS_TEXT.dialog.summary(
-    keepSpan(keep),
-    est === null ? null : formatBytes(roundEstimate(est)),
+  return backupOptionsText(locale).dialog.summary(
+    keepSpan(keep, locale),
+    est === null ? null : formatBytes(roundEstimate(est), locale),
     placeName,
-    free === null ? null : formatBytes(free),
+    free === null ? null : formatBytes(free, locale),
   );
 }
 
@@ -1100,8 +927,9 @@ export function backupToBringBack(
 export function oldWhombatDoneLines(
   state: Pick<BackupRestoreState, 'items' | 'oldApplianceId' | 'newPassword'> | null,
   name: string,
+  locale?: string | null,
 ): string[] {
-  const B = BACKUP_OPTIONS_TEXT.bringBack;
+  const B = backupOptionsText(locale).bringBack;
   const lost = state?.items.find((i) => i.id === 'old-appliance')?.resolution === 'credentials-rotated';
   return [
     ...(state?.oldApplianceId ? [B.doneOldOff(name)] : []),
@@ -1113,8 +941,9 @@ export function oldWhombatDoneLines(
 export function oldWhombatMeta(
   answer: 'gone' | 'lost' | null,
   newPassword: BackupRestoreState['newPassword'] | null | undefined,
+  locale?: string | null,
 ): string {
-  const B = BACKUP_OPTIONS_TEXT.bringBack;
+  const B = backupOptionsText(locale).bringBack;
   const yours = newPassword?.by === 'you';
   if (answer === 'lost') return yours ? B.oldLostMetaYou(newPassword?.place ?? null) : B.oldLostMeta;
   return yours ? B.oldGoneMetaYou : B.oldGoneMeta;
@@ -1127,8 +956,9 @@ export function restoreSteps(
   state: BackupRestoreState | null,
   runtimeReachable: boolean,
   place: string | null,
+  locale?: string | null,
 ): { text: string; state: 'done' | 'running' | 'queued' }[] {
-  const S = BACKUP_OPTIONS_TEXT.bringBack.steps;
+  const S = backupOptionsText(locale).bringBack.steps;
   const stage = state?.stage ?? null;
   const order = ['check', 'copy', 'put', 'servers'] as const;
   let at = 0;
@@ -1163,7 +993,10 @@ export function reloginNames(relogin: readonly string[]): string[] {
 }
 
 /** “Claude and GitHub”, “Claude, Codex and GitHub”. */
-export function andList(items: readonly string[]): string {
+export function andList(items: readonly string[], locale?: string | null): string {
   if (items.length <= 1) return items[0] ?? '';
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`;
+  return interpolate(clientTree(locale, BACKUP_OPTIONS_WORDS).and, {
+    head: items.slice(0, -1).join(', '),
+    last: items.at(-1) ?? '',
+  });
 }

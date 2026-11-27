@@ -10,7 +10,6 @@
 
 import { toggleDay, weekdayLabels } from '@whombat/client';
 import {
-  DESK_SCREENS_TEXT,
   DESK_SIZES,
   DESK_TURNS,
   type DeskApi,
@@ -70,7 +69,8 @@ import { Kbd } from '../../../components/Kbd';
 import { Modal, ModalTitle } from '../../../components/Modal';
 import { SegmentedControl } from '../../../components/SegmentedControl';
 import { useToast } from '../../../components/Toast';
-import { useWebI18n } from '../../../i18n/provider';
+import { DESK_SCREENS_TEXT } from '../../../i18n/clientWords';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
 import { useLocaleWords } from '../../../i18n/words';
 import { useDeskHere } from '../../desk/useDeskHere';
 import { draftKey, writeDraft } from '../../messaging/drafts';
@@ -101,7 +101,7 @@ export function ScreenEditorPage({ burrow, id, onBack }: ScreenEditorPageProps) 
           <Icon icon={ChevronLeft} size={15} />
           {T.back}
         </button>
-        <p className={e.gone}>{screensErrorText(detail.error)}</p>
+        <p className={e.gone}>{screensErrorText(detail.error, undefined, currentLocale())}</p>
       </div>
     );
   if (!detail.data) return null;
@@ -413,14 +413,14 @@ function Editor({
         ed.markSaved(saved.layout);
         say(E.saved);
       })
-      .catch((error) => say(screensErrorText(error)))
+      .catch((error) => say(screensErrorText(error, undefined, currentLocale())))
       .finally(() => setSaving(false));
   };
   const tryIt = () => {
     void actions
       .tryLayout({ screen: screen.id, layout: draft })
       .then(() => say(E.trying))
-      .catch((error) => say(screensErrorText(error)));
+      .catch((error) => say(screensErrorText(error, undefined, currentLocale())));
   };
   const leave = (to: () => void = onBack) => {
     away.current = to;
@@ -448,9 +448,9 @@ function Editor({
   }, [ed.dirty]);
 
   const sub = [
-    screenWhat(screen, desk?.display ?? null),
-    gridText(grid.cols, grid.rows),
-    pagesText(draft.pages.length),
+    screenWhat(screen, desk?.display ?? null, currentLocale()),
+    gridText(grid.cols, grid.rows, currentLocale()),
+    pagesText(draft.pages.length, currentLocale()),
   ].join(' · ');
   const height = grid.height * scale;
   const dragging = drag?.kind === 'widget' && drag.moved ? drag : null;
@@ -527,7 +527,9 @@ function Editor({
           <div className={e.left}>
             {ed.rearranged ? (
               <p className={e.note}>
-                <b>{fillDeskWords(E.rearranged, { grid: gridText(grid.cols, grid.rows) })}</b>
+                <b>
+                  {fillDeskWords(E.rearranged, { grid: gridText(grid.cols, grid.rows, currentLocale()) })}
+                </b>
                 {fillDeskWords(E.rearrangedRest, { from: ed.rearranged.replace('x', ' × ') })}
               </p>
             ) : null}
@@ -928,14 +930,18 @@ function PageTabs({
             role="tab"
             aria-selected={i === page}
             className={cx(e.pageButton, i === page && e.pageOn)}
-            title={p.show ? fillDeskWords(E.times.label, { when: pageWhenText(p.show) }) : undefined}
+            title={
+              p.show
+                ? fillDeskWords(E.times.label, { when: pageWhenText(p.show, currentLocale()) })
+                : undefined
+            }
             onClick={() => ed.setPage(i)}
           >
             {p.name}
             {p.show ? (
               <span className={e.pageHours}>
                 <Icon icon={Clock} size={11} />
-                {pageHoursText(p.show)}
+                {pageHoursText(p.show, currentLocale())}
               </span>
             ) : null}
           </button>

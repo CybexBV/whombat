@@ -466,9 +466,13 @@ export function WorkingBubble({
   onStop?: () => void;
   stopping?: boolean;
 }) {
+  const { rawLocale } = useI18n();
   // Ticks each second only while the agent reports actions here.
-  const nowMs = useTicker(clock, thinkingLabels(name, agentNow, principalId, threadRootId, 0).ticks);
-  const words = thinkingLabels(name, agentNow, principalId, threadRootId, nowMs);
+  const nowMs = useTicker(
+    clock,
+    thinkingLabels(name, agentNow, principalId, threadRootId, 0, rawLocale).ticks,
+  );
+  const words = thinkingLabels(name, agentNow, principalId, threadRootId, nowMs, rawLocale);
   const state = workingFaceState(agentNowFor(agentNow, principalId, threadRootId, nowMs));
   const face =
     agent?.kind === 'agent' && !isAutomationPrincipal(agent) ? (

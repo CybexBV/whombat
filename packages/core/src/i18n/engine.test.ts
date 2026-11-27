@@ -182,4 +182,16 @@ describe('locale formatters', () => {
     expect(parseLocaleNumber('')).toBeNull();
     expect(parseLocaleNumber('abc')).toBeNull();
   });
+
+  it('reads a single comma as a decimal when the part before it cannot be a thousands group', () => {
+    expect(parseLocaleNumber('0,005')).toBe(0.005);
+    expect(parseLocaleNumber('1000,500')).toBe(1000.5);
+    expect(parseLocaleNumber('-0,125')).toBe(-0.125);
+    expect(parseLocaleNumber('012,345')).toBe(12.345);
+    expect(parseLocaleNumber('1,000')).toBe(1000);
+    expect(parseLocaleNumber('-12,500')).toBe(-12500);
+    expect(parseLocaleNumber('999,999')).toBe(999999);
+    expect(parseLocaleNumber('1,234', 'nl-NL')).toBe(1.234);
+    expect(parseLocaleNumber('1,5')).toBe(1.5);
+  });
 });

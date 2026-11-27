@@ -146,7 +146,7 @@ export function RunScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { slug, bootstrap } = useBurrow();
   const ctx = useViewContext();
-  const { number, back = 'Inbox' } = route.params;
+  const { number, back = tMobile('places.inbox') } = route.params;
   const query = useRun({ params: { burrow: slug, number } });
   const detail = query.data;
   useSubscription(detail ? topics.run(detail.run.id) : null);
@@ -186,7 +186,7 @@ export function RunScreen({ route, navigation }: Props) {
     const go = () => control.act(b.action, detail.run, model.agentName);
     if (!b.confirm) return go();
     Alert.alert(b.confirm.title, b.confirm.body, [
-      { text: 'Cancel', style: 'cancel' },
+      { text: tMobile('screens.run.cancel'), style: 'cancel' },
       { text: b.confirm.cta, style: 'destructive', onPress: go },
     ]);
   };

@@ -120,7 +120,8 @@ export function compareLocaleText(a: string, b: string, localeTag?: string | nul
 
 /**
  * Parses a decimal number typed in either dot or comma style (`"90.5"`, `"90,5"`, `"1.234,56"`, `"1,234.56"`).
- * A single comma before three digits is thousands grouping unless the caller specifies Dutch.
+ * A single comma before three digits is thousands grouping when one to three digits (not starting with 0) come
+ * before it, unless the caller specifies Dutch.
  * Returns null if the input is empty or not a finite number.
  */
 export function parseLocaleNumber(raw: string, locale?: string | null): number | null {
@@ -140,7 +141,11 @@ export function parseLocaleNumber(raw: string, locale?: string | null): number |
     const parts = cleaned.split(',');
     if (parts.length === 2) {
       const [whole, fraction] = parts;
-      const grouping = /^[0-9]{3}$/.test(fraction ?? '') && resolveLanguage(locale) !== 'nl';
+      // “1,234” groups thousands in English, but “0,005” and “1000,500” can only be decimals.
+      const grouping =
+        /^[0-9]{3}$/.test(fraction ?? '') &&
+        /^-?[1-9]\d{0,2}$/.test(whole ?? '') &&
+        resolveLanguage(locale) !== 'nl';
       normalized = `${whole}${grouping ? '' : '.'}${fraction}`;
     } else if (parts.every((p, i) => (i === 0 ? /^-?\d{1,3}$/.test(p) : /^\d{3}$/.test(p)))) {
       normalized = parts.join('');

@@ -15,12 +15,13 @@ import {
   type BackupProgressView,
   type BackupRestoreRow,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { thisWhombatText } from '@whombat/client/managed';
 import { useBackupMaker, useBackupRestorer } from '@whombat/client/react';
 import { BACKUP_COPY, type BackupRestoreChip } from '@whombat/core/backup';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
+import { useI18n } from '../i18n';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -57,11 +58,12 @@ const dismissedRestores = () => {
 };
 
 export function BackupFileScreen() {
+  const { rawLocale } = useI18n();
   const navigation = useAppNavigation();
   const { slug, timeZone } = useBurrowBase();
   const back = (
     <BackBar
-      label={THIS_WHOMBAT_TEXT.parts.backups}
+      label={thisWhombatText(rawLocale).parts.backups}
       onPress={() => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('WhombatBackups'))}
     />
   );

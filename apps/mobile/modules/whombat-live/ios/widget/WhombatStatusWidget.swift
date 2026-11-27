@@ -20,11 +20,6 @@ private struct StatusWidgetSnapshot: Decodable {
     let asOfYesterdayTemplate: String
   }
 
-  private static let shortMonths = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-  ]
-
   private static let utcCalendar: Calendar = {
     var cal = Calendar(identifier: .gregorian)
     if let utc = TimeZone(secondsFromGMT: 0) {
@@ -60,7 +55,7 @@ private struct StatusWidgetSnapshot: Decodable {
     let atParts = cal.dateComponents([.year, .month, .day, .hour, .minute], from: atDate)
     let nowParts = cal.dateComponents([.year, .month, .day], from: now)
     let tag = locale ?? LiveWidgetLocale.shared
-    let dutch = LiveWidgetLocale.isDutch(tag)
+    let words = StatusWidgetWords.forLocale(tag)
     guard let atYear = atParts.year,
           let atMonth = atParts.month,
           let atDay = atParts.day,
@@ -69,35 +64,29 @@ private struct StatusWidgetSnapshot: Decodable {
           let nowYear = nowParts.year,
           let diff = Self.dayDiff(from: atParts, to: nowParts)
     else {
-      return StatusWidgetEmpty.asOf(dutch: dutch)
+      return words.emptyHint
     }
     let clock = String(format: "%02d:%02d", atHour, atMinute)
     if diff == 0 {
-      return asOf(clock, dutch: dutch)
+      return asOf(clock, words: words)
     }
     if diff == 1 {
       if let template = labels?.asOfYesterdayTemplate, template.contains("{clock}") {
         return template.replacingOccurrences(of: "{clock}", with: clock)
       }
-      return dutch ? "van gisteren \(clock)" : "as of yesterday \(clock)"
+      return words.asOfYesterdayTemplate.replacingOccurrences(of: "{clock}", with: clock)
     }
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: tag ?? "nl-NL")
-    formatter.timeZone = cal.timeZone
-    formatter.dateFormat = "MMM"
-    let month = dutch
-      ? formatter.string(from: atDate).trimmingCharacters(in: CharacterSet(charactersIn: "."))
-      : (1...12).contains(atMonth) ? Self.shortMonths[atMonth - 1] : ""
+    let month = words.month(atDate, number: atMonth, timeZone: cal.timeZone, locale: tag)
     let day = "\(atDay) \(month)"
     let date = atYear == nowYear ? day : "\(day) \(atYear)"
-    return asOf(date, dutch: dutch)
+    return asOf(date, words: words)
   }
 
-  private func asOf(_ label: String, dutch: Bool) -> String {
+  private func asOf(_ label: String, words: StatusWidgetWords) -> String {
     if let template = labels?.asOfTemplate, template.contains("{when}") {
       return template.replacingOccurrences(of: "{when}", with: label)
     }
-    return dutch ? "van \(label)" : "as of \(label)"
+    return words.asOfTemplate.replacingOccurrences(of: "{when}", with: label)
   }
 
   private func nextBoundary(after date: Date, calendar cal: Calendar) -> Date? {
@@ -144,12 +133,55 @@ private struct StatusWidgetSnapshot: Decodable {
   }
 }
 
-/// Mirrors `WIDGET_EMPTY_COPY` in `@whombat/client` (verified by `statusWidget.test.ts`).
-private enum StatusWidgetEmpty {
-  static let boxName = "Whombat"
-  static let status = "Open Whombat"
-  static func asOf(dutch: Bool) -> String {
-    dutch ? "Tik om de status te zien" : "Tap to see status"
+private struct StatusWidgetWords {
+  let emptyHint: String
+  let sampleName: String
+  let sampleStatus: String
+  let asOfTemplate: String
+  let asOfYesterdayTemplate: String
+  let description: String
+  let accessibilityHint: String
+  let shortMonths: [String]?
+
+  static let english = Self(
+    emptyHint: "Tap to see status",
+    sampleName: "Home",
+    sampleStatus: "All good",
+    asOfTemplate: "as of {when}",
+    asOfYesterdayTemplate: "as of yesterday {clock}",
+    description: "Shows your Whombat’s last status and opens the app.",
+    accessibilityHint: "Opens Whombat",
+    shortMonths: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  )
+
+  static let byLanguage: [String: Self] = [
+    "en": english,
+    "nl": Self(
+      emptyHint: "Tik om de status te zien",
+      sampleName: "Thuis",
+      sampleStatus: "Alles in orde",
+      asOfTemplate: "van {when}",
+      asOfYesterdayTemplate: "van gisteren {clock}",
+      description: "Toont de laatste status van je Whombat en opent de app.",
+      accessibilityHint: "Opent Whombat",
+      shortMonths: nil
+    ),
+  ]
+
+  static func forLocale(_ tag: String? = LiveWidgetLocale.shared) -> Self {
+    byLanguage[LiveWidgetLocale.languageCode(tag)] ?? english
+  }
+
+  func month(_ date: Date, number: Int, timeZone: TimeZone, locale: String?) -> String {
+    if let shortMonths {
+      let index = number - 1
+      return shortMonths.indices.contains(index) ? shortMonths[index] : ""
+    }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: locale ?? "en-GB")
+    formatter.timeZone = timeZone
+    formatter.dateFormat = "MMM"
+    return formatter.string(from: date).trimmingCharacters(in: CharacterSet(charactersIn: "."))
   }
 }
 
@@ -171,22 +203,22 @@ struct WhombatStatusEntry: TimelineEntry {
   static func empty(at date: Date) -> WhombatStatusEntry {
     WhombatStatusEntry(
       date: date,
-      boxName: StatusWidgetEmpty.boxName,
-      status: StatusWidgetEmpty.status,
+      boxName: "Whombat",
+      status: "Open Whombat",
       tone: "neutral",
-      asOf: StatusWidgetEmpty.asOf(dutch: LiveWidgetLocale.isDutch(LiveWidgetLocale.shared)),
+      asOf: StatusWidgetWords.forLocale().emptyHint,
       isEmpty: true
     )
   }
 
   static func sample(at date: Date) -> WhombatStatusEntry {
-    let dutch = LiveWidgetLocale.isDutch(LiveWidgetLocale.shared)
+    let words = StatusWidgetWords.forLocale()
     return WhombatStatusEntry(
       date: date,
-      boxName: dutch ? "Thuis" : "Home",
-      status: dutch ? "Alles in orde" : "All good",
+      boxName: words.sampleName,
+      status: words.sampleStatus,
       tone: "ok",
-      asOf: dutch ? "van 14:05" : "as of 14:05",
+      asOf: words.asOfTemplate.replacingOccurrences(of: "{when}", with: "14:05"),
       isEmpty: false
     )
   }
@@ -280,9 +312,7 @@ struct WhombatStatusWidget: Widget {
       WhombatStatusWidgetView(entry: entry)
     }
     .configurationDisplayName("Whombat")
-    .description(Text(LiveWidgetLocale.isDutch(LiveWidgetLocale.shared)
-      ? "Toont de laatste status van je Whombat en opent de app."
-      : "Shows your Whombat’s last status and opens the app."))
+    .description(Text(StatusWidgetWords.forLocale().description))
     .supportedFamilies([.systemSmall])
   }
 }
@@ -323,7 +353,7 @@ private struct WhombatStatusWidgetView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(entry.accessibilityLabel)
-    .accessibilityHint(Text(LiveWidgetLocale.isDutch(LiveWidgetLocale.shared) ? "Opent Whombat" : "Opens Whombat"))
+    .accessibilityHint(Text(StatusWidgetWords.forLocale().accessibilityHint))
     .widgetSurface(Palette.bg)
   }
 }

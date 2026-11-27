@@ -18,14 +18,14 @@ import {
   orderPasskeys,
   PAIRING_CODE,
   PASSKEY_COPY,
-  PASSKEY_SETUP_TEXT,
   pairingErrorKey,
   passkeyEnrolledDevices,
   passkeyErrorText,
   passkeyMeta,
   passkeyRemove,
+  passkeySetupText,
   platformName,
-  THIS_WHOMBAT_TEXT,
+  thisWhombatText,
 } from '@whombat/client/managed';
 import {
   type EndpointSummary,
@@ -215,7 +215,7 @@ export function DevicesScreen({ route, navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
       >
-        <LargeTitle title={THIS_WHOMBAT_TEXT.parts.devices} />
+        <LargeTitle title={thisWhombatText(rawLocale).parts.devices} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }} onLayout={place.onContainer}>
           {mine ? (
             <Card label={managedTextHere.devices}>
@@ -350,6 +350,7 @@ function PasskeysCard({
   /** The box's state changed here (a passkey became the backups' key): read it again. */
   onChanged: () => void;
 }) {
+  const { rawLocale } = useI18n();
   const { session, control, appliancePeerId, connection } = useManagedOrThrow();
   const theme = useTheme();
   const tap = useBackupPasskeyTap();
@@ -447,11 +448,12 @@ function PasskeysCard({
           <View style={{ flex: 1, gap: 3 }}>
             <Text size={15} weight={500} lh={1.35}>
               {tap?.loadError
-                ? PASSKEY_SETUP_TEXT.loadError
-                : (view?.title ?? (tap ? PASSKEY_SETUP_TEXT.loading : PASSKEY_SETUP_TEXT.empty))}
+                ? passkeySetupText(rawLocale).loadError
+                : (view?.title ??
+                  (tap ? passkeySetupText(rawLocale).loading : passkeySetupText(rawLocale).empty))}
             </Text>
             <Text size={13} lh={1.4} color={theme.colors.mut}>
-              {view?.meta ?? PASSKEY_SETUP_TEXT.intro}
+              {view?.meta ?? passkeySetupText(rawLocale).intro}
             </Text>
           </View>
         </View>
@@ -459,7 +461,7 @@ function PasskeysCard({
         <Note text={touching ? tap?.note : (note ?? tap?.note ?? null)} />
         {view?.phase !== 'ready' || tap?.loadError ? (
           <Button
-            label={tap?.label ?? PASSKEY_SETUP_TEXT.setup}
+            label={tap?.label ?? passkeySetupText(rawLocale).setup}
             variant="primary"
             busy={touching}
             disabled={!tap || !platform || !list || (!view && !tap.loadError)}
@@ -467,7 +469,7 @@ function PasskeysCard({
           />
         ) : null}
         <Button
-          label={PASSKEY_SETUP_TEXT.details}
+          label={passkeySetupText(rawLocale).details}
           variant="quiet"
           accessibilityState={{ expanded: details }}
           onPress={() => setDetails(!details)}
@@ -494,7 +496,7 @@ function PasskeysCard({
           {view?.phase === 'ready' && tap ? (
             <View style={{ padding: 16 }}>
               <Button
-                label={touching ? tap.label : PASSKEY_SETUP_TEXT.check}
+                label={touching ? tap.label : passkeySetupText(rawLocale).check}
                 variant="secondary"
                 busy={touching}
                 onPress={() => void add()}

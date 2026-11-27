@@ -6,20 +6,20 @@
  * channel) opens This Whombat, where this is. Words: `DESK_TEXT.unlock`.
  */
 
-import { DESK_TEXT, type DeskApi, deskUnlockAnswerText } from '@whombat/client/desk';
+import { type DeskApi, deskText, deskUnlockAnswerText } from '@whombat/client/desk';
 import { useDeskActions, useDeskUnlockRequest } from '@whombat/client/desk/react';
 import { useState } from 'react';
 import { Alert, View } from 'react-native';
-import { useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
 import { showNotice } from '../screens/feedback';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Button } from '../ui/primitives';
 import { Card } from './ui';
 
-const U = DESK_TEXT.unlock;
-
 export function DeskUnlockCard({ api }: { api: DeskApi | null }) {
+  const { rawLocale } = useI18n();
+  const U = deskText(rawLocale).unlock;
   const { t: tMobile } = useMobileT();
   const theme = useTheme();
   const request = useDeskUnlockRequest(api);
@@ -30,9 +30,9 @@ export function DeskUnlockCard({ api }: { api: DeskApi | null }) {
     setBusy(unlock ? 'unlock' : 'no');
     try {
       await actions.answerUnlock({ id: request.id, unlock });
-      showNotice(deskUnlockAnswerText(unlock));
+      showNotice(deskUnlockAnswerText(unlock, undefined, rawLocale));
     } catch (error) {
-      Alert.alert(tMobile('managed.that-didnt-go-through'), deskUnlockAnswerText(unlock, error));
+      Alert.alert(tMobile('managed.that-didnt-go-through'), deskUnlockAnswerText(unlock, error, rawLocale));
     } finally {
       setBusy(null);
     }

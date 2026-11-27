@@ -1,5 +1,6 @@
 import { IOS_LIVE_ACTIVITY_ATTRIBUTES } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
+import { genericPushText } from '../domain/push-preview';
 import { apnsOutcome, apnsTopic, buildApnsPayload } from './apns';
 
 describe('APNs payloads', () => {
@@ -36,6 +37,36 @@ describe('APNs payloads', () => {
     expect(buildApnsPayload({ title: 'Dusty', body: 'Hi', path: '/x', preview: true })).not.toHaveProperty(
       'preview',
     );
+  });
+
+  it('never puts the words it was handed in the alert when previews are off', () => {
+    const built = buildApnsPayload({
+      kind: 'agent_update',
+      title: 'Front door',
+      body: 'Alice unlocked the front door',
+      path: '/burrow-hq/c/home',
+      burrow: 'burrow-hq',
+      notificationId: 'ntf_1',
+      preview: false,
+    });
+    const sent = JSON.stringify(built);
+    expect(sent).not.toContain('Front door');
+    expect(sent).not.toContain('Alice');
+    expect(built.aps).toMatchObject({
+      alert: { title: 'Whombat', body: genericPushText('agent_update', 'en') },
+    });
+  });
+
+  it('keeps a generic line in the person’s language when previews are off', () => {
+    const dutch = genericPushText('mention', 'nl-NL');
+    const built = buildApnsPayload({
+      kind: 'mention',
+      title: 'Whombat',
+      body: dutch,
+      path: '/x',
+      preview: false,
+    });
+    expect(built.aps).toMatchObject({ alert: { title: 'Whombat', body: dutch } });
   });
 
   it('starts an activity with its attributes and an alert, and ends it with a dismissal date', () => {

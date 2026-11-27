@@ -96,6 +96,11 @@ export interface WebI18nControl {
   applyOwnerLocale(tag: string | null | undefined): void;
   /** The box this page talks to, so its language is cached under it. */
   setBox(boxId: string | null): void;
+  /**
+   * The language the person chose on this page for what it shows now (the picker, `setLocale`), or null: never a
+   * language remembered from another box. A box chosen anew forgets it.
+   */
+  chosenLocale(): string | null;
   /** A query cache whose server-written words are fetched again when the language changes. */
   addQueryClient(queryClient: QueryClient): () => void;
   /** Fetches the server-written words again (after the box saved a new language). */
@@ -173,6 +178,8 @@ function RootProvider({
   initialLocale = null,
 }: WebI18nProviderProps) {
   const [state, setState] = useState<LocaleState>(() => startState(scope, boxId, initialLocale));
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const [nl, setNl] = useState<DutchCatalog | null>(() => loadedDutch());
   const [dutchFailed, setDutchFailed] = useState(false);
   const queryClients = useRef(new Set<QueryClient>());
@@ -214,7 +221,7 @@ function RootProvider({
 
   const shownLanguage = shown ? resolveLanguage(shown) : null;
   useEffect(() => {
-    if (scope === 'owner' && shownLanguage) setServiceWorkerLanguage(shownLanguage);
+    if (scope === 'owner' && shownLanguage) void setServiceWorkerLanguage(shownLanguage);
   }, [scope, shownLanguage]);
 
   // Server-written words (dashboards, Home and Inbox lines) come back in the new language.
@@ -250,9 +257,11 @@ function RootProvider({
         setState((s) => {
           if (s.boxId === next) return s;
           const cached = scope === 'owner' && next ? readCachedLocale(next) : null;
-          return { ...s, boxId: next, owner: cached ?? s.owner };
+          // A choice made for one box isn't the next box's.
+          return { ...s, boxId: next, owner: cached ?? s.owner, chosen: scope === 'owner' ? null : s.chosen };
         });
       },
+      chosenLocale: () => stateRef.current.chosen,
       addQueryClient: (client) => {
         queryClients.current.add(client);
         return () => {

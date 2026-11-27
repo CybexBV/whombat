@@ -47,6 +47,25 @@ function sameSet(a: readonly string[], b: readonly string[]): boolean {
   return a.every((v, i) => v === b[i]);
 }
 
+/**
+ * Placeholders that carry the count itself. A singular form may say “one item” or “1 item” without them; every other
+ * placeholder (a name, a host, a time) must stay, or the singular sentence silently loses it.
+ */
+export const COUNT_PLACEHOLDERS: ReadonlySet<string> = new Set(['count', 'n', 'countWord', 'shown']);
+
+function checkPluralFormKeepsWords(
+  label: string,
+  otherVars: readonly string[],
+  formVars: readonly string[],
+  errors: string[],
+): void {
+  for (const v of otherVars) {
+    if (!COUNT_PLACEHOLDERS.has(v) && !formVars.includes(v)) {
+      errors.push(`${label}: drops placeholder {${v}} that "other" has`);
+    }
+  }
+}
+
 function checkMessageValue(
   label: string,
   enVal: MessageValue,
@@ -84,6 +103,10 @@ function checkMessageValue(
       errors.push(`${label} [en]: missing plural form "${cat}"`);
     }
   }
+  for (const [cat, text] of Object.entries(enPlural)) {
+    if (cat === 'other' || typeof text !== 'string') continue;
+    checkPluralFormKeepsWords(`${label} [en.${cat}]`, enVars, extractPlaceholders(text), errors);
+  }
   const trCats = requiredPluralCategories(lang);
   for (const cat of trCats) {
     const text = trPlural[cat];
@@ -93,12 +116,12 @@ function checkMessageValue(
     }
     if (/\bTODO\b/i.test(text)) errors.push(`${label} [${lang}.${cat}]: contains TODO marker`);
     const vars = extractPlaceholders(text);
-    // Count placeholder (`n` / `count`) may be omitted in `one` ("1 item" vs "een item"), but no unknown placeholders allowed.
     for (const v of vars) {
       if (!enVars.includes(v)) {
         errors.push(`${label} [${lang}.${cat}]: unknown placeholder {${v}} not in en {${enVars.join(', ')}}`);
       }
     }
+    if (cat !== 'other') checkPluralFormKeepsWords(`${label} [${lang}.${cat}]`, enVars, vars, errors);
     if (cat === 'other' && !sameSet(enVars, vars)) {
       errors.push(`${label} [${lang}.other]: placeholders {${vars.join(', ')}} != en {${enVars.join(', ')}}`);
     }

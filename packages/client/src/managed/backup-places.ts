@@ -6,65 +6,47 @@
  * apps say the same; the places come from `backup.places` (a box from before answers `unknown_op` and shows nothing).
  */
 import {
-  BACKUP_PLACE_TEXT,
   type BackupPlace,
   type BackupPlaceKind,
   type BackupPlaceLocation,
+  backupPlaceText,
   parseBackupPlaceId,
 } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { formatBytes } from '@whombat/core/text';
+import { clientTree } from '../i18n/catalog';
+import { BACKUP_PLACES_WORDS } from '../i18n/messages/backupPlaces';
 import { type BackupPlacesList, OperationError } from '../session/managed-ops';
 import { DeadlineExceededError, OutcomeUnknownError, SessionClosedError } from '../session/types';
 import { backupErrorText } from './backup-setup';
-import { ACCOUNTS_TEXT } from './status-copy';
+import { accountsText } from './status-copy';
 
-const T = BACKUP_PLACE_TEXT;
+/** The words beyond the contract's (`backupPlaceText`): progress, outcomes, the by-hand sheet, what a place keeps. */
+export function backupPlacesText(locale?: string | null) {
+  const T = backupPlaceText(locale);
+  const { doneWhere: _doneWhere, ago: _ago, ...w } = clientTree(locale, BACKUP_PLACES_WORDS);
+  const f = interpolate;
+  return {
+    heading: T.heading,
+    ...w,
+    settingUp: (name: string) => f(w.settingUp, { name }),
+    done: (destination: string) => f(w.done, { destination }),
+    byHandTitle: (name: string) => f(w.byHandTitle, { name }),
+    used: (bytes: string) => f(w.used, { bytes }),
+    free: (bytes: string) => f(w.free, { bytes }),
+    lastCleared: (when: string) => f(w.lastCleared, { when }),
+    cleanupFailed: (when: string) => f(w.cleanupFailed, { when }),
+    /** Where on a place (BPL-13): an Unraid share, a TrueNAS pool, a Synology's or QNAP's shared folder. */
+    where: T.location.said,
+    whereTitle: (place: string) => f(w.whereTitle, { place }),
+    changeTitle: (name: string) => f(w.changeTitle, { name }),
+    changeMoves: (name: string) => f(w.changeMoves, { name }),
+    moving: (name: string) => f(w.moving, { name }),
+    moved: (where: string) => f(w.moved, { where }),
+  };
+}
 
-/** The words beyond the contract's (`BACKUP_PLACE_TEXT`): progress, outcomes, the by-hand sheet, what a place keeps. */
-export const BACKUP_PLACES_TEXT = {
-  heading: T.heading,
-  /** While `backup.usePlace` runs: installing the app on the NAS can take a while (BPL-05). */
-  settingUp: (name: string) => `Setting up ${name}. This can take a minute or two.`,
-  settingUpButton: 'Setting up…',
-  done: (destination: string) => `Done. Backups go to ${destination} now.`,
-  firstBackup: 'The first backup has started.',
-  /** The deadline passed while the box was still at it: it carries on (no automatic retry). */
-  slow: 'This is taking longer than usual. Whombat carries on; look again in a few minutes.',
-  cancel: 'Cancel',
-  close: 'Close',
-  /** Where the old backups are when the box's refusal doesn't name the place (BPL-06). */
-  fromUnknown: 'the place they go now',
-  byHandTitle: (name: string) => `Set up ${name} by hand`,
-  byHandLead: 'Whombat can’t install its backup app there itself. Paste it in, then check it.',
-  byHandLoading: 'Getting it ready…',
-  byHandFailed: 'Couldn’t get it ready. Try again.',
-  compose: 'The app to paste',
-  copy: 'Copy',
-  copied: 'Copied',
-  checking: 'Checking…',
-  thisWhombat: 'This Whombat',
-  used: (bytes: string) => `${bytes} used`,
-  free: (bytes: string) => `${bytes} free`,
-  lastCleared: (when: string) => `Last cleared ${when}`,
-  cleanupFailed: (when: string) => `The last cleanup didn’t work, ${when}`,
-  cleanupSoon: 'The first cleanup runs within a week',
-  /** Where on a place (BPL-13): an Unraid share, a TrueNAS pool, a Synology's or QNAP's shared folder. */
-  where: T.location.said,
-  whereTitle: (place: string) => `Where on ${place}?`,
-  whereLead: 'Choose where Whombat keeps its backups.',
-  recommended: 'Recommended',
-  inUse: 'In use',
-  isNew: 'Whombat makes it',
-  change: 'Change',
-  /** Changing where on the place in use (BPL-14): Unraid and Linux move the backups, a NAS's API can't. */
-  changeTitle: (name: string) => `Keep backups in ${name}?`,
-  changeMoves: (name: string) => `Whombat moves your backups to ${name}. Backups keep their history.`,
-  /** While they move: gigabytes can take up to an hour, and the box carries on without the page. */
-  moving: (name: string) =>
-    `Moving your backups to ${name}… This can take up to an hour. You can leave this page.`,
-  movingButton: 'Moving…',
-  moved: (where: string) => `Done. Your backups are in ${where} now.`,
-} as const;
+export const BACKUP_PLACES_TEXT = backupPlacesText('en');
 
 /** The one thing a place's row offers (BPL-04). */
 export type BackupPlaceAction =
@@ -107,9 +89,10 @@ export function backupPlaceMark(kind: BackupPlaceKind): string {
   return kind === 'linux' ? 'server' : kind;
 }
 
-function placeAction(place: BackupPlace): BackupPlaceAction | null {
+function placeAction(place: BackupPlace, locale?: string | null): BackupPlaceAction | null {
+  const T = backupPlaceText(locale);
   if (place.state === 'in_use')
-    return place.locations.length > 1 ? { kind: 'change', label: BACKUP_PLACES_TEXT.change } : null;
+    return place.locations.length > 1 ? { kind: 'change', label: backupPlacesText(locale).change } : null;
   if (place.state === 'ready') return { kind: 'use', label: T.use };
   if (place.byHand) return { kind: 'byHand', label: T.byHand };
   const ref = parseBackupPlaceId(place.id);
@@ -129,18 +112,22 @@ function placeAction(place: BackupPlace): BackupPlaceAction | null {
   return null;
 }
 
-function placeLine(place: BackupPlace): string {
+function placeLine(place: BackupPlace, locale?: string | null): string {
   if (place.reason) return place.reason;
-  const where = place.state === 'in_use' ? placeWhere(place) : null;
+  const T = backupPlaceText(locale);
+  const where = place.state === 'in_use' ? placeWhere(place, locale) : null;
   if (where) return `${T.state.in_use} · ${where}`;
   const free = place.state === 'ready' ? place.kept?.freeBytes : null;
   return free != null
-    ? `${T.state[place.state]} · ${BACKUP_PLACES_TEXT.free(formatBytes(free))}`
+    ? `${T.state[place.state]} · ${backupPlacesText(locale).free(formatBytes(free, locale))}`
     : T.state[place.state];
 }
 
 /** “On your network”'s rows, the place in use first; empty when there are none (the section then hides). */
-export function backupPlaceRows(list: BackupPlacesList | null | undefined): BackupPlaceRow[] {
+export function backupPlaceRows(
+  list: BackupPlacesList | null | undefined,
+  locale?: string | null,
+): BackupPlaceRow[] {
   if (!list) return [];
   return list.places
     .map((place, i) => ({ place, i }))
@@ -150,13 +137,14 @@ export function backupPlaceRows(list: BackupPlacesList | null | undefined): Back
       name: place.name,
       kind: place.kind,
       mark: backupPlaceMark(place.kind),
-      line: placeLine(place),
-      action: placeAction(place),
+      line: placeLine(place, locale),
+      action: placeAction(place, locale),
       current: place.state === 'in_use' || place.id === list.currentPlaceId,
     }));
 }
 
-function cleanupWords(kept: NonNullable<BackupPlace['kept']>): string {
+function cleanupWords(kept: NonNullable<BackupPlace['kept']>, locale?: string | null): string {
+  const T = backupPlaceText(locale);
   return kept.cleanup.on ? T.cleanup(kept.cleanup.keepDays) : T.noCleanup;
 }
 
@@ -166,23 +154,28 @@ function cleanupWords(kept: NonNullable<BackupPlace['kept']>): string {
  */
 export function currentPlaceLine(
   list: BackupPlacesList | null | undefined,
+  locale?: string | null,
 ): { title: string; meta: string; mark: string } | null {
   if (!list?.currentPlaceId) return null;
   const place = list.places.find((p) => p.id === list.currentPlaceId);
   if (!place) return null;
-  const where = placeWhere(place);
+  const T = backupPlaceText(locale);
+  const where = placeWhere(place, locale);
   return {
     title: [place.name, T.kind(place.kind), where].filter(Boolean).join(' · '),
-    meta: [T.appendOnly, place.kept ? cleanupWords(place.kept) : null].filter(Boolean).join(' · '),
+    meta: [T.appendOnly, place.kept ? cleanupWords(place.kept, locale) : null].filter(Boolean).join(' · '),
     mark: backupPlaceMark(place.kind),
   };
 }
 
 /** Where on the place the backups are kept now, as people read it (“the share whombat-backups”); null without a choice. */
-export function placeWhere(place: Pick<BackupPlace, 'kind' | 'locations' | 'location'>): string | null {
+export function placeWhere(
+  place: Pick<BackupPlace, 'kind' | 'locations' | 'location'>,
+  locale?: string | null,
+): string | null {
   if (!place.location || place.locations.length < 2) return null;
   const name = place.locations.find((l) => l.id === place.location)?.name ?? place.location;
-  return BACKUP_PLACES_TEXT.where(place.kind, name);
+  return backupPlacesText(locale).where(place.kind, name);
 }
 
 /** One location in “Where on BlackBox?”: its name, a line (free space, made new, its note) and its marks. */
@@ -202,11 +195,12 @@ export interface PlaceLocationRow {
  */
 export function placeLocations(
   place: Pick<BackupPlace, 'locations' | 'location'> | null | undefined,
+  locale?: string | null,
 ): { rows: PlaceLocationRow[]; selected: string } | null {
   if (!place || place.locations.length < 2) return null;
-  const W = BACKUP_PLACES_TEXT;
+  const W = backupPlacesText(locale);
   const line = (l: BackupPlaceLocation) =>
-    [l.freeBytes != null ? W.free(formatBytes(l.freeBytes)) : null, l.isNew ? W.isNew : null, l.note]
+    [l.freeBytes != null ? W.free(formatBytes(l.freeBytes, locale)) : null, l.isNew ? W.isNew : null, l.note]
       .filter(Boolean)
       .join(' · ') || null;
   const rows = place.locations
@@ -232,10 +226,12 @@ export function placeLocations(
 export function placeLocationChange(
   place: Pick<BackupPlace, 'kind' | 'locations' | 'location'>,
   to: string,
+  locale?: string | null,
 ): { title: string; body: string; button: string; move: boolean; name: string; where: string } | null {
   const target = place.locations.find((l) => l.id === to);
   if (!target || to === place.location) return null;
-  const W = BACKUP_PLACES_TEXT;
+  const W = backupPlacesText(locale);
+  const T = backupPlaceText(locale);
   const moves = place.kind === 'unraid' || place.kind === 'linux';
   const old = place.locations.find((l) => l.id === place.location)?.name ?? place.location ?? '';
   return {
@@ -244,18 +240,18 @@ export function placeLocationChange(
     button: W.change,
     move: !moves,
     name: target.name,
-    where: BACKUP_PLACES_TEXT.where(place.kind, target.name),
+    where: W.where(place.kind, target.name),
   };
 }
 
 /** “3 days ago”, from an ISO time and now (ms). */
-export function placeAgo(iso: string, now: number): string {
+export function placeAgo(iso: string, now: number, locale?: string | null): string {
+  const A = clientTree(locale, BACKUP_PLACES_WORDS).ago;
   const s = Math.max(0, (now - Date.parse(iso)) / 1000);
-  if (!Number.isFinite(s) || s < 90) return 'just now';
-  if (s < 5400) return `${Math.round(s / 60)} minutes ago`;
-  if (s < 129_600) return `${Math.round(s / 3600)} hours ago`;
-  const d = Math.round(s / 86_400);
-  return `${d} day${d === 1 ? '' : 's'} ago`;
+  if (!Number.isFinite(s) || s < 90) return A.justNow;
+  if (s < 5400) return A.minutes(Math.round(s / 60));
+  if (s < 129_600) return A.hours(Math.round(s / 3600));
+  return A.days(Math.round(s / 86_400));
 }
 
 export interface KeptHereRow {
@@ -272,28 +268,29 @@ export interface KeptHereRow {
 export function keptHere(
   list: BackupPlacesList | null | undefined,
   thing: string,
-  options: { whombat?: string | null; now: number },
+  options: { whombat?: string | null; now: number; locale?: string | null },
 ): KeptHereRow[] | null {
   const place = list?.places.find((p) => p.id === thing && p.kept);
   const kept = place?.kept;
   if (!kept) return null;
-  const W = BACKUP_PLACES_TEXT;
+  const locale = options.locale;
+  const W = backupPlacesText(locale);
   const space = [
-    kept.usedBytes != null ? W.used(formatBytes(kept.usedBytes)) : null,
-    kept.freeBytes != null ? W.free(formatBytes(kept.freeBytes)) : null,
+    kept.usedBytes != null ? W.used(formatBytes(kept.usedBytes, locale)) : null,
+    kept.freeBytes != null ? W.free(formatBytes(kept.freeBytes, locale)) : null,
   ].filter(Boolean);
   const c = kept.cleanup;
   const failed = c.on && c.ok === false;
   return [
     { title: options.whombat?.trim() || W.thisWhombat, meta: space.join(' · ') || null, dot: null },
     {
-      title: cleanupWords(kept),
+      title: cleanupWords(kept, locale),
       meta: !c.on
         ? null
         : c.lastAt
           ? failed
-            ? W.cleanupFailed(placeAgo(c.lastAt, options.now))
-            : W.lastCleared(placeAgo(c.lastAt, options.now))
+            ? W.cleanupFailed(placeAgo(c.lastAt, options.now, locale))
+            : W.lastCleared(placeAgo(c.lastAt, options.now, locale))
           : W.cleanupSoon,
       dot: !c.on ? 'mut' : failed ? 'warn' : 'ok',
     },
@@ -304,9 +301,13 @@ export function keptHere(
  * Moving backups that go to another place is the person's choice (BPL-06): the name of the place they go to now when
  * it isn't `placeId`, so the app asks first; null when nothing needs asking up front.
  */
-export function moveFromPlace(list: BackupPlacesList | null | undefined, placeId: string): string | null {
+export function moveFromPlace(
+  list: BackupPlacesList | null | undefined,
+  placeId: string,
+  locale?: string | null,
+): string | null {
   if (!list?.currentPlaceId || list.currentPlaceId === placeId) return null;
-  return list.places.find((p) => p.id === list.currentPlaceId)?.name ?? BACKUP_PLACES_TEXT.fromUnknown;
+  return list.places.find((p) => p.id === list.currentPlaceId)?.name ?? backupPlacesText(locale).fromUnknown;
 }
 
 /**
@@ -314,12 +315,13 @@ export function moveFromPlace(list: BackupPlacesList | null | undefined, placeId
  * where they go now, for the confirm; null for any other error. The refusal is `conflict` with `details.code`
  * `move_needed` (and `details.from`, the place's name, when the box knows it).
  */
-export function moveNeeded(error: unknown): { from: string } | null {
+export function moveNeeded(error: unknown, locale?: string | null): { from: string } | null {
   if (!(error instanceof OperationError)) return null;
   const details = (error.details ?? {}) as { code?: unknown; from?: unknown };
   if (error.code !== 'move_needed' && details.code !== 'move_needed') return null;
   return {
-    from: typeof details.from === 'string' && details.from ? details.from : BACKUP_PLACES_TEXT.fromUnknown,
+    from:
+      typeof details.from === 'string' && details.from ? details.from : backupPlacesText(locale).fromUnknown,
   };
 }
 
@@ -330,12 +332,19 @@ export function placeSetNotes(result: {
   locationName?: string | null;
   appendOnly: 'verified' | 'not-enforced' | 'unknown';
   firstBackup: boolean;
+  locale?: string | null;
 }): string {
-  const where = result.locationName ? `${result.locationName} on ${result.destination}` : result.destination;
+  const W = backupPlacesText(result.locale);
+  const where = result.locationName
+    ? interpolate(clientTree(result.locale, BACKUP_PLACES_WORDS).doneWhere, {
+        location: result.locationName,
+        destination: result.destination,
+      })
+    : result.destination;
   return [
-    BACKUP_PLACES_TEXT.done(where),
-    result.appendOnly === 'verified' ? null : ACCOUNTS_TEXT.appendOnly[result.appendOnly],
-    result.firstBackup ? BACKUP_PLACES_TEXT.firstBackup : null,
+    W.done(where),
+    result.appendOnly === 'verified' ? null : accountsText(result.locale).appendOnly[result.appendOnly],
+    result.firstBackup ? W.firstBackup : null,
   ]
     .filter(Boolean)
     .join(' ');
@@ -352,13 +361,13 @@ const PLACE_REFUSALS: ReadonlySet<string> = new Set([
 ]);
 
 /** What a failed set-up or check says: the box's sentence for a step that failed, else the app's words. */
-export function placeErrorText(error: unknown): string {
+export function placeErrorText(error: unknown, locale?: string | null): string {
   if (error instanceof OperationError) {
-    if (error.code === 'deadline_exceeded') return BACKUP_PLACES_TEXT.slow;
+    if (error.code === 'deadline_exceeded') return backupPlacesText(locale).slow;
     const sentence = error.message.trim();
     if (PLACE_REFUSALS.has(error.code) && sentence && sentence !== 'Failed.') return sentence;
   }
-  return backupErrorText(error);
+  return backupErrorText(error, locale);
 }
 
 /**

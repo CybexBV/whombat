@@ -775,7 +775,7 @@ export function approvalView(approval: Approval, ctx: ApprovalViewContext): Appr
     ? `${tr.t('approval.needs.grant', { agent: R })}${grant.asks ? tr.t('approval.needs.grantAsks') : ''}`
     : n === 0
       ? tr.t('approval.needs.action', { agent: R, what: v.not })
-      : tr.tp('approval.needs.actionAfter', n, { agent: R, what: v.not, word: numberWord(tr, n) });
+      : tr.tp('approval.needs.actionAfter', n, { agent: R, what: v.not, countWord: numberWord(tr, n) });
   const durationText =
     approval.execution.durationMs !== null
       ? formatDuration(approval.execution.durationMs, locale)

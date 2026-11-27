@@ -8,7 +8,6 @@ import {
   addPage,
   addWidget,
   chooseWidget,
-  DESK_SCREENS_TEXT,
   type DeskCatalogItem,
   type DeskLayout,
   type DeskPageShow,
@@ -48,6 +47,8 @@ import {
 } from '@whombat/client/desk';
 import { type Grid, shapeKey } from '@whombat/screen';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { DESK_SCREENS_TEXT } from '../../../i18n/clientWords';
+import { currentLocale } from '../../../i18n/provider';
 
 const E = DESK_SCREENS_TEXT.editor;
 
@@ -191,7 +192,7 @@ export function useScreenEditor(
           : why === 'tooBig' && limits
             ? { w: limits.max[0], h: limits.max[1] }
             : undefined;
-      return refusalText(why, size, grow);
+      return refusalText(why, size, grow, currentLocale());
     };
     return {
       state,
@@ -218,7 +219,7 @@ export function useScreenEditor(
       move: (id, cell) => {
         const s = live.current;
         const r = moveWidget(s.draft, s.page, gridOf(s.draft), id, cell, view.current);
-        return r.ok ? moved(s, { ...r, id }) : refusalText(r.why);
+        return r.ok ? moved(s, { ...r, id }) : refusalText(r.why, undefined, undefined, currentLocale());
       },
       resize: (id, size) => {
         const s = live.current;
@@ -246,7 +247,11 @@ export function useScreenEditor(
       add(widget, name, at) {
         const s = live.current;
         const r = addWidget(s.draft, s.page, gridOf(s.draft), widget, at, view.current);
-        if (!r.ok) return { text: at ? E.refused.drop : refusalText(r.why), id: null };
+        if (!r.ok)
+          return {
+            text: at ? E.refused.drop : refusalText(r.why, undefined, undefined, currentLocale()),
+            id: null,
+          };
         set(commit(s, r.layout, { selected: r.id }));
         return { text: fillDeskWords(r.smaller ? E.addedSmaller : E.added, { name }), id: r.id };
       },
@@ -257,14 +262,14 @@ export function useScreenEditor(
       choose(id, item) {
         const s = live.current;
         const r = chooseWidget(s.draft, id, item);
-        if (!r.ok) return refusalText(r.why);
+        if (!r.ok) return refusalText(r.why, undefined, undefined, currentLocale());
         if (r.layout !== s.draft) set(commit(s, r.layout));
         return null;
       },
       tidy() {
         const s = live.current;
         const r = tidyPage(s.draft, s.page, gridOf(s.draft), view.current);
-        if (!r.ok) return refusalText(r.why);
+        if (!r.ok) return refusalText(r.why, undefined, undefined, currentLocale());
         if (r.moved === 0) return E.alreadyTidy;
         set(commit(s, r.layout));
         return E.tidied;
@@ -272,7 +277,7 @@ export function useScreenEditor(
       addPage() {
         const s = live.current;
         const r = addPage(s.draft, gridOf(s.draft));
-        if (!r.ok) return refusalText(r.why);
+        if (!r.ok) return refusalText(r.why, undefined, undefined, currentLocale());
         set({ ...commit(s, r.layout), page: r.index, selected: null });
         return E.newPage;
       },
@@ -290,7 +295,7 @@ export function useScreenEditor(
         const s = live.current;
         const name = s.draft.pages[index]?.name ?? '';
         const r = deletePage(s.draft, index);
-        if (!r.ok) return refusalText(r.why);
+        if (!r.ok) return refusalText(r.why, undefined, undefined, currentLocale());
         set({
           ...commit(s, r.layout),
           page: Math.max(0, Math.min(index, r.layout.pages.length - 1)),
@@ -305,7 +310,7 @@ export function useScreenEditor(
         if (next !== s.draft) set(commit(s, next));
         return {
           ok: true,
-          text: pageShowSaid(next.pages[index]?.name ?? '', next.pages[index]?.show ?? null),
+          text: pageShowSaid(next.pages[index]?.name ?? '', next.pages[index]?.show ?? null, currentLocale()),
         };
       },
       setSize(size) {
@@ -319,7 +324,7 @@ export function useScreenEditor(
         });
         const g = gridOf(layout);
         const p = editorPage(layout, s.page, g, view.current);
-        const grid = gridText(g.cols, g.rows);
+        const grid = gridText(g.cols, g.rows, currentLocale());
         if (!p.rearranged) return fillDeskWords(E.sizeOwn, { grid });
         return p.left.length
           ? fillDeskWords(E.sizeChangedLeft, { grid, n: p.left.length })

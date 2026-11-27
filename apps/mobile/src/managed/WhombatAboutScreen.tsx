@@ -16,7 +16,7 @@
 import { type RouteProp, useRoute } from '@react-navigation/native';
 import { TEAM_REPORT_WORDS } from '@whombat/client';
 import {
-  ACCOUNTS_TEXT,
+  accountsText,
   ago,
   type CheckedPreview,
   DIAGNOSTIC_SCOPE_LIST,
@@ -25,16 +25,16 @@ import {
   downloadDiagnostics,
   hasUpdateCheck,
   OWN_ADDRESS_TEXT,
-  OWN_NAME_TEXT,
   ownAddressCloudflareLine,
   ownAddressLeavingView,
   ownAddressRenameErrorText,
   ownAddressView,
   ownNameChosen,
   ownNameLine,
+  ownNameText,
   ownNameZoneOf,
   previewDiagnostics,
-  THIS_WHOMBAT_TEXT,
+  thisWhombatText,
   UPDATE_TEXT,
   updateCheckNotice,
   updateView,
@@ -184,7 +184,7 @@ export function WhombatAboutScreen() {
         onScrollBeginDrag={place.stop}
         contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
       >
-        <LargeTitle title={THIS_WHOMBAT_TEXT.parts.about} />
+        <LargeTitle title={thisWhombatText(rawLocale).parts.about} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }} onLayout={place.onContainer}>
           {/* What runs and how it is kept up to date, in one card: the versions, then the updates (waiting, failed, the
               last one with what it brought, AP-258) and their settings. */}
@@ -266,7 +266,7 @@ export function WhombatAboutScreen() {
           {status.ownAddress ? <OwnAddressCard own={status.ownAddress} onChanged={reload} /> : null}
 
           {policy.length > 0 ? (
-            <Card label={THIS_WHOMBAT_TEXT.turnedOff}>
+            <Card label={thisWhombatText(rawLocale).turnedOff}>
               {policy.map(([key, p], i) => (
                 <Row key={key} first={i === 0} dot="mut" title={p.reason ?? key} />
               ))}
@@ -276,7 +276,9 @@ export function WhombatAboutScreen() {
           {/* One row for the machine; every part is on the Hardware screen. */}
           <HardwareSummary
             machine={machine}
-            onOpen={() => navigation.navigate('WhombatHardware', { back: THIS_WHOMBAT_TEXT.parts.about })}
+            onOpen={() =>
+              navigation.navigate('WhombatHardware', { back: thisWhombatText(rawLocale).parts.about })
+            }
             {...(target === 'hardware' ? { onLayout: place.onCard } : {})}
           />
           {/* Help, last: remote help, a report to the Whombat Team, files for support. */}
@@ -291,7 +293,9 @@ export function WhombatAboutScreen() {
                 title={TEAM_REPORT_WORDS.entry}
                 body={TEAM_REPORT_WORDS.intro}
                 label={`${TEAM_REPORT_WORDS.entry}. ${TEAM_REPORT_WORDS.intro}`}
-                onPress={() => navigation.navigate('TeamReports', { back: THIS_WHOMBAT_TEXT.parts.about })}
+                onPress={() =>
+                  navigation.navigate('TeamReports', { back: thisWhombatText(rawLocale).parts.about })
+                }
               />
             </Card>
           ) : null}
@@ -324,8 +328,8 @@ function OwnAddressCard({
   const theme = useTheme();
   const v = ownAddressView(own, undefined, rawLocale);
   const t = OWN_ADDRESS_TEXT.settings;
-  const leaving = ownAddressLeavingView(own);
-  const cloudflare = ownAddressCloudflareLine(own.host);
+  const leaving = ownAddressLeavingView(own, undefined, undefined, rawLocale);
+  const cloudflare = ownAddressCloudflareLine(own.host, undefined, rawLocale);
   const [changing, setChanging] = useState(false);
   // What the box says now is what the next connection dials (a change made elsewhere included).
   const seen = managed.ownAddressSeen;
@@ -358,12 +362,16 @@ function OwnAddressCard({
             onDone={(next) => {
               setChanging(false);
               seen?.(next);
-              showNotice(OWN_NAME_TEXT.changed(next.host));
+              showNotice(ownNameText(rawLocale).changed(next.host));
               onChanged();
             }}
           />
         ) : (
-          <Button variant="secondary" label={OWN_NAME_TEXT.change} onPress={() => setChanging(true)} />
+          <Button
+            variant="secondary"
+            label={ownNameText(rawLocale).change}
+            onPress={() => setChanging(true)}
+          />
         )}
       </View>
     </Card>
@@ -380,9 +388,10 @@ function ChangeAddress({
   onCancel: () => void;
   onDone: (own: NonNullable<ApplianceStatus['ownAddress']>) => void;
 }) {
+  const { rawLocale } = useI18n();
   const { session } = useManagedOrThrow();
   const theme = useTheme();
-  const N = OWN_NAME_TEXT;
+  const N = ownNameText(rawLocale);
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -392,7 +401,7 @@ function ChangeAddress({
   );
   const label = ownNameChosen(check);
   const zone = ownNameZoneOf(check.kind === 'done' && check.host ? check.host : own.host);
-  const line = ownNameLine(check, zone);
+  const line = ownNameLine(check, zone, rawLocale);
   const lineColor =
     line?.tone === 'ok' ? theme.colors.ok : line?.tone === 'bad' ? theme.colors.bad : theme.colors.mut;
   const submit = async () => {
@@ -402,7 +411,7 @@ function ChangeAddress({
     try {
       onDone((await sessionOps.ownAddressRename(session, label)).ownAddress);
     } catch (error) {
-      setProblem(ownAddressRenameErrorText(error));
+      setProblem(ownAddressRenameErrorText(error, rawLocale));
       setBusy(false);
     }
   };
@@ -591,7 +600,7 @@ function Diagnostics() {
                   <Text size={13} weight={600}>
                     {t.scopeNames[scope] ?? scope}
                   </Text>
-                  {` · ${diagnosticScopeLine(scope, description)}`}
+                  {` · ${diagnosticScopeLine(scope, description, rawLocale)}`}
                 </Text>
               </Pressable>
             ))}
@@ -608,7 +617,7 @@ function Diagnostics() {
               }
             />
             <Button
-              label={ACCOUNTS_TEXT.cancel}
+              label={accountsText(rawLocale).cancel}
               variant="quiet"
               disabled={busy}
               onPress={() => setMaking(false)}
@@ -616,7 +625,7 @@ function Diagnostics() {
           </>
         ) : (
           <Button
-            label={THIS_WHOMBAT_TEXT.diagnostics.make}
+            label={thisWhombatText(rawLocale).diagnostics.make}
             variant="secondary"
             onPress={() => {
               setNote(null);

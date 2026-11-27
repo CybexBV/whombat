@@ -8,7 +8,7 @@
 
 import { agentSettingsView, agentUpdateWords, commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { useHostAgentSettings, useHostsChange, useHostsStatus } from '@whombat/client/hosts/react';
-import { MANAGED_TEXT } from '@whombat/client/managed';
+import { managedText } from '@whombat/client/managed';
 import { api } from '@whombat/core';
 import { Alert, Switch, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -91,10 +91,11 @@ export function AgentUpdatesSwitchRow({ first = false }: { first?: boolean }) {
 
 /** UPDATES with the switch alone (This Whombat of a self-hosted server or the demo world). */
 export function AgentUpdatesSwitchCard() {
+  const { rawLocale } = useI18n();
   const { settings } = useAgentSettings();
   if (!settings) return null;
   return (
-    <Card label={MANAGED_TEXT.updates}>
+    <Card label={managedText(rawLocale).updates}>
       <AgentUpdatesSwitchRow first />
     </Card>
   );

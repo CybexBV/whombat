@@ -19,7 +19,6 @@ import {
   settingsHomeRows,
   THEME_CHOICES,
 } from '@whombat/client';
-import { DESK_TEXT } from '@whombat/client/desk';
 import { whombatOverview } from '@whombat/client/managed';
 import { placeNewsShown, usePreferences, useSessionProtocol, useTheAgent } from '@whombat/client/react';
 import { sessionOps } from '@whombat/client/session';
@@ -45,7 +44,8 @@ import { cx } from '../../components/cx';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
 import { Toggle } from '../../components/Toggle';
-import { useWebI18n } from '../../i18n/provider';
+import { DESK_TEXT } from '../../i18n/clientWords';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useSettingsHomeText, useThemeWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { useDeskUnlockHere } from '../desk/useDeskHere';
@@ -243,6 +243,7 @@ function useApplianceNeeds(burrow: string, agent: string): { known: boolean; ite
       passkeys,
       access: null,
       agent,
+      locale: currentLocale(),
     });
     const desk: NeedsItem[] = asking ? [{ key: 'desk', dot: 'warn', title: DESK_TEXT.unlock.title }] : [];
     return {
@@ -349,24 +350,20 @@ function ThemeRow() {
   );
 }
 
-const MOVING_FACES = {
-  title: 'Moving faces',
-  line: 'Faces blink and show what your agents are doing.',
-};
-
 /**
  * Moving faces: this device's switch for the agents' live faces. Off, or with the system's reduce motion, a face still
  * changes its expression but nothing moves. The whole row switches it.
  */
 function MovingFacesRow() {
+  const { t } = useWebI18n();
   const [on, setOn] = useFaceMotionSetting();
   const id = useId();
   return (
     <label className={p.row} htmlFor={id} data-settings-row="moving-faces">
       <PlaceRowBody
         icon={Smile}
-        name={MOVING_FACES.title}
-        line={MOVING_FACES.line}
+        name={t('settings.movingFaces.title')}
+        line={t('settings.movingFaces.line')}
         nameId={`${id}-name`}
         lineId={`${id}-line`}
         end={

@@ -21,20 +21,20 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { BACKUP_FILE_TEXT } from '@whombat/client';
 import {
-  ACCOUNTS_TEXT,
+  accountsText,
   ago,
   BACKUP_KINDS,
-  BACKUP_OPTIONS_TEXT,
   backupBlocksText,
   backupDetailLines,
   backupFixText,
   backupHero,
+  backupOptionsText,
   backupPageShown,
   bringBackLaterOffered,
   coverageGaps,
   earlierPlacesLine,
   scopeLabels,
-  THIS_WHOMBAT_TEXT,
+  thisWhombatText,
 } from '@whombat/client/managed';
 import {
   useBackupCheckpoints,
@@ -106,6 +106,7 @@ function BackupsParts({
   onChanged?: () => void;
   children?: ReactNode;
 }) {
+  const { rawLocale } = useI18n();
   const navigation = useNavigation<Props['navigation']>();
   const agent = useAgentWords();
   const { slug } = useBurrowBase();
@@ -125,6 +126,7 @@ function BackupsParts({
   const [paperError, setPaperError] = useState<string | null>(null);
   const list = checkpoints.data ?? null;
   const hero = backupHero({
+    locale: rawLocale,
     status: service.data?.status ?? null,
     summary: service.data?.summary ?? null,
     policy: policy.data?.policy ?? null,
@@ -146,7 +148,7 @@ function BackupsParts({
       await reload();
       onChanged?.();
     } catch (error) {
-      setNote(backupErrorText(error));
+      setNote(backupErrorText(error, rawLocale));
     } finally {
       setBusy(false);
     }
@@ -154,10 +156,13 @@ function BackupsParts({
   // *Ask {assistant} to fix it*: what is wrong goes to the assistant in its own thread, as the Inbox's button does.
   const askFix = async () => {
     setNote(null);
-    const result = await start.mutateAsync({ text: backupFixText(hero) }).catch(() => null);
+    const result = await start.mutateAsync({ text: backupFixText(hero, rawLocale) }).catch(() => null);
     if (result?.status === 'ok')
-      navigateTo(navigation as never, startedChatRoute(result.data, THIS_WHOMBAT_TEXT.parts.backups));
-    else setNote(backupErrorText(null));
+      navigateTo(
+        navigation as never,
+        startedChatRoute(result.data, thisWhombatText(rawLocale).parts.backups),
+      );
+    else setNote(backupErrorText(null, rawLocale));
   };
   const makePaper = async (way: 'print' | 'file') => {
     if (!paper) return;
@@ -167,7 +172,7 @@ function BackupsParts({
       await paper(way);
       await reload();
     } catch {
-      setPaperError(BACKUP_OPTIONS_TEXT.paper.failed);
+      setPaperError(backupOptionsText(rawLocale).paper.failed);
     } finally {
       setPaperBusy(false);
     }
@@ -182,7 +187,7 @@ function BackupsParts({
         onBackUpNow={() => void runNow()}
         onOptions={policy.data ? () => navigation.navigate('BackupOptions') : null}
         askFix={{
-          label: BACKUP_OPTIONS_TEXT.askFix(agent.name),
+          label: backupOptionsText(rawLocale).askFix(agent.name),
           busy: start.isPending,
           onPress: () => void askFix(),
         }}
@@ -202,10 +207,11 @@ function BackupsParts({
           onOpen={(checkpointId) => navigation.navigate('BackupDetail', { checkpointId })}
         />
       ) : null}
-      {list ? <BackupEarlierLine text={earlierPlacesLine(notes.data?.earlierPlaces)} /> : null}
+      {list ? <BackupEarlierLine text={earlierPlacesLine(notes.data?.earlierPlaces, rawLocale)} /> : null}
       <BackupDustyLine agent={agent.name} />
       <BackupDetailsCard
         lines={backupDetailLines({
+          locale: rawLocale,
           status: service.data?.status ?? null,
           clearedBy: policy.data?.clearedBy ?? null,
           placeName,
@@ -216,8 +222,8 @@ function BackupsParts({
           newest
             ? () =>
                 check.mutate(newest.id, {
-                  onSuccess: () => setCheckNote(BACKUP_OPTIONS_TEXT.detail.checkQueued),
-                  onError: (e) => setCheckNote(backupErrorText(e)),
+                  onSuccess: () => setCheckNote(backupOptionsText(rawLocale).detail.checkQueued),
+                  onError: (e) => setCheckNote(backupErrorText(e, rawLocale)),
                 })
             : null
         }
@@ -250,7 +256,7 @@ function DemoBackups({ navigation }: Props) {
     <Screen>
       <BackBar label={managedCopyHere.whombat.title} onPress={() => navigation.goBack()} />
       <ScrollView contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}>
-        <LargeTitle title={THIS_WHOMBAT_TEXT.parts.backups} />
+        <LargeTitle title={thisWhombatText(rawLocale).parts.backups} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
           {session ? (
             <BackupsParts session={session} passkey={null} paper={null} />
@@ -334,13 +340,14 @@ function ManagedBackups({ route, navigation }: Props) {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
         >
-          <LargeTitle title={THIS_WHOMBAT_TEXT.parts.backups} />
+          <LargeTitle title={thisWhombatText(rawLocale).parts.backups} />
           <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
             <BackupsParts
               session={managed.session}
               passkey={tap}
               paper={(way) =>
                 sharePaperCopy({
+                  locale: rawLocale,
                   session: managed.session,
                   way,
                   name,
@@ -379,7 +386,7 @@ function ManagedBackups({ route, navigation }: Props) {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: 40 + bottomRoom }}
       >
-        <LargeTitle title={THIS_WHOMBAT_TEXT.parts.backups} />
+        <LargeTitle title={thisWhombatText(rawLocale).parts.backups} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
           <Card label={managedTextHere.backups}>
             <Row
@@ -466,9 +473,10 @@ function ManagedBackups({ route, navigation }: Props) {
 
 /** “Bring back a Whombat you had”, while this one started fresh (backup-options.md BKO-29): its flow asks first. */
 function BringBackLaterCard({ onPress }: { onPress: () => void }) {
-  const L = BACKUP_OPTIONS_TEXT.later;
+  const { rawLocale } = useI18n();
+  const L = backupOptionsText(rawLocale).later;
   return (
-    <Card label={BACKUP_OPTIONS_TEXT.bringBack.kicker}>
+    <Card label={backupOptionsText(rawLocale).bringBack.kicker}>
       <Row
         first
         title={L.title}
@@ -525,6 +533,7 @@ function BackupActions({
   /** Only choosing where they go (the new page has Back up now in its top card). */
   where?: boolean;
 }) {
+  const { rawLocale } = useI18n();
   const { session } = useManagedOrThrow();
   const kinds = BACKUP_KINDS;
   const [open, setOpen] = useState(openAtFirst);
@@ -537,9 +546,9 @@ function BackupActions({
     setNotes([]);
     try {
       await sessionOps.backupRunNow(session);
-      setNotes([ACCOUNTS_TEXT.backedUp]);
+      setNotes([accountsText(rawLocale).backedUp]);
     } catch (error) {
-      setNotes([backupErrorText(error)]);
+      setNotes([backupErrorText(error, rawLocale)]);
     } finally {
       setBusy(false);
     }
@@ -553,12 +562,16 @@ function BackupActions({
           kinds={kinds}
           onSaved={(result) => {
             setOpen(false);
-            setNotes(savedNotes(result));
+            setNotes(savedNotes(result, rawLocale));
             setKitNeeded(!!onKit);
             onChanged();
           }}
           extraActions={
-            <Button label={ACCOUNTS_TEXT.cancel} variant="secondary" onPress={() => setOpen(false)} />
+            <Button
+              label={accountsText(rawLocale).cancel}
+              variant="secondary"
+              onPress={() => setOpen(false)}
+            />
           }
         />
       ) : (
@@ -568,14 +581,14 @@ function BackupActions({
           ))}
           {kitNeeded && onKit ? (
             <>
-              <Note text={ACCOUNTS_TEXT.newKit} />
-              <Button label={ACCOUNTS_TEXT.saveKit} variant="secondary" onPress={onKit} />
+              <Note text={accountsText(rawLocale).newKit} />
+              <Button label={accountsText(rawLocale).saveKit} variant="secondary" onPress={onKit} />
             </>
           ) : null}
-          <Button label={ACCOUNTS_TEXT.setUp} variant="secondary" onPress={() => setOpen(true)} />
+          <Button label={accountsText(rawLocale).setUp} variant="secondary" onPress={() => setOpen(true)} />
           {!unprotected && !where ? (
             <Button
-              label={ACCOUNTS_TEXT.runNow}
+              label={accountsText(rawLocale).runNow}
               variant="secondary"
               busy={busy}
               onPress={() => void runNow()}

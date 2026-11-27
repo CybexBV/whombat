@@ -1,4 +1,7 @@
+import { interpolate } from '@whombat/core/i18n';
 import type { PasskeySummary } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { ONE_PASSKEY_WORDS } from '../i18n/messages/onePasskey';
 import { OperationError, sessionOps } from '../session/managed-ops';
 import type { ApplianceSession, ConnectionState } from '../session/types';
 import type { ControlApi } from './control';
@@ -13,33 +16,40 @@ import {
 } from './passkeys';
 import type { ManagedWhombats } from './switcher';
 
-export const ONE_PASSKEY_TEXT = {
-  action: 'Finish setup',
-  intro:
-    'Use the same passkey for your account, every Whombat and your backups. Each Whombat checks access and its saved backups.',
-  checking: 'Checking your passkey…',
-  cancelled:
-    'The check stopped. Choose “Finish setup” to continue with the same passkey. Your existing access has been kept.',
-  ready: 'Your passkey is ready on all your Whombats.',
-  removed: (names: string[]) =>
-    `Retired: ${names.map((name) => `“${name}”`).join(', ')}. You can delete their old items from your password manager. Keep the shared passkey you just used.`,
-  kept: 'Keep your older passkeys for now. Some still protect saved backup details or open a Whombat that hasn’t been checked.',
-  pending: 'Your passkey is saved. Still to check:',
-} as const;
+/** One passkey's words, in a locale (English when none is given). */
+export function onePasskeyText(locale?: string | null) {
+  const {
+    steps: _steps,
+    why: _why,
+    backupsUnlocked: _u,
+    backupsChecked: _c,
+    progress: _progress,
+    thisWhombat: _this,
+    ...w
+  } = clientTree(locale, ONE_PASSKEY_WORDS);
+  return {
+    ...w,
+    removed: (names: string[]) =>
+      interpolate(w.removed, { names: names.map((name) => `“${name}”`).join(', ') }),
+  };
+}
+
+export const ONE_PASSKEY_TEXT = onePasskeyText('en');
 
 /** Visible before every provider request, shared by the web and phone. */
-export function passkeySetupWords(step: PasskeySetupStep): string {
+export function passkeySetupWords(step: PasskeySetupStep, locale?: string | null): string {
+  const w = clientTree(locale, ONE_PASSKEY_WORDS).steps;
   switch (step) {
     case 'create':
-      return 'Save your passkey in your password manager.';
+      return w.create;
     case 'unlock':
-      return 'Touch your passkey to prepare access.';
+      return w.unlock;
     case 'link':
-      return 'Touch your passkey to check access.';
+      return w.link;
     case 'link-and-verify':
-      return 'Touch your passkey to check access and saved backups.';
+      return w.linkAndVerify;
     case 'verify':
-      return 'Touch your passkey to check the saved backup details.';
+      return w.verify;
   }
 }
 
@@ -75,6 +85,8 @@ interface Input {
   /** A bounded connection wait; tests inject a short deadline. */
   connectTimeoutMs?: number;
   onProgress?: (note: string) => void;
+  /** The language of the progress notes (English when none is given). */
+  locale?: string | null;
 }
 
 /** Wait for an enrolled, pinned application session, without leaving an offline Whombat reconnecting forever. */
@@ -161,7 +173,12 @@ export async function setUpOnePasskey(input: Input): Promise<OnePasskeyResult> {
     for (const target of targets) {
       const progress = (step: PasskeySetupStep) =>
         input.onProgress?.(
-          `${target.name ?? 'This Whombat'} · Whombat ${targets.indexOf(target) + 1} of ${targets.length}. ${passkeySetupWords(step)}`,
+          interpolate(clientTree(input.locale, ONE_PASSKEY_WORDS).progress, {
+            name: target.name ?? clientTree(input.locale, ONE_PASSKEY_WORDS).thisWhombat,
+            index: targets.indexOf(target) + 1,
+            total: targets.length,
+            step: passkeySetupWords(step, input.locale),
+          }),
         );
       const here = target.contentPeerId === input.appliance;
       let session: ApplianceSession | null = here ? input.session : null;
@@ -258,31 +275,25 @@ export async function setUpOnePasskey(input: Input): Promise<OnePasskeyResult> {
   }
 }
 
-export function onePasskeyWords(result: OnePasskeyResult): string {
+export function onePasskeyWords(result: OnePasskeyResult, locale?: string | null): string {
+  const w = clientTree(locale, ONE_PASSKEY_WORDS);
+  const text = onePasskeyText(locale);
   const pending = result.pending.map(
     ({ name, reason }) =>
       `${name} (${
         reason === 'setup'
-          ? 'set up this device there first'
+          ? w.why.setup
           : reason === 'backups'
-            ? 'backup details are being saved; try again in a moment'
+            ? w.why.backups
             : reason === 'offline'
-              ? 'bring it online, then try again'
-              : 'the check didn’t finish; try again'
+              ? w.why.offline
+              : w.why.other
       })`,
   );
   return [
-    pending.length ? `${ONE_PASSKEY_TEXT.pending} ${pending.join(', ')}.` : ONE_PASSKEY_TEXT.ready,
-    result.backupsChecked.length > 0
-      ? pending.length
-        ? 'Backups on the Whombats checked are unlocked by this passkey.'
-        : 'Your backups have been checked with this passkey.'
-      : '',
-    result.kept.length
-      ? ONE_PASSKEY_TEXT.kept
-      : result.retired.length
-        ? ONE_PASSKEY_TEXT.removed(result.retired)
-        : '',
+    pending.length ? `${text.pending} ${pending.join(', ')}.` : text.ready,
+    result.backupsChecked.length > 0 ? (pending.length ? w.backupsUnlocked : w.backupsChecked) : '',
+    result.kept.length ? text.kept : result.retired.length ? text.removed(result.retired) : '',
   ]
     .filter(Boolean)
     .join(' ');

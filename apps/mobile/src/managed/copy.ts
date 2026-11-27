@@ -5,7 +5,7 @@
  */
 
 import { clientTranslator } from '@whombat/client/i18n';
-import { claimStepKicker, COPY as SHARED, MANAGED_TEXT as SHARED_STATUS } from '@whombat/client/managed';
+import { claimStepKicker, COPY as SHARED, managedText as sharedStatus } from '@whombat/client/managed';
 import { VERSION_REFUSAL_COPY } from '@whombat/protocol/session';
 import { mobileTranslator } from '../i18n/translate';
 
@@ -358,7 +358,7 @@ export const COPY = managedCopy();
 export function managedText(locale?: string) {
   const { t } = mobileTranslator(locale);
   return {
-    ...SHARED_STATUS,
+    ...sharedStatus(locale),
     thisBrowser: t('copy.managedText.thisBrowser'),
     addHelp: t('copy.managedText.addHelp'),
   } as const;

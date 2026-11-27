@@ -100,7 +100,7 @@ function Screen({
   const [own, setOwn] = useState<ScreenPart | undefined>(undefined);
   // The pairing line under “The screen isn’t paired” goes by the clock.
   const now = useDeskClock(Boolean(screen.pairing), 15_000);
-  const v = deskSectionView(screen, { assistant, timeZone, now });
+  const v = deskSectionView(screen, { assistant, timeZone, now, locale: currentLocale() });
   const parts = screenParts(screen, widgets);
   const open = screenPartOpen(parts, onPartChange ? part : own);
   const line = screen.paired

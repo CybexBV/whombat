@@ -3,6 +3,7 @@
  * subscribe/unsubscribe with a VAPID key, and turn a `PushSubscription` into the request body
  * `devices.register` expects. Pure browser-API wrappers, no React — `useWebPush.ts` is the hook.
  */
+import { DEFAULT_LANGUAGE, resolveLanguage, type SupportedLanguage } from '@whombat/core/i18n';
 
 /** `'serviceWorker' in navigator && 'PushManager' in window`, safe to call anywhere (incl. SSR-less tests). */
 export function isPushSupported(): boolean {
@@ -24,15 +25,24 @@ export function urlBase64ToUint8Array(base64: string): Uint8Array {
   return bytes;
 }
 
-/** The language the service worker writes notifications without a preview in (it can't read `localStorage`). */
-let workerLanguage: 'en' | 'nl' = 'en';
+/**
+ * The language the service worker was last told, or null before the page has told it anything: the first language this
+ * page shows is always sent, so a worker another tab or device left in Dutch switches back to English too.
+ */
+let workerLanguage: SupportedLanguage | null = null;
+
+/** The worker's language from any tag: a supported language, else English. */
+function workerLanguageOf(language: string | null | undefined): SupportedLanguage {
+  return resolveLanguage(language);
+}
 
 /**
- * The worker's script address: `/sw.js` in English, `/sw.js?lang=nl` in Dutch, so a worker started fresh by a push
- * (no page open) still knows the language.
+ * The worker's script address: `/sw.js` in English, `/sw.js?lang=<language>` otherwise, so a worker started fresh by a
+ * push (no page open) still knows the language.
  */
-export function serviceWorkerUrl(language: 'en' | 'nl' = workerLanguage): string {
-  return language === 'nl' ? '/sw.js?lang=nl' : '/sw.js';
+export function serviceWorkerUrl(language: string | null = workerLanguage): string {
+  const clean = workerLanguageOf(language);
+  return clean === DEFAULT_LANGUAGE ? '/sw.js' : `/sw.js?lang=${clean}`;
 }
 
 /** Registers (or reuses) the shell's service worker. Idempotent — the browser dedupes by script URL. */
@@ -44,21 +54,27 @@ export function registerServiceWorker(): Promise<ServiceWorkerRegistration> {
  * Tells the service worker which language to use: kept for the next registration, and sent to a worker that is
  * already running (`{type: 'locale', lang}`), which keeps it in its own cache for the next start.
  */
-export function setServiceWorkerLanguage(language: 'en' | 'nl'): void {
-  const changed = language !== workerLanguage;
-  workerLanguage = language;
-  if (!changed || !isPushSupported()) return;
-  void (async () => {
+export function setServiceWorkerLanguage(language: string): Promise<void> {
+  const next = workerLanguageOf(language);
+  const changed = next !== workerLanguage;
+  workerLanguage = next;
+  if (!changed || !isPushSupported()) return Promise.resolve();
+  return (async () => {
     try {
       const registration = await navigator.serviceWorker.getRegistration('/sw.js');
       if (!registration) return;
-      registration.active?.postMessage({ type: 'locale', lang: language });
+      registration.active?.postMessage({ type: 'locale', lang: next });
       // Register again under the new address so a fresh worker starts in this language too.
-      await navigator.serviceWorker.register(serviceWorkerUrl(language));
+      await navigator.serviceWorker.register(serviceWorkerUrl(next));
     } catch {
       // No worker yet: the next registration uses the new address.
     }
   })();
+}
+
+/** Forgets what the worker was told, for tests. */
+export function resetServiceWorkerLanguageForTests(): void {
+  workerLanguage = null;
 }
 
 /** The existing push subscription for this browser, if any, without prompting for permission. */

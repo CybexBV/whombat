@@ -12,7 +12,7 @@
 
 import { z } from 'zod';
 import { FEEDBACK_REFERENCE_ALPHABET } from '../feedback/install.js';
-import { coreTree, type WordTree } from '../i18n/catalog.js';
+import { coreTree, tCore, type WordTree } from '../i18n/catalog.js';
 import { type DateInput, daysAgo, formatClock, formatDate, formatShortWeekday } from '../text/time.js';
 import { deskText } from './desk.js';
 
@@ -316,13 +316,17 @@ export function fillRemoteHelpWords(
 }
 
 /** “Look”, “Look and fix”. */
-export function remoteHelpLevelLabel(level: RemoteHelpLevel): string {
-  return REMOTE_HELP_WORDS.levels[level].label;
+export function remoteHelpLevelLabel(level: RemoteHelpLevel, locale?: string | null): string {
+  return remoteHelpWords(locale).levels[level].label;
 }
 
 /** “Whombat support can look and fix for 1 hour.”, “… until you stop it.” */
-export function remoteHelpConfirmText(level: RemoteHelpLevel, duration: RemoteHelpDuration): string {
-  const c = REMOTE_HELP_WORDS.confirm;
+export function remoteHelpConfirmText(
+  level: RemoteHelpLevel,
+  duration: RemoteHelpDuration,
+  locale?: string | null,
+): string {
+  const c = remoteHelpWords(locale).confirm;
   return fillRemoteHelpWords(c.body, { level: c.levels[level], duration: c.durations[duration] });
 }
 
@@ -330,12 +334,17 @@ export function remoteHelpConfirmText(level: RemoteHelpLevel, duration: RemoteHe
  * When a grant ends, in the zone's clock: today the clock (“14:00”), “tomorrow 14:00”, otherwise the short weekday and
  * date (“Thu 23 Oct, 14:00”, with the year when it isn't now's).
  */
-export function remoteHelpUntilText(until: DateInput, now: DateInput, timeZone = 'UTC'): string {
+export function remoteHelpUntilText(
+  until: DateInput,
+  now: DateInput,
+  timeZone = 'UTC',
+  locale?: string | null,
+): string {
   const clock = formatClock(until, timeZone);
   const days = -daysAgo(until, now, timeZone);
   if (days <= 0) return clock;
-  if (days === 1) return `tomorrow ${clock}`;
-  return `${formatShortWeekday(until, timeZone)} ${formatDate(until, timeZone, { now })}, ${clock}`;
+  if (days === 1) return `${tCore(locale, 'time.tomorrowLower')} ${clock}`;
+  return `${formatShortWeekday(until, timeZone, locale)} ${formatDate(until, timeZone, { now }, locale)}, ${clock}`;
 }
 
 /**
@@ -347,13 +356,14 @@ export function remoteHelpStateLine(s: {
   until: string | null;
   now: Date;
   timeZone?: string;
+  locale?: string | null;
 }): string {
-  const w = REMOTE_HELP_WORDS.state;
+  const w = remoteHelpWords(s.locale).state;
   const when =
     s.until === null
       ? w.forever
-      : fillRemoteHelpWords(w.until, { time: remoteHelpUntilText(s.until, s.now, s.timeZone) });
-  return `${w.on} · ${remoteHelpLevelLabel(s.level)} · ${when}`;
+      : fillRemoteHelpWords(w.until, { time: remoteHelpUntilText(s.until, s.now, s.timeZone, s.locale) });
+  return `${w.on} · ${remoteHelpLevelLabel(s.level, s.locale)} · ${when}`;
 }
 
 /** The desk's line: “Remote help is on · until 14:00”, “… · until tomorrow 14:00”, “Remote help is on · forever”. */
@@ -394,8 +404,8 @@ export function remoteHelpTurnedOnText(level: RemoteHelpLevel, duration: RemoteH
 }
 
 /** The words of a refusal's `details.code`, or null for a code remote help doesn't name. */
-export function remoteHelpRefusalText(code: string): string | null {
-  const r: Readonly<Record<string, string>> = REMOTE_HELP_WORDS.refusals;
+export function remoteHelpRefusalText(code: string, locale?: string | null): string | null {
+  const r: Readonly<Record<string, string>> = remoteHelpWords(locale).refusals;
   return Object.hasOwn(r, code) ? (r[code] ?? null) : null;
 }
 
@@ -421,9 +431,12 @@ export function remoteHelpWho(keyId: string): string {
   return name === '' ? REMOTE_HELP_WORDS.someone : name;
 }
 
-function joinAnd(parts: readonly string[]): string {
+function joinAnd(parts: readonly string[], locale?: string | null): string {
   if (parts.length <= 1) return parts[0] ?? '';
-  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
+  return tCore(locale, 'recipe.and', {
+    items: parts.slice(0, -1).join(', '),
+    last: parts[parts.length - 1] ?? '',
+  });
 }
 
 /** What `remoteHelpStepText` reads of a step (`RemoteHelpStep` of `@whombat/protocol/session` is one). */
@@ -442,8 +455,8 @@ export interface RemoteHelpStepView {
  * “Used a command line for 3 minutes”, “Restarted voice”, “Opened a connection to 127.0.0.1:8123”, “Was stopped: that
  * needs Look and fix”, “Typed a wrong help code”. `who` names the visitor.
  */
-export function remoteHelpStepText(step: RemoteHelpStepView, who: string): string {
-  const s = REMOTE_HELP_WORDS.steps;
+export function remoteHelpStepText(step: RemoteHelpStepView, who: string, locale?: string | null): string {
+  const s = remoteHelpWords(locale).steps;
   switch (step.kind) {
     case 'connected':
       return fillRemoteHelpWords(s.connected, { who });
@@ -452,7 +465,7 @@ export function remoteHelpStepText(step: RemoteHelpStepView, who: string): strin
     case 'look': {
       const command = step.command ?? 'help';
       if (command === 'logs' && step.units && step.units.length > 0)
-        return fillRemoteHelpWords(s.logsOf, { names: joinAnd(step.units.map(remoteHelpUnitName)) });
+        return fillRemoteHelpWords(s.logsOf, { names: joinAnd(step.units.map(remoteHelpUnitName), locale) });
       return s.look[command];
     }
     case 'exec':

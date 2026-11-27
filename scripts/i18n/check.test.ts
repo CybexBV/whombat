@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sourceHash } from '../../packages/core/src/i18n/engine';
 import { checkAllCatalogs, validateCatalogs } from './check';
-import { lintLiterals } from './lint-literals';
+import { countLiterals, lintLiterals } from './lint-literals';
 import { parsePo, serializePo } from './po';
 import { loadCatalogs } from './registry';
 
@@ -42,6 +42,34 @@ describe('i18n catalogs', () => {
     expect(res.errors.some((e) => e.includes('placeholders'))).toBe(true);
     expect(res.errors.some((e) => e.includes('missing plural form "one"'))).toBe(true);
     expect(res.errors.some((e) => e.includes('English source changed'))).toBe(true);
+  });
+
+  it('lets a plural form drop only the count, never another placeholder', () => {
+    const check = (one: string) =>
+      validateCatalogs(
+        [
+          {
+            name: 'sample',
+            en: { items: { one: 'One item for {name}', other: '{count} items for {name}' } },
+            locales: { nl: { items: { one, other: '{count} items voor {name}' } } },
+          },
+        ],
+        null,
+      ).errors;
+    expect(check('Eén item')).toEqual([expect.stringContaining('drops placeholder {name}')]);
+    expect(check('Eén item voor {name}')).toEqual([]);
+
+    const english = validateCatalogs(
+      [
+        {
+          name: 'sample',
+          en: { items: { one: 'One item', other: '{count} items for {name}' } },
+          locales: { nl: { items: { one: 'Eén item voor {name}', other: '{count} items voor {name}' } } },
+        },
+      ],
+      null,
+    ).errors;
+    expect(english).toEqual([expect.stringContaining('[en.one]: drops placeholder {name}')]);
   });
 
   it('hashes each message once and catches orphan hashes', () => {
@@ -144,6 +172,20 @@ describe('i18n literal lint', () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  });
+
+  it('counts short JSX text and object-literal copy, not identifiers or code', () => {
+    expect(countLiterals('<button>Send keys</button>', true)).toBe(1);
+    expect(countLiterals('<Text accessibilityLabel="Moving faces" />', true)).toBe(1);
+    expect(
+      countLiterals(
+        "const row = { label: 'Send keys', title: \"Moving faces\", hint: 'A device asks' };",
+        false,
+      ),
+    ).toBe(3);
+    expect(countLiterals("const row = { label: 'send_keys', title: 'API', empty: '' };", false)).toBe(0);
+    expect(countLiterals('<span>OK</span><code>{x}</code>', true)).toBe(0);
+    expect(countLiterals('<button>Send keys</button>', false)).toBe(0);
   });
 
   it('finds no regressions across the repository', () => {

@@ -8,7 +8,7 @@
 
 import {
   accountOf,
-  BACKUP_OPTIONS_TEXT,
+  backupOptionsText,
   type ControlApi,
   confirmationSignature,
   type KitBackup,
@@ -45,8 +45,6 @@ import { managedCopy } from './copy';
 import { phoneLabel } from './env';
 import { ErrorLine, Frame, Note } from './ui';
 
-const K = BACKUP_OPTIONS_TEXT.kit;
-
 /** Shares the kit's print page (an HTML file the share sheet hands to a browser or a printer app; AP-6857). */
 export interface KitPrinter {
   print(fileName: string, html: string): Promise<void>;
@@ -72,6 +70,7 @@ export interface KitWaysProps {
 
 export function KitWays(props: KitWaysProps) {
   const { rawLocale } = useI18n();
+  const K = backupOptionsText(rawLocale).kit;
   const managedCopyHere = managedCopy(rawLocale);
 
   const { session, control, platform, appliancePeerId } = props;
@@ -119,6 +118,7 @@ export function KitWays(props: KitWaysProps) {
   const lock = async (kitTextNow: string, generation: number): Promise<boolean> => {
     if (!platform || !control) return false;
     const added = await setUpOnePasskey({
+      locale: rawLocale,
       session,
       control,
       platform,
@@ -164,7 +164,12 @@ export function KitWays(props: KitWaysProps) {
         try {
           await props.printer.print(
             `whombat-recovery-kit-${props.device}.html`,
-            kitPrintHtml({ name: props.applianceName, kitText: t, qrPayload: kitQrPayload(t) }),
+            kitPrintHtml({
+              name: props.applianceName,
+              kitText: t,
+              qrPayload: kitQrPayload(t),
+              locale: rawLocale,
+            }),
           );
         } catch {
           setError(BACKUP_PHONE_TEXT.printFailed);
@@ -189,7 +194,7 @@ export function KitWays(props: KitWaysProps) {
     }
   };
 
-  const primary = kitPrimary(ways);
+  const primary = kitPrimary(ways, rawLocale);
   const back = props.onBack ? { back: { label: BACKUP_PHONE_TEXT.back, onPress: props.onBack } } : {};
 
   if (kept)
@@ -223,7 +228,7 @@ export function KitWays(props: KitWaysProps) {
       {ways.passkey && hasPasskey === false ? <Note text={K.noPasskey(props.applianceName)} /> : null}
       <ErrorLine text={error} />
       <Button
-        label={primary ?? BACKUP_OPTIONS_TEXT.dialog.save}
+        label={primary ?? backupOptionsText(rawLocale).dialog.save}
         size="lg"
         busy={busy || (!ready && !error)}
         disabled={!primary || !ready}
@@ -234,6 +239,8 @@ export function KitWays(props: KitWaysProps) {
 }
 
 function WaysCard({ ways, prf, onChange }: { ways: Ways; prf: boolean; onChange: (w: Ways) => void }) {
+  const { rawLocale } = useI18n();
+  const K = backupOptionsText(rawLocale).kit;
   const theme = useTheme();
   const rows: { key: keyof Ways; icon: LucideIcon; title: string; meta: string; tag?: string }[] = [
     ...(prf
@@ -243,7 +250,7 @@ function WaysCard({ ways, prf, onChange }: { ways: Ways; prf: boolean; onChange:
             icon: UserKey,
             title: K.passkey,
             meta: K.passkeyMeta,
-            tag: BACKUP_OPTIONS_TEXT.dialog.recommended,
+            tag: backupOptionsText(rawLocale).dialog.recommended,
           },
         ]
       : []),

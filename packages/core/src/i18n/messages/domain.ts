@@ -267,6 +267,41 @@ export const DOMAIN_MESSAGES = splitPairs({
   'backupLook.category.vault': ['Vault', 'Kluis'],
   'backupLook.category.memories': ['Memories', 'Herinneringen'],
   'backupLook.category.skills': ['Skills', 'Vaardigheden'],
+  'backupLook.done.one': ['“{title}” is back.', '“{title}” is terug.'],
+  'backupLook.done.back': [
+    { one: '1 thing is back.', other: '{count} things are back.' },
+    { one: '1 ding is terug.', other: '{count} dingen zijn terug.' },
+  ],
+  'backupLook.done.alreadyAll': [
+    {
+      one: 'It was already here, so nothing changed.',
+      other: 'All {count} were already here, so nothing changed.',
+    },
+    {
+      one: 'Het stond er al, dus er is niets veranderd.',
+      other: 'Alle {count} stonden er al, dus er is niets veranderd.',
+    },
+  ],
+  'backupLook.done.already': [
+    { one: '1 was already here.', other: '{count} were already here.' },
+    { one: '1 stond er al.', other: '{count} stonden er al.' },
+  ],
+  'backupLook.done.notBack': [
+    { one: '1 thing couldn’t come back.', other: '{count} things couldn’t come back.' },
+    { one: '1 ding kon niet terugkomen.', other: '{count} dingen konden niet terugkomen.' },
+  ],
+  'backupLook.done.nothing': ['Nothing needed to come back.', 'Er hoefde niets terug te komen.'],
+  'backupLook.done.signInOne': ['{name} needs you to sign in again.', 'Bij {name} moet je opnieuw inloggen.'],
+  'backupLook.done.signIn': [
+    {
+      one: '1 connection needs you to sign in again.',
+      other: '{count} connections need you to sign in again.',
+    },
+    {
+      one: 'Bij 1 koppeling moet je opnieuw inloggen.',
+      other: 'Bij {count} koppelingen moet je opnieuw inloggen.',
+    },
+  ],
   'sessionLogin.failure.refused': [
     '{name} refused the account name or password. Check them and try again.',
     '{name} weigerde de accountnaam of het wachtwoord. Controleer ze en probeer het opnieuw.',

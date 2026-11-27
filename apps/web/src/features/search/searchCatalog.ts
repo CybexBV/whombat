@@ -19,8 +19,6 @@ import {
   USAGE_HREF,
   youParts,
 } from '@whombat/client';
-import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import {
   CONNECTIONS_HREF,
   NEWS_KIND_WORDS,
@@ -30,6 +28,7 @@ import {
   type ThingSummary,
 } from '@whombat/core';
 import { INBOX_PATH } from '../../app/shell/location';
+import { DESK_SCREENS_TEXT, THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
 import { currentLocale } from '../../i18n/provider';
 import { appPlaceWords, SEARCH_WORDS } from '../../i18n/shared';
 

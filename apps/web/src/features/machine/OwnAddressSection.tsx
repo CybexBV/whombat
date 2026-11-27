@@ -9,7 +9,6 @@ import {
   accountLinkErrorText,
   normalizeLinkCode,
   OWN_ADDRESS_TEXT,
-  OWN_NAME_TEXT,
   ownAddressCloudflareLine,
   ownAddressLeavingView,
   ownAddressRenameErrorText,
@@ -31,6 +30,8 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { OWN_NAME_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { OwnNameField } from '../../managed/OwnNameField';
 import { announceOwnAddress, useOwnAddressChanges } from '../../managed/ownAddressEvents';
 import styles from '../settings/SettingsScreen.module.css';
@@ -70,8 +71,8 @@ export function OwnAddressSection() {
 
   if (!own || !session) return null;
   const v = ownAddressView(own);
-  const leaving = ownAddressLeavingView(own);
-  const cloudflare = ownAddressCloudflareLine(own.host);
+  const leaving = ownAddressLeavingView(own, undefined, undefined, currentLocale());
+  const cloudflare = ownAddressCloudflareLine(own.host, undefined, currentLocale());
   const reach = async (on: boolean) => {
     setBusy(true);
     setNote(null);
@@ -215,7 +216,7 @@ function ChangeDialog({
     try {
       onChanged((await sessionOps.ownAddressRename(session, label)).ownAddress);
     } catch (error) {
-      setProblem(ownAddressRenameErrorText(error));
+      setProblem(ownAddressRenameErrorText(error, currentLocale()));
       setBusy(false);
     }
   };

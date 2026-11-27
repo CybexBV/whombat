@@ -11,7 +11,8 @@
 
 import { createSign } from 'node:crypto';
 import { connect, constants } from 'node:http2';
-import { IOS_LIVE_ACTIVITY_ATTRIBUTES, liveActivityAttributes } from '@whombat/core';
+import { IOS_LIVE_ACTIVITY_ATTRIBUTES, liveActivityAttributes, type PushPayload } from '@whombat/core';
+import { previewOffWords } from './preview-off';
 import type { PushOutcome, PushTransport } from './types';
 
 function base64url(input: string | Buffer): string {
@@ -53,8 +54,12 @@ export function buildApnsPayload(payload: {
   /** Alerts: the burrow slug and inbox row, so the app opens the screen and marks the row read. */
   burrow?: string;
   notificationId?: string | null;
-  /** False when the recipient turned previews off: the app shows its own generic words in its own language. */
+  /**
+   * False when the recipient turned previews off: the app shows its own generic words in its own language, and the
+   * alert itself carries only the generic title and line (for `kind`), never the words it was handed.
+   */
   preview?: boolean;
+  kind?: PushPayload['kind'];
   event?: 'start' | 'update' | 'end';
   contentState?: unknown;
   attributesType?: string;
@@ -80,8 +85,12 @@ export function buildApnsPayload(payload: {
       path: payload.path,
     };
   }
+  const alert =
+    payload.preview === false
+      ? previewOffWords(payload.kind, payload.body)
+      : { title: payload.title, body: payload.body };
   return {
-    aps: { alert: { title: payload.title, body: payload.body }, 'mutable-content': 1 },
+    aps: { alert, 'mutable-content': 1 },
     path: payload.path,
     ...(payload.burrow ? { burrow: payload.burrow } : {}),
     ...(payload.notificationId ? { notificationId: payload.notificationId } : {}),

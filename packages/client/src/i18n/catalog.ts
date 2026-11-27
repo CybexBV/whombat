@@ -9,8 +9,10 @@ import {
   type MessageVars,
   type Translator,
 } from '@whombat/core/i18n';
+import { WORD_TREES } from './messages';
+import { type ReadTree, readTree, type WordTreeSource } from './tree';
 
-export const EN = {
+const CLIENT_EN = {
   // Agent name & character
   'agent.fallbackName': 'your agent',
   'agent.ask': 'Ask {name}',
@@ -1272,9 +1274,9 @@ export const EN = {
   'whatsNew.see': 'See what’s new',
 } as const satisfies MessageCatalog;
 
-export type ClientMessageKey = keyof typeof EN;
+export type ClientMessageKey = keyof typeof CLIENT_EN;
 
-export const NL: Record<ClientMessageKey, MessageValue> = {
+const CLIENT_NL: Record<ClientMessageKey, MessageValue> = {
   // Agent name & character
   'agent.fallbackName': 'je assistent',
   'agent.ask': 'Vraag {name}',
@@ -2552,7 +2554,22 @@ export const NL: Record<ClientMessageKey, MessageValue> = {
   'whatsNew.see': 'Bekijk wat er nieuw is',
 };
 
+/**
+ * The whole catalog: the flat messages above, and the word trees of `./messages/` (the larger screens' tables, written
+ * as nested trees) under their own prefixes. `ClientMessageKey` names the flat ones; a tree is read with `clientTree`.
+ */
+export const EN = { ...CLIENT_EN, ...WORD_TREES.en } as typeof CLIENT_EN;
+export const NL: Record<ClientMessageKey, MessageValue> = { ...CLIENT_NL, ...WORD_TREES.nl };
+
 const CATALOGS = { en: EN, nl: NL } as const;
+
+/** One of `./messages/`'s word trees read in a locale (English when none is given). */
+export function clientTree<T extends WordTreeSource>(
+  locale: string | null | undefined,
+  area: { prefix: string; tree: T },
+): ReadTree<T> {
+  return readTree(CATALOGS, area.prefix, area.tree, locale);
+}
 
 export function clientTranslator(locale?: string | null): Translator<typeof EN> {
   return createTranslator(CATALOGS, typeof locale === 'string' ? locale : undefined);

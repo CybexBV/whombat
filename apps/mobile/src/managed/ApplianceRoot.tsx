@@ -834,6 +834,7 @@ function usePasskeyNudge({
   open: boolean;
   me: string | null;
 }): PasskeyNudgeState | null {
+  const { rawLocale } = useI18n();
   const due = !!PASSKEYS && !!control && open && PASSKEY_NUDGE.shows(appliance.device, endpoint);
   const [shown, setShown] = useState(false);
   const tap = useOnePasskeySetup(
@@ -848,6 +849,7 @@ function usePasskeyNudge({
           whombats,
         }
       : null,
+    rawLocale,
   );
   useEffect(() => {
     if (!due) return;

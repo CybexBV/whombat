@@ -20,7 +20,6 @@ import {
   hostTimeTicks,
   splitLead,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import {
   formatBytes,
   formatMbits,
@@ -48,6 +47,7 @@ import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
 import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import styles from './HostStatus.module.css';

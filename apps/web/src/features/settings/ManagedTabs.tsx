@@ -22,7 +22,6 @@ import {
   addDeviceLink,
   ago,
   askFirstView,
-  BACKUP_OPTIONS_TEXT,
   backupBlocksText,
   bringBackLaterOffered,
   CHANNEL_TEXT,
@@ -40,11 +39,9 @@ import {
   LINK_TEXT,
   linkErrorText,
   linkTimeLeft,
-  MANAGED_TEXT,
   orderPasskeys,
   PAIRING_CODE,
   PASSKEY_COPY,
-  PASSKEY_SETUP_TEXT,
   pairingErrorKey,
   passkeyEnrolledDevices,
   passkeyErrorText,
@@ -55,7 +52,6 @@ import {
   readOwnAddress,
   readUpdatesChannel,
   scopeLabels,
-  THIS_WHOMBAT_TEXT,
   updateCheckNotice,
   updatePollMs,
   updateText,
@@ -93,6 +89,12 @@ import { StatusDot } from '../../components/StatusDot';
 import { Tag } from '../../components/Tag';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import {
+  BACKUP_OPTIONS_TEXT,
+  MANAGED_TEXT,
+  PASSKEY_SETUP_TEXT,
+  THIS_WHOMBAT_TEXT,
+} from '../../i18n/clientWords';
 import { COPY } from '../../i18n/managed';
 import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';

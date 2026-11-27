@@ -2,9 +2,10 @@
  * The screen's unlock request as This Whombat's NEEDS YOU row (`DeskUnlockRow`): a tap on the unlock push opens This
  * Whombat. The screen's settings have their own tab (Settings → Screen).
  */
-import { DESK_TEXT, type DeskUnlockRequest } from '@whombat/client/desk';
+import type { DeskUnlockRequest } from '@whombat/client/desk';
 import { Button } from '../../components/Button';
 import { StatusDot } from '../../components/StatusDot';
+import { DESK_TEXT } from '../../i18n/clientWords';
 import styles from '../settings/SettingsScreen.module.css';
 import { useDeskUnlockAnswer } from './DeskUnlock';
 import type { DeskHere } from './useDeskHere';

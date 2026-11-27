@@ -7,9 +7,9 @@
  * has no tablet to read them from, the letters its tablet shows are said under the boxes.
  */
 import {
-  DESK_SCREENS_TEXT,
   type DeskApi,
   type DeskPopups,
+  deskScreensText,
   fillDeskWords,
   screensErrorText,
 } from '@whombat/client/desk';
@@ -20,6 +20,7 @@ import { useBurrowBase } from '../../data/BurrowProvider';
 import { toasts } from '../../data/toast';
 import { useAgentWords } from '../../data/useAgent';
 import { demoDesk } from '../../fixtures/desk';
+import { useI18n } from '../../i18n';
 import { ErrorLine, Field } from '../../managed/ui';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
@@ -28,8 +29,6 @@ import { Segmented } from '../../ui/Segmented';
 import { Sheet } from '../../ui/sheet';
 import { lettersProblem, popupOptions, screenLetters, screenName } from './screensList';
 import { PHONE_SCREENS_TEXT } from './tiles';
-
-const T = DESK_SCREENS_TEXT.addDialog;
 
 export function AddScreenSheet({
   api,
@@ -40,6 +39,8 @@ export function AddScreenSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { rawLocale } = useI18n();
+  const T = deskScreensText(rawLocale).addDialog;
   const theme = useTheme();
   const assistant = useAgentWords().name;
   const { mode, me } = useBurrowBase();
@@ -76,11 +77,11 @@ export function AddScreenSheet({
       },
       (e: unknown) => {
         setBusy(false);
-        setError(screensErrorText(e));
+        setError(screensErrorText(e, undefined, rawLocale));
       },
     );
   };
-  const popupHint = popups === 'problems' ? T.popupsHint : DESK_SCREENS_TEXT.page.popupsHint[popups];
+  const popupHint = popups === 'problems' ? T.popupsHint : deskScreensText(rawLocale).page.popupsHint[popups];
   return (
     <Sheet visible={visible} onClose={onClose} label={T.title} maxHeight="92%">
       <ScrollView
@@ -121,7 +122,7 @@ export function AddScreenSheet({
         <View style={{ gap: 8 }}>
           <SectionLabel>{T.popups.toUpperCase()}</SectionLabel>
           <Segmented<DeskPopups>
-            options={popupOptions()}
+            options={popupOptions(rawLocale)}
             value={popups}
             onChange={setPopups}
             label={T.popups}
@@ -159,6 +160,8 @@ export function AddScreenSheet({
  * with what's typed — and the boxes show each letter, the next one to type outlined.
  */
 function LetterBoxes({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { rawLocale } = useI18n();
+  const T = deskScreensText(rawLocale).addDialog;
   const theme = useTheme();
   const [focused, setFocused] = useState(false);
   return (

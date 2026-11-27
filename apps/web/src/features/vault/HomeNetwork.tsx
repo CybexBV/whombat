@@ -6,7 +6,6 @@
 
 import type { UseQueryResult } from '@tanstack/react-query';
 import { vaultProblemOf } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import { useVaultNetworkWrite } from '@whombat/client/react';
 import { api, type VaultNetworksResponse } from '@whombat/core/contracts';
 import { formatAgo } from '@whombat/core/text';
@@ -18,6 +17,7 @@ import { Input } from '../../components/Input';
 import { SkeletonRows } from '../../components/ListState';
 import { SectionLabel } from '../../components/SectionLabel';
 import { useToast } from '../../components/Toast';
+import { THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
 import { useLocaleWords } from '../../i18n/words';
 import { portsText, VAULT_TEXT } from './copy';
 import { type FieldProblems, parsePorts } from './model';

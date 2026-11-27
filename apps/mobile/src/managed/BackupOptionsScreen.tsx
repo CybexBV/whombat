@@ -7,7 +7,7 @@
  */
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { BACKUP_OPTIONS_TEXT, keepTicks, policySummary } from '@whombat/client/managed';
+import { backupOptionsText, keepTicks, policySummary } from '@whombat/client/managed';
 import { useBackupCheckpoints, useBackupPolicy, useSetBackupPolicy } from '@whombat/client/react';
 import { formatBytes } from '@whombat/core/text';
 import type { BackupFrequency } from '@whombat/protocol/session';
@@ -35,11 +35,11 @@ import { useBackupPlaceName, useBackupSession } from './useBackups';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'BackupOptions'>;
 
-const D = BACKUP_OPTIONS_TEXT.dialog;
 const FREQUENCIES: BackupFrequency[] = ['nightly', '6h', 'hourly'];
 
 export function BackupOptionsScreen({ navigation }: Props) {
   const { rawLocale } = useI18n();
+  const D = backupOptionsText(rawLocale).dialog;
   const managedTextHere = managedText(rawLocale);
 
   const theme = useTheme();
@@ -64,7 +64,7 @@ export function BackupOptionsScreen({ navigation }: Props) {
       return;
     }
     setError(null);
-    save.mutate(r.input, { onSuccess: close, onError: (e) => setError(backupErrorText(e)) });
+    save.mutate(r.input, { onSuccess: close, onError: (e) => setError(backupErrorText(e, rawLocale)) });
   };
 
   const header = (
@@ -134,7 +134,7 @@ export function BackupOptionsScreen({ navigation }: Props) {
               }}
             >
               <Text size={15} lh={1.45} color={theme.colors.ink}>
-                {policySummary(keep, list.data ?? null, placeName)}
+                {policySummary(keep, list.data ?? null, placeName, rawLocale)}
               </Text>
             </View>
           ) : null}
@@ -369,6 +369,8 @@ function Radio({ on }: { on: boolean }) {
 
 /** The picture of what is kept: ticks denser towards now, the four labels under them. */
 function Timeline({ ticks }: { ticks: { at: number; tall: boolean }[] }) {
+  const { rawLocale } = useI18n();
+  const D = backupOptionsText(rawLocale).dialog;
   const theme = useTheme();
   const L = D.timeline;
   return (

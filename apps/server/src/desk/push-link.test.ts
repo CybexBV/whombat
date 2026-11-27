@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { opaqueRef, registerPushResolver, resolvePushRef } from '../managed/push';
 import type { Services } from '../services';
-import { DESK_SETTINGS_PATH, UnlockPushes, unlockPushWhat } from './push-link';
+import { DESK_SETTINGS_PATH, UnlockPushes, unlockPushPreview, unlockPushWhat } from './push-link';
 
 const refOf = (what: string) => opaqueRef('ref', what);
 const ORIGIN = 'https://app.whombat.test/';
@@ -33,5 +33,16 @@ describe('a tap on the unlock push (DK-S21)', () => {
     await expect(resolvePushRef(services, 'acc_mara', 'not a ref')).rejects.toMatchObject({
       code: 'not_found',
     });
+  });
+});
+
+describe('the unlock push’s words', () => {
+  it('are in the person’s language, English without one', () => {
+    const english = unlockPushPreview(null);
+    expect(english.title).toContain('unlock');
+    expect(english.body).toContain('Unlock');
+    const dutch = unlockPushPreview('nl-NL');
+    expect(dutch.title).toContain('ontgrendelen');
+    expect(dutch.body).toContain('Ontgrendel');
   });
 });

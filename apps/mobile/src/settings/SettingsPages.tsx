@@ -16,7 +16,7 @@ import {
   settingsGroupText,
   TEAM_REPORT_WORDS,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { thisWhombatText } from '@whombat/client/managed';
 import { useTeamReportsEntry } from '@whombat/client/react';
 import type { HostMetrics } from '@whombat/protocol/session';
 import { type ReactNode, useCallback, useEffect } from 'react';
@@ -320,8 +320,8 @@ export function SettingsWhombatScreen() {
         <ManagedCard>
           <LinkRow
             first
-            title={THIS_WHOMBAT_TEXT.parts.backups}
-            label={THIS_WHOMBAT_TEXT.parts.backups}
+            title={thisWhombatText(rawLocale).parts.backups}
+            label={thisWhombatText(rawLocale).parts.backups}
             onPress={() => navigation.navigate('WhombatBackups')}
           />
         </ManagedCard>

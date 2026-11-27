@@ -5,11 +5,12 @@
  * is, its grid and pages; what pops up and how it locks; since when it isn't showing), opening its page, with *Edit
  * layout* beside it; then *Add a screen*, which opens its sheet (or says why not when there are as many as can be).
  */
-import { DESK_SCREENS_TEXT, type DeskApi, type DeskScreensList, deskLockAgainOf } from '@whombat/client/desk';
+import { type DeskApi, type DeskScreensList, deskLockAgainOf, deskScreensText } from '@whombat/client/desk';
 import { useDesk, useDeskScreen } from '@whombat/client/desk/react';
 import { useState } from 'react';
 import { View } from 'react-native';
 import { useBurrowBase } from '../../data/BurrowProvider';
+import { useI18n } from '../../i18n';
 import { DeskUnlockCard } from '../../managed/DeskUnlockCard';
 import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
@@ -22,13 +23,14 @@ import { screenRow } from './screensList';
 import { PHONE_SCREENS_TEXT } from './tiles';
 
 export function ScreensList({ api, list }: { api: DeskApi; list: DeskScreensList }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const [adding, setAdding] = useState(false);
   return (
     <>
       <DeskUnlockCard api={api} />
       <Text size={14} lh={1.45} color={theme.colors.mut} style={{ paddingHorizontal: 6, marginTop: -10 }}>
-        {DESK_SCREENS_TEXT.intro}
+        {deskScreensText(rawLocale).intro}
       </Text>
       <View
         style={{
@@ -73,6 +75,7 @@ function ScreenRow({
   screen: DeskScreensList['screens'][number];
   first: boolean;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   const navigation = useAppNavigation();
   const { timeZone } = useBurrowBase();
@@ -84,6 +87,7 @@ function ScreenRow({
     lockedView: desk?.settings.lockedView ?? null,
     now: Date.now(),
     timeZone,
+    locale: rawLocale,
   });
   const Icon = screen.kind === 'device' ? Tablet : Monitor;
   return (
@@ -136,11 +140,14 @@ function ScreenRow({
       </Touchable>
       <View style={{ paddingLeft: 64, paddingBottom: 14, alignItems: 'flex-start' }}>
         <Button
-          label={DESK_SCREENS_TEXT.editLayout}
+          label={deskScreensText(rawLocale).editLayout}
           variant="secondary"
-          accessibilityLabel={`${DESK_SCREENS_TEXT.editLayout}, ${row.name}`}
+          accessibilityLabel={`${deskScreensText(rawLocale).editLayout}, ${row.name}`}
           onPress={() =>
-            navigation.navigate('SettingsScreenLayout', { screen: screen.id, back: DESK_SCREENS_TEXT.back })
+            navigation.navigate('SettingsScreenLayout', {
+              screen: screen.id,
+              back: deskScreensText(rawLocale).back,
+            })
           }
           style={{ paddingHorizontal: 16 }}
         />

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
+import { tClient } from '../i18n/catalog';
 import { OperationError } from '../session/managed-ops';
-import { ONE_PASSKEY_TEXT, onePasskeyWords, setUpOnePasskey } from './one-passkey';
-import { type PasskeySetupView, readPasskeySetup, PASSKEY_SETUP_TEXT as T } from './passkey-setup';
+import { onePasskeyText, onePasskeyWords, setUpOnePasskey } from './one-passkey';
+import { type PasskeySetupView, passkeySetupText, readPasskeySetup } from './passkey-setup';
 import { operationReason, PasskeyCancelled, PasskeyError, passkeyErrorText } from './passkeys';
 
 export type BackupPasskeyProgress = (note: string) => void;
@@ -102,7 +103,12 @@ function makeFlow() {
 // Feedback and unfinished checks survive navigation. A different appliance session gets its own flow.
 const flows = new WeakMap<object, ReturnType<typeof makeFlow>>();
 
-export function useBackupPasskeyAction(scope: object | null, invoke: Tap, load: Load): BackupPasskeyTap {
+export function useBackupPasskeyAction(
+  scope: object | null,
+  invoke: Tap,
+  load: Load,
+  locale?: string | null,
+): BackupPasskeyTap {
   const flow = useMemo(() => {
     if (!scope) return makeFlow();
     let found = flows.get(scope);
@@ -118,6 +124,7 @@ export function useBackupPasskeyAction(scope: object | null, invoke: Tap, load: 
   const refresh = useMemo(() => () => flow.refresh(load), [flow, load]);
   const state = useSyncExternalStore(flow.subscribe, flow.snapshot, flow.snapshot);
   return useMemo(() => {
+    const T = passkeySetupText(locale);
     const settled =
       state.unfinished && state.view?.phase === 'ready'
         ? { phase: 'incomplete' as const, title: T.incomplete, meta: T.intro, action: T.finish }
@@ -132,18 +139,19 @@ export function useBackupPasskeyAction(scope: object | null, invoke: Tap, load: 
       label: state.busy
         ? T.checking
         : state.loadError
-          ? 'Try again'
+          ? tClient(locale, 'settings.retry')
           : !view
             ? T.loading
             : (view.action ?? T.check),
       refresh,
     });
-  }, [flow, invoke, load, refresh, state]);
+  }, [flow, invoke, load, refresh, state, locale]);
 }
 
 /** The default ceremony on every entry point; no separate sign-in-only, backup or upgrade action. */
 export function useOnePasskeySetup(
   input: Parameters<typeof setUpOnePasskey>[0] | null,
+  locale?: string | null,
 ): BackupPasskeyTap | null {
   const session = input?.session;
   const control = input?.control;
@@ -154,8 +162,8 @@ export function useOnePasskeySetup(
   const whombats = input?.whombats;
   const load = useCallback(async () => {
     if (!session || !control) throw new Error('No account');
-    return readPasskeySetup({ session, control, appliance, me });
-  }, [session, control, appliance, me]);
+    return readPasskeySetup({ session, control, appliance, me, locale });
+  }, [session, control, appliance, me, locale]);
   const invoke = useCallback(
     async (onProgress?: BackupPasskeyProgress): Promise<PasskeySetupFeedback> => {
       if (!session || !control || !platform) return { note: null, complete: false };
@@ -169,9 +177,10 @@ export function useOnePasskeySetup(
           name,
           whombats,
           onProgress,
+          locale,
         });
         return {
-          note: onePasskeyWords(result),
+          note: onePasskeyWords(result, locale),
           complete: result.pending.length === 0,
           pending: result.pending.length > 0,
         };
@@ -179,19 +188,19 @@ export function useOnePasskeySetup(
         return {
           note:
             error instanceof PasskeyCancelled
-              ? ONE_PASSKEY_TEXT.cancelled
+              ? onePasskeyText(locale).cancelled
               : error instanceof OperationError && operationReason(error) === 'backup_passkey_saving'
-                ? T.saving
+                ? passkeySetupText(locale).saving
                 : error instanceof PasskeyError && error.code === 'unsupported'
-                  ? T.unsupported
+                  ? passkeySetupText(locale).unsupported
                   : passkeyErrorText(error),
           complete: false,
           pending: true,
         };
       }
     },
-    [session, control, platform, appliance, me, name, whombats],
+    [session, control, platform, appliance, me, name, whombats, locale],
   );
-  const tap = useBackupPasskeyAction(session ?? null, invoke, load);
+  const tap = useBackupPasskeyAction(session ?? null, invoke, load, locale);
   return input ? tap : null;
 }

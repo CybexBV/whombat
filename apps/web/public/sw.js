@@ -43,7 +43,12 @@ const GENERIC_TEXT_NL = {
   generic: 'Whombat heeft je nodig',
 };
 
-const TEXT_BY_LANGUAGE = { en: GENERIC_TEXT, nl: GENERIC_TEXT_NL };
+/** The lines per language; a language without its own lines falls back to English. */
+const GENERIC_BY_LANG = { en: GENERIC_TEXT, nl: GENERIC_TEXT_NL };
+
+function linesFor(language) {
+  return Object.hasOwn(GENERIC_BY_LANG, language) ? GENERIC_BY_LANG[language] : GENERIC_TEXT;
+}
 
 /** Control's text when the appliance sent no preview (control `GENERIC_ALERT`). */
 const CONTROL_GENERIC = { title: 'Whombat', body: 'Whombat needs you' };
@@ -55,7 +60,7 @@ const LOCALE_ENTRY = '/__whombat-locale';
 function cleanLanguage(value) {
   if (typeof value !== 'string') return null;
   const primary = value.trim().toLowerCase().split(/[-_]/)[0];
-  return primary === 'nl' || primary === 'en' ? primary : null;
+  return Object.hasOwn(GENERIC_BY_LANG, primary) ? primary : null;
 }
 
 /** The language from the worker's own address (`/sw.js?lang=nl`). */
@@ -107,7 +112,7 @@ function withoutPreview(payload, title, body) {
 
 /** What a managed push says: its preview, else “Whombat” and the kind's line. */
 function managedText(payload, kind, language) {
-  const lines = TEXT_BY_LANGUAGE[language] || GENERIC_TEXT;
+  const lines = linesFor(language);
   const title = typeof payload.title === 'string' ? payload.title : '';
   const body = typeof payload.body === 'string' ? payload.body : '';
   if (withoutPreview(payload, title, body)) return { title: 'Whombat', body: lines[kind] };
@@ -132,15 +137,18 @@ async function showManaged(payload) {
   });
 }
 
-/** The line a box's own push (one with a `path`) shows when it carries no preview, by its kind. */
+/**
+ * The line a box's own push (one with a `path`) shows when it carries no preview, by its kind: the same grouping as the
+ * box's own previews and the Android app.
+ */
 const ROUTED_KIND = {
-  needs_you: 'generic',
+  needs_you: 'approval',
+  approval_updated: 'approval',
   mention: 'mention',
   reply: 'message',
   direct: 'message',
-  agent_update: 'run',
+  agent_update: 'message',
   run_progress: 'run',
-  approval_updated: 'approval',
 };
 
 /** A box's own push: its title and body, unless it says it carries no preview, then “Whombat” and the kind's line. */
@@ -148,7 +156,7 @@ async function showRouted(payload) {
   let title = payload.title || 'Whombat';
   let body = payload.body || '';
   if (payload.preview === false || payload.generic === true) {
-    const lines = TEXT_BY_LANGUAGE[await currentLanguage()] || GENERIC_TEXT;
+    const lines = linesFor(await currentLanguage());
     const kind = Object.hasOwn(ROUTED_KIND, payload.kind) ? ROUTED_KIND[payload.kind] : 'generic';
     title = 'Whombat';
     body = lines[kind];

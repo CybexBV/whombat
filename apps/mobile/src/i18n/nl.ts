@@ -2,6 +2,16 @@ import type { EN } from './en';
 
 export const NL = {
   'language.saveFailed': 'De taal is niet opgeslagen. Probeer het opnieuw.',
+  'settings.movingFaces.title': 'Bewegende gezichten',
+  'settings.movingFaces.line': 'Gezichten knipperen en laten zien wat je assistenten doen.',
+  'settings.you.photo': 'Je foto',
+  'settings.you.notifications': 'meldingen',
+  'settings.you.devices': 'apparaten',
+  'settings.you.links': 'gedeelde links',
+  'settings.you.prompts': 'prompts',
+  'settings.theme.auto': 'Automatisch',
+  'settings.screens.count': '{count} schermen',
+  'screens.run.cancel': 'Annuleren',
   'language.dutchVoiceHint':
     'Wil je antwoorden in het Nederlands horen? Zet de Nederlandse stem aan bij Deze Whombat → Spraaktypen.',
   'live.step.live': 'Nu: {step}',

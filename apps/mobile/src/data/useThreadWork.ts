@@ -8,6 +8,7 @@ import { queryKeys, type TypingEntry } from '@whombat/client/query';
 import { subscribeCacheEntry, useHandoffs, useRuns } from '@whombat/client/react';
 import { type Handoff, TYPING_TTL_MS } from '@whombat/core';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useI18n } from '../i18n';
 import type { People } from './people';
 import { liveTyping, type ThreadWorkView, threadWorkView } from './working';
 
@@ -57,6 +58,7 @@ export function useThreadWork(
   enabled: boolean,
   people: People,
 ): (rootId: string) => ThreadWorkView | null {
+  const { rawLocale } = useI18n();
   const runs = useRuns(enabled ? { params: { burrow: slug }, query: { status: 'live' } } : null);
   const typing = useConversationTyping(enabled ? conversationId : null);
   // What the agent handed to T3 Code from which thread (t3code-handoff.md AP-6611).
@@ -70,10 +72,10 @@ export function useThreadWork(
     return (rootId: string) => {
       const view = replaceEqualDeep(
         shown.current.get(rootId) ?? null,
-        threadWorkView(rootId, list, typing, people, byRoot.get(rootId) ?? NO_HANDOFFS),
+        threadWorkView(rootId, list, typing, people, byRoot.get(rootId) ?? NO_HANDOFFS, rawLocale),
       );
       shown.current.set(rootId, view);
       return view;
     };
-  }, [live, typing, people, handoffs]);
+  }, [live, typing, people, handoffs, rawLocale]);
 }

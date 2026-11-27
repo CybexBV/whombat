@@ -27,6 +27,8 @@ import {
   deskScreenWords,
 } from '@whombat/core';
 import { hostsFor } from '../../hosts/service';
+import { tServer } from '../../i18n/catalog';
+import { onLocaleChange } from '../../i18n/locale';
 import { keepFields, localizeTree } from '../../i18n/phrases';
 import { type NewsRead, newsDeskView } from '../../news/view';
 import type { Services } from '../../services';
@@ -63,9 +65,12 @@ export const REFRESH_MIN_S = 10;
 /** Kept reads at most; past it the ones not asked for longest go. */
 const KEPT_MAX = 1_000;
 
-export const RESOLVE_WORDS = {
-  failed: 'I can’t read this right now.',
-} as const;
+/** What a widget says when it couldn't be read, in a locale. */
+export function resolveWords(locale?: string | null) {
+  return { failed: tServer(locale, 'desk.widget.cantRead') };
+}
+
+export const RESOLVE_WORDS = resolveWords('en');
 
 interface Entry {
   value: unknown;
@@ -163,6 +168,11 @@ export class Kept {
     await Promise.race([Promise.all(waiting), late]).finally(() => clearTimeout(timer));
   }
 
+  /** Forgets everything kept; reads going on now still end, but what they bring isn't kept. */
+  clear(): void {
+    this.#entries.clear();
+  }
+
   /** Once every read going on now has ended. */
   async idle(): Promise<void> {
     await Promise.all([...this.#entries.values()].flatMap((e) => (e.pending ? [e.pending] : [])));
@@ -200,6 +210,7 @@ const idOf = (ref: string | undefined) => (ref ? ref.slice(ref.indexOf(':') + 1)
 export class WidgetResolver {
   readonly #kept: Kept;
   readonly #accounts: AccountWidgets;
+  readonly #offLocale: () => void;
 
   constructor(
     private readonly services: Services,
@@ -216,6 +227,13 @@ export class WidgetResolver {
   ) {
     this.#kept = new Kept(() => services.clock().getTime());
     this.#accounts = new AccountWidgets(services, reads.accounts);
+    // What's kept was said in the language of its read: a new language reads everything again at once.
+    this.#offLocale = onLocaleChange(services, () => this.#kept.clear());
+  }
+
+  /** Stops following the person's language (the runtime is stopping). */
+  close(): void {
+    this.#offLocale();
   }
 
   /** The person's accounts' widgets (their catalogue groups too). */
@@ -359,7 +377,9 @@ export class WidgetResolver {
         },
         (key) => {
           const spec = due.get(key);
-          return spec ? failedView(spec, DESK_SCREEN_WORDS.figures.name, RESOLVE_WORDS.failed) : undefined;
+          return spec
+            ? failedView(spec, deskScreenWords(ctx.locale).figures.name, resolveWords(ctx.locale).failed)
+            : undefined;
         },
       );
     }
@@ -402,6 +422,7 @@ export class WidgetResolver {
             timeZone: ctx.timeZone,
             unreachable: !card && fleet.failed,
             failed: parts.failed && !parts.has,
+            locale: ctx.locale ?? null,
           });
         }
         const range = serverRange(spec.opts);
@@ -429,7 +450,10 @@ export class WidgetResolver {
       }
       case 'widget': {
         const home = this.#kept.peek<ScreenHomeWidget[]>(`home\n${viewer}`);
-        if (!home.has) return home.failed ? failedView(spec, 'Widget', RESOLVE_WORDS.failed) : null;
+        if (!home.has)
+          return home.failed
+            ? failedView(spec, tServer(ctx.locale, 'desk.widget.widget'), resolveWords(ctx.locale).failed)
+            : null;
         return homeWidgetView(
           spec.id,
           (home.value ?? []).find((w) => w.id === idOf(spec.ref)),

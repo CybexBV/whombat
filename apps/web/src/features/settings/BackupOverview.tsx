@@ -15,7 +15,6 @@
 
 import { startedChatPath } from '@whombat/client';
 import {
-  BACKUP_OPTIONS_TEXT,
   type BackupHero,
   type BackupPageShown,
   type BackupRow,
@@ -63,7 +62,8 @@ import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { Modal, ModalClose, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
-import { useWebI18n } from '../../i18n/provider';
+import { BACKUP_OPTIONS_TEXT } from '../../i18n/clientWords';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { backupErrorText } from './BackupDestination';
 import { BackupDetail } from './BackupDetail';
@@ -157,12 +157,17 @@ export function BackupOverview({
     justNow: justNowAt !== null && Date.now() - justNowAt < JUST_NOW_MS,
     notice,
     lastKnownAt,
+    locale: currentLocale(),
   });
   const groups = known
-    ? backupGroups(known, policy.data?.policy.keep ?? null, all ? {} : { limit: BACKUP_ROWS_SHOWN })
+    ? backupGroups(
+        known,
+        policy.data?.policy.keep ?? null,
+        all ? { locale: currentLocale() } : { limit: BACKUP_ROWS_SHOWN, locale: currentLocale() },
+      )
     : [];
   const total = known?.checkpoints.length ?? 0;
-  const earlier = earlierPlacesLine(notes.data?.earlierPlaces);
+  const earlier = earlierPlacesLine(notes.data?.earlierPlaces, currentLocale());
 
   // `backup.runNow` answers once the backup is made: the card says so then, not that it started.
   const runNow = async () => {
@@ -392,7 +397,7 @@ function AskFix({
   const navigateHref = useNavigateHref();
   const ask = async () => {
     onNote(null);
-    const result = await start.mutateAsync({ text: backupFixText(hero) }).catch(() => null);
+    const result = await start.mutateAsync({ text: backupFixText(hero, currentLocale()) }).catch(() => null);
     if (result?.status === 'ok') navigateHref(startedChatPath(result.data));
     else onNote(backupErrorText(null));
   };
@@ -567,7 +572,12 @@ function BackupDetails({
   const [note, setNote] = useState<string | null>(null);
   const id = useId();
   const D = T.details;
-  const lines = backupDetailLines({ status: status.data?.status ?? null, clearedBy, placeName });
+  const lines = backupDetailLines({
+    status: status.data?.status ?? null,
+    clearedBy,
+    placeName,
+    locale: currentLocale(),
+  });
   return (
     <section className={styles.detailsSection} data-backup-details="">
       <button

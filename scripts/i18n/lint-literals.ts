@@ -1,7 +1,8 @@
 /**
  * Ratcheting JSX/TSX hardcoded-text check (docs/decisions/i18n.md I18N-10).
  *
- * Finds literal multi-word English sentences in TSX files under UI surfaces and compares
+ * Finds literal English copy of two words or more in TS and TSX files under UI surfaces (JSX text, text attributes and
+ * object-literal copy properties such as `label` and `title`) and compares
  * per-file counts against `scripts/i18n/lint-baseline.json`. Files can improve (fewer
  * hardcoded strings), never regress. Run with `--update-baseline` after translating screens.
  */
@@ -15,9 +16,18 @@ export const BASELINE_FILE = resolve(HERE, 'lint-baseline.json');
 
 const SCAN_DIRS = ['apps/web/src', 'apps/mobile/src', 'apps/widget/src', 'appliance/console/ui/src'];
 
-const IGNORE_RE = /(\.test\.tsx?$|\.stories\.tsx?$|\/i18n\/|\/locales\/|\/fixtures\/|\/mocks\/|\/vendor\/)/;
-const JSX_TEXT_RE = />\s*([A-Z][A-Za-z’']+(?:\s+[A-Za-z’'-]+){2,}[.!?]?)\s*</g;
-const ATTR_TEXT_RE = /\b(?:placeholder|aria-label|title)="([A-Z][A-Za-z’']+(?:\s+[A-Za-z’'-]+){1,}[.!?]?)"/g;
+const IGNORE_RE =
+  /(\.test\.tsx?$|\.stories\.tsx?$|\.d\.ts$|\/i18n\/|\/locales\/|\/fixtures\/|\/mocks\/|\/vendor\/)/;
+/** Visible JSX text of two words or more (“Send keys”), starting with a capital letter; code and symbols don't match. */
+const JSX_TEXT_RE = />\s*([A-Z][A-Za-z’']+(?:\s+[A-Za-z’'-]+){1,}[.!?…]?)\s*</g;
+const ATTR_TEXT_RE =
+  /\b(?:placeholder|aria-label|title|alt|accessibilityLabel|accessibilityHint)="([A-Z][A-Za-z’']+(?:\s+[A-Za-z’'-]+){1,}[.!?…]?)"/g;
+/**
+ * UI copy kept in object literals (`label: 'Send keys'`, `title: "Moving faces"`): a quoted string of two words or
+ * more starting with a capital letter. Identifiers (`'send_keys'`, `'API'`) and template strings don't match.
+ */
+const PROP_TEXT_RE =
+  /\b(?:label|title|description|placeholder|heading|hint|subtitle|empty)\s*:\s*(['"])([A-Z][A-Za-z’']*\s+[A-Za-z’'“][^'"\n]*)\1/g;
 
 function walk(root: string, dir: string, out: string[]): void {
   if (!existsSync(dir)) return;
@@ -25,8 +35,19 @@ function walk(root: string, dir: string, out: string[]): void {
     const full = join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) walk(root, full, out);
-    else if (name.endsWith('.tsx') && !IGNORE_RE.test(`/${relative(root, full)}`)) out.push(full);
+    else if (/\.tsx?$/.test(name) && !IGNORE_RE.test(`/${relative(root, full)}`)) out.push(full);
   }
+}
+
+/** How many hardcoded UI strings one file's source holds. */
+export function countLiterals(src: string, tsx: boolean): number {
+  let n = 0;
+  if (tsx) {
+    for (const _ of src.matchAll(JSX_TEXT_RE)) n++;
+    for (const _ of src.matchAll(ATTR_TEXT_RE)) n++;
+  }
+  for (const _ of src.matchAll(PROP_TEXT_RE)) n++;
+  return n;
 }
 
 export function scanLiteralCounts(
@@ -37,10 +58,7 @@ export function scanLiteralCounts(
   for (const d of scanDirs) walk(root, join(root, d), files);
   const counts: Record<string, number> = {};
   for (const file of files.sort()) {
-    const src = readFileSync(file, 'utf8');
-    let n = 0;
-    for (const _ of src.matchAll(JSX_TEXT_RE)) n++;
-    for (const _ of src.matchAll(ATTR_TEXT_RE)) n++;
+    const n = countLiterals(readFileSync(file, 'utf8'), file.endsWith('.tsx'));
     if (n > 0) counts[relative(root, file)] = n;
   }
   return counts;

@@ -5,14 +5,12 @@
  * the words are the shared client's (`@whombat/client/managed`); the UI is `RemoteHelpSection.tsx`. Pure TypeScript.
  */
 import {
-  REMOTE_HELP_WORDS,
   type RemoteHelpChoice,
   type RemoteHelpStepRow,
   remoteHelpConfirmText,
+  remoteHelpWords,
 } from '@whombat/client/managed';
 import { remoteHelpTranscriptName } from '@whombat/protocol/session';
-
-const W = REMOTE_HELP_WORDS;
 
 /* The no-passkey dialog (RH-04) ----------------------------------------------------------------------------------- */
 
@@ -34,7 +32,11 @@ export type ShowAlert = (
  * “Turn on remote help?” without a passkey (AP-4473): the shared title and sentence, Cancel and Turn on.
  * Turn on answers true; Cancel, the back button or a tap beside it false (and only the first answer counts).
  */
-export function remoteHelpConfirm(alert: ShowAlert): (choice: RemoteHelpChoice) => Promise<boolean> {
+export function remoteHelpConfirm(
+  alert: ShowAlert,
+  locale?: string | null,
+): (choice: RemoteHelpChoice) => Promise<boolean> {
+  const { confirm } = remoteHelpWords(locale);
   return (choice) =>
     new Promise<boolean>((resolve) => {
       let answered = false;
@@ -44,11 +46,11 @@ export function remoteHelpConfirm(alert: ShowAlert): (choice: RemoteHelpChoice) 
         resolve(yes);
       };
       alert(
-        W.confirm.title,
-        remoteHelpConfirmText(choice.level, choice.duration),
+        confirm.title,
+        remoteHelpConfirmText(choice.level, choice.duration, locale),
         [
-          { text: W.confirm.cancel, style: 'cancel', onPress: () => answer(false) },
-          { text: W.confirm.turnOn, onPress: () => answer(true) },
+          { text: confirm.cancel, style: 'cancel', onPress: () => answer(false) },
+          { text: confirm.turnOn, onPress: () => answer(true) },
         ],
         { cancelable: true, onDismiss: () => answer(false) },
       );

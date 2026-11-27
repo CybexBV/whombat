@@ -3,8 +3,10 @@
  * the live check's line and the privacy words. The account site's confirm step and Settings → ADDRESS's Change use
  * it; the check itself is the caller's (`useOwnNameCheck`).
  */
-import { OWN_NAME_TEXT, type OwnNameCheck, ownNameLine } from '@whombat/client/managed';
+import { type OwnNameCheck, ownNameLine } from '@whombat/client/managed';
 import { Input, type InputSize } from '../components/Input';
+import { OWN_NAME_TEXT } from '../i18n/clientWords';
+import { currentLocale } from '../i18n/provider';
 import styles from './OwnNameField.module.css';
 
 export function OwnNameField({
@@ -24,7 +26,7 @@ export function OwnNameField({
   size?: InputSize;
   autoFocus?: boolean;
 }) {
-  const line = ownNameLine(check, zone);
+  const line = ownNameLine(check, zone, currentLocale());
   return (
     <div className={styles.wrap} data-own-name="">
       <div className={styles.input}>

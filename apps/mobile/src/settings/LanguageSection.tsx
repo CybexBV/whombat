@@ -12,17 +12,21 @@ import { RadioCards } from '../ui/radioCards';
 import { useVoiceApi } from '../voice/useVoiceApi';
 
 export function LanguageSection() {
+  const saveLocale = useSaveLocale();
+  return saveLocale ? <LanguagePicker saveLocale={saveLocale} /> : null;
+}
+
+function LanguagePicker({ saveLocale }: { saveLocale: (next: string) => Promise<void> }) {
   const { language, tClient } = useI18n();
   const { t } = useMobileT();
   const theme = useTheme();
-  const saveLocale = useSaveLocale();
   const voice = useVoice(useVoiceApi());
   const [busy, setBusy] = useState(false);
   const [pickedDutch, setPickedDutch] = useState(false);
   const title = tClient('settings.language.title');
 
   const choose = async (next: string) => {
-    if (!saveLocale || busy || resolveLanguage(next) === language) return;
+    if (busy || resolveLanguage(next) === language) return;
     setBusy(true);
     try {
       await saveLocale(next);
@@ -42,7 +46,7 @@ export function LanguageSection() {
         options={MOBILE_LANGUAGES}
         value={language === 'nl' ? 'nl-NL' : 'en-GB'}
         onChange={(next) => void choose(next)}
-        disabled={busy || !saveLocale}
+        disabled={busy}
       />
       {pickedDutch && language === 'nl' && voice.data?.available && voice.data.dutchVoice?.on === false ? (
         <Text size={13} color={theme.colors.mut}>

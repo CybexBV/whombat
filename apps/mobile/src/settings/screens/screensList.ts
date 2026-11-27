@@ -7,9 +7,6 @@
 import {
   DEFAULT_DESK_SHOW,
   DESK_SCREEN_CODE_RE,
-  DESK_SCREEN_WORDS,
-  DESK_SCREENS_TEXT,
-  DESK_WORDS,
   type DeskLockAgain,
   type DeskLockedView,
   type DeskPopups,
@@ -18,13 +15,16 @@ import {
   type DeskScreenSummary,
   type DeskScreensList,
   deskErrorCode,
+  deskScreensText,
   fillDeskWords,
   gridText,
   pagesText,
   screenLines,
   screenShape,
 } from '@whombat/client/desk';
-import { formatRecent } from '@whombat/core';
+import { daysAgo, formatRecent } from '@whombat/core';
+import { deskScreenWords, deskWords } from '@whombat/core/domain';
+import { mobileTranslator } from '../../i18n/translate';
 
 /**
  * What Settings shows for the box's screen (DK-149): *Screens* where the runtime answers `desk.screens`, the older
@@ -43,10 +43,10 @@ export function screensOffered(q: {
 }
 
 /** The Settings list's line for *Screens*: the box's own alone, or how many there are. */
-export function screensRowLine(list: DeskScreensList): string {
+export function screensRowLine(list: DeskScreensList, locale?: string | null): string {
   const n = list.screens.length;
-  if (n <= 1) return DESK_SCREEN_WORDS.box;
-  return `${n} screens`;
+  if (n <= 1) return deskScreenWords(locale).box;
+  return mobileTranslator(locale).t('settings.screens.count', { count: n });
 }
 
 export interface ScreenRowView {
@@ -74,6 +74,7 @@ export function screenRow(
     lockedView?: DeskLockedView | null;
     now: number;
     timeZone: string;
+    locale?: string;
   },
 ): ScreenRowView {
   // Until its own read is there, the list's summary at Normal (its pages are counted already).
@@ -83,8 +84,9 @@ export function screenRow(
     show: detail?.show ?? DEFAULT_DESK_SHOW,
   };
   const when = (iso: string) => {
-    const s = formatRecent(iso, context.now, context.timeZone);
-    return s === 'Yesterday' ? 'yesterday' : s;
+    const { now, timeZone, locale } = context;
+    const text = formatRecent(iso, now, timeZone, locale);
+    return daysAgo(iso, now, timeZone) === 1 ? text.toLocaleLowerCase() : text;
   };
   const lines = screenLines(full, { ...context, when });
   return {
@@ -99,19 +101,23 @@ export function screenRow(
 }
 
 /** *Edit layout*'s line on a screen's page: “3 pages · 8 × 5”. */
-export function layoutLine(screen: Pick<DeskScreenDetail, 'size' | 'layout'>): string {
+export function layoutLine(
+  screen: Pick<DeskScreenDetail, 'size' | 'layout'>,
+  locale?: string | null,
+): string {
   const { cols, rows } = screenShape(screen);
-  return fillDeskWords(DESK_SCREENS_TEXT.page.layoutLine, {
-    pages: pagesText(screen.layout.pages.length),
-    grid: gridText(cols, rows),
+  return fillDeskWords(deskScreensText(locale).page.layoutLine, {
+    pages: pagesText(screen.layout.pages.length, locale),
+    grid: gridText(cols, rows, locale),
   });
 }
 
 /** *What pops up*'s three, in their order, with the contract's words. */
-export function popupOptions(): { value: DeskPopups; label: string }[] {
+export function popupOptions(locale?: string | null): { value: DeskPopups; label: string }[] {
+  const { popups } = deskScreenWords(locale);
   return (['all', 'problems', 'none'] as const).map((value) => ({
     value,
-    label: DESK_SCREEN_WORDS.popups[value],
+    label: popups[value],
   }));
 }
 
@@ -143,12 +149,10 @@ export function screenName(typed: string): string | null {
 /** The box's own screen's parts beyond its layout, as tabs: the top bar first, then the older page's three. */
 export const BOX_PARTS = ['bar', 'lock', 'night', 'talk'] as const;
 export type BoxPart = (typeof BOX_PARTS)[number];
-export const BOX_PART_LABELS: Record<BoxPart, string> = {
-  bar: DESK_WORDS.settings.bar,
-  lock: DESK_WORDS.settings.parts.lock,
-  night: DESK_WORDS.settings.parts.night,
-  talk: DESK_WORDS.settings.parts.talk,
-};
+export function boxPartLabels(locale?: string | null): Record<BoxPart, string> {
+  const { bar, parts } = deskWords(locale).settings;
+  return { bar, lock: parts.lock, night: parts.night, talk: parts.talk };
+}
 
 /** None until the box's screen is paired (the switch card with *Pair the screen* says it all), as the older page. */
 export function boxParts(screen: Pick<DeskScreen, 'paired'>): BoxPart[] {

@@ -145,6 +145,23 @@ function navigatorLanguages(): readonly string[] | null {
   }
 }
 
+/**
+ * The language a new box is claimed in: the tab's `?lang=` test language, else the language the claimant chose on this
+ * page, else their browser's, else English. Never the language this browser remembers from another box: the claimant
+ * may not be that box's owner, and they never chose it for this one. The pseudo-locale is a page language only.
+ */
+export function claimantLocale(
+  chosen: string | null,
+  search: string = currentSearch(),
+  languages: readonly string[] | null = navigatorLanguages(),
+): string {
+  const override = readLocaleOverride(search);
+  if (override && override !== PSEUDO_TAG) return override;
+  const picked = cleanLocaleTag(chosen);
+  if (picked && picked !== PSEUDO_TAG) return picked;
+  return browserLocale(languages);
+}
+
 /** What `<html lang>` says for a tag: the BCP-47 tag, `en-XA` for the pseudo-locale. */
 export function htmlLangOf(tag: string): string {
   const language: DisplayLanguage = resolveDisplayLanguage(tag);

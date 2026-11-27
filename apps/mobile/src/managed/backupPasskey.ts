@@ -3,11 +3,13 @@ import { deliverBackupKey, passkeyName } from '@whombat/client/managed';
 import { type BackupPasskeyTap, useOnePasskeySetup } from '@whombat/client/managed/react';
 import type { ApplianceSession } from '@whombat/client/session';
 import { useEffect } from 'react';
+import { useI18n } from '../i18n';
 import { useManaged } from './context';
 import { phoneLabel } from './env';
 import { PASSKEYS } from './passkeyEnv';
 
 export function useBackupPasskeyTap(): BackupPasskeyTap | null {
+  const { rawLocale } = useI18n();
   const managed = useManaged();
   const s = managed?.session.state();
   return useOnePasskeySetup(
@@ -22,6 +24,7 @@ export function useBackupPasskeyTap(): BackupPasskeyTap | null {
           whombats: managed.whombats,
         }
       : null,
+    rawLocale,
   );
 }
 

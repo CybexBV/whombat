@@ -1,10 +1,7 @@
 import { useLocation, useNavigate } from '@tanstack/react-router';
 import { whombatSectionPlace } from '@whombat/client';
-import { DESK_SCREENS_TEXT } from '@whombat/client/desk';
 import { useDesk, useDeskScreens } from '@whombat/client/desk/react';
 import {
-  HERMES_WORDS,
-  THIS_WHOMBAT_TEXT,
   updateView,
   type WhombatAction,
   type WhombatOverview,
@@ -26,6 +23,8 @@ import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { StatusDot } from '../../components/StatusDot';
+import { DESK_SCREENS_TEXT, HERMES_WORDS, THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import { useBackupPasskeyTap } from '../../managed/backupPasskey';
 import { QuietHoursSection } from '../care/QuietHoursSection';
@@ -283,7 +282,7 @@ function PartLabel({
 }) {
   return (
     <span className={tw.partLabel}>
-      {whombatPartLabel(part, assistant)}
+      {whombatPartLabel(part, assistant, currentLocale())}
       {badge ? (
         <>
           <span className={tw.badge} aria-hidden="true">
@@ -386,6 +385,7 @@ function useOverview(
         access,
         versions: { app: versions.app, runtime: versions.runtime },
         agent: assistant,
+        locale: currentLocale(),
       }),
     [status, box, passkey?.view, access, versions.app, versions.runtime, assistant],
   );

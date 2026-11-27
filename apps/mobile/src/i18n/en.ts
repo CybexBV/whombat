@@ -1,5 +1,15 @@
 export const EN = {
   'language.saveFailed': 'The language didn’t save. Try again.',
+  'settings.movingFaces.title': 'Moving faces',
+  'settings.movingFaces.line': 'Faces blink and show what your agents are doing.',
+  'settings.you.photo': 'Your photo',
+  'settings.you.notifications': 'notifications',
+  'settings.you.devices': 'devices',
+  'settings.you.links': 'shared links',
+  'settings.you.prompts': 'prompts',
+  'settings.theme.auto': 'Auto',
+  'settings.screens.count': '{count} screens',
+  'screens.run.cancel': 'Cancel',
   'language.dutchVoiceHint':
     'To hear replies in Dutch, you can turn on Dutch voice in This Whombat → Voice typing.',
   'live.step.live': 'Now: {step}',

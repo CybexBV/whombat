@@ -3,7 +3,12 @@
  * words it always had (“3 Nov”, “3 November”, “Sunday”); Dutch gets Intl's names without the abbreviation's dot
  * (“3 nov”, “3 november”, “zondag”), so a Dutch sentence never carries an English month.
  */
-import { resolveLanguage } from '@whombat/core/i18n';
+import {
+  DEFAULT_LANGUAGE,
+  formatLocaleOf,
+  resolveDisplayLanguage,
+  resolveLanguage,
+} from '@whombat/core/i18n';
 
 const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const LONG_MONTHS = [
@@ -22,9 +27,15 @@ const LONG_MONTHS = [
 ];
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-/** The Intl locale for a page tag, or null for English (and the pseudo-locale, which keeps English names). */
+/** Whether a tag is the test pseudo-locale (`pseudo`, `en-XA`, `nl-XA`), which keeps English names. */
+function isPseudoLocale(tag: string): boolean {
+  return resolveDisplayLanguage(tag) === 'pseudo';
+}
+
+/** The Intl locale for a page tag, or null for English and the pseudo-locale (their names are the fixed lists). */
 function intlLocale(tag: string | null | undefined): string | null {
-  return tag && resolveLanguage(tag) === 'nl' && tag !== 'pseudo' ? 'nl-NL' : null;
+  if (!tag || isPseudoLocale(tag)) return null;
+  return resolveLanguage(tag) !== DEFAULT_LANGUAGE ? formatLocaleOf(tag) : null;
 }
 
 function part(

@@ -30,12 +30,17 @@ export function agentNowFor(
  * The thinking line: `Banjo · Editing Layout.astro · 1m 12s` while its turn reports actions (the clock from 10 s on),
  * else `Banjo is thinking`.
  */
-export function workingLabel(name: string, now: AgentNowEntry | null, nowMs: number): string {
+export function workingLabel(
+  name: string,
+  now: AgentNowEntry | null,
+  nowMs: number,
+  locale?: string | null,
+): string {
   const title = now?.title.trim();
-  if (!now || !title) return typingLabel(name);
+  if (!now || !title) return typingLabel(name, locale);
   const elapsed = nowMs - now.since;
   return elapsed >= AGENT_NOW_CLOCK_FROM_MS
-    ? `${name} · ${title} · ${formatDuration(elapsed)}`
+    ? `${name} · ${title} · ${formatDuration(elapsed, locale)}`
     : `${name} · ${title}`;
 }
 

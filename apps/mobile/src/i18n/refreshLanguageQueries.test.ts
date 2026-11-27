@@ -45,6 +45,19 @@ describe('changing the box language', () => {
     }
   });
 
+  it('invalidates cached server status read outside the endpoint cache', async () => {
+    const qc = new QueryClient();
+    const key = ['settings', 'appliance-status', 'box-1'];
+    qc.setQueryData(key, { backup: 'Failed to back up.' });
+
+    try {
+      await refreshLanguageQueries(qc);
+      expect(qc.getQueryState(key)?.isInvalidated).toBe(true);
+    } finally {
+      qc.clear();
+    }
+  });
+
   it('drops saved search cursors and resets Home, Things and Inbox', async () => {
     const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
     const first: QueryKey = queryKeys.endpoint(api.search.query, { params, query: { q: 'server' } });

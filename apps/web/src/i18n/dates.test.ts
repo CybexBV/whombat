@@ -17,6 +17,9 @@ describe('dates in the page’s language', () => {
     expect(dayLongMonth(at)).toBe('3 November');
     expect(weekdayName(0)).toBe('Sunday');
     expect(dayLongMonth(at, 'pseudo')).toBe('3 November');
+    expect(dayLongMonth(at, 'en-XA')).toBe('3 November');
+    expect(dayLongMonth(at, 'nl-XA')).toBe('3 November');
+    expect(dayShortMonth(at, 'en-US')).toBe('3 Nov');
   });
 
   it('gives Dutch names without an English month or a dot', () => {
@@ -24,6 +27,8 @@ describe('dates in the page’s language', () => {
     expect(dayLongMonth(at, 'nl-NL')).toBe('3 november');
     expect(longMonthName(9, 'nl-NL')).toBe('oktober');
     expect(weekdayName(0, 'nl-NL')).toBe('zondag');
+    expect(dayLongMonth(at, 'nl-BE')).toBe('3 november');
+    expect(dayLongMonth(at, 'nl')).toBe('3 november');
   });
 
   it('writes a backup’s title and range in Dutch', () => {

@@ -15,7 +15,7 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
 import { DESK_QUERY_KEY, useDesk } from '@whombat/client/desk/react';
-import { THIS_WHOMBAT_TEXT, whombatOverview } from '@whombat/client/managed';
+import { thisWhombatText, whombatOverview } from '@whombat/client/managed';
 import { sessionOps } from '@whombat/client/session';
 import Constants from 'expo-constants';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -57,8 +57,6 @@ import { useMachineHere } from './useMachine';
 import { useTailscaleHere } from './useTailscale';
 import { VoiceSection } from './VoiceSection';
 
-const T = THIS_WHOMBAT_TEXT;
-
 type Lists = Pick<OverviewFacts, 'endpoints'>;
 
 /**
@@ -82,6 +80,7 @@ function useOverviewLists() {
 
 export function WhombatScreen() {
   const { rawLocale } = useI18n();
+  const T = thisWhombatText(rawLocale);
   const managedCopyHere = managedCopy(rawLocale);
   const managedTextHere = managedText(rawLocale);
 
@@ -168,10 +167,11 @@ export function WhombatScreen() {
       app: Constants.expoConfig?.version ?? null,
       timeZone,
       agent,
+      locale: rawLocale,
     }),
   );
-  const needs = needsRows(overview);
-  const glance = glanceRows(overview);
+  const needs = needsRows(overview, rawLocale);
+  const glance = glanceRows(overview, rawLocale);
   return (
     <Screen>
       {back}
@@ -252,6 +252,7 @@ function NeedsYouRow({
   /** What the step said when it ended, under the button. */
   said?: string | null;
 }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
   return (
     <View
@@ -267,7 +268,7 @@ function NeedsYouRow({
       <View
         accessible
         accessibilityRole="image"
-        accessibilityLabel={THIS_WHOMBAT_TEXT.dotLabels[row.dot]}
+        accessibilityLabel={thisWhombatText(rawLocale).dotLabels[row.dot]}
         style={{
           width: 8,
           height: 8,

@@ -33,7 +33,7 @@ import { managedCopy } from '../managed/copy';
 import { useUpdateCheck } from '../managed/useAppUpdate';
 import { type AppNavigation, useAppNavigation } from '../navigation/hooks';
 import { useBeside } from '../navigation/panes';
-import { THEME_PREFERENCES, type ThemePreference } from '../theme/preference';
+import { type ThemePreference, themePreferences } from '../theme/preference';
 import { Text } from '../theme/Text';
 import { useTheme, useThemeContext } from '../theme/theme';
 import { Screen } from '../ui/headers';
@@ -126,7 +126,7 @@ export function SettingsScreen() {
   const agentName = agent?.name ?? '';
   const prompts = usePrompts();
   const parts = youPartsHere({ mode, prompts: prompts.shown });
-  const you = youLine(parts);
+  const you = youLine(parts, rawLocale);
   const notifications = parts.includes('notifications');
   const applianceLine = useApplianceLine();
   // The home's names and, where a row has no news of its own, what it holds.
@@ -281,15 +281,19 @@ export function SettingsScreen() {
 
 /** Each theme's icon, as the web's menu has them: the sun, the moon, and the phone that Auto follows. */
 const THEME_ICONS: Record<ThemePreference, LucideIcon> = { light: Sun, dark: Moon, system: Smartphone };
-const THEME_OPTIONS = THEME_PREFERENCES.map((o) => ({ ...o, icon: THEME_ICONS[o.value] }));
 
 /**
  * The theme in the list (AP-2622): Light · Dark · Auto, as on the web, one tap, saved to the account. The word stays
  * whole; the switch takes the rest.
  */
 function ThemeRow({ first }: { first: boolean }) {
-  const { rawLocale } = useI18n();
+  const { displayLanguage, rawLocale } = useI18n();
   const settingsTextHere = settingsText(rawLocale);
+  const options = themePreferences(rawLocale).map((option) => ({
+    ...option,
+    icon: THEME_ICONS[option.value],
+  }));
+  const wideLabels = displayLanguage !== 'en';
 
   const theme = useTheme();
   const { preference } = useThemeContext();
@@ -314,13 +318,16 @@ function ThemeRow({ first }: { first: boolean }) {
       <Text size={16} weight={600} style={{ flexShrink: 0 }}>
         {settingsTextHere.theme}
       </Text>
-      <View style={{ flex: 1, minWidth: 180, alignItems: 'flex-end' }}>
-        <View style={{ width: '100%', maxWidth: 216 }}>
+      <View
+        style={{ flex: 1, minWidth: 180, flexBasis: wideLabels ? 270 : undefined, alignItems: 'flex-end' }}
+      >
+        <View style={{ width: '100%', maxWidth: wideLabels ? 270 : 216 }}>
           <Segmented
-            options={THEME_OPTIONS}
+            options={options}
             value={preference}
             onChange={setTheme}
             label={settingsTextHere.theme}
+            fit={wideLabels}
           />
         </View>
       </View>

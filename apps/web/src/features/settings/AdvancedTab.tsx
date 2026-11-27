@@ -1,6 +1,5 @@
 import { createLink, Link } from '@tanstack/react-router';
 import { type AdvancedPart, type AdvancedRow, type AdvancedSection, advancedRowsHere } from '@whombat/client';
-import { MANAGED_TEXT } from '@whombat/client/managed';
 import { useBootstrap, useHostInfo, useTheAgent } from '@whombat/client/react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
@@ -9,6 +8,7 @@ import { ButtonLink } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
 import { SectionLabel } from '../../components/SectionLabel';
+import { MANAGED_TEXT } from '../../i18n/clientWords';
 import { useWebI18n } from '../../i18n/provider';
 import { useSettingsGroupText } from '../../i18n/words';
 import { AgentProfilePart } from '../agent/settings/AgentTab';

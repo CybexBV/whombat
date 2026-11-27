@@ -4,12 +4,14 @@
  * two lists: NEEDS YOU (what is wrong, each with its step) and AT A GLANCE (one line for
  * everything else, a link to its part). Shared by the web's parts and the phone's This Whombat screens. Pure.
  */
+import { interpolate } from '@whombat/core/i18n';
+import { clientTranslator, clientTree } from '../i18n/catalog';
+import { HERMES_WORDS_TREE, THIS_WHOMBAT_WORDS } from '../i18n/messages/thisWhombat';
 import type { ApplianceStatus, LicenceView } from '../session/managed-ops';
 import { backupPasskeyAsked } from './backup-options';
-import { COPY } from './copy';
 import { licenceSummary, licenceUsage } from './licence';
-import { PASSKEY_SETUP_TEXT, type PasskeySetupView } from './passkey-setup';
-import { ago, MANAGED_TEXT } from './status-copy';
+import { type PasskeySetupView, passkeySetupText } from './passkey-setup';
+import { ago, managedText } from './status-copy';
 import { updateView } from './updates';
 
 export type WhombatPart = 'overview' | 'backups' | 'devices' | 'access' | 'about';
@@ -33,126 +35,71 @@ export type WhombatAction =
  * chat-settle.md AP-6159), after “Whombat”, on the web and the phone: what the assistant runs on, its version in mono or
  * that no runner has said yet.
  */
-export const HERMES_WORDS = {
-  title: 'Hermes Agent',
-  meta: 'What your assistant runs on',
-  unknown: 'Not known yet',
-} as const;
+export function hermesWords(locale?: string | null) {
+  return clientTree(locale, HERMES_WORDS_TREE);
+}
 
-export const THIS_WHOMBAT_TEXT = {
-  parts: {
-    overview: 'Overview',
-    backups: 'Backups',
-    devices: 'Devices',
-    access: 'Agents’ access',
-    about: 'About',
-  } as Record<WhombatPart, string>,
-  /** The parts' group, for screen readers. */
-  partsLabel: 'Parts of This Whombat',
-  /** A segment's accessible name with its badge (AP-1226). */
-  partNeeds: (part: string, n: number) => `${part}, ${n} need${n === 1 ? 's' : ''} you`,
-  needsYou: 'NEEDS YOU',
-  glance: 'AT A GLANCE',
-  showCharts: 'Show charts',
-  hideCharts: 'Hide charts',
-  actions: {
-    setUpBackups: 'Set up backups',
-    openBackups: 'Open backups',
-    saveKit: MANAGED_TEXT.kitMake,
-    openDevices: 'Open devices',
-    setUpPasskey: PASSKEY_SETUP_TEXT.finish,
-  } as Record<WhombatAction, string>,
-  /** A NEEDS YOU or AT A GLANCE dot's name for screen readers. */
-  dotLabels: { ok: 'Fine', warn: 'Needs a look', bad: 'Not working', mut: 'Waiting' } as Record<Dot, string>,
-  /** Bringing it back, part of being backed up (Whombat backup-passkey.md BPK-08). */
-  broughtBack: 'Can be brought back',
-  backupsOff: 'Backups aren’t set up',
-  backupsOffMeta: 'If this Whombat breaks, its data can’t be restored.',
-  backedUp: 'Backed up',
-  devices: (n: number) => (n === 1 ? '1 device' : `${n} devices`),
-  /**
-   * The agent by its name (less-is-more.md AP-1806; one-agent.md AP-4905): the part named after it, “Dusty’s access”,
-   * and what it may reach.
-   */
-  accessFor: (agent: string) => `${capital(agent)}’s access`,
-  lanOpenFor: (agent: string) => `${capital(agent)} may reach your local network`,
-  lanClosedFor: (agent: string, n: number) =>
-    n === 0
-      ? `Your local network is closed to ${agent}`
-      : `${n} local network${n === 1 ? '' : 's'} open to ${agent}`,
-  version: (app: string, runtime: string | null) =>
-    runtime ? `App ${app} · Whombat ${runtime}` : `App ${app}`,
-  /** The AT A GLANCE row that opens About: named after the page it opens, its state on the line under it. */
-  aboutTitle: 'About',
-  /** The agent's access with nothing in it (AP-1230). */
-  nothingHere: 'Nothing to set here on this Whombat.',
-  /** What a managed Whombat turns off (was “NOT ON A MANAGED WHOMBAT”; AP-1230). */
-  turnedOff: 'TURNED OFF HERE',
-  /** Was SUBSCRIPTION (AP-1231). */
-  plan: 'PLAN',
-  devicesLabel: 'DEVICES',
-  addDevice: 'Add a device',
-  addDeviceMeta: 'A phone scans a code with the Whombat app. Another computer opens a link.',
-  /** To the Mobile app page, where a phone signs in by QR code (AP-523). */
-  addPhone: 'Add a phone',
-  addComputer: 'Add a computer',
-  /** A new device already shows a code: only the field to type it. */
-  enterCode: 'Have a code already?',
-  /** “Add a computer”: what to do, in order. */
-  addComputerSteps: [
-    'Open this link on the other computer.',
-    'Sign in there with the same email you use here. It then shows a code.',
-    'Type that code here, then check its fingerprint before you let it in.',
-  ],
-  showLink: 'Show the link',
-  /** The code field under Add a computer's steps (step 3 says what to do). */
-  codeFromComputer: 'Type the code the other computer shows, like 1234-5678.',
-  /** Letting a device in from Devices: the Mobile app page's card, with words for any device. */
-  confirmLabel: 'A DEVICE IS ASKING TO COME IN',
-  confirmTitle: (name: string) => `Let ${name} in?`,
-  confirmInto: 'It gets the same access to this Whombat as this browser.',
-  sameOnDevice: 'Check that the other device shows',
-  compareDevice: 'If they don’t match, choose “Not my device”.',
-  notMyDevice: 'Not my device',
-  addNetwork: 'Add network',
-  cancel: 'Cancel',
-  diagnostics: {
-    make: 'Make a file for support…',
-    dialogTitle: 'Make a file for support',
-    /** What each part of a diagnostic file holds, in plain words (AP-1232); the contract's list is for developers. */
-    scopes: {
-      versions: 'Which versions of Whombat and its parts are running.',
-      health:
-        'Whether each part works, how long it’s been running and whether AI sign-ins work. Not whose they are.',
-      updates: 'What’s running, what’s next, and why an update waited or failed.',
-      backup: 'Whether backups work and when the last one ran. Not where they go, and nothing from them.',
-      connectivity: 'How well this Whombat stayed connected over the last 7 days.',
-      errors:
-        'How often something went wrong over the last 7 days, counted by kind. Nothing from your conversations.',
-    } as Record<string, string>,
-  },
-  backupFile: {
-    download: 'Download a backup…',
-    restore: 'Restore from a file…',
-    show: 'Show',
-    making: (pct: number | null) => (pct === null ? 'Making the file…' : `Making the file · ${pct} %`),
-    ready: (size: string) => `Ready · ${size}`,
-    uploading: (pct: number | null) => (pct === null ? 'Uploading…' : `Uploading · ${pct} %`),
-    opening: 'Waiting for its password',
-    preview: 'Choose what to bring back',
-    restoring: 'Restoring…',
-    restored: 'Restored',
-    failed: 'The restore didn’t finish',
-  },
-} as const;
+export const HERMES_WORDS = hermesWords('en');
+
+/** Settings → This Whombat's words in a locale (English when none is given). */
+export function thisWhombatText(locale?: string | null) {
+  const {
+    lanClosedNone,
+    versionApp,
+    addComputerSteps,
+    actions,
+    backupFile: file,
+    ...w
+  } = clientTree(locale, THIS_WHOMBAT_WORDS);
+  const { makingStart, uploadingStart, ...backupFile } = file;
+  const f = interpolate;
+  return {
+    ...w,
+    parts: w.parts as Record<WhombatPart, string>,
+    /** A segment's accessible name with its badge. */
+    partNeeds: (part: string, n: number) => w.partNeeds(n, { part }),
+    actions: {
+      ...actions,
+      saveKit: managedText(locale).kitMake,
+      setUpPasskey: passkeySetupText(locale).finish,
+    } as Record<WhombatAction, string>,
+    /** A NEEDS YOU or AT A GLANCE dot's name for screen readers. */
+    dotLabels: w.dotLabels as Record<Dot, string>,
+    devices: (n: number) => w.devices(n),
+    /** The agent by its name: the part named after it, “Dusty’s access”, and what it may reach. */
+    accessFor: (agent: string) => f(w.accessFor, { Agent: capital(agent) }),
+    lanOpenFor: (agent: string) => f(w.lanOpenFor, { Agent: capital(agent) }),
+    lanClosedFor: (agent: string, n: number) =>
+      n === 0 ? f(lanClosedNone, { agent }) : w.lanClosedFor(n, { agent }),
+    version: (app: string, runtime: string | null) =>
+      runtime ? f(w.version, { app, runtime }) : f(versionApp, { app }),
+    /** “Add a computer”: what to do, in order. */
+    addComputerSteps: [addComputerSteps.first, addComputerSteps.second, addComputerSteps.third],
+    confirmTitle: (name: string) => f(w.confirmTitle, { name }),
+    diagnostics: {
+      ...w.diagnostics,
+      /** What each part of a diagnostic file holds, in plain words; the contract's list is for developers. */
+      scopes: w.diagnostics.scopes as Record<string, string>,
+    },
+    backupFile: {
+      ...backupFile,
+      making: (pct: number | null) => (pct === null ? makingStart : f(backupFile.making, { pct })),
+      ready: (size: string) => f(backupFile.ready, { size }),
+      uploading: (pct: number | null) => (pct === null ? uploadingStart : f(backupFile.uploading, { pct })),
+    },
+  };
+}
+
+export const THIS_WHOMBAT_TEXT = thisWhombatText('en');
 
 function capital(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 /** A part's name; the agent's part by its name, “Dusty’s access” (AP-1806, AP-4905). */
-export function whombatPartLabel(part: WhombatPart, agent: string): string {
-  return part === 'access' ? THIS_WHOMBAT_TEXT.accessFor(agent) : THIS_WHOMBAT_TEXT.parts[part];
+export function whombatPartLabel(part: WhombatPart, agent: string, locale?: string | null): string {
+  const T = thisWhombatText(locale);
+  return part === 'access' ? T.accessFor(agent) : T.parts[part];
 }
 
 /** Reads `?section=`: one of the parts, else the Overview (AP-1221). */
@@ -202,6 +149,8 @@ export interface WhombatOverviewInput {
   /** The agent by its name: AT A GLANCE says what it may reach (AP-1806, AP-4905). */
   agent: string;
   timeZone?: string;
+  /** The words' language; English when not given. */
+  locale?: string | null;
 }
 
 export interface WhombatOverview {
@@ -209,6 +158,12 @@ export interface WhombatOverview {
   glance: WhombatItem[];
   /** How many NEEDS YOU rows each part has (AP-1226); parts without any are left out. */
   badges: Partial<Record<WhombatPart, number>>;
+}
+
+/** “Founder plan”: the plan's id as a name. */
+function planName(plan: string, locale?: string | null): string {
+  const name = `${plan.charAt(0).toUpperCase()}${plan.slice(1).replace(/-/g, ' ')}`;
+  return clientTranslator(locale).t('managed.licence.plan', { plan: name });
 }
 
 const WORST: Record<Dot, number> = { bad: 0, warn: 1, mut: 2, ok: 3 };
@@ -221,10 +176,13 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
   const needsYou: WhombatItem[] = [];
   const glance: WhombatItem[] = [];
   const s = input.status;
-  const T = THIS_WHOMBAT_TEXT;
+  const locale = input.locale;
+  const T = thisWhombatText(locale);
+  const M = managedText(locale);
+  const P = passkeySetupText(locale);
 
   if (s) {
-    const update = updateView(s).rows[0];
+    const update = updateView(s, { locale }).rows[0];
     if (update)
       glance.push({
         key: 'update',
@@ -237,9 +195,9 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
       });
     if (s.licence) {
       // “Whombat plan · Active” over “Valid until 24 October 2026 · Connectors 3 of 50” (AP-1225).
-      const plan = licenceSummary(s.licence, input.timeZone);
-      const name = s.licence.plan ? COPY.licence.plan(s.licence.plan) : null;
-      const usage = licenceUsage(s.licence).map((u) => u.text);
+      const plan = licenceSummary(s.licence, input.timeZone, locale);
+      const name = s.licence.plan ? planName(s.licence.plan, locale) : null;
+      const usage = licenceUsage(s.licence, locale).map((u) => u.text);
       const meta = [...plan.meta.split(' · ').filter((p) => p && p !== name), ...usage].join(' · ');
       glance.push({
         key: 'plan',
@@ -251,7 +209,7 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
     }
 
     const b = s.backup;
-    const last = b.lastSuccessAt ? MANAGED_TEXT.backup.last(ago(b.lastSuccessAt)) : MANAGED_TEXT.backup.none;
+    const last = b.lastSuccessAt ? M.backup.last(ago(b.lastSuccessAt, locale)) : M.backup.none;
     if (b.state === 'unprotected')
       needsYou.push({
         key: 'backups',
@@ -266,7 +224,7 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
         key: 'backups',
         part: 'backups',
         dot: b.state === 'failing' ? 'bad' : 'warn',
-        title: MANAGED_TEXT.backup[b.state],
+        title: M.backup[b.state],
         meta: [last, b.lastFailure?.reason].filter(Boolean).join(' · '),
         action: 'openBackups',
       });
@@ -278,7 +236,7 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
         key: 'backups',
         part: 'backups',
         dot: b.state === 'protected' ? 'ok' : 'mut',
-        title: b.state === 'protected' ? T.backedUp : MANAGED_TEXT.backup.pending,
+        title: b.state === 'protected' ? T.backedUp : M.backup.pending,
         meta: [last, way].filter(Boolean).join(' · '),
       });
     }
@@ -291,17 +249,15 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
               key: 'kit',
               part: 'backups',
               dot: 'ok',
-              title: MANAGED_TEXT.kitSaved,
-              meta: MANAGED_TEXT.kitSavedMeta,
+              title: M.kitSaved,
+              meta: M.kitSavedMeta,
             }
           : {
               key: 'kit',
               part: 'backups',
               dot: 'mut',
-              title: MANAGED_TEXT.kitMissing,
-              meta: s.recovery.rotationPending
-                ? MANAGED_TEXT.kitRotationPending
-                : MANAGED_TEXT.kitMissingMeta,
+              title: M.kitMissing,
+              meta: s.recovery.rotationPending ? M.kitRotationPending : M.kitMissingMeta,
             },
       );
   }
@@ -324,10 +280,10 @@ export function whombatOverview(input: WhombatOverviewInput): WhombatOverview {
       key: 'passkey',
       part: 'devices',
       dot: 'mut',
-      title: PASSKEY_SETUP_TEXT.empty,
-      meta: PASSKEY_SETUP_TEXT.intro,
+      title: P.empty,
+      meta: P.intro,
       action: 'setUpPasskey',
-      actionLabel: PASSKEY_SETUP_TEXT.setup,
+      actionLabel: P.setup,
     });
   if (input.devices !== null && input.devices > 0)
     glance.push({ key: 'devices', part: 'devices', dot: 'ok', title: T.devices(input.devices) });

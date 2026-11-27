@@ -138,12 +138,45 @@ describe('a push without a preview', () => {
       });
       expect(w.shown.map((s) => [s.title, s.options.body, s.options.data])).toEqual([
         ['Whombat', lines.mention, { path: '/c/general' }],
-        ['Whombat', lines.generic, { path: '/inbox' }],
+        ['Whombat', lines.approval, { path: '/inbox' }],
       ]);
       expect(JSON.stringify(w.shown)).not.toContain('Mara');
       expect(JSON.stringify(w.shown)).not.toContain('Salaries');
     });
   }
+
+  it('groups the box’s own kinds like the box and the Android app do', async () => {
+    const w = worker();
+    const kinds = [
+      'needs_you',
+      'approval_updated',
+      'mention',
+      'reply',
+      'direct',
+      'agent_update',
+      'run_progress',
+      'odd',
+    ];
+    for (const kind of kinds) {
+      await w.push({ ...secret, kind, path: '/inbox', notificationId: kind, burrow: 'b', preview: false });
+    }
+    expect(w.shown.map((s) => s.options.body)).toEqual([
+      PUSH_TEXT.approval,
+      PUSH_TEXT.approval,
+      PUSH_TEXT.mention,
+      PUSH_TEXT.message,
+      PUSH_TEXT.message,
+      PUSH_TEXT.message,
+      PUSH_TEXT.run,
+      PUSH_TEXT.generic,
+    ]);
+  });
+
+  it('falls back to English for a language it has no lines for', async () => {
+    const w = worker('/sw.js?lang=fr');
+    await w.push({ ...secret, kind: 'message', ref: 'r1', preview: false });
+    expect(w.shown.map((s) => s.options.body)).toEqual([PUSH_TEXT.message]);
+  });
 
   it('shows the box’s own push as it came when previews are on', async () => {
     const w = worker();

@@ -303,14 +303,14 @@ export const APPROVALS = splitPairs({
   ],
   'approval.needs.actionAfter': [
     {
-      one: '{agent} won’t {what} without a person. Approve now and it goes out once the first {word} is green.',
+      one: '{agent} won’t {what} without a person. Approve now and it goes out once the first {countWord} is green.',
       other:
-        '{agent} won’t {what} without a person. Approve now and it goes out once the first {word} are green.',
+        '{agent} won’t {what} without a person. Approve now and it goes out once the first {countWord} are green.',
     },
     {
       one: '{agent} gaat {what} zonder een persoon. Keur nu goed en het gaat door zodra de eerste groen is.',
       other:
-        '{agent} gaat {what} zonder een persoon. Keur nu goed en het gaat door zodra de eerste {word} groen zijn.',
+        '{agent} gaat {what} zonder een persoon. Keur nu goed en het gaat door zodra de eerste {countWord} groen zijn.',
     },
   ],
   'approval.executing.grant': ['Giving {agent} {label} now.', '{agent} krijgt nu {label}.'],

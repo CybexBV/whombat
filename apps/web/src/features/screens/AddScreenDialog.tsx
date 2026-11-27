@@ -7,7 +7,6 @@
 import {
   DESK_POPUPS,
   DESK_SCREEN_CODE_RE,
-  DESK_SCREENS_TEXT,
   type DeskApi,
   type DeskPopups,
   deskErrorCode,
@@ -24,6 +23,8 @@ import { Input } from '../../components/Input';
 import { Modal, ModalTitle } from '../../components/Modal';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
+import { DESK_SCREENS_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import s from './Screens.module.css';
 
@@ -88,7 +89,7 @@ export function AddScreenDialog({
         const c = deskErrorCode(error);
         setProblem({
           field: c === 'wrong_code' || c === 'pairing_expired' ? 'code' : 'form',
-          text: screensErrorText(error),
+          text: screensErrorText(error, undefined, currentLocale()),
         });
       })
       .finally(() => setBusy(false));

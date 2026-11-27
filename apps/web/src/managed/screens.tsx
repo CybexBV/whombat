@@ -9,7 +9,6 @@ import {
   accountOf,
   agoText,
   appliancesEmptyText,
-  BACKUP_OPTIONS_TEXT,
   type ClaimCard,
   type ClaimRequest,
   type ControlApi,
@@ -21,7 +20,6 @@ import {
   formatScreenLettersInput,
   isKitBackupGap,
   isRetired,
-  KIT_BACKUP_TEXT,
   type KitBackup,
   type KitBackupGap,
   kitText,
@@ -81,6 +79,7 @@ import { Input } from '../components/Input';
 import { SectionLabel } from '../components/SectionLabel';
 import { StatusDot } from '../components/StatusDot';
 import { SCREEN_MODE_TEXT } from '../features/screens/screenMode/model';
+import { BACKUP_OPTIONS_TEXT, KIT_GAP_TEXT } from '../i18n/clientWords';
 import { COPY } from '../i18n/managed';
 import { currentLocale } from '../i18n/provider';
 import { saveBlob } from '../lib/saveBlob';
@@ -1537,6 +1536,7 @@ export function RecoveryKitScreen({
           appliance: appliancePeerId,
           me: accountOf(session),
           name: passkeyName(browserLabel()),
+          locale: currentLocale(),
         });
         const ids = [added.credentialId];
         setPasskeyIds(ids);
@@ -1577,7 +1577,7 @@ export function RecoveryKitScreen({
         busy={busy}
         saved={saved}
         error={error}
-        notice={isKitBackupGap(backup) ? KIT_BACKUP_TEXT[backup.gap] : null}
+        notice={isKitBackupGap(backup) ? KIT_GAP_TEXT[backup.gap] : null}
         onSave={() => void save()}
         onPrint={print}
         onDownload={download}

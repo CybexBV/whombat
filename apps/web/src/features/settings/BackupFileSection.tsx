@@ -11,7 +11,6 @@
 import { createLink } from '@tanstack/react-router';
 import { ApiError, BACKUP_FILE_TEXT, backupRestoreFileLine, blobChunkSource } from '@whombat/client';
 import { addServerHref } from '@whombat/client/hosts';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
 import {
   type BackupMaker,
   type BackupRestorer,
@@ -39,6 +38,7 @@ import { Input } from '../../components/Input';
 import { Modal, ModalDescription, ModalTitle } from '../../components/Modal';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
+import { THIS_WHOMBAT_TEXT } from '../../i18n/clientWords';
 import { useWebI18n } from '../../i18n/provider';
 import { useLocaleWords } from '../../i18n/words';
 import styles from './BackupFile.module.css';

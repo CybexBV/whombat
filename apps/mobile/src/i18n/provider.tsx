@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { I18nProvider, useI18n } from '@whombat/client/i18n/react';
-import { usePreferences, useWhombat } from '@whombat/client/react';
+import { usePreferences, useSessionProtocol, useWhombat } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { DEFAULT_LOCALE, formatLocaleOf } from '@whombat/core/i18n';
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WhombatLive } from '../../modules/whombat-live';
 import type { QueryPersister } from '../data/queryPersist';
 import { secureStore } from '../lib/storage';
-import { boxLocale, deviceLocale, saveBoxLocale } from './locale';
+import { boxLocale, canSaveBoxLocale, deviceLocale, saveBoxLocale } from './locale';
 import { refreshLanguageQueries } from './refreshLanguageQueries';
 
 export function MobileI18nProvider({ locale, children }: { locale?: string; children: ReactNode }) {
@@ -29,6 +29,7 @@ export function BoxI18nProvider({
   children: ReactNode;
 }) {
   const { client, queries } = useWhombat();
+  const canSave = canSaveBoxLocale(connected, useSessionProtocol());
   const qc = useQueryClient();
   const preferences = usePreferences(connected ? {} : null, {
     refetchOnMount: 'always',
@@ -72,7 +73,7 @@ export function BoxI18nProvider({
   );
 
   return (
-    <SaveLocaleContext.Provider value={connected ? save : null}>
+    <SaveLocaleContext.Provider value={canSave ? save : null}>
       <MobileI18nProvider locale={locale}>{children}</MobileI18nProvider>
     </SaveLocaleContext.Provider>
   );

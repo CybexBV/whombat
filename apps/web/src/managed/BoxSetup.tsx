@@ -58,7 +58,8 @@ import { Input } from '../components/Input';
 import { StatusDot } from '../components/StatusDot';
 import { type Reach, useNow, useReach } from '../features/machine/useReach';
 import ob from '../features/onboarding/OnboardingScreen.module.css';
-import { useWebI18n } from '../i18n/provider';
+import { claimantLocale } from '../i18n/locale';
+import { useWebLocaleControl } from '../i18n/provider';
 import setup from './BoxSetup.module.css';
 import type { BoxEnvironment } from './boxEnv';
 import { WEB_CLIENT } from './connect';
@@ -114,7 +115,7 @@ export function BoxSetup({
   const knowsAccount = Boolean(prefill?.email);
   const steps = boxSetupSteps({ atAddress, fromLink: prefill?.fromLink ?? false, knowsAccount });
   const [stage, setStage] = useState<Stage>('letters');
-  const { locale: claimLocale } = useWebI18n();
+  const localeControl = useWebLocaleControl();
   const [letters, setLetters] = useState('');
   const [name, setName] = useState(prefill?.name ?? '');
   const [email, setEmail] = useState(prefill?.email ?? '');
@@ -153,8 +154,9 @@ export function BoxSetup({
         clientPeerId: keyPair.peerId,
         account: { name: name.trim(), email: email.trim() },
         endpoint: { label: label(), platform: 'web' },
-        // The language this page is in becomes the new account's (a box that predates languages ignores it).
-        locale: claimLocale,
+        // The claimant's own language becomes the new account's, never one this browser kept for another box (a box
+        // that predates languages ignores it).
+        locale: claimantLocale(localeControl?.chosenLocale() ?? null),
       });
       onClaimed(out.accountId);
       setStage(atAddress ? 'passkey' : 'reach');

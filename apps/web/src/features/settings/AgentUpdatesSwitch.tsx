@@ -6,7 +6,6 @@
  */
 import { agentSettingsView, commitOutcomeText, hostErrorInfo } from '@whombat/client/hosts';
 import { useHostAgentSettings, useHostsChange, useHostsStatus } from '@whombat/client/hosts/react';
-import { MANAGED_TEXT } from '@whombat/client/managed';
 import { api } from '@whombat/core/contracts';
 import { useId } from 'react';
 import { cx } from '../../components/cx';
@@ -14,6 +13,7 @@ import { SectionLabel } from '../../components/SectionLabel';
 import { StatusDot } from '../../components/StatusDot';
 import { useToast } from '../../components/Toast';
 import { Toggle } from '../../components/Toggle';
+import { MANAGED_TEXT } from '../../i18n/clientWords';
 import { useWebI18n } from '../../i18n/provider';
 import { useAgentUpdateWords } from '../../i18n/words';
 import styles from './SettingsScreen.module.css';

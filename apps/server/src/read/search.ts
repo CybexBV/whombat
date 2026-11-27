@@ -83,18 +83,20 @@ async function tsQuery(db: Db, q: string, lang: SupportedLanguage = 'en'): Promi
 }
 
 /**
- * A query without its stopwords (pure, unit-tested): quoted phrases stay whole, `or` and a `-` before a word keep their
- * meaning, and an `or` left with nothing on one side goes too.
+ * A query without its stopwords (pure, unit-tested): quoted phrases stay whole, `or` keeps its meaning, and an `or`
+ * left with nothing on one side goes too. A word with a `-` before it stays even when it is a stopword: the person
+ * asked to leave out what has it, and the two halves of the search are either-or, so dropping it from one half would
+ * bring those results back through that half.
  */
 export function withoutStopwords(q: string, stopwords: readonly string[]): string {
   const stop = new Set(stopwords.map((w) => w.toLowerCase()));
   const parts = q.match(/-?"[^"]*"?|\S+/g) ?? [];
   const kept = parts.filter((p) => {
     if (p.includes('"') || /^or$/i.test(p)) return true;
-    const word = p
-      .replace(/^-/, '')
-      .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
-      .toLowerCase();
+    if (/^-[\p{L}\p{N}]/u.test(p)) return true;
+    // A minus on its own leaves nothing out.
+    if (p === '-') return false;
+    const word = p.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '').toLowerCase();
     return !word || !stop.has(word);
   });
   const out: string[] = [];

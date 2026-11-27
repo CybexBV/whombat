@@ -16,6 +16,8 @@ export const PHRASES = splitPairs({
   'phrase.update': ['Update', 'Bijwerken'],
   'phrase.updateName': ['Update {name}', '{name} bijwerken'],
   'phrase.updateAll': ['Update all', 'Alles bijwerken'],
+  'phrase.updateNow': ['Update now', 'Nu bijwerken'],
+  'phrase.updateLists': ['Update lists', 'Lijsten bijwerken'],
   'phrase.stop': ['Stop', 'Stoppen'],
   'phrase.start': ['Start', 'Starten'],
   'phrase.retry': ['Retry', 'Opnieuw'],
@@ -54,6 +56,7 @@ export const PHRASES = splitPairs({
   'phrase.failing': ['Failing', 'Mislukt steeds'],
   'phrase.waiting': ['Waiting', 'Wacht'],
   'phrase.waitingForYou': ['Waiting for you', 'Wacht op jou'],
+  'phrase.updateWaiting': ['Update waiting', 'Update wacht'],
   'phrase.queued': ['Queued', 'In de wachtrij'],
   'phrase.pending': ['Pending', 'In afwachting'],
   'phrase.working': ['Working', 'Werkt'],
@@ -125,6 +128,7 @@ export const PHRASES = splitPairs({
 
   // Labels.
   'phrase.today': ['Today', 'Vandaag'],
+  'phrase.todayByTheHour': ['Today by the hour', 'Vandaag per uur'],
   'phrase.thisWeek': ['This week', 'Deze week'],
   'phrase.thisMonth': ['This month', 'Deze maand'],
   'phrase.last30Days': ['Last 30 days', 'Laatste 30 dagen'],
@@ -241,6 +245,7 @@ export const PHRASES = splitPairs({
     { one: '{count} minuut', other: '{count} minuten' },
   ],
   'phrase.minShort': ['{n} min', '{n} min'],
+  'phrase.atLeast': ['at least {n}', 'minstens {n}'],
   'phrase.hours': [
     { one: '{count} hour', other: '{count} hours' },
     { one: '{count} uur', other: '{count} uur' },

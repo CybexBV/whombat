@@ -29,7 +29,7 @@ import {
   hostTiles,
   hostTimeTicks,
 } from '@whombat/client';
-import { THIS_WHOMBAT_TEXT } from '@whombat/client/managed';
+import { thisWhombatText } from '@whombat/client/managed';
 import { hostRangeLabels, hostStatusCopy } from '@whombat/core/text';
 import type { HostMetrics, HostMetricsRange } from '@whombat/protocol/session';
 import { type ReactNode, useRef, useState } from 'react';
@@ -191,8 +191,9 @@ function PowerLine({ metrics }: { metrics: HostMetrics }) {
 
 /** “Show charts” / “Hide charts” under the tiles (AP-1245): a link-style 44dp button that says whether they're open. */
 function ChartsToggle({ open, onPress }: { open: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
   const theme = useTheme();
-  const label = open ? THIS_WHOMBAT_TEXT.hideCharts : THIS_WHOMBAT_TEXT.showCharts;
+  const label = open ? thisWhombatText(rawLocale).hideCharts : thisWhombatText(rawLocale).showCharts;
   return (
     <Touchable
       accessibilityRole="button"

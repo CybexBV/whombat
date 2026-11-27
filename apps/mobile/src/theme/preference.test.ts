@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { memoryStore, STORAGE_KEYS } from '../lib/kv';
-import { loadThemePreference, saveThemePreference, THEME_PREFERENCES } from './preference';
+import { loadThemePreference, saveThemePreference, themePreferences } from './preference';
 
 const refusing = {
   ...memoryStore(),
@@ -25,10 +25,14 @@ describe('the theme choice when the keystore refuses (AP-594)', () => {
 
 describe('the theme’s choices', () => {
   it('are the web’s, in its order: Light · Dark · Auto, Auto following the phone', () => {
-    expect(THEME_PREFERENCES).toEqual([
+    expect(themePreferences()).toEqual([
       { value: 'light', label: 'Light' },
       { value: 'dark', label: 'Dark' },
       { value: 'system', label: 'Auto' },
     ]);
+  });
+
+  it('uses the Dutch labels on the phone', () => {
+    expect(themePreferences('nl-NL').map(({ label }) => label)).toEqual(['Licht', 'Donker', 'Automatisch']);
   });
 });

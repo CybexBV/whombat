@@ -9,25 +9,27 @@
  * Not in the mocks: onboarding's choice cards (the Billing page's) and the settings' fields.
  */
 import {
-  ACCOUNTS_TEXT,
-  BACKUP_SETUP_TEXT,
   type BackupForm,
   type BackupKind,
-  backupErrorText,
+  backupErrorText as clientBackupErrorText,
   destinationInput,
   emptyBackupForm,
-  MANAGED_TEXT,
 } from '@whombat/client/managed';
 import { type ApplianceSession, type BackupDestinationResult, sessionOps } from '@whombat/client/session';
 import { type FormEvent, type ReactNode, useEffect, useId, useState } from 'react';
 import { Button } from '../../components/Button';
 import { copyText } from '../../components/CopyButton';
 import { Input } from '../../components/Input';
+import { ACCOUNTS_TEXT, BACKUP_SETUP_TEXT, MANAGED_TEXT } from '../../i18n/clientWords';
+import { currentLocale } from '../../i18n/provider';
 import styles from './BackupDestination.module.css';
 
 const T = BACKUP_SETUP_TEXT;
 
-export { backupErrorText };
+/** Why a backup step failed, in the page's language. */
+export function backupErrorText(error: unknown): string {
+  return clientBackupErrorText(error, currentLocale());
+}
 
 /** What you are told after saving: whether old backups are safe from this box, and the host key to compare. */
 export function savedNotes(result: BackupDestinationResult): string[] {
@@ -70,7 +72,7 @@ export function BackupDestinationForm({
 
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    const check = destinationInput({ ...form, kind });
+    const check = destinationInput({ ...form, kind }, currentLocale());
     if (!check.ok) {
       setInvalid({ field: check.field, error: check.error });
       document.getElementById(`${legend}-${check.field}`)?.focus();

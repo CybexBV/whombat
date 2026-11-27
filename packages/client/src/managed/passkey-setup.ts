@@ -1,34 +1,22 @@
 import type { BackupBringBack } from '@whombat/protocol/session';
+import { clientTree } from '../i18n/catalog';
+import { PASSKEY_SETUP_WORDS } from '../i18n/messages/passkeySetup';
 import { sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
 import type { ControlApi } from './control';
 import { PasskeyError } from './passkeys';
 
-export const PASSKEY_SETUP_TEXT = {
-  empty: 'Set up your passkey',
-  incomplete: 'Finish setting up your passkey',
-  ready: 'Passkey ready',
-  intro: 'One passkey to sign in, open all your Whombats and unlock your backups.',
-  setup: 'Set up my passkey',
-  finish: 'Finish setup',
-  check: 'Check my passkey',
-  checking: 'Checking your passkey…',
-  settingUp: 'Setting up your passkey',
-  loading: 'Loading your passkey…',
-  loadError: 'Couldn’t check your passkey. Try again.',
-  unsupported:
-    'Your browser or passkey provider couldn’t finish setting up backup access. Update both, then finish setup with the same passkey.',
-  details: 'Passkey details',
-  /** Under it: what it opens, the passkeys once there are any (it holds which kinds count before then too). */
-  detailsMeta: (n: number) =>
-    n === 0
-      ? 'Which passkeys this Whombat accepts'
-      : `${n === 1 ? 'Your passkey' : `Your ${n} passkeys`} and which ones this Whombat accepts`,
-  saving: 'Your backup details are being saved. Finish setup in a moment.',
-  readyMeta: 'Your passkey signs you in, opens your Whombats and unlocks your backups.',
-  noBackups:
-    'Your passkey signs you in and opens your Whombats. It will protect your backups when you set them up.',
-} as const;
+/** The one passkey's setup words in a locale (English when none is given). */
+export function passkeySetupText(locale?: string | null) {
+  const { detailsMetaNone, detailsMeta, ...w } = clientTree(locale, PASSKEY_SETUP_WORDS);
+  return {
+    ...w,
+    /** Under it: what it opens, the passkeys once there are any (it holds which kinds count before then too). */
+    detailsMeta: (n: number) => (n === 0 ? detailsMetaNone : detailsMeta(n)),
+  };
+}
+
+export const PASSKEY_SETUP_TEXT = passkeySetupText('en');
 
 export interface PasskeySetupView {
   phase: 'empty' | 'incomplete' | 'ready';
@@ -43,8 +31,9 @@ export function passkeySetupView(input: {
   linked: boolean;
   allLinked: boolean;
   bringBack: BackupBringBack | null | undefined;
+  locale?: string | null;
 }): PasskeySetupView {
-  const T = PASSKEY_SETUP_TEXT;
+  const T = passkeySetupText(input.locale);
   if (!input.hasPasskey) return { phase: 'empty', title: T.empty, meta: T.intro, action: T.setup };
   const b = input.bringBack;
   const backupsReady =
@@ -70,6 +59,7 @@ export async function readPasskeySetup(input: {
   control: Pick<ControlApi, 'session' | 'passkeys' | 'appliances'>;
   appliance: string;
   me: string | null;
+  locale?: string | null;
 }): Promise<PasskeySetupView> {
   if (!input.me) throw new PasskeyError('invalid');
   const [local, cloud, account, backup] = await Promise.all([
@@ -99,5 +89,6 @@ export async function readPasskeySetup(input: {
         shared.owner?.appliances.includes(peer),
       ),
     bringBack: backup.summary.bringBack,
+    locale: input.locale,
   });
 }

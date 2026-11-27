@@ -45,7 +45,7 @@ export function stepOfRestore(state: Pick<BackupRestoreState, 'phase'> | null): 
 export function kitWhombatName(text: string): string | null {
   const line = text.split(/\r?\n/).find((l) => l.trim().startsWith('Whombat: '));
   const name = line?.trim().slice('Whombat: '.length).trim();
-  return name && bringBackName(name) === name ? name : null;
+  return name && bringBackName(name, currentLocale()) === name ? name : null;
 }
 
 export interface ChooseRow {
@@ -67,7 +67,7 @@ export function chooseRows(checkpoints: readonly BackupCheckpoint[], now = new D
   const late = madeAfterReplaced(checkpoints);
   const pick = backupToBringBack(checkpoints);
   return checkpoints.map((cp) => {
-    const label = backupLabel(cp, false);
+    const label = backupLabel(cp, false, currentLocale());
     const meta = [
       ago(cp.createdAt, currentLocale()),
       late.has(cp.id) ? t('backups.afterReplaced') : null,

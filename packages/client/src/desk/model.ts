@@ -8,8 +8,12 @@
  * in words, Listen's sample, and the screen's unlock request with its time left. Shared by the web and the phone; pure
  * (the clock is passed in).
  */
+import { deskWords } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { formatClock, formatDate } from '@whombat/core/text';
 import { normalizeClaimCode } from '@whombat/protocol/claim';
+import { clientTree } from '../i18n/catalog';
+import { DESK_WORDS as DESK_TEXT_WORDS } from '../i18n/messages/desk';
 import { OperationError } from '../session/managed-ops';
 import { fromBase64 } from '../svg';
 import {
@@ -33,158 +37,175 @@ import {
   knownDeskVoices,
 } from './contract';
 
-const W = DESK_WORDS.settings;
-const E = DESK_WORDS.errors;
+/** “Unpair the screen?” and what follows it, from the one sentence of the desk's words. */
+function splitUnpair(sentence: string): [string, string] {
+  const at = sentence.indexOf('? ');
+  return at < 0 ? [sentence, ''] : [sentence.slice(0, at + 1), sentence.slice(at + 2)];
+}
 
-/** “Unpair the screen?” and what follows it, from the one sentence of `DESK_WORDS`. */
-const [UNPAIR_TITLE, UNPAIR_LEAD] = (() => {
-  const at = W.unpairConfirm.indexOf('? ');
-  return at < 0 ? [W.unpairConfirm, ''] : [W.unpairConfirm.slice(0, at + 1), W.unpairConfirm.slice(at + 2)];
-})();
+/**
+ * Every word of the SCREEN section, its dialogs and the unlock request in a locale (English when none is given): the
+ * desk's own words where it has them.
+ */
+export function deskText(locale?: string | null) {
+  const desk = locale === undefined || locale === null ? DESK_WORDS : deskWords(locale);
+  const W = desk.settings;
+  const E = desk.errors;
+  const own = clientTree(locale, DESK_TEXT_WORDS);
+  const [unpairTitle, unpairLead] = splitUnpair(W.unpairConfirm);
+  const lockedHints = own.lockedHints;
+  return {
+    section: W.screen.toUpperCase(),
+    pair: W.pairTheScreen,
+    unpairedTitle: own.unpairedTitle,
+    unpairedMeta: W.intro,
+    pairingShown: (until: string) => interpolate(own.pairingShown, { until }),
+    pairedYou: (since: string) => fillDeskWords(W.pairedWith, { name: own.pairedYouName, date: since }),
+    pairedMine: own.pairedMine,
+    pairedMineNoPin: own.pairedMineNoPin,
+    unpair: W.unpair,
+    pin: W.pin,
+    pinMeta: own.pinMeta,
+    changePin: W.changePin,
+    noPin: W.noPin,
+    choosePin: W.choosePinButton,
+    /* The switch, on runtimes that report their `display`. */
+    showOnScreen: W.showOnScreen,
+    screenNamed: (name: string) => fillDeskWords(W.screenNamed, { name }),
+    builtIn: W.builtIn,
+    connectedUnnamed: W.connectedUnnamed,
+    noScreenNow: W.noScreenNow,
+    virtualHint: W.virtualHint,
+    offHint: W.offHint,
+    /** On, and not paired yet: the runtime pairs it within a minute, or the person pairs it with its letters. */
+    pairsItself: own.pairsItself,
+    lockedShows: W.whileLocked,
+    lockedViews: W.lockedViews as Record<DeskLockedView, string>,
+    lockedHints: {
+      time: (assistant: string) => interpolate(lockedHints.time, { assistant }),
+      summary: (assistant: string) => interpolate(lockedHints.summary, { assistant }),
+      everything: (assistant: string) => interpolate(lockedHints.everything, { assistant }),
+    } as Record<DeskLockedView, (assistant: string) => string>,
+    quietHours: W.quietHours,
+    quietOn: (start: string, end: string, night: DeskNight) =>
+      interpolate(night === 'black' ? own.quietOnBlack : own.quietOnDim, { start, end }),
+    quietOff: own.quietOff,
+    from: W.from,
+    to: W.to,
+    inZone: (timeZone: string) => interpolate(own.inZone, { timeZone }),
+    atNight: W.atNight,
+    nights: W.nights as Record<DeskNight, string>,
+    talkTo: (assistant: string) => fillDeskWords(W.talkTo, { assistant }),
+    talkOn: own.talkOn,
+    talkOff: own.talkOff,
+    noMicrophone: W.noMicrophone,
+    noVoice: W.noVoice,
+    /* Stay unlocked while you’re here, where the box has a camera the presence service reads (older runtimes). */
+    presence: W.presence,
+    presenceHint: W.presenceHint,
+    /* Lock again, where the runtime lists its choices; `{assistant}` in `never`'s hint. */
+    lockAgain: W.lockAgain,
+    lockAgainChoices: W.lockAgainChoices as Record<DeskLockAgain, string>,
+    lockAgainHints: (choice: DeskLockAgain, assistant: string) =>
+      fillDeskWords((W.lockAgainHints as Record<DeskLockAgain, string>)[choice], { assistant }),
+    /* Use the camera to see when you’re here, where the runtime says the camera works for it. */
+    cameraWake: W.cameraWake,
+    cameraWakeHint: W.cameraWakeHint,
+    /* The voice the screen answers with, under Talk while it is on. */
+    voice: W.voice,
+    voiceHint: (assistant: string) => fillDeskWords(W.voiceHint, { assistant }),
+    voiceNames: W.voices as Record<DeskVoice, string>,
+    voiceKinds: W.voiceKinds as Record<DeskVoice, string>,
+    listen: W.listen,
+    playing: W.listening,
+    sampleFailed: W.sampleFailed,
+    dialog: {
+      title: W.pairTheScreen,
+      lead: own.dialog.lead,
+      showLetters: own.dialog.showLetters,
+      letters: W.typeLetters,
+      lettersPlaceholder: 'ABCD',
+      changesIn: (minutes: number) =>
+        minutes < 1 ? own.dialog.changesSoon : interpolate(own.dialog.changesIn, { minutes }),
+      expired: own.dialog.expired,
+      newLetters: own.dialog.newLetters,
+      pin: W.choosePin,
+      pinAgain: W.repeatPin,
+      submit: own.dialog.submit,
+      busy: own.dialog.busy,
+      done: own.dialog.done,
+      cancel: own.dialog.cancel,
+    },
+    pinDialog: {
+      title: W.changePin,
+      lead: own.pinDialog.lead,
+      submit: W.changePin,
+      busy: own.pinDialog.busy,
+      done: own.pinDialog.done,
+    },
+    /** The first PIN of a screen that paired itself or was turned on. */
+    firstPinDialog: {
+      title: W.choosePinButton,
+      lead: own.firstPinDialog.lead,
+      submit: own.firstPinDialog.submit,
+      busy: own.firstPinDialog.busy,
+      done: own.firstPinDialog.done,
+    },
+    /** Turning the screen off while it is paired: it ends the pairing and its PIN. */
+    offDialog: {
+      title: own.offDialog.title,
+      lead: (hasPin: boolean) =>
+        interpolate(hasPin ? own.offDialog.leadPin : own.offDialog.lead, { offHint: W.offHint }),
+      submit: own.offDialog.submit,
+      done: own.offDialog.done,
+    },
+    unpairDialog: {
+      title: unpairTitle,
+      lead: unpairLead,
+      submit: W.unpair,
+      done: own.unpairDialog.done,
+    },
+    problems: {
+      letters: own.problems.letters,
+      pin: own.problems.pin,
+      easy: E.easy_pin,
+      pinAgain: W.pinsDiffer,
+    },
+    errors: {
+      /** Five wrong tries: the screen already shows new letters. */
+      newLetters: own.errors.newLetters,
+      forbidden: own.errors.forbidden,
+      failed: own.errors.failed,
+      /** An older runtime refuses a PIN shorter than six digits as malformed. */
+      sixDigits: own.errors.sixDigits,
+    },
+    unlock: {
+      notice: W.unlockRequest,
+      title: W.unlockRequest.replace(/\.$/, ''),
+      meta: (secondsLeft: number) =>
+        interpolate(own.unlock.meta, {
+          ends:
+            secondsLeft >= 60
+              ? interpolate(own.unlock.endsMin, { n: Math.ceil(secondsLeft / 60) })
+              : interpolate(own.unlock.endsSec, { n: secondsLeft }),
+        }),
+      unlock: W.unlock,
+      no: W.no,
+      unlocked: own.unlock.unlocked,
+      keptLocked: own.unlock.keptLocked,
+    },
+  };
+}
 
-/** Every word of the SCREEN section, its dialogs and the unlock request: `DESK_WORDS` where it has them. */
-export const DESK_TEXT = {
-  section: W.screen.toUpperCase(),
-  pair: W.pairTheScreen,
-  unpairedTitle: 'The screen isn’t paired',
-  unpairedMeta: W.intro,
-  pairingShown: (until: string) => `The screen shows pairing letters until ${until}.`,
-  pairedYou: (since: string) => fillDeskWords(W.pairedWith, { name: 'you', date: since }),
-  pairedMine: 'Unlock it with your PIN or your phone.',
-  pairedMineNoPin: 'Unlock it with your phone.',
-  unpair: W.unpair,
-  pin: W.pin,
-  pinMeta: '4 to 6 digits that unlock the screen.',
-  changePin: W.changePin,
-  noPin: W.noPin,
-  choosePin: W.choosePinButton,
-  /* The switch (DK-20, runtimes with `display`). */
-  showOnScreen: W.showOnScreen,
-  screenNamed: (name: string) => fillDeskWords(W.screenNamed, { name }),
-  builtIn: W.builtIn,
-  connectedUnnamed: W.connectedUnnamed,
-  noScreenNow: W.noScreenNow,
-  virtualHint: W.virtualHint,
-  offHint: W.offHint,
-  /** On, and not paired yet: the runtime pairs it within a minute (DK-17), or the person pairs it with its letters. */
-  pairsItself: 'It pairs itself with you in a moment.',
-  lockedShows: W.whileLocked,
-  lockedViews: W.lockedViews as Record<DeskLockedView, string>,
-  lockedHints: {
-    time: () => 'The clock, and whether something needs you.',
-    summary: () => 'How many things need you, your servers and home. No titles or messages.',
-    everything: (assistant: string) =>
-      `Also what needs you and what ${assistant} is doing, by name. Anyone walking past can read it.`,
-  } as Record<DeskLockedView, (assistant: string) => string>,
-  quietHours: W.quietHours,
-  quietOn: (start: string, end: string, night: DeskNight) =>
-    night === 'black'
-      ? `From ${start} to ${end} the screen is black and makes no sound.`
-      : `From ${start} to ${end} the screen shows a dim clock and makes no sound.`,
-  quietOff: 'The screen may wake for something new at any hour.',
-  from: W.from,
-  to: W.to,
-  inZone: (timeZone: string) => `In your time zone, ${timeZone}.`,
-  atNight: W.atNight,
-  nights: W.nights as Record<DeskNight, string>,
-  talkTo: (assistant: string) => fillDeskWords(W.talkTo, { assistant }),
-  talkOn: 'Hold to talk on the unlocked screen. What you say stays on this Whombat.',
-  talkOff: 'The screen doesn’t listen.',
-  noMicrophone: W.noMicrophone,
-  noVoice: W.noVoice,
-  /* Stay unlocked while you’re here (DK-28), where the box has a camera the presence service reads (before 0.107). */
-  presence: W.presence,
-  presenceHint: W.presenceHint,
-  /* Lock again (0.107, DK-74), where the runtime lists its choices; `{assistant}` in `never`'s hint. */
-  lockAgain: W.lockAgain,
-  lockAgainChoices: W.lockAgainChoices as Record<DeskLockAgain, string>,
-  lockAgainHints: (choice: DeskLockAgain, assistant: string) =>
-    fillDeskWords((W.lockAgainHints as Record<DeskLockAgain, string>)[choice], { assistant }),
-  /* Use the camera to see when you’re here (0.107, DK-72), where the runtime says the camera works for it. */
-  cameraWake: W.cameraWake,
-  cameraWakeHint: W.cameraWakeHint,
-  /* The voice the screen answers with (0.105, DK-50, DK-51), under Talk while it is on. */
-  voice: W.voice,
-  voiceHint: (assistant: string) => fillDeskWords(W.voiceHint, { assistant }),
-  voiceNames: W.voices as Record<DeskVoice, string>,
-  voiceKinds: W.voiceKinds as Record<DeskVoice, string>,
-  listen: W.listen,
-  playing: W.listening,
-  sampleFailed: W.sampleFailed,
-  dialog: {
-    title: W.pairTheScreen,
-    lead: 'The screen shows 4 letters now. Type them here and choose a PIN to unlock it with.',
-    showLetters: 'Show the letters',
-    letters: W.typeLetters,
-    lettersPlaceholder: 'ABCD',
-    changesIn: (minutes: number) =>
-      minutes < 1 ? 'They change in less than a minute.' : `They change in ${minutes} min.`,
-    expired: 'The letters ran out of time.',
-    newLetters: 'Show new letters',
-    pin: W.choosePin,
-    pinAgain: W.repeatPin,
-    submit: 'Pair',
-    busy: 'Pairing…',
-    done: 'The screen is paired with you.',
-    cancel: 'Cancel',
-  },
-  pinDialog: {
-    title: W.changePin,
-    lead: 'The new PIN unlocks the screen from now on.',
-    submit: W.changePin,
-    busy: 'Saving…',
-    done: 'PIN changed.',
-  },
-  /** The first PIN of a screen that paired itself or was turned on (DK-18). */
-  firstPinDialog: {
-    title: W.choosePinButton,
-    lead: 'Type it on the screen to unlock it by touch. Your phone still works too.',
-    submit: 'Save PIN',
-    busy: 'Saving…',
-    done: 'PIN saved.',
-  },
-  /** Turning the screen off while it is paired: it ends the pairing and its PIN (DK-20). */
-  offDialog: {
-    title: 'Turn the screen off?',
-    lead: (hasPin: boolean) => `This unpairs it${hasPin ? ' and removes its PIN' : ''}. ${W.offHint}`,
-    submit: 'Turn off',
-    done: 'The screen is off.',
-  },
-  unpairDialog: {
-    title: UNPAIR_TITLE,
-    lead: UNPAIR_LEAD,
-    submit: W.unpair,
-    done: 'The screen is unpaired.',
-  },
-  problems: {
-    letters: 'Type the 4 letters from the screen.',
-    pin: 'The PIN is 4 to 6 digits.',
-    easy: E.easy_pin,
-    pinAgain: W.pinsDiffer,
-  },
-  errors: {
-    /** Five wrong tries: the screen already shows new letters. */
-    newLetters: 'Those weren’t the letters. The screen shows new ones now.',
-    forbidden: 'You can’t change this.',
-    failed: 'That didn’t work. Try again.',
-    /** A runtime from before 0.103 refused a PIN shorter than six digits as malformed (DK-34). */
-    sixDigits: 'This Whombat takes a 6-digit PIN until it’s updated.',
-  },
-  unlock: {
-    notice: W.unlockRequest,
-    title: W.unlockRequest.replace(/\.$/, ''),
-    meta: (secondsLeft: number) =>
-      `Unlock it only if you’re at your desk. ${
-        secondsLeft >= 60
-          ? `Ends in ${Math.ceil(secondsLeft / 60)}\u00a0min.`
-          : `Ends in ${secondsLeft}\u00a0s.`
-      }`,
-    unlock: W.unlock,
-    no: W.no,
-    unlocked: 'The screen is unlocked.',
-    keptLocked: 'The screen stays locked.',
-  },
-} as const;
+/** The SCREEN section's words in English. */
+export type DeskTextWords = ReturnType<typeof deskText>;
+
+export const DESK_TEXT: DeskTextWords = deskText('en');
+
+/** The English words without building them again; another locale's when one is given. */
+function textIn(locale?: string | null): DeskTextWords {
+  return locale === undefined || locale === null || locale === 'en' ? DESK_TEXT : deskText(locale);
+}
 
 /* The SCREEN section --------------------------------------------------------------------------------------------- */
 
@@ -194,10 +215,11 @@ export function deskSectionShown(screen: Pick<DeskScreen, 'paired' | 'display'>)
 }
 
 /** The screen line (DK-16): “DELL U2720Q · connected”, “Built-in screen”, “A screen is connected”, or none now. */
-export function deskScreenLine(display: DeskDisplay): string {
-  if (!display.connected) return DESK_TEXT.noScreenNow;
-  if (display.name) return DESK_TEXT.screenNamed(display.name);
-  return display.builtIn ? DESK_TEXT.builtIn : DESK_TEXT.connectedUnnamed;
+export function deskScreenLine(display: DeskDisplay, locale?: string | null): string {
+  const T = textIn(locale);
+  if (!display.connected) return T.noScreenNow;
+  if (display.name) return T.screenNamed(display.name);
+  return display.builtIn ? T.builtIn : T.connectedUnnamed;
 }
 
 /** The switch's row: on, the screen line and the hint under it (DK-16, DK-20). */
@@ -213,15 +235,19 @@ export interface DeskSwitchView {
  * The switch (DK-20). A connected screen that isn't a real one and that nobody chose for gets the virtual-machine hint
  * (it already says the screen stays off); otherwise off says what off means.
  */
-export function deskSwitchView(screen: Pick<DeskScreen, 'display' | 'on' | 'onChosen'>): DeskSwitchView {
+export function deskSwitchView(
+  screen: Pick<DeskScreen, 'display' | 'on' | 'onChosen'>,
+  locale?: string | null,
+): DeskSwitchView {
+  const T = textIn(locale);
   const display = screen.display;
   const on = screen.on;
   const virtual = display.connected && !display.real && !screen.onChosen;
   return {
-    title: DESK_TEXT.showOnScreen,
+    title: T.showOnScreen,
     on,
-    line: deskScreenLine(display),
-    hint: virtual && !on ? DESK_TEXT.virtualHint : on ? null : DESK_TEXT.offHint,
+    line: deskScreenLine(display, locale),
+    hint: virtual && !on ? T.virtualHint : on ? null : T.offHint,
   };
 }
 
@@ -297,20 +323,22 @@ const LOCKED_VIEWS: readonly DeskLockedView[] = ['time', 'summary', 'everything'
 const NIGHTS: readonly DeskNight[] = ['dim', 'black'];
 
 /** `20 Oct` (the year when it isn't this one). */
-function sinceText(at: string, now: number, timeZone: string): string {
-  return formatDate(at, timeZone, { year: 'auto', now });
+function sinceText(at: string, now: number, timeZone: string, locale?: string | null): string {
+  return formatDate(at, timeZone, { year: 'auto', now }, locale);
 }
 
 /** What Talk's switch says (DK-07): off by itself without a microphone or speech on the box. */
 export function deskTalkView(
   screen: Pick<DeskScreen, 'settings' | 'hasMicrophone' | 'voiceAvailable'>,
   assistant: string,
+  locale?: string | null,
 ): { title: string; on: boolean; disabled: boolean; meta: string } {
-  const title = DESK_TEXT.talkTo(assistant);
-  if (!screen.hasMicrophone) return { title, on: false, disabled: true, meta: DESK_TEXT.noMicrophone };
-  if (!screen.voiceAvailable) return { title, on: false, disabled: true, meta: DESK_TEXT.noVoice };
+  const T = textIn(locale);
+  const title = T.talkTo(assistant);
+  if (!screen.hasMicrophone) return { title, on: false, disabled: true, meta: T.noMicrophone };
+  if (!screen.voiceAvailable) return { title, on: false, disabled: true, meta: T.noVoice };
   const on = screen.settings.voice;
-  return { title, on, disabled: false, meta: on ? DESK_TEXT.talkOn : DESK_TEXT.talkOff };
+  return { title, on, disabled: false, meta: on ? T.talkOn : T.talkOff };
 }
 
 /**
@@ -322,18 +350,20 @@ export function deskTalkView(
 export function deskVoiceView(
   screen: Pick<DeskScreen, 'settings' | 'hasMicrophone' | 'voiceAvailable' | 'voices'>,
   assistant: string,
+  locale?: string | null,
 ): DeskVoiceView | null {
-  if (!deskTalkView(screen, assistant).on) return null;
+  if (!deskTalkView(screen, assistant, locale).on) return null;
+  const T = textIn(locale);
   const known = knownDeskVoices(screen.voices ?? []);
   if (known.length < 2) return null;
   return {
-    title: DESK_TEXT.voice,
-    meta: DESK_TEXT.voiceHint(assistant),
+    title: T.voice,
+    meta: T.voiceHint(assistant),
     value: known.find((v) => v === screen.settings.speechVoice) ?? null,
     options: known.map((value) => ({
       value,
-      label: DESK_TEXT.voiceNames[value],
-      kind: DESK_TEXT.voiceKinds[value],
+      label: T.voiceNames[value],
+      kind: T.voiceKinds[value],
     })),
   };
 }
@@ -347,6 +377,7 @@ export function deskVoiceView(
 export function deskLockAgainView(
   screen: Pick<DeskScreen, 'paired' | 'settings' | 'lockAgain'>,
   assistant: string,
+  locale?: string | null,
 ): DeskLockAgainView | null {
   if (!screen.paired) return null;
   const listed = screen.lockAgain;
@@ -354,11 +385,12 @@ export function deskLockAgainView(
   if (offered.length < 2) return null;
   const chosen = deskLockAgainOf(screen.settings);
   const value = offered.includes(chosen) ? chosen : 'idle';
+  const T = textIn(locale);
   return {
-    title: DESK_TEXT.lockAgain,
+    title: T.lockAgain,
     value,
-    options: offered.map((c) => ({ value: c, label: DESK_TEXT.lockAgainChoices[c] })),
-    meta: DESK_TEXT.lockAgainHints(value, assistant),
+    options: offered.map((c) => ({ value: c, label: T.lockAgainChoices[c] })),
+    meta: T.lockAgainHints(value, assistant),
   };
 }
 
@@ -368,18 +400,21 @@ export function deskLockAgainView(
  */
 export function deskCameraWakeView(
   screen: Pick<DeskScreen, 'paired' | 'settings' | 'cameraWakeAvailable'>,
+  locale?: string | null,
 ): DeskCameraWakeView | null {
   if (!screen.paired || !screen.cameraWakeAvailable) return null;
+  const T = textIn(locale);
   return {
-    title: DESK_TEXT.cameraWake,
+    title: T.cameraWake,
     on: screen.settings.cameraWake,
-    meta: DESK_TEXT.cameraWakeHint,
+    meta: T.cameraWakeHint,
   };
 }
 
 /** Quiet hours in a sentence (DK-09). */
-export function deskQuietText(quiet: DeskQuietHours, night: DeskNight): string {
-  return quiet.enabled ? DESK_TEXT.quietOn(quiet.start, quiet.end, night) : DESK_TEXT.quietOff;
+export function deskQuietText(quiet: DeskQuietHours, night: DeskNight, locale?: string | null): string {
+  const T = textIn(locale);
+  return quiet.enabled ? T.quietOn(quiet.start, quiet.end, night) : T.quietOff;
 }
 
 /**
@@ -388,20 +423,21 @@ export function deskQuietText(quiet: DeskQuietHours, night: DeskNight): string {
  */
 export function deskSectionView(
   screen: DeskScreen,
-  context: { assistant: string; timeZone: string; now: number },
+  context: { assistant: string; timeZone: string; now: number; locale?: string | null },
 ): DeskSectionView {
-  const { assistant, timeZone, now } = context;
-  const onScreen = deskSwitchView(screen);
+  const { assistant, timeZone, now, locale } = context;
+  const T = textIn(locale);
+  const onScreen = deskSwitchView(screen, locale);
   if (!screen.paired) {
     const pairing =
       screen.pairing && Date.parse(screen.pairing.expiresAt) > now
-        ? DESK_TEXT.pairingShown(formatClock(screen.pairing.expiresAt, timeZone))
+        ? T.pairingShown(formatClock(screen.pairing.expiresAt, timeZone))
         : null;
     // Off says it all; on and nobody paired is the minute before it pairs itself (DK-17).
     const row = onScreen.on || pairing !== null;
     return {
       onScreen,
-      unpaired: row ? { title: DESK_TEXT.unpairedTitle, meta: pairing ?? DESK_TEXT.pairsItself } : null,
+      unpaired: row ? { title: T.unpairedTitle, meta: pairing ?? T.pairsItself } : null,
       paired: null,
       mine: null,
       lockAgain: null,
@@ -410,31 +446,31 @@ export function deskSectionView(
   }
   const p = screen.paired;
   const hasPin = p.hasPin;
-  const since = sinceText(p.pairedAt, now, timeZone);
+  const since = sinceText(p.pairedAt, now, timeZone, locale);
   const s = screen.settings;
   return {
     onScreen,
     unpaired: null,
     paired: {
-      title: DESK_TEXT.pairedYou(since),
-      meta: hasPin ? DESK_TEXT.pairedMine : DESK_TEXT.pairedMineNoPin,
+      title: T.pairedYou(since),
+      meta: hasPin ? T.pairedMine : T.pairedMineNoPin,
     },
     mine: {
       pin: hasPin
-        ? { has: true, meta: DESK_TEXT.pinMeta, action: DESK_TEXT.changePin }
-        : { has: false, meta: DESK_TEXT.noPin, action: DESK_TEXT.choosePin },
+        ? { has: true, meta: T.pinMeta, action: T.changePin }
+        : { has: false, meta: T.noPin, action: T.choosePin },
       lockedView: s.lockedView,
-      lockedOptions: LOCKED_VIEWS.map((value) => ({ value, label: DESK_TEXT.lockedViews[value] })),
-      lockedHint: DESK_TEXT.lockedHints[s.lockedView](assistant),
+      lockedOptions: LOCKED_VIEWS.map((value) => ({ value, label: T.lockedViews[value] })),
+      lockedHint: T.lockedHints[s.lockedView](assistant),
       quietHours: s.quietHours,
-      quietMeta: deskQuietText(s.quietHours, s.night),
+      quietMeta: deskQuietText(s.quietHours, s.night, locale),
       night: s.night,
-      nightOptions: NIGHTS.map((value) => ({ value, label: DESK_TEXT.nights[value] })),
-      talk: deskTalkView(screen, assistant),
-      voice: deskVoiceView(screen, assistant),
+      nightOptions: NIGHTS.map((value) => ({ value, label: T.nights[value] })),
+      talk: deskTalkView(screen, assistant, locale),
+      voice: deskVoiceView(screen, assistant, locale),
     },
-    lockAgain: deskLockAgainView(screen, assistant),
-    cameraWake: deskCameraWakeView(screen),
+    lockAgain: deskLockAgainView(screen, assistant, locale),
+    cameraWake: deskCameraWakeView(screen, locale),
   };
 }
 
@@ -451,10 +487,15 @@ export type DeskFormField = 'letters' | 'pin' | 'pinAgain';
  * Why a new PIN (typed twice) can't be sent yet, or null: 4 to 6 digits (DK-26), not one that is too easy to guess
  * (DK-27, before anything is sent; Whombat refuses it too), then the same twice.
  */
-export function deskPinProblem(pin: string, again: string): { field: DeskFormField; text: string } | null {
-  if (!DESK_PIN_RE.test(pin)) return { field: 'pin', text: DESK_TEXT.problems.pin };
-  if (deskPinTooEasy(pin)) return { field: 'pin', text: DESK_TEXT.problems.easy };
-  if (pin !== again) return { field: 'pinAgain', text: DESK_TEXT.problems.pinAgain };
+export function deskPinProblem(
+  pin: string,
+  again: string,
+  locale?: string | null,
+): { field: DeskFormField; text: string } | null {
+  const P = textIn(locale).problems;
+  if (!DESK_PIN_RE.test(pin)) return { field: 'pin', text: P.pin };
+  if (deskPinTooEasy(pin)) return { field: 'pin', text: P.easy };
+  if (pin !== again) return { field: 'pinAgain', text: P.pinAgain };
   return null;
 }
 
@@ -465,13 +506,16 @@ export function deskLetters(typed: string): string | null {
 }
 
 /** Why the pairing form can't be sent yet, or null (the letters first, then the PIN). */
-export function deskPairProblem(form: {
-  letters: string;
-  pin: string;
-  pinAgain: string;
-}): { field: DeskFormField; text: string } | null {
-  if (!deskLetters(form.letters)) return { field: 'letters', text: DESK_TEXT.problems.letters };
-  return deskPinProblem(form.pin, form.pinAgain);
+export function deskPairProblem(
+  form: {
+    letters: string;
+    pin: string;
+    pinAgain: string;
+  },
+  locale?: string | null,
+): { field: DeskFormField; text: string } | null {
+  if (!deskLetters(form.letters)) return { field: 'letters', text: textIn(locale).problems.letters };
+  return deskPinProblem(form.pin, form.pinAgain, locale);
 }
 
 /** Whole minutes until the letters change (rounded down), or null once they have. */
@@ -507,15 +551,18 @@ function triesLeftOf(error: unknown): number {
   return typeof left === 'number' ? left : 0;
 }
 
-/** What a refused desk op means, in words (`DESK_WORDS.errors`). */
-export function deskErrorText(error: unknown): string {
+/** What a refused desk op means, in words (the desk's own error words). */
+export function deskErrorText(error: unknown, locale?: string | null): string {
   const code = deskErrorCode(error);
+  const T = textIn(locale);
+  const E = locale === undefined || locale === null ? DESK_WORDS.errors : deskWords(locale).errors;
   switch (code) {
     case 'wrong_code': {
       const left = triesLeftOf(error);
-      if (left === 0) return DESK_TEXT.errors.newLetters;
-      const text = fillDeskWords(E.wrong_code, { n: left });
-      return left === 1 ? text.replace('1 tries', '1 try') : text;
+      if (left === 0) return T.errors.newLetters;
+      // The desk's sentence says “tries”; one try left has its own.
+      if (left === 1) return clientTree(locale, DESK_TEXT_WORDS).errors.wrongCodeOne;
+      return fillDeskWords(E.wrong_code, { n: left });
     }
     case 'pairing_expired':
     case 'not_paired':
@@ -526,9 +573,9 @@ export function deskErrorText(error: unknown): string {
     case 'no_voice':
       return E[code];
     case 'forbidden':
-      return DESK_TEXT.errors.forbidden;
+      return T.errors.forbidden;
     default:
-      return sixDigitsOnly(error) ? DESK_TEXT.errors.sixDigits : DESK_TEXT.errors.failed;
+      return sixDigitsOnly(error) ? T.errors.sixDigits : T.errors.failed;
   }
 }
 
@@ -567,11 +614,11 @@ export function deskSampleWav(sample: DeskVoiceSample): Uint8Array {
  * Why Listen didn't play: a desk refusal's words (`no_voice`: the box can't say it now), anything else (the sample
  * didn't arrive, or the device couldn't play it) “The voice couldn’t play. Try again.”.
  */
-export function deskListenErrorText(error: unknown): string {
+export function deskListenErrorText(error: unknown, locale?: string | null): string {
   const code = deskErrorCode(error);
   return code !== null && (DESK_ERROR_CODES as readonly string[]).includes(code)
-    ? deskErrorText(error)
-    : DESK_TEXT.sampleFailed;
+    ? deskErrorText(error, locale)
+    : textIn(locale).sampleFailed;
 }
 
 /* The unlock request ----------------------------------------------------------------------------------------------- */
@@ -599,7 +646,8 @@ export function deskUnlockRequest(
 }
 
 /** What answering said: unlocked, kept locked, or why it couldn't. */
-export function deskUnlockAnswerText(unlock: boolean, error?: unknown): string {
-  if (error !== undefined) return deskErrorText(error);
-  return unlock ? DESK_TEXT.unlock.unlocked : DESK_TEXT.unlock.keptLocked;
+export function deskUnlockAnswerText(unlock: boolean, error?: unknown, locale?: string | null): string {
+  if (error !== undefined) return deskErrorText(error, locale);
+  const T = textIn(locale);
+  return unlock ? T.unlock.unlocked : T.unlock.keptLocked;
 }

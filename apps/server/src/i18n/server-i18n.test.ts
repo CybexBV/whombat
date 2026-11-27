@@ -2,6 +2,8 @@
  * The server in Dutch: each area's words in `nl`, English exactly as before, and the checks that must never read words
  * (the lock, Ignore episodes, backup reasons) working the same in both.
  */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { ThingPage } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import type { CatalogConnectionRow } from '../connections/types';
@@ -579,5 +581,185 @@ describe('a whole service page in Dutch', () => {
     expect(localizePhrase('1.2 TB of 4 TB', 'nl-NL')).toBe('1,2 TB van 4 TB');
     // Words between “of” are not an amount: left as they were.
     expect(localizePhrase('Top of the list', 'nl-NL')).toBe('Top of the list');
+  });
+});
+
+describe('the phrasebook never half-translates', () => {
+  it('says whole labels it knows and leaves ordinary English after a short template alone', () => {
+    expect(localizePhrase('Update lists', 'nl-NL')).toBe('Lijsten bijwerken');
+    expect(localizePhrase('Update waiting', 'nl-NL')).toBe('Update wacht');
+    expect(localizePhrase('Update now', 'nl-NL')).toBe('Nu bijwerken');
+    expect(localizePhrase('Today by the hour', 'nl-NL')).toBe('Vandaag per uur');
+    expect(localizePhrase('at least 3', 'nl-NL')).toBe('minstens 3');
+    // Typed slots still take what they are for.
+    expect(localizePhrase('Today 09:30', 'nl-NL')).toBe('Vandaag 09:30');
+    expect(localizePhrase('at 14:05', 'nl-NL')).toBe('om 14:05');
+    expect(localizePhrase('Restart Plex', 'nl-NL')).toBe('Plex herstarten');
+    expect(localizePhrase('Part of pve-01', 'nl-NL')).toBe('Onderdeel van pve-01');
+    // Ordinary words where a short template expects a name stay English.
+    expect(localizePhrase('Update required', 'nl-NL')).toBe('Update required');
+    expect(localizePhrase('Part of the plan', 'nl-NL')).toBe('Part of the plan');
+    expect(localizePhrase('In progress', 'nl-NL')).toBe('In progress');
+    expect(localizePhrase('Today and tomorrow', 'nl-NL')).toBe('Today and tomorrow');
+    // A name is never translated, even when it is a word the book knows.
+    expect(localizePhrase('Restart Settings', 'nl-NL')).toBe('Settings herstarten');
+  });
+
+  it('reads a point as a decimal point and a comma as thousands', () => {
+    expect(localizePhrase('1.250 GB free', 'nl-NL')).toBe('1,250 GB vrij');
+    expect(localizePhrase('1,250 devices', 'nl-NL')).toBe('1.250 apparaten');
+    expect(localizePhrase('12.5 GB free', 'nl-NL')).toBe('12,5 GB vrij');
+  });
+
+  it('keeps a translation longer than its English in a field without a limit', () => {
+    const tree = { meta: 'Update all', whatever: 'Remind me tomorrow' };
+    const nl = localizeTree(tree, 'nl-NL');
+    expect(nl.meta).toBe('Alles bijwerken');
+    expect(nl.whatever).toBe('Herinner me morgen');
+    // A field with a limit still keeps English when the Dutch would not fit.
+    expect(localizeTree({ label: 'Update all' }, 'nl-NL', { max: { label: 12 } }).label).toBe('Update all');
+  });
+
+  const doorsPage = (): ThingPage => {
+    const doors = {
+      ...ACCESS_doors,
+      data: ACCESS_doors.data.map((d, i) => (i === 0 ? { ...d, name: 'Open', full_name: 'Open' } : d)),
+    };
+    const s: AccessSnapshot = {
+      readAt: NOW,
+      doors: parseDoors(accessData(doors), new Map()),
+      devices: parseAccessDevices(accessData(ACCESS_devices)),
+      openings: parseOpenings(accessData(ACCESS_logs)),
+      moreOpenings: false,
+      openingsTotal: 2,
+    };
+    const row = {
+      id: 'con_access',
+      access: 'manage',
+      label: 'Access',
+      catalogId: 'unifi_access',
+      fields: {},
+    };
+    const view = accessView(
+      s,
+      { now: NOW, timeZone: TZ, openSince: new Map() },
+      { row: row as unknown as CatalogConnectionRow },
+    );
+    return pageOf(view, { catalogId: 'unifi_access', name: 'UniFi Access' });
+  };
+
+  it('keeps a door called “Open” and its open state, and says an Open button as Openen', () => {
+    const nl = localizeTree(doorsPage(), 'nl-NL');
+    const items = nl.tabs
+      .flatMap((t) => t.panels)
+      .flatMap((p) => (p.kind === 'list' ? p.items : []))
+      .filter((item) => item.id === ACCESS_doors.data[0]?.id);
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) {
+      expect(item.title).toBe('Open');
+      if (item.detail) expect(item.detail.split(' · ')[0]).toBe('Open');
+    }
+    expect(JSON.stringify(nl)).not.toContain('Openen');
+    // The same word on a button is the verb.
+    const withButton = localizeTree(
+      {
+        kind: 'list',
+        id: 'doors',
+        items: [{ id: 'd1', title: 'Open', actions: [{ action: 'open', label: 'Open', allowed: true }] }],
+      },
+      'nl-NL',
+    );
+    expect(withButton.items[0]?.title).toBe('Open');
+    expect(withButton.items[0]?.actions[0]?.label).toBe('Openen');
+    expect(localizePhrase('Open', 'nl-NL')).toBe('Open');
+    expect(localizePhrase('Open', 'nl-NL', { button: true })).toBe('Openen');
+  });
+
+  it('keeps the names of a service’s own things in galleries, controls and a table’s first column', () => {
+    const nl = localizeTree(
+      {
+        tabs: [
+          {
+            key: 'overview',
+            label: 'Overview',
+            panels: [
+              { kind: 'gallery', id: 'g', title: 'Recently added', items: [{ id: 'm', title: 'Updates' }] },
+              {
+                kind: 'controls',
+                id: 'c',
+                title: 'Lights',
+                groups: [{ id: 'r', title: 'Rooms', items: [{ id: 'l', label: 'Alarm', state: 'Locked' }] }],
+              },
+              {
+                kind: 'table',
+                id: 't',
+                title: 'Containers',
+                columns: [
+                  { key: 'name', label: 'Device' },
+                  { key: 'state', label: 'State' },
+                ],
+                rows: [{ id: 'x', cells: { name: { text: 'Backups' }, state: { text: 'Running' } } }],
+              },
+            ],
+          },
+        ],
+      },
+      'nl-NL',
+    );
+    const [gallery, controls, table] = nl.tabs[0]?.panels ?? [];
+    expect(gallery?.title).toBe('Onlangs toegevoegd');
+    expect(gallery?.items?.[0]?.title).toBe('Updates');
+    expect(controls?.groups?.[0]?.items[0]).toEqual({ id: 'l', label: 'Alarm', state: 'Op slot' });
+    expect(table?.columns?.map((c) => c.label)).toEqual(['Apparaat', 'Status']);
+    expect(table?.rows?.[0]?.cells).toEqual({ name: { text: 'Backups' }, state: { text: 'Actief' } });
+  });
+
+  /** Every quoted English label in the services' own code (not their tests or recorded answers). */
+  function kindLabels(): string[] {
+    const root = join(__dirname, '..', 'things', 'kinds');
+    const files: string[] = [];
+    const visit = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) {
+          if (name !== 'fixtures') visit(path);
+        } else if (name.endsWith('.ts') && !name.includes('.test.') && !name.includes('testing'))
+          files.push(path);
+      }
+    };
+    visit(root);
+    const labels = new Set<string>();
+    for (const file of files) {
+      for (const m of readFileSync(file, 'utf8').matchAll(/'([A-Za-z][^'\n$\\]{1,60})'/g))
+        labels.add(m[1] ?? '');
+    }
+    return [...labels];
+  }
+
+  it('leaves no English word behind in a label it translates', () => {
+    const labels = kindLabels();
+    expect(labels.length).toBeGreaterThan(500);
+    const leftovers =
+      /\b(the|by|least|now|waiting|lists|hour|hours|of|for|with|and|this|your|since|required)\b/;
+    const half: string[] = [];
+    for (const label of labels) {
+      // Parts between dots and sentences are each their own label.
+      for (const part of label.split(/ · |(?<=[.!?])\s+/)) {
+        const said = localizePhrase(part, 'nl-NL');
+        if (said === part) continue;
+        const left = leftovers.exec(said)?.[1];
+        if (left && part.includes(left)) half.push(`${part} → ${said}`);
+      }
+    }
+    expect(half).toEqual([]);
+    for (const bad of [
+      'lists bijwerken',
+      'waiting bijwerken',
+      'now bijwerken',
+      'Vandaag by the hour',
+      'om least 3',
+    ]) {
+      expect(labels.map((l) => localizePhrase(l, 'nl-NL')).join('\n')).not.toContain(bad);
+    }
   });
 });

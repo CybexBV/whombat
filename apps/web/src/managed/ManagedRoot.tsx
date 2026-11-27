@@ -91,8 +91,9 @@ import { ThemeProvider } from '../app/theme';
 import { Button } from '../components/Button';
 import { AccountMobilePage, PhoneLinkPage, PublicMobilePage } from '../features/mobile';
 import { WHATS_NEW_MARKDOWN } from '../features/whatsNew/changelog';
+import { claimantLocale } from '../i18n/locale';
 import { COPY } from '../i18n/managed';
-import { useWebI18n, WebI18nProvider } from '../i18n/provider';
+import { useWebI18n, useWebLocaleControl, WebI18nProvider } from '../i18n/provider';
 import { LEGAL_PAGES, LegalPage } from '../legal/LegalPage';
 import { ApplianceApp } from './ApplianceApp';
 import { BringBackFlow } from './BringBack';
@@ -1380,7 +1381,7 @@ function ClaimFlow({
   found: NearbyClaimStep | null;
   onClaimed: (device: string, name: string | null, peerId: string, accountId: string) => void;
 }) {
-  const { locale: claimLocale } = useWebI18n();
+  const localeControl = useWebLocaleControl();
   const [step, setStep] = useState<ClaimStep>(found ?? { kind: 'looking' });
   const handedOver = useRef(found);
   /** Bumped by “Look again”: asks `claims.nearby` once more. */
@@ -1429,8 +1430,9 @@ function ClaimFlow({
         clientPeerId: keyPair.peerId,
         account: { name: cloud.account.name ?? typedName, email: cloud.account.email },
         endpoint: { label: browserLabel(), platform: 'web' },
-        // The language this page is in becomes the new account's (a box that predates languages ignores it).
-        locale: claimLocale,
+        // The claimant's own language becomes the new account's, never one this browser kept for another box (a box
+        // that predates languages ignores it).
+        locale: claimantLocale(localeControl?.chosenLocale() ?? null),
       });
       // Only now, with the appliance's confirmation checked, is its PeerId pinned (CC-07).
       onClaimed(r.device, null, r.peerId, r.accountId);

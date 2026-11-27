@@ -11,12 +11,14 @@
  * page on it. The older page stays for a Whombat before them.
  */
 import { type RouteProp, StackActions, useRoute } from '@react-navigation/native';
-import { DESK_SCREENS_TEXT, DESK_TEXT, DESK_WORDS, deskSectionShown } from '@whombat/client/desk';
+import { deskScreensText, deskSectionShown, deskText } from '@whombat/client/desk';
 import { useDesk, useDeskActions, useDeskScreens } from '@whombat/client/desk/react';
+import { deskWords } from '@whombat/core/domain';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useBurrow } from '../data/BurrowProvider';
 import { demoDesk, isDeskDemoState } from '../fixtures/desk';
+import { useI18n } from '../i18n';
 import { DeskLockCard, DeskNightCard, DeskSwitchCard, DeskTalkCard } from '../managed/DeskSection';
 import { DeskUnlockCard } from '../managed/DeskUnlockCard';
 import { useDeskApi } from '../managed/useDesk';
@@ -25,18 +27,14 @@ import type { RootStackParamList } from '../navigation/routes';
 import { ErrorState, Loading } from '../ui/primitives';
 import { UnderlineTabs } from '../ui/UnderlineTabs';
 import { DeskShowsPart } from './DeskShowsPart';
-import {
-  DESK_SCREEN_PART_LABELS,
-  type DeskScreenPart,
-  deskScreenParts,
-  resolveDeskScreenPart,
-} from './deskScreen';
+import { type DeskScreenPart, deskScreenParts, resolveDeskScreenPart } from './deskScreen';
 import { SettingsPage } from './SettingsPages';
 import { ScreensList } from './screens/ScreensList';
 import { screensOffered } from './screens/screensList';
 import { useDeskNameSync } from './useDeskName';
 
 export function SettingsDeskScreen() {
+  const { rawLocale } = useI18n();
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsDesk'>>();
   const navigation = useAppNavigation();
   const { bootstrap, mode } = useBurrow();
@@ -55,11 +53,11 @@ export function SettingsDeskScreen() {
   }, [offered, asked, navigation]);
   if (offered === 'older') return <OlderDeskScreen />;
   return (
-    <SettingsPage title={DESK_SCREENS_TEXT.title}>
+    <SettingsPage title={deskScreensText(rawLocale).title}>
       {api && screens.data ? (
         <ScreensList api={api} list={screens.data} />
       ) : offered === 'failed' ? (
-        <ErrorState text={DESK_TEXT.errors.failed} onRetry={() => void screens.refetch()} />
+        <ErrorState text={deskText(rawLocale).errors.failed} onRetry={() => void screens.refetch()} />
       ) : (
         <Loading />
       )}
@@ -69,6 +67,8 @@ export function SettingsDeskScreen() {
 
 /** The older Screen page, on a Whombat without screens of widgets (DK-149). */
 function OlderDeskScreen() {
+  const { rawLocale } = useI18n();
+  const { tab, parts: labels } = deskWords(rawLocale).settings;
   const route = useRoute<RouteProp<RootStackParamList, 'SettingsDesk'>>();
   const api = useDeskApi();
   const desk = useDesk(api);
@@ -84,7 +84,7 @@ function OlderDeskScreen() {
   const part = chosen && parts.includes(chosen) ? chosen : resolveDeskScreenPart(asked, parts);
   const [dragging, setDragging] = useState(false);
   return (
-    <SettingsPage title={DESK_WORDS.settings.tab} scrollEnabled={!dragging}>
+    <SettingsPage title={tab} scrollEnabled={!dragging}>
       {api && screen && deskSectionShown(screen) ? (
         <>
           <DeskUnlockCard api={api} />
@@ -92,10 +92,10 @@ function OlderDeskScreen() {
           {part ? (
             <View style={{ marginTop: -2 }}>
               <UnderlineTabs<DeskScreenPart>
-                tabs={parts.map((key) => ({ key, label: DESK_SCREEN_PART_LABELS[key] }))}
+                tabs={parts.map((key) => ({ key, label: labels[key] }))}
                 value={part}
                 onChange={setChosen}
-                label={DESK_WORDS.settings.tab}
+                label={tab}
                 bleed={16}
               />
             </View>

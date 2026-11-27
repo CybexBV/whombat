@@ -42,6 +42,7 @@ const FIVE_MINUTES = 5 * 60_000;
  * still work).
  */
 export function useApplianceLine(): ApplianceLine | null | undefined {
+  const { rawLocale } = useI18n();
   const managed = useManaged();
   const { mode, timeZone } = useBurrowBase();
   const status = useQuery({ ...applianceStatusQuery(managed), refetchInterval: FIVE_MINUTES });
@@ -55,10 +56,11 @@ export function useApplianceLine(): ApplianceLine | null | undefined {
         passkeys: null,
         app: Constants.expoConfig?.version ?? null,
         timeZone,
+        locale: rawLocale,
       }),
     );
     return managedApplianceLine(overview, updateReady(status.data));
-  }, [managed, mode, status.data, status.error, timeZone]);
+  }, [managed, mode, status.data, status.error, timeZone, rawLocale]);
 }
 
 /** The assistant's line from what the bootstrap and the AI sign-ins say. */
@@ -97,9 +99,9 @@ export function useSettingsRows(): SettingsRowView[] {
   // News and weather where the Whombat answers the place and the news.
   const news = placeNewsShown(useSessionProtocol());
   const screenLine = screens
-    ? screensRowLine(screens)
+    ? screensRowLine(screens, locale)
     : desk && deskSectionShown(desk)
-      ? deskScreenLine(desk.display)
+      ? deskScreenLine(desk.display, locale)
       : null;
   return useMemo(
     () =>

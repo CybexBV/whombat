@@ -358,6 +358,8 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
           value: `${Math.round(i.progress * 100)} %`,
           ...(sub ? { sub: sub.slice(0, 80) } : {}),
           ...(tone ? { tone } : {}),
+          // A row about someone (who watches it, who asked for it) says what they're doing now.
+          ...(i.person ? { private: true } : {}),
         });
       }
     else if (p.kind === 'gallery' && p.look === 'rows')
@@ -366,6 +368,8 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
         label: p.title.slice(0, 30),
         value: String(p.total ?? p.items.length),
         ...(p.meta ? { sub: p.meta.slice(0, 80) } : {}),
+        // How many people are at it now, and its line may name them.
+        ...(p.items.some((i) => !!i.person) ? { private: true } : {}),
       });
   for (const p of panels)
     if (p.kind === 'list' && !p.look && p.place === 'chart')
@@ -535,6 +539,7 @@ export function panelPrivate(
   guards?: KindHints['guards'],
   showsWho = false,
 ): boolean {
+  // Every kind is named, so a new one makes its author decide here whether a locked screen may show it.
   switch (p.kind) {
     case 'kpis':
       return p.items.some((k) => !!k.private);
@@ -546,8 +551,23 @@ export function panelPrivate(
       return showsWho && p.items.some((i) => !!i.person);
     case 'controls':
       return guardsHouse(p, item, guards);
-    default:
+    // These carry no privacy mark of their own: a kind that shows something private in one says so in its hints.
+    case 'chart':
+    case 'notices':
+    case 'table':
+    case 'settings':
+    case 'facts':
+    case 'text':
       return false;
+    // About Whombat itself, never a widget (`NOT_WIDGETS`).
+    case 'access':
+    case 'changes':
+    case 'widgets':
+      return false;
+    default: {
+      const _exhaustive: never = p;
+      return _exhaustive;
+    }
   }
 }
 

@@ -50,11 +50,12 @@ public struct WhombatLiveAttributes: ActivityAttributes {
 
 public extension WhombatLiveAttributes.ContentState {
   func actionLabel(_ action: String, fallbackLocale: String? = nil) -> String {
-    let dutch = LiveWidgetLocale.isDutch(locale ?? fallbackLocale ?? LiveWidgetLocale.shared)
+    let language = LiveWidgetLocale.languageCode(locale ?? fallbackLocale ?? LiveWidgetLocale.shared)
+    let words = ActivityActionWords.byLanguage[language] ?? ActivityActionWords.english
     switch action {
-    case "approve": return dutch ? "Bekijken" : "Review"
-    case "details": return "Details"
-    default: return dutch ? "Open uitvoering" : "Open run"
+    case "approve": return words.review
+    case "details": return words.details
+    default: return words.openRun
     }
   }
 
@@ -64,6 +65,17 @@ public extension WhombatLiveAttributes.ContentState {
   }
 }
 
+private struct ActivityActionWords {
+  let review: String
+  let details: String
+  let openRun: String
+
+  static let english = Self(review: "Review", details: "Details", openRun: "Open run")
+  static let byLanguage: [String: Self] = [
+    "en": english,
+    "nl": Self(review: "Bekijken", details: "Details", openRun: "Open uitvoering"),
+  ]
+}
 
 enum LiveWidgetLocale {
   static let key = "com.whombat.live.locale"
@@ -76,7 +88,7 @@ enum LiveWidgetLocale {
       ?? Locale.preferredLanguages.first
   }
 
-  static func isDutch(_ tag: String?) -> Bool {
-    Locale(identifier: tag ?? "en-GB").language.languageCode?.identifier == "nl"
+  static func languageCode(_ tag: String?) -> String {
+    Locale(identifier: tag ?? "en-GB").language.languageCode?.identifier ?? "en"
   }
 }

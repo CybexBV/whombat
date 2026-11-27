@@ -4,20 +4,30 @@
  * picker shows the choice at once; the page changes language once the box has saved it, so the stored language never
  * pulls the page back to the old one and what the box writes is asked for again only after the save.
  *
+ * A Whombat from before languages keeps no language: there the row says the update brings it instead of offering a
+ * choice it would drop, and a save the box answered without the language counts as not saved.
+ *
  * Switching to Dutch never turns on the Dutch voice: it has a licence of its own the person agrees to in Settings →
  * This Whombat. Where the box offers it and it is off, a quiet note says where to find it.
  */
 import { Link } from '@tanstack/react-router';
 import { queryKeys } from '@whombat/client/query';
+import { useSessionProtocol } from '@whombat/client/react';
 import { useVoice } from '@whombat/client/voice/react';
 import type { Bootstrap, Preferences } from '@whombat/core';
-import { LANGUAGE_NATIVE_NAMES, type Language, SUPPORTED_LANGUAGES } from '@whombat/core/i18n';
+import {
+  LANGUAGE_NATIVE_NAMES,
+  type Language,
+  resolveLanguage,
+  SUPPORTED_LANGUAGES,
+} from '@whombat/core/i18n';
+import { LOCALE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { useId, useState, useSyncExternalStore } from 'react';
 import { useAppServices, useOptionalAppServices } from '../../app/providers';
 import { SectionLabel } from '../../components/SectionLabel';
 import { SegmentedControl } from '../../components/SegmentedControl';
 import { useToast } from '../../components/Toast';
-import { readLocaleOverride, storedLocaleOf } from '../../i18n/locale';
+import { cleanLocaleTag, readLocaleOverride, storedLocaleOf } from '../../i18n/locale';
 import { useWebI18n, useWebLocaleControl } from '../../i18n/provider';
 import styles from './SettingsScreen.module.css';
 
@@ -43,8 +53,15 @@ function useChoseDutch(): boolean {
   );
 }
 
+/** Whether the box saved the language asked for: an older box answers the save but leaves the language out. */
+export function savedLanguage(preferences: Preferences, asked: Language): boolean {
+  const saved = cleanLocaleTag(preferences.locale);
+  return saved !== null && resolveLanguage(saved) === asked;
+}
+
 export function LanguageSection({ burrow }: { burrow: string }) {
   const ids = useId();
+  const keepsLanguage = protocolAtLeast(useSessionProtocol(), LOCALE_MINOR);
   const { t, language } = useWebI18n();
   const control = useWebLocaleControl();
   const { client, queryClient } = useAppServices();
@@ -55,12 +72,16 @@ export function LanguageSection({ burrow }: { burrow: string }) {
   const dutchChosen = useChoseDutch();
   const current: Language = pending ?? language;
 
-  const put = (preferences: Preferences) => {
-    queryClient.setQueryData(
-      queryKeys.conversations.bootstrap({ params: { burrow } }),
-      (old: Bootstrap | undefined) => old && { ...old, preferences },
-    );
-    queryClient.setQueryData(queryKeys.me.getPreferences({}), preferences);
+  const put = async (preferences: Preferences) => {
+    const bootstrapKey = queryKeys.conversations.bootstrap({ params: { burrow } });
+    const preferencesKey = queryKeys.me.getPreferences({});
+    // A read that left before the save would land after it with the old language and pull the page back.
+    await Promise.all([
+      queryClient.cancelQueries({ queryKey: bootstrapKey }),
+      queryClient.cancelQueries({ queryKey: preferencesKey }),
+    ]);
+    queryClient.setQueryData(bootstrapKey, (old: Bootstrap | undefined) => old && { ...old, preferences });
+    queryClient.setQueryData(preferencesKey, preferences);
   };
 
   const choose = async (next: Language) => {
@@ -69,10 +90,10 @@ export function LanguageSection({ burrow }: { burrow: string }) {
     setPending(next);
     try {
       const result = await client.me.updatePreferences({ body: { locale: tag } });
-      if (result.status !== 'ok') throw new Error('not saved');
+      if (result.status !== 'ok' || !savedLanguage(result.data, next)) throw new Error('not saved');
       // The cached preferences carry the new language before the page changes, so the shell's sync with the stored
       // language agrees with the choice instead of switching back.
-      put(result.data);
+      await put(result.data);
       setChoseDutch(next === 'nl');
       control?.setLocale(tag);
       // A changed language asks for the box's words again by itself; a `?lang=` test language keeps the page as it is,
@@ -101,19 +122,28 @@ export function LanguageSection({ burrow }: { burrow: string }) {
             <span className={styles.rowTitle} id={`${ids}-title`}>
               {t('settings.language.title')}
             </span>
-            <span className={styles.rowMeta} id={`${ids}-hint`}>
-              {t('settings.language.hint')}
+            <span
+              className={styles.rowMeta}
+              id={`${ids}-hint`}
+              data-language-needs-update={keepsLanguage ? undefined : ''}
+            >
+              {t(keepsLanguage ? 'settings.language.hint' : 'settings.language.needsUpdate')}
             </span>
           </span>
-          <SegmentedControl
-            label={t('settings.language.title')}
-            role="radiogroup"
-            size="sm"
-            describedBy={`${ids}-hint`}
-            options={SUPPORTED_LANGUAGES.map((lang) => ({ value: lang, label: LANGUAGE_NATIVE_NAMES[lang] }))}
-            value={current}
-            onChange={(v) => void choose(v as Language)}
-          />
+          {keepsLanguage ? (
+            <SegmentedControl
+              label={t('settings.language.title')}
+              role="radiogroup"
+              size="sm"
+              describedBy={`${ids}-hint`}
+              options={SUPPORTED_LANGUAGES.map((lang) => ({
+                value: lang,
+                label: LANGUAGE_NATIVE_NAMES[lang],
+              }))}
+              value={current}
+              onChange={(v) => void choose(v as Language)}
+            />
+          ) : null}
         </div>
       </div>
       {dutchChosen && current === 'nl' ? <DutchVoiceNote /> : null}
