@@ -911,25 +911,36 @@ function SignedIn({
     );
   if (path === '/appliances/claim' || path === '/claim')
     return (
-      <ClaimFlow
-        env={env}
-        orgId={orgId}
-        keyPair={keyPair}
-        cloud={cloud}
-        found={foundNearby}
-        onClaimed={(device, name, peerId, accountId) => {
-          held.claimCard.clear();
-          // The claim is the one source that may replace a pin: CPace proved this identity (AP-63, AP-68).
-          registry.put(
-            { device, orgId, name, peerId, pinSource: 'claim', enrolled: true, kitPending: false, accountId },
-            { replacePin: true },
-          );
-          registry.setLastUsed(device);
-          // A new Whombat or one brought back (backup-options.md AP-6830); then Connect your AI and the Whombat. Where
-          // backups go is Needs you's proposal, not a step here, and there's no recovery kit at the claim (BX-01).
-          navigate(`/appliances/${device}/start`);
-        }}
-      />
+      <WebI18nProvider scope="visitor">
+        <ClaimFlow
+          env={env}
+          orgId={orgId}
+          keyPair={keyPair}
+          cloud={cloud}
+          found={foundNearby}
+          onClaimed={(device, name, peerId, accountId) => {
+            held.claimCard.clear();
+            // The claim is the one source that may replace a pin: CPace proved this identity (AP-63, AP-68).
+            registry.put(
+              {
+                device,
+                orgId,
+                name,
+                peerId,
+                pinSource: 'claim',
+                enrolled: true,
+                kitPending: false,
+                accountId,
+              },
+              { replacePin: true },
+            );
+            registry.setLastUsed(device);
+            // A new Whombat or one brought back (backup-options.md AP-6830); then Connect your AI and the Whombat. Where
+            // backups go is Needs you's proposal, not a step here, and there's no recovery kit at the claim (BX-01).
+            navigate(`/appliances/${device}/start`);
+          }}
+        />
+      </WebI18nProvider>
     );
   if (startMatch?.[1]) {
     const known = registry.get(decodeURIComponent(startMatch[1]));

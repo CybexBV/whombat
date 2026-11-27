@@ -41,13 +41,13 @@ let book: Book | null = null;
  * template never takes ordinary English words for a value (“at least 3” is not “at {time}”, “Today by the hour” is
  * not “Today {time}”).
  */
-const NUMBER = '(\\d+(?:[.,]\\d+)*)';
-const SIZE = '(\\d+(?:[.,]\\d+)*(?:\\s?(?:[KMGTPE]i?B|B|bytes?))?)';
+const NUMBER = '(\\d+(?:,\\d{3})*(?:\\.\\d+)?)';
+const SIZE = '(\\d+(?:,\\d{3})*(?:\\.\\d+)?(?:\\s?(?:[KMGTPE]i?B|B|bytes?))?)';
 const PCT = '(\\d+(?:[.,]\\d+)?\\s?%)';
 const TIME = '(\\d{1,2}[:.]\\d{2}(?:\\s?[aApP][mM])?)';
 const UNIT = '(?:ms|s|secs?|seconds?|min|mins|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|months?|years?)';
 const DURATION = `(\\d+(?:[.,]\\d+)?\\s?${UNIT}(?:\\s\\d+(?:[.,]\\d+)?\\s?${UNIT})?)`;
-const AMOUNT = '(\\d+(?:[.,]\\d+)*(?:\\s?[^\\s\\d]\\S*)?)';
+const AMOUNT = '(\\d+(?:,\\d{3})*(?:\\.\\d+)?(?:\\s?[^\\s\\d]\\S*)?)';
 
 /** Slots that hold a count: the count picks the plural form, and the reader's language writes the number. */
 const COUNT_SLOTS = new Set(['n', 'count', 'days', 'hours', 'minutes', 'seconds']);
@@ -78,7 +78,7 @@ const BUTTON_ONLY = new Set<ServerMessageKey>(['phrase.open']);
  * don't have. A name with an ordinary word in it stays English, which is never wrong, only untranslated.
  */
 const looksLikeName = (captured: string): boolean =>
-  captured.split(/\s+/).every((word) => /[^a-z'’,-]/.test(word));
+  /[A-Za-z]/.test(captured) && captured.split(/\s+/).every((word) => /[^a-z'’,-]/.test(word));
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -143,17 +143,18 @@ function phrasebook(): Book {
 }
 
 /** An English number: a comma groups thousands (“1,250”), a point is the decimal point (“1.250” is one and a quarter). */
-function countOf(raw: string): number {
+function countOf(raw: string): number | null {
   const n = Number(raw.replace(/,(?=\d{3}\b)/g, '').replace(',', '.'));
-  return Number.isFinite(n) ? n : 0;
+  return Number.isFinite(n) ? n : null;
 }
 
 /** An English number (with its unit, when it has one) written the way the reader's language writes it. */
 function numberIn(raw: string, locale: string): string {
-  const m = /^(\d[\d.,]*)(.*)$/s.exec(raw);
+  const m = /^(\d+(?:,\d{3})*(?:\.\d+)?)(.*)$/s.exec(raw);
   if (!m) return raw;
   const digits = m[1] ?? '';
   const n = countOf(digits);
+  if (n === null) return raw;
   // Keep every decimal the English had (“1.250” stays three places, “1,250”).
   const decimals = /\.(\d+)$/.exec(digits)?.[1]?.length ?? 0;
   const said = formatLocaleNumber(n, locale, {
@@ -188,10 +189,16 @@ function whole(text: string, locale: string, button: boolean): string | null {
     if (p.names.some((name, i) => p.guarded.has(name) && !looksLikeName(captured[i] ?? ''))) continue;
     const vars: Record<string, string | number> = {};
     let count: number | undefined;
+    let invalidCount = false;
     p.names.forEach((name, i) => {
       const value = captured[i] ?? '';
       if (COUNT_SLOTS.has(name)) {
-        count = countOf(value);
+        const parsed = countOf(value);
+        if (parsed === null) {
+          invalidCount = true;
+          return;
+        }
+        count = parsed;
         vars[name] = numberIn(value, locale);
       } else if (SIZE_SLOTS.has(name)) {
         vars[name] = numberIn(value, locale);
@@ -203,6 +210,7 @@ function whole(text: string, locale: string, button: boolean): string | null {
         vars[name] = value;
       }
     });
+    if (invalidCount) continue;
     if (p.counted && count !== undefined) return tr.tp(p.key, count, vars);
     return tr.t(p.key, vars);
   }

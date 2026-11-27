@@ -2,7 +2,7 @@ import { createECDH, randomBytes } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { PushPayload } from '@whombat/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config';
 import { silentLogger } from '../services';
 import type { PushDevice } from './types';
@@ -123,5 +123,24 @@ describe('sendWebPush', () => {
     const outcome = await sendWebPush(config, silentLogger, device(), payload);
     expect(outcome).toBe('failed');
     expect(requests).toBe(1);
+  });
+
+  it('replaces preview text with generic copy when preview is false', async () => {
+    status = 201;
+    const spy = vi.spyOn(webPush, 'generateRequestDetails');
+    const config = loadConfig({ ...MOCK, VAPID_PUBLIC_KEY: publicKey, VAPID_PRIVATE_KEY: privateKey });
+    const outcome = await sendWebPush(config, silentLogger, device(), {
+      ...payload,
+      title: 'Front door',
+      body: 'Alice unlocked the front door',
+      kind: 'direct',
+      preview: false,
+    });
+    expect(outcome).toBe('sent');
+    const sent = String(spy.mock.calls[0]?.[1] ?? '');
+    expect(sent).not.toContain('Front door');
+    expect(sent).not.toContain('Alice');
+    expect(JSON.parse(sent)).toMatchObject({ title: 'Whombat', preview: false });
+    spy.mockRestore();
   });
 });

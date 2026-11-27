@@ -2,6 +2,8 @@ import type { EN } from './en';
 
 export const NL = {
   'language.saveFailed': 'De taal is niet opgeslagen. Probeer het opnieuw.',
+  'language.needsUpdate':
+    'Je Whombat heeft een update nodig voordat je hier een taal kunt kiezen. Whombats werken zichzelf bij.',
   'settings.movingFaces.title': 'Bewegende gezichten',
   'settings.movingFaces.line': 'Gezichten knipperen en laten zien wat je assistenten doen.',
   'settings.you.photo': 'Je foto',

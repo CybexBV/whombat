@@ -1681,6 +1681,7 @@ export class DeskService {
       servers: cards.map((card) => ({ card, row: card.id ? fleet?.rows.get(card.id) : undefined })),
       show,
       activityLine: (catalogId) => this.#reads.sources.activityLine(catalogId),
+      locale: place.locale,
     });
   }
 

@@ -93,6 +93,25 @@ describe('APNs payloads', () => {
       (end.aps as { timestamp: number }).timestamp,
     );
   });
+
+  it('strips Live Activity content when preview is false', () => {
+    const start = buildApnsPayload({
+      title: 'Front door',
+      body: 'Alice unlocked the front door',
+      path: '/burrow-hq/runs/1907',
+      kind: 'direct',
+      preview: false,
+      event: 'start',
+      contentState: { title: 'Alice', text: 'Front door' },
+      attributesType: 'WhombatLiveAttributes',
+      attributes: { id: 'run-1907' },
+    });
+    const text = JSON.stringify(start);
+    expect(text).not.toContain('Front door');
+    expect(text).not.toContain('Alice');
+    expect(start.aps).not.toHaveProperty('content-state');
+    expect(start.aps).toMatchObject({ alert: { title: 'Whombat' } });
+  });
 });
 
 describe('APNs answers', () => {

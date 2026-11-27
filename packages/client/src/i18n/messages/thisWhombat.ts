@@ -125,7 +125,7 @@ export const THIS_WHOMBAT_WORDS = treeCatalogs(
       one: '{part}, {count} punt vraagt om jou',
       other: '{part}, {count} punten vragen om jou',
     },
-    needsYou: 'VRAAGT OM JOU',
+    needsYou: 'ACTIE NODIG',
     glance: 'IN ÉÉN OOGOPSLAG',
     showCharts: 'Grafieken tonen',
     hideCharts: 'Grafieken verbergen',

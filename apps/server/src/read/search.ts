@@ -109,6 +109,35 @@ export function withoutStopwords(q: string, stopwords: readonly string[]): strin
   return out.join(' ');
 }
 
+/** Top-level `&`-joined negations (`!'was'`) in a tsquery that has no top-level `|`, so dropped stopword exclusions stay enforced. */
+function topLevelNegations(tsq: string): string[] {
+  let depth = 0;
+  let inQuote = false;
+  let start = 0;
+  const parts: string[] = [];
+  for (let i = 0; i < tsq.length; i += 1) {
+    const ch = tsq[i];
+    if (ch === "'") {
+      if (inQuote && tsq[i + 1] === "'") {
+        i += 1;
+        continue;
+      }
+      inQuote = !inQuote;
+      continue;
+    }
+    if (inQuote) continue;
+    if (ch === '(') depth += 1;
+    else if (ch === ')' && depth > 0) depth -= 1;
+    else if (depth === 0 && ch === '|') return [];
+    else if (depth === 0 && ch === '&') {
+      parts.push(tsq.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  parts.push(tsq.slice(start).trim());
+  return parts.filter((part) => part.startsWith('!'));
+}
+
 /** `tsQuery` without the database (pure, unit-tested): the English and the words-as-written halves combined. */
 export function combinedTsQuery(
   q: string,
@@ -119,8 +148,15 @@ export function combinedTsQuery(
   const advanced = /["]|(^|\s)-\S|\sor\s/i.test(q);
   const halves: string[] = [];
   if (advanced) {
-    if (english.trim()) halves.push(english);
-    if (simple.trim() && simple !== english) halves.push(simple);
+    let eng = english.trim();
+    const sim = simple.trim();
+    if (eng && sim) {
+      const existing = new Set(topLevelNegations(eng));
+      const missing = topLevelNegations(sim).filter((neg) => !existing.has(neg));
+      if (missing.length) eng = `${eng} & ${missing.join(' & ')}`;
+    }
+    if (eng) halves.push(eng);
+    if (sim && sim !== eng) halves.push(sim);
   } else {
     const stop = new Set(stopwords);
     const keepTerms = (raw: string) =>

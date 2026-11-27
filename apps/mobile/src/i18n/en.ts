@@ -1,5 +1,7 @@
 export const EN = {
   'language.saveFailed': 'The language didn’t save. Try again.',
+  'language.needsUpdate':
+    'Your Whombat needs an update before you can choose a language here. Whombats update themselves.',
   'settings.movingFaces.title': 'Moving faces',
   'settings.movingFaces.line': 'Faces blink and show what your agents are doing.',
   'settings.you.photo': 'Your photo',

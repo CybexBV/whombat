@@ -3,7 +3,16 @@ import { I18nProvider, useI18n } from '@whombat/client/i18n/react';
 import { usePreferences, useSessionProtocol, useWhombat } from '@whombat/client/react';
 import { api } from '@whombat/core';
 import { DEFAULT_LOCALE, formatLocaleOf } from '@whombat/core/i18n';
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { WhombatLive } from '../../modules/whombat-live';
 import type { QueryPersister } from '../data/queryPersist';
 import { secureStore } from '../lib/storage';
@@ -64,7 +73,7 @@ export function BoxI18nProvider({
       await qc.cancelQueries({ queryKey: key });
       const result = await client.me.updatePreferences({ body: { locale: next } });
       await qc.cancelQueries({ queryKey: key });
-      if (result.status !== 'ok' || boxLocale(result.data.locale) !== next) {
+      if (result.status !== 'ok' || !result.data.locale || boxLocale(result.data.locale) !== next) {
         throw new Error('Language preference was not saved');
       }
       qc.setQueryData(key, result.data);
@@ -72,17 +81,31 @@ export function BoxI18nProvider({
     [client, qc, queries],
   );
 
+  const localeControl = useMemo<LocaleControl>(
+    () => ({ save: canSave ? save : null, needsUpdate: connected && !canSave }),
+    [canSave, connected, save],
+  );
+
   return (
-    <SaveLocaleContext.Provider value={canSave ? save : null}>
+    <SaveLocaleContext.Provider value={localeControl}>
       <MobileI18nProvider locale={locale}>{children}</MobileI18nProvider>
     </SaveLocaleContext.Provider>
   );
 }
 
-const SaveLocaleContext = createContext<((next: string) => Promise<void>) | null>(null);
+interface LocaleControl {
+  save: ((next: string) => Promise<void>) | null;
+  needsUpdate: boolean;
+}
+
+const SaveLocaleContext = createContext<LocaleControl>({ save: null, needsUpdate: false });
 
 export function useSaveLocale() {
-  return useContext(SaveLocaleContext);
+  return useContext(SaveLocaleContext).save;
+}
+
+export function useLocaleNeedsUpdate() {
+  return useContext(SaveLocaleContext).needsUpdate;
 }
 
 export function useClaimLocale() {

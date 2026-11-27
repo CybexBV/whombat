@@ -57,11 +57,13 @@ export interface ShowOptionsInput {
   show: Pick<DeskShow, 'order'>;
   /** What a kind shows as its activity (“Who’s watching”), or null (`DeskCalmSources.activityLine`). */
   activityLine: (catalogId: string) => string | null;
+  /** The owner's language, when known; defaults to English. */
+  locale?: string | null;
 }
 
 /** Settings → Screen's lists (DK-106): grouped in `DESK_SHOW_GROUPS`' order, the servers in the strip's (DK-108). */
 export function deskShowOptions(input: ShowOptionsInput): DeskShowOption[] {
-  const words = DESK_WORDS.settings;
+  const words = (input.locale ? deskWords(input.locale) : DESK_WORDS).settings;
   const a = { assistant: input.assistant };
   const option = (o: DeskShowOption): DeskShowOption[] => (o.name && DESK_SHOW_KEY_RE.test(o.key) ? [o] : []);
   const things = input.things
@@ -101,7 +103,7 @@ export function deskShowOptions(input: ShowOptionsInput): DeskShowOption[] {
         key: `server:${s.card.id}`,
         group: 'server',
         name: screenText(s.card.name, 80),
-        line: s.row ? serverLine(s.row) : '',
+        line: s.row ? serverLine(s.row, input.locale) : '',
         mark: s.card.mark,
         activity: false,
       }),

@@ -762,4 +762,11 @@ describe('the phrasebook never half-translates', () => {
       expect(labels.map((l) => localizePhrase(l, 'nl-NL')).join('\n')).not.toContain(bad);
     }
   });
+
+  it('never turns IP addresses or dotted versions into 0,0 or commands', () => {
+    expect(localizePhrase('10.100.0.5 online', 'nl-NL')).toBe('10.100.0.5 online');
+    expect(localizePhrase('1.2.3 running', 'nl-NL')).toBe('1.2.3 running');
+    expect(localizePhrase('3 of 4.5.6 online', 'nl-NL')).toBe('3 of 4.5.6 online');
+    expect(localizePhrase('Update 1.2.3', 'nl-NL')).toBe('Update 1.2.3');
+  });
 });

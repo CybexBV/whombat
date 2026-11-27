@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Alert, View } from 'react-native';
 import { useI18n, useMobileT } from '../i18n';
 import { MOBILE_LANGUAGES } from '../i18n/locale';
-import { useSaveLocale } from '../i18n/provider';
+import { useLocaleNeedsUpdate, useSaveLocale } from '../i18n/provider';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { SectionLabel } from '../ui/primitives';
@@ -13,7 +13,20 @@ import { useVoiceApi } from '../voice/useVoiceApi';
 
 export function LanguageSection() {
   const saveLocale = useSaveLocale();
-  return saveLocale ? <LanguagePicker saveLocale={saveLocale} /> : null;
+  const needsUpdate = useLocaleNeedsUpdate();
+  const { tClient } = useI18n();
+  const { t } = useMobileT();
+  const theme = useTheme();
+  if (saveLocale) return <LanguagePicker saveLocale={saveLocale} />;
+  if (!needsUpdate) return null;
+  return (
+    <View style={{ gap: 6 }}>
+      <SectionLabel>{tClient('settings.language.title')}</SectionLabel>
+      <Text size={13} color={theme.colors.mut}>
+        {t('language.needsUpdate')}
+      </Text>
+    </View>
+  );
 }
 
 function LanguagePicker({ saveLocale }: { saveLocale: (next: string) => Promise<void> }) {

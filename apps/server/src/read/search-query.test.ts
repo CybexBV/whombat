@@ -29,6 +29,12 @@ describe('combinedTsQuery', () => {
     expect(combinedTsQuery('"the who"', '', "'the' <-> 'who'", ['the', 'who'])).toBe("'the' <-> 'who'");
   });
 
+  it('keeps stopword exclusions from the simple half when English drops them', () => {
+    expect(combinedTsQuery('backup -was', "'backup'", "'backup' & !'was'", ['was'])).toBe(
+      "'backup' & !'was'",
+    );
+  });
+
   it('is nothing when nothing is left to search for', () => {
     expect(combinedTsQuery('the', '', "'the'", ['the'])).toBeNull();
     expect(combinedTsQuery('', '', '', [])).toBeNull();

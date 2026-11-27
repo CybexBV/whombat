@@ -128,7 +128,7 @@ export interface WebI18nProviderProps {
  */
 export function WebI18nProvider(props: WebI18nProviderProps) {
   const outer = useContext(ControlContext);
-  if (outer) return <NestedProvider outer={outer} {...props} />;
+  if (outer && props.scope !== 'visitor') return <NestedProvider outer={outer} {...props} />;
   return <RootProvider {...props} />;
 }
 
@@ -139,7 +139,11 @@ function NestedProvider({
   children,
 }: WebI18nProviderProps & { outer: WebI18nControl }) {
   useEffect(() => {
-    if (boxId !== undefined) outer.setBox(boxId);
+    if (boxId === undefined) return undefined;
+    outer.setBox(boxId);
+    return () => {
+      outer.setBox(null);
+    };
   }, [outer, boxId]);
   useEffect(() => (queryClient ? outer.addQueryClient(queryClient) : undefined), [outer, queryClient]);
   return <>{children}</>;
