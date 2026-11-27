@@ -29,6 +29,7 @@ import {
   type Message,
   shortNameOf,
 } from '@whombat/core/domain';
+import { resolveLanguage } from '@whombat/core/i18n';
 import {
   BLOCKED_GUIDANCE,
   formatClock,
@@ -114,8 +115,12 @@ export function replyLengthLines(ctx: DispatchContext): string[] {
   const trigger = ctx.dispatch.trigger;
   if (trigger === 'expand') return [];
   const person = ctx.onBehalfOf ? shortNameOf(ctx.onBehalfOf.person) : 'the person';
+  const langReminder =
+    !isOutsideTurn(ctx) && !ctx.tracker && resolveLanguage(ctx.locale) === 'nl'
+      ? ' Reply in natural informal Dutch (je/jouw).'
+      : '';
   return [
-    `Keep this reply short, however long your earlier ones were: the answer or result and what happens next, in one to three short sentences (under 60 words), without headings, lists or how you got there. Go longer only when ${person} asked for detail or a write-up, and offer the rest with more.`,
+    `Keep this reply short, however long your earlier ones were: the answer or result and what happens next, in one to three short sentences (under 60 words), without headings, lists or how you got there. Go longer only when ${person} asked for detail or a write-up, and offer the rest with more.${langReminder}`,
   ];
 }
 
@@ -125,7 +130,7 @@ export function replyLengthLines(ctx: DispatchContext): string[] {
  * readers can open, ids as given.
  */
 export const WRITING_LINES: readonly string[] = [
-  '- Write like a person, in plain English anyone understands: first-person sentences, specific about what matters to the reader (what changed, what it means, who decided), no jargon, no filler and no emoji. Commit hashes, test counts, file paths, commands and tool output stay out of chat unless someone asks for them or needs them to act: they belong in the pull request, your report’s details or “More detail”.',
+  '- Write like a person, in plain words anyone understands: first-person sentences, specific about what matters to the reader (what changed, what it means, who decided), no jargon, no filler and no emoji. Commit hashes, test counts, file paths, commands and tool output stay out of chat unless someone asks for them or needs them to act: they belong in the pull request, your report’s details or “More detail”.',
   '- Chat shows Markdown: bold, italic, code, links, lists, quotes, tables and code blocks. To show a picture, upload_file an image and attach it (attachmentIds), or put an SVG document in a ```svg block: one of the two, never both.',
   '- Show what is easier seen than read: numbers with a trend or a comparison as a chart, and any mockup, chart or diagram someone asks for, as an HTML page in a ```html block (styled as post_message’s text says) or a ```mermaid diagram, with a sentence on what it shows. Check a page with page_preview first when you have it.',
   '- Links are for what readers can open: web addresses and Whombat’s own pages. Name a skill, one of your files or any other local path in plain words or `code`, never as a link.',
@@ -465,11 +470,31 @@ function changeWindowLines(ctx: DispatchContext): string[] {
   ];
 }
 
+/**
+ * The active reply language, injected per turn so open/resumed Hermes sessions switch immediately when the person
+ * changes language. Protocol tokens (`NO_REPLY`, `MORE:`, `VERDICT_*`) stay ASCII English; outsider turns match the
+ * outsider's language instead of the box owner's.
+ */
+export function languageLines(
+  ctx: Pick<DispatchContext, 'locale' | 'outside' | 'tracker' | 'dispatch'>,
+): string[] {
+  if (isOutsideTurn(ctx as DispatchContext) || ctx.tracker || ctx.dispatch.trigger === 'feedback') return [];
+  if (!ctx.locale) return [];
+  const lang = resolveLanguage(ctx.locale);
+  if (lang === 'nl') {
+    return [
+      'Language: reply to the person in natural, plain informal Dutch (use je/jouw, never u). Keep familiar Dutch IT terms (server, back-up, container, VM, passkey, Tailscale, pull request, Wi-Fi, Bluetooth, DNS, SSH, GitHub) and use the Dutch UI names (Instellingen, Kluis, Overzicht, Koppelingen, Automatiseringen, Actie nodig, Meer details). Write report_done, look_report, ahead_report and post_answer summaries in Dutch too. Keep protocol markers (NO_REPLY, MORE:) and tool arguments in English.',
+    ];
+  }
+  return ['Language: reply to the person in plain English.'];
+}
+
 /** The preface's lines: now, the person's accounts (or that the turn is apart), where it is and what is connected. */
 export function prefaceLines(ctx: DispatchContext, options: TurnPromptOptions = {}): string[] {
   const c = ctx.conversation;
   return [
     nowLine(ctx),
+    ...languageLines(ctx),
     ...(ctx.onBehalfOf && !isOutsideTurn(ctx) ? personalLines(ctx.onBehalfOf) : []),
     // Their own turn may start a watch on their mail (looks-ahead.md).
     ...aheadWatchLines(ctx),

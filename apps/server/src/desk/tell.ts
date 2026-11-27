@@ -2,7 +2,7 @@
  * The assistant tells its person something in their chat (the DM Chat lives in), as the disk alerts do
  * (`managed/host-disk-alerts.ts`): the power (DK-10) and five wrong PINs on the screen (DK-04).
  */
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, eq, gt, isNull, or } from 'drizzle-orm';
 import { applyContext } from '../commit/pipeline';
 import { messages } from '../db/schema/index';
 import { postMessage } from '../domain/messages';
@@ -13,8 +13,10 @@ import { toActor } from '../read/principals';
 import type { Services } from '../services';
 
 export interface TellOptions {
-  /** Says nothing when the assistant said the same words in this DM this recently (and the room wasn't cleared since). */
+  /** Says nothing when the assistant said the same words (or same structured key) in this DM this recently. */
   unlessSaidWithinMs?: number | null;
+  /** Optional language-independent deduplication key stored via message provenance/check, paired with text match. */
+  alsoMatchTexts?: readonly string[];
 }
 
 /**
@@ -33,6 +35,9 @@ export async function tellPerson(
     if (!where) return false;
     const now = services.clock();
     if (options.unlessSaidWithinMs) {
+      const variants = [...new Set([text, ...(options.alsoMatchTexts ?? [])])];
+      const textMatch =
+        variants.length === 1 ? eq(messages.text, text) : or(...variants.map((v) => eq(messages.text, v)));
       const [said] = await session.tx
         .select({ id: messages.id })
         .from(messages)
@@ -40,7 +45,7 @@ export async function tellPerson(
           and(
             eq(messages.conversationId, where.dm.id),
             eq(messages.authorId, where.agent.id),
-            eq(messages.text, text),
+            textMatch,
             isNull(messages.deletedAt),
             gt(messages.createdAt, new Date(now.getTime() - options.unlessSaidWithinMs)),
             afterClear(where.dm.roomClearedAt),

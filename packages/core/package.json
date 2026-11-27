@@ -25,7 +25,8 @@
     "./backup": "./src/backup/index.ts",
     "./share": "./src/share/index.ts",
     "./ids": "./src/ids.ts",
-    "./own-address": "./src/own-address/index.ts"
+    "./own-address": "./src/own-address/index.ts",
+    "./i18n": "./src/i18n/index.ts"
   },
   "files": [
     "dist"
@@ -111,6 +112,10 @@
       "./own-address": {
         "types": "./dist/own-address/index.d.ts",
         "default": "./dist/own-address/index.js"
+      },
+      "./i18n": {
+        "types": "./dist/i18n/index.d.ts",
+        "default": "./dist/i18n/index.js"
       }
     }
   },

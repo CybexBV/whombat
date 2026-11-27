@@ -956,6 +956,8 @@ export function fuseboxInventory(input: FuseboxInput): InventoryPanel | null {
         icon: 'money',
         value: usd(month.usd),
         detail: 'At API prices',
+        figureKey: 'f-worth-this-month',
+        private: true,
         ...(thisWeek >= 0.005 ? { note: `+${usd(thisWeek)} this week`, noteTone: 'ok' as const } : {}),
         url: `${url}/#/usage`,
       }),

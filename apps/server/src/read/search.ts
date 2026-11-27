@@ -14,12 +14,14 @@ import {
   daysAgo,
   formatClock,
   formatDate,
+  resolveLanguage,
   type SearchAnswer,
   type SearchCounts,
   type SearchFilter,
   type SearchResponse,
   type SearchResult,
   SearchResultType,
+  type SupportedLanguage,
   searchFilterOf,
   zonedInstant,
 } from '@whombat/core';
@@ -41,14 +43,25 @@ import { approvalVisible } from './work-views';
 /**
  * The search's tsquery (resourceful-agents.md RA-26): English stems and the words as written, the two halves of
  * `search_documents.tsv`. Natural questions match any term (ranked by how many): the English terms, and the words as
- * written except English stopwords (else “the” would find everything); quotes / `-term` / `or` keep web-search syntax in
- * each half, either half matching. Null when nothing is left to search for.
+ * written except the active language's stopwords (English always, plus Dutch on Dutch burrows so “de/het/een/van”
+ * don't match every document without stripping English words like “want/die/was” on English burrows); quotes / `-term` /
+ * `or` keep web-search syntax in each half, either half matching. Null when nothing is left to search for.
  */
-async function tsQuery(db: Db, q: string): Promise<string | null> {
-  const [row] = await db.execute<{ e: string; s: string; stop: string[] | null }>(
-    sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
-      (select array_agg(distinct lower(d.token)) from ts_debug('english', ${q}) d where d.lexemes = '{}') as stop`,
-  );
+async function tsQuery(db: Db, q: string, lang: SupportedLanguage = 'en'): Promise<string | null> {
+  const [row] =
+    lang === 'nl'
+      ? await db.execute<{ e: string; s: string; stop: string[] | null }>(
+          sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
+            (select array_agg(distinct lower(d.token)) from (
+              select token from ts_debug('english', ${q}) where lexemes = '{}'
+              union
+              select token from ts_debug('dutch', ${q}) where lexemes = '{}'
+            ) d) as stop`,
+        )
+      : await db.execute<{ e: string; s: string; stop: string[] | null }>(
+          sql`select websearch_to_tsquery('english', ${q})::text as e, websearch_to_tsquery('simple', ${q})::text as s,
+            (select array_agg(distinct lower(d.token)) from ts_debug('english', ${q}) d where d.lexemes = '{}') as stop`,
+        );
   return combinedTsQuery(q, row?.e ?? '', row?.s ?? '', row?.stop ?? []);
 }
 
@@ -65,12 +78,15 @@ export function combinedTsQuery(
     if (english.trim()) halves.push(english);
     if (simple.trim() && simple !== english) halves.push(simple);
   } else {
-    if (english.trim()) halves.push(english.replace(/ & /g, ' | '));
     const stop = new Set(stopwords);
-    const words = [...new Set([...simple.matchAll(/'((?:[^']|'')+)'/g)].map((m) => m[1] ?? ''))].filter(
-      (w) => w && !stop.has(w.replace(/''/g, "'")),
-    );
-    const asWritten = words.map((w) => `'${w}'`).join(' | ');
+    const keepTerms = (raw: string) =>
+      [...new Set([...raw.matchAll(/'((?:[^']|'')+)'/g)].map((m) => m[1] ?? ''))]
+        .filter((w) => w && !stop.has(w.replace(/''/g, "'")))
+        .map((w) => `'${w}'`)
+        .join(' | ');
+    const stemmed = keepTerms(english);
+    if (stemmed) halves.push(stemmed);
+    const asWritten = keepTerms(simple);
     if (asWritten && asWritten !== halves[0]) halves.push(asWritten);
   }
   if (!halves.length) return null;
@@ -81,14 +97,17 @@ function whereOf(
   doc: Pick<typeof searchDocuments.$inferSelect, 'type' | 'createdAt' | 'where'>,
   now: Date,
   timeZone: string,
+  lang: SupportedLanguage = 'en',
 ): string {
   if (doc.type !== 'THREAD' && doc.type !== 'MESSAGE') return doc.where;
   const days = daysAgo(doc.createdAt, now, timeZone);
+  const todayWord = lang === 'nl' ? 'vandaag' : 'today';
+  const yesterdayWord = lang === 'nl' ? 'gisteren' : 'yesterday';
   const when =
     days === 0
-      ? `today ${formatClock(doc.createdAt, timeZone)}`
+      ? `${todayWord} ${formatClock(doc.createdAt, timeZone)}`
       : days === 1
-        ? `yesterday ${formatClock(doc.createdAt, timeZone)}`
+        ? `${yesterdayWord} ${formatClock(doc.createdAt, timeZone)}`
         : formatDate(doc.createdAt, timeZone, { year: 'always' });
   return doc.where ? `${doc.where} · ${when}` : when;
 }
@@ -227,6 +246,7 @@ function scopeKey(parts: {
   after?: string | undefined;
   before?: string | undefined;
   zone: string;
+  lang?: SupportedLanguage | undefined;
   authorId?: string | undefined;
   types?: readonly SearchResultType[] | undefined;
 }): string {
@@ -244,10 +264,11 @@ function scopeKey(parts: {
         parts.after ?? null,
         parts.before ?? null,
         dated ? parts.zone : null,
-        // Older cursors (no `mine`) keep their key.
+        // Older cursors (no `mine`, default English) keep their key.
         ...(parts.authorId || parts.types?.length
           ? [parts.authorId ?? null, [...(parts.types ?? [])].sort()]
           : []),
+        ...(parts.lang && parts.lang !== 'en' ? [parts.lang] : []),
       ]),
     )
     .digest('base64url')
@@ -638,6 +659,8 @@ export interface SearchInput {
   cursor?: string;
   /** The zone `after` / `before` days are in: the viewer's, else the burrow's. */
   timeZone?: string;
+  /** The viewer's preferred language tag (controls stopword filtering and date labels). */
+  locale?: string;
   /** Rows this request may read (default `SEARCH_SCAN_BUDGET`; tests set less). */
   scanBudget?: number;
   /** Leave the chip counts out (all zero): readers that only want results (SRP-09). */
@@ -675,10 +698,11 @@ export async function search(
     : [];
   const answer = answerRow ? toSearchAnswer(answerRow) : null;
 
-  const tsq = q ? await tsQuery(db, q) : null;
+  const lang = resolveLanguage(input.locale);
+  const tsq = q ? await tsQuery(db, q, lang) : null;
   if (q && !tsq) return { query: q, results: [], counts: { ...ZERO_COUNTS }, answer, next: null };
   const zone = input.timeZone ?? burrow.timeZone;
-  const key = scopeKey({ ...input, burrowId: burrow.id, viewerId: viewer.id, q, zone });
+  const key = scopeKey({ ...input, burrowId: burrow.id, viewerId: viewer.id, q, zone, lang });
   const cursor = input.cursor ? decodeCursor(input.cursor, key, !!tsq) : null;
   // Queries that carry the cursor's values: a value Postgres can't read is a cursor that isn't this search's (SRP-04).
   const withCursor = async <T>(work: () => Promise<T>): Promise<T> => {
@@ -716,7 +740,7 @@ export async function search(
   const results: SearchResult[] = page.rows.map((doc) => ({
     id: doc.id,
     type: doc.type,
-    where: whereOf(doc, now, burrow.timeZone).slice(0, 200),
+    where: whereOf(doc, now, burrow.timeZone, lang).slice(0, 200),
     authorId: doc.authorId,
     snippet: doc.snippet.slice(0, 1000),
     citedAs: cited.get(doc.id) ?? null,

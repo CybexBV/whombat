@@ -16,6 +16,7 @@ import { createHmac, hkdfSync, randomBytes } from 'node:crypto';
 import type { LinkMailAuditPayload, LinkMailSummary } from '@whombat/protocol/session';
 import { eq } from 'drizzle-orm';
 import { applianceState } from '../../db/schema/index';
+import { configuredBoxLocale } from '../../i18n/locale';
 import type { Services } from '../../services';
 import { appendApplianceEvent } from '../audit';
 import { ManagerCallError, type ManagerPort } from '../ports';
@@ -109,6 +110,12 @@ export class LinkEmail {
     void this.tell();
   }
 
+  /** Owner's language changed: sync the new locale to control for offline and waiting emails. */
+  localeChanged(): void {
+    this.#told = null;
+    void this.tell();
+  }
+
   /**
    * Tells control the choices when it knows the box and hasn't taken these yet (one at a time). A failure is logged and
    * tried again at the next chance (the runtime's five-minute sweep, a Link move, the owner's next change).
@@ -124,13 +131,26 @@ export class LinkEmail {
     const send = this.manager.linkMailSet?.bind(this.manager);
     if (!send || !this.link.known()) return;
     const choices = this.#choices;
-    const key = `${choices.offline}/${choices.notifications}`;
+    const locale = await configuredBoxLocale(this.services).catch(() => null);
+    const key = `${choices.offline}/${choices.notifications}/${locale ?? ''}`;
     if (this.#told === key) return;
     try {
-      await send({ offline: choices.offline, notifications: choices.notifications });
+      await send({
+        offline: choices.offline,
+        notifications: choices.notifications,
+        ...(locale ? { locale } : {}),
+      });
       // The owner may have changed them meanwhile: only what was sent counts as told.
       this.#told = key;
     } catch (err) {
+      // An older manager or control that doesn't know `locale` yet may reject strict input with 400.
+      if (locale && err instanceof ManagerCallError && err.status === 400) {
+        try {
+          await send({ offline: choices.offline, notifications: choices.notifications });
+          this.#told = key;
+          return;
+        } catch {}
+      }
       this.services.log.info(
         { status: err instanceof ManagerCallError ? err.status : undefined, err: String(err).slice(0, 200) },
         'link: the email choices weren’t told to Whombat Link yet',
@@ -172,12 +192,14 @@ export class LinkEmail {
   ): Promise<boolean> {
     if (!this.sendsWaiting() || count < 1) return false;
     if ((await this.person().catch(() => null)) !== accountId) return false;
+    const locale = await configuredBoxLocale(this.services).catch(() => null);
     return this.send({
       kind: 'waiting',
       ref: this.ref(`waiting:${accountId}:${this.services.clock().toISOString()}`),
       count: Math.min(count, 999),
       cadence,
       ...(/^\/[A-Za-z0-9/_.~%?&=-]{0,199}$/.test(path) ? { path } : {}),
+      ...(locale ? { locale } : {}),
     });
   }
 
@@ -193,12 +215,14 @@ export class LinkEmail {
     if (!this.sendsNotices()) return false;
     if (this.services.maintenance.quarantined && !options.evenInQuarantine) return false;
     const path = notice.path.startsWith('/') && notice.path.length <= 200 ? notice.path : undefined;
+    const locale = await configuredBoxLocale(this.services).catch(() => null);
     return this.send({
       kind: 'notice',
       ref: this.ref(`notice:${what}:${this.services.clock().toISOString()}`),
       title: line(notice.title, 80),
       body: line(notice.body, 240),
       ...(path ? { path } : {}),
+      ...(locale ? { locale } : {}),
     });
   }
 
@@ -210,6 +234,14 @@ export class LinkEmail {
       this.services.log.info({ kind: mail.kind }, 'link: an email went to Whombat Link');
       return true;
     } catch (err) {
+      if ('locale' in mail && mail.locale && err instanceof ManagerCallError && err.status === 400) {
+        const { locale: _l, ...withoutLocale } = mail;
+        try {
+          await send(withoutLocale as Parameters<NonNullable<ManagerPort['mailSend']>>[0]);
+          this.services.log.info({ kind: mail.kind }, 'link: an email went to Whombat Link');
+          return true;
+        } catch {}
+      }
       // Control's refusal says the choice it has is off: tell it again at the next chance.
       if (err instanceof ManagerCallError && err.status === 502) this.#told = null;
       this.services.log.warn(

@@ -353,6 +353,7 @@ const HA_PRIVATE_ENTITY = /^(person|device_tracker|zone|lock|alarm_control_panel
 
 /** A Home Assistant control a locked screen leaves out: someone's whereabouts, a presence, motion or lock sensor. */
 function haGuards(c: ThingControl): boolean {
+  if (c.private) return true;
   const domain = c.id.split('.')[0] ?? '';
   return HA_WHO.has(domain) || (domain === 'binary_sensor' && HA_WATCH_WORDS.has(c.state ?? ''));
 }

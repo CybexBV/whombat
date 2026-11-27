@@ -50,6 +50,7 @@ import { dispatchAttachments, dispatchFiles } from '../files/dispatch';
 import { ghContextFor } from '../github/agent-gh-context';
 import { undoRequestOf } from '../home/reports';
 import { taskFinishedOf } from '../hosts/followed';
+import { configuredAccountLocale, configuredBoxLocale } from '../i18n/locale';
 import { atMost } from '../lib/side-by-side';
 import { iso, isoOrNull } from '../lib/time';
 import { localModelDispatch } from '../local-model/check';
@@ -496,8 +497,14 @@ export async function buildDispatchContext(
   // asks, the organization access the tracker granted now (or why not). Both write, so they come after the reads.
   const token = await issueDispatchToken(services, row.id);
   const tracker = await trackerPart(services, row);
+  const turnLocale = outside
+    ? null
+    : person?.accountId
+      ? await configuredAccountLocale(services, person.accountId)
+      : await configuredBoxLocale(services);
   const context: DispatchContextType = {
     dispatch: toDispatch(runnerRow),
+    ...(turnLocale ? { locale: turnLocale } : {}),
     burrow: { id: burrowRow.id, slug: burrowRow.slug, name: burrowRow.name, timeZone: burrowRow.timeZone },
     agent: {
       id: agent.id,
@@ -589,12 +596,21 @@ async function searchContext(
   const db = services.db;
   const [answer] = await db.select().from(searchAnswers).where(eq(searchAnswers.id, row.search.answerId));
   const asker = answer ? await loadPrincipalRow(db, answer.askedById) : undefined;
+  const locale = asker?.accountId
+    ? await configuredAccountLocale(services, asker.accountId)
+    : await configuredBoxLocale(services);
   const results = asker
     ? await searchResults(
         db,
         asker,
         burrowRow,
-        { q: row.search.query, type: 'all', limit: ANSWER_RESULTS, log: services.log },
+        {
+          q: row.search.query,
+          type: 'all',
+          limit: ANSWER_RESULTS,
+          ...(locale ? { locale } : {}),
+          log: services.log,
+        },
         now,
       )
     : [];

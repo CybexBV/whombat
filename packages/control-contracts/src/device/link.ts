@@ -4,6 +4,7 @@
  * through the box, and remote help's narrow heartbeat. The Link state also rides on every `ticket.issue` answer
  * (`TicketResponse.link`). Cross-language.
  */
+import { LocaleTag } from '@whombat/core/i18n';
 import {
   LinkCode,
   LinkPageUrl,
@@ -126,6 +127,7 @@ export const LinkMail = z.strictObject({
   title: hostTextSchema(80).optional(),
   body: hostTextSchema(240).optional(),
   path: LinkMailPath.optional(),
+  locale: LocaleTag.optional(),
 });
 export type LinkMail = z.infer<typeof LinkMail>;
 
@@ -211,7 +213,11 @@ export const LINK_DEVICE_OPS = {
    * Accepted in any Link state but `off` (the box sends nothing then).
    */
   'link.mail.set': {
-    body: z.strictObject({ offline: z.boolean(), notifications: z.boolean() }),
+    body: z.strictObject({
+      offline: z.boolean(),
+      notifications: z.boolean(),
+      locale: LocaleTag.optional(),
+    }),
     response: Ok,
   },
   /**

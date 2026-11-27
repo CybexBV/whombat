@@ -262,9 +262,24 @@ async function widget(run: RestoreRun, r: BackupWidgetRecord): Promise<RecordOut
 }
 
 const isDefaultPreferences = (p: Record<string, unknown>) =>
-  Object.keys(p).every((k) => k === 'theme' || k === 'timeZone') &&
+  Object.keys(p).every((k) => k === 'theme' || k === 'timeZone' || k === 'locale') &&
   (p.theme ?? 'system') === 'system' &&
-  (p.timeZone ?? null) === null;
+  (p.timeZone ?? null) === null &&
+  (p.locale ?? null) === null;
+
+/** Parses backed-up preferences safely so a malformed/unsupported future locale tag never discards the rest. */
+function parseRestoredPreferences(raw: unknown): Preferences | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const direct = Preferences.safeParse(raw);
+  if (direct.success) return direct.data;
+  const record = raw as Record<string, unknown>;
+  if ('locale' in record) {
+    const { locale: _dropped, ...rest } = record;
+    const withoutLocale = Preferences.safeParse(rest);
+    if (withoutLocale.success) return withoutLocale.data;
+  }
+  return null;
+}
 
 /**
  * The person's preferences and photo (BF-20, BF-S18), back to the person restoring. What nobody chose here — preferences as a
@@ -275,8 +290,7 @@ async function accountProfile(run: RestoreRun, r: BackupAccountProfileRecord): P
   if (!run.restorer.accountId) return 'detail';
   const [account] = await run.db.select().from(accounts).where(eq(accounts.id, run.restorer.accountId));
   if (!account) return 'detail';
-  const prefs = r.preferences ? Preferences.safeParse(r.preferences) : null;
-  const wantedPrefs = prefs?.success ? prefs.data : null;
+  const wantedPrefs = r.preferences ? parseRestoredPreferences(r.preferences) : null;
   const prefsDiffer = !!wantedPrefs && canonicalJson(account.preferences) !== canonicalJson(wantedPrefs);
   const photo =
     r.photo?.width &&

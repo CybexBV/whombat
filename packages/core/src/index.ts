@@ -15,6 +15,7 @@ export * from './contracts/index.js';
 export * from './domain/delegation-verification.js';
 export * from './domain/index.js';
 export * from './feedback/index.js';
+export * from './i18n/index.js';
 export * from './keys/index.js';
 export * from './skills/index.js';
 export * from './text/index.js';

@@ -5,7 +5,9 @@
  */
 import { api, buildPath, type SearchResponse } from '@whombat/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { updatePreferences } from '../commands/account';
 import { sendMessage } from '../commands/messages';
+import { personAccountId } from '../read/principals';
 import { IDS } from '../seed/test-world';
 import { useTestServer } from '../test/harness';
 import { mcpClient, type TestMcp } from '../test/mcp';
@@ -58,6 +60,36 @@ describe('search across languages', () => {
     const the = await find('the factuur');
     expect(the).not.toContain(ids.english);
     expect(the).not.toContain(ids.mara);
+  });
+
+  it('filters Dutch stopwords on Dutch accounts without stripping English words on English accounts', async () => {
+    const wantMsg = await post(IDS.mara, IDS.general, 'We want faster nightly backups.');
+    // On an English account, “want” (a Dutch stopword) still finds the English message.
+    expect(await find('want')).toContain(wantMsg);
+    // Switch Mara to Dutch: “de” and “van” are filtered as Dutch stopwords so “de onbekendwoord” doesn't match Dutch “De facturen…”.
+    const maraAccountId = await personAccountId(t.services.db);
+    if (!maraAccountId) throw new Error('missing Mara account');
+    await updatePreferences(t.services, maraAccountId, { locale: 'nl-NL' });
+    try {
+      const res = await t.api.inject({
+        method: 'GET',
+        url: `${api.search.query.base}${buildPath(api.search.query.path, { burrow: 'burrow-hq' })}?q=${encodeURIComponent('de onbekendwoord')}`,
+        headers: { cookie },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json() as SearchResponse;
+      expect(body.results.map((r) => r.id)).not.toContain(ids.dutch);
+      // Dutch word still matches and `where` uses Dutch “vandaag”.
+      const hitRes = await t.api.inject({
+        method: 'GET',
+        url: `${api.search.query.base}${buildPath(api.search.query.path, { burrow: 'burrow-hq' })}?q=${encodeURIComponent('facturen')}`,
+        headers: { cookie },
+      });
+      const hitBody = hitRes.json() as SearchResponse;
+      expect(hitBody.results.find((r) => r.id === ids.dutch)?.where).toContain('vandaag');
+    } finally {
+      await updatePreferences(t.services, maraAccountId, { locale: null });
+    }
   });
 });
 

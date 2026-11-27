@@ -142,7 +142,12 @@ export const contentRoutes = [
       access.principal,
       access.burrow,
       // `after` / `before` are days in the viewer's zone (CT-180).
-      { ...query, timeZone: auth.account?.preferences.timeZone ?? access.burrow.timeZone, log: services.log },
+      {
+        ...query,
+        timeZone: auth.account?.preferences.timeZone ?? access.burrow.timeZone,
+        ...(auth.account?.preferences.locale ? { locale: auth.account.preferences.locale } : {}),
+        log: services.log,
+      },
       services.clock(),
     ),
   ),

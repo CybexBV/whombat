@@ -37,6 +37,7 @@ import { catalogConnections } from '../../db/schema/index';
 import { deviceThings } from '../../devices/home';
 import { DEVICE_CATALOG_ID } from '../../devices/store';
 import { homeShowsConnection } from '../../home/overview';
+import { onLocaleChange } from '../../i18n/locale';
 import { ApiError } from '../../lib/errors';
 import type { Services } from '../../services';
 import { largeImageRef } from '../../things/images';
@@ -215,6 +216,9 @@ class Memory<V> {
   delete(key: string): void {
     this.#m.delete(key);
   }
+  clear(): void {
+    this.#m.clear();
+  }
 }
 
 /** What a page offered *Add a widget*, and when. */
@@ -250,10 +254,17 @@ export function createThingWidgets(
   const seen = new Memory<SeenPanel>();
   const names = new Memory<string>();
   const gate = limiter(GROUPS_READS_AT_ONCE);
+  const localeKey = (ctx: WidgetCtx) => ctx.locale ?? 'en';
+  onLocaleChange(services, () => {
+    offered.clear();
+    reading.clear();
+    lastPages.clear();
+  });
 
   /** Remembers what a page showed: its name, its panels' views, what it offers *Add a widget*. */
   function learn(ctx: WidgetCtx, thing: DeskWidgetRef, page: ThingPage, at: number): DeskCatalogGroup {
     const scope = `${ctx.viewer.burrowId}|${thing}`;
+    const langScope = `${scope}|${localeKey(ctx)}`;
     names.set(scope, page.name);
     const hints = kindHints(page.catalogId);
     for (const p of screenPanels(page, hints, ctx)) {
@@ -268,13 +279,13 @@ export function createThingWidgets(
       thing,
       items: catalogItems(page, thing, hints, mark, ctx),
     };
-    offered.set(scope, { at, group });
+    offered.set(langScope, { at, group });
     return group;
   }
 
   /** One read of a page shared by every widget and screen asking within `PAGE_SHARE_MS`; the outcome is learnt. */
   function readPage(ctx: WidgetCtx, thing: DeskWidgetRef, range: PageRange): Promise<ThingPage> {
-    const key = `${ctx.viewer.principal.id}|${thing}|${range}`;
+    const key = `${ctx.viewer.principal.id}|${thing}|${range}|${localeKey(ctx)}`;
     const now = deps.clock();
     for (const [k, v] of reading) if (now - v.at > PAGE_SHARE_MS) reading.delete(k);
     const shared = reading.get(key);
@@ -292,14 +303,14 @@ export function createThingWidgets(
 
   /** A group of *Add a widget* from what is kept, else the page read within `ms` (then its figures and `partial`). */
   async function groupOf(ctx: WidgetCtx, t: ThingEntry, ms: number): Promise<DeskCatalogGroup | null> {
-    const scope = `${ctx.viewer.burrowId}|${t.ref}`;
-    const kept = offered.get(scope);
+    const langScope = `${ctx.viewer.burrowId}|${t.ref}|${localeKey(ctx)}`;
+    const kept = offered.get(langScope);
     if (kept && deps.clock() - kept.at <= PANELS_KEEP_MS) return kept.group;
     // The wait counts from the ask: a read still waiting for its turn is as slow as one under way.
     const read = gate(() => readPage(ctx, t.ref, '24h'));
     try {
       const page = await within(read, ms, LATE);
-      if (page !== LATE) return offered.get(scope)?.group ?? null;
+      if (page !== LATE) return offered.get(langScope)?.group ?? null;
     } catch (err) {
       if (isGone(err)) return null;
     }
@@ -331,7 +342,7 @@ export function createThingWidgets(
       const one = (await deps.things(ctx)).find((t) => t.ref === thing);
       if (!one) return [];
       // Asked alone: read it now, whatever is kept.
-      offered.delete(`${ctx.viewer.burrowId}|${thing}`);
+      offered.delete(`${ctx.viewer.burrowId}|${thing}|${localeKey(ctx)}`);
       const group = await groupOf(ctx, one, PAGE_DEADLINE_MS);
       return group ? [group] : [];
     }
@@ -383,7 +394,7 @@ export function createThingWidgets(
     } catch (err) {
       if (isGone(err)) return { page: null, gone: true };
     }
-    const last = lastPages.get(`${ctx.viewer.principal.id}|${thing}|${range}`);
+    const last = lastPages.get(`${ctx.viewer.principal.id}|${thing}|${range}|${localeKey(ctx)}`);
     return last && deps.clock() - last.at <= LAST_PAGE_KEEP_MS ? { page: last.page } : { page: null };
   }
 

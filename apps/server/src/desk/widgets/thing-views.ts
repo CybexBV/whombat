@@ -381,11 +381,12 @@ export function slotFigures(panels: readonly Panel[], rows: readonly string[] = 
         if (i.figure) {
           const tone = lineTone(i);
           out.push({
-            key: keyOf(i.title),
+            key: i.figure.key ?? keyOf(i.title),
             label: i.title.slice(0, 30),
             value: i.figure.value,
             ...(i.figure.note ? { sub: i.figure.note.slice(0, 80) } : {}),
             ...(tone ? { tone } : {}),
+            ...(i.private ? { private: true } : {}),
           });
         }
   return out.slice(0, 6);
@@ -504,7 +505,7 @@ export function panelItems(p: Panel): PanelItem[] {
 /** Controls that open, lock or watch the house: a locked screen leaves them out (DK-138), and what the kind adds. */
 const GUARDED = new Set<ThingControl['icon']>(['lock', 'alarm', 'door', 'camera']);
 export const guardsHouse = (p: Panel, item?: string, guards?: KindHints['guards']): boolean => {
-  const guarded = (c: ThingControl) => GUARDED.has(c.icon) || !!guards?.(c);
+  const guarded = (c: ThingControl) => !!c.private || GUARDED.has(c.icon) || !!guards?.(c);
   return (
     p.kind === 'controls' &&
     p.groups.some((g) =>
@@ -529,7 +530,7 @@ export function shownFigures(kpis: readonly ThingPageKpi[], lead?: string): Thin
 export function figuresPrivate(hints: KindHints, kpis: readonly ThingPageKpi[]): boolean {
   if (hints.private) return true;
   const secret = hints.privateFigures ?? [];
-  return shownFigures(kpis, hints.figure).some((k) => secret.includes(k.key));
+  return shownFigures(kpis, hints.figure).some((k) => !!k.private || secret.includes(k.key));
 }
 
 /* Add a widget ----------------------------------------------------------------------------------------------------- */

@@ -235,6 +235,8 @@ export const ThingPageKpi = z.object({
   charts: z.array(ThingPageKey).min(1).max(3).optional(),
   /** Or where the figure leads when it has no charts (0.94, CT-449): the Guests tab, a page. */
   link: ThingPageLink.optional(),
+  /** Hidden on a locked desk screen (source metadata, never derived from display words). */
+  private: z.boolean().optional(),
 });
 export type ThingPageKpi = z.infer<typeof ThingPageKpi>;
 
@@ -399,11 +401,15 @@ export const ThingPageItem = z.object({
    */
   figure: z
     .object({
+      /** Stable machine key for this figure, independent of translated titles. */
+      key: ThingPageKey.optional(),
       value: z.string().min(1).max(20),
       note: z.string().max(40).optional(),
       tone: ThingTone.optional(),
     })
     .optional(),
+  /** Hidden on a locked desk screen (source metadata, never derived from display words). */
+  private: z.boolean().optional(),
 });
 export type ThingPageItem = z.infer<typeof ThingPageItem>;
 
@@ -530,6 +536,8 @@ export const ThingControl = z
     /** A stepper: the client sends the new `value` (within min…max, by step). */
     stepper: ThingControlStepper.optional(),
     image: ThingImage.optional(),
+    /** Hidden on a locked desk screen (presence, occupancy, motion, locks, cameras, people). */
+    private: z.boolean().optional(),
   })
   .refine((c) => c.toggle === undefined || c.on !== undefined, {
     message: 'A switch says whether it is on',

@@ -141,6 +141,7 @@ import {
   displayTextRe as textRe,
   VOICE_TYPING_MAX_BYTES,
 } from '@whombat/core/domain';
+import { LocaleTag } from '@whombat/core/i18n';
 import { ClaimLetters } from '@whombat/protocol/claim';
 import {
   BluetoothAddress,
@@ -417,6 +418,8 @@ export const DeskPaired = z.object({
   assistant: DeskAssistant,
   /** The person's IANA zone: the clock, Done today and quiet hours. */
   timeZone: TimeZoneName,
+  /** The person's BCP-47 locale (`en-GB`, `nl-NL`) for desk chrome and date/number formatting. */
+  locale: LocaleTag.optional(),
   lockedView: DeskLockedView,
   night: DeskNight,
   /** Inside quiet hours now (DK-09). */

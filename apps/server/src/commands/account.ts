@@ -9,12 +9,21 @@ import {
   DEFAULT_PREFERENCES,
   NotificationPreferences,
   newId,
+  normalizeLocaleTag,
   type Preferences,
 } from '@whombat/core';
 import { and, eq, inArray, isNull } from 'drizzle-orm';
-import { accounts, devices, liveActivities, notifications } from '../db/schema/index';
+import {
+  accounts,
+  devices,
+  liveActivities,
+  notifications,
+  principals,
+  searchAnswers,
+} from '../db/schema/index';
 import { publishNotificationsRead, unreadNotifications } from '../domain/notification-read';
 import { clearReadThreads } from '../domain/notify';
+import { notifyLocaleChanged } from '../i18n/locale';
 import { ApiError, notFound } from '../lib/errors';
 import { webPushEndpointProblem } from '../push/webpush';
 import type { Services } from '../services';
@@ -24,12 +33,17 @@ export async function updatePreferences(
   accountId: string,
   patch: Partial<Preferences>,
 ): Promise<Preferences> {
-  return services.pipeline.transactAccount(async (tx) => {
+  return services.pipeline.transactAccount(async (tx, session) => {
     const [row] = await tx.select().from(accounts).where(eq(accounts.id, accountId));
     if (!row) throw notFound('Account');
     const next: Preferences = { ...DEFAULT_PREFERENCES, ...row.preferences };
+    const prevLocale = next.locale ?? null;
+    const localeUpdated = patch.locale !== undefined;
     if (patch.theme !== undefined) next.theme = patch.theme;
     if (patch.timeZone !== undefined) next.timeZone = patch.timeZone;
+    if (patch.locale !== undefined) {
+      next.locale = patch.locale === null ? null : (normalizeLocaleTag(patch.locale) ?? null);
+    }
     // Replaced whole (CT-82): the toggle and the “Don’t ask again” topics (assistant-guides.md AG-12).
     if (patch.assistant !== undefined)
       next.assistant = AssistantPreferences.parse({
@@ -45,6 +59,22 @@ export async function updatePreferences(
     // Replaced whole too: when threads settle by themselves (docs/decisions/chat-settle.md).
     if (patch.chat !== undefined) next.chat = ChatPreferences.parse(patch.chat);
     await tx.update(accounts).set({ preferences: next }).where(eq(accounts.id, accountId));
+    if (localeUpdated && (next.locale ?? null) !== prevLocale) {
+      // Drop cached AI search answers from the previous language so re-asking answers in the new language.
+      const owned = await tx
+        .select({ id: principals.id })
+        .from(principals)
+        .where(eq(principals.accountId, accountId));
+      const ids = owned.map((p) => p.id);
+      if (ids.length > 0) {
+        await tx.delete(searchAnswers).where(inArray(searchAnswers.askedById, ids));
+      }
+    }
+    if (localeUpdated) {
+      session.after(async () => {
+        notifyLocaleChanged(services, accountId, next.locale ?? null);
+      });
+    }
     return next;
   });
 }

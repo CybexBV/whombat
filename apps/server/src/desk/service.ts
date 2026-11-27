@@ -91,6 +91,8 @@ import {
   deskText,
   deskWidgetSpecProblem,
   fillDeskWords,
+  resolveLanguage,
+  safeLocaleOrNull,
   type ThingSummary,
   topics,
 } from '@whombat/core';
@@ -119,6 +121,7 @@ import { startOfLocalDay } from '../home/time';
 import { homeWidgetsNow, type WidgetNow } from '../home/widgets';
 import { serversPrincipal } from '../hosts/principal';
 import { HostsError, hostsFor } from '../hosts/service';
+import { onLocaleChange } from '../i18n/locale';
 import { ApiError, forbidden } from '../lib/errors';
 import { fixLook } from '../looks/research';
 import { type ControlPush, opaqueRef, PUSH_TTL_S, registerPushResolver } from '../managed/push';
@@ -135,8 +138,11 @@ import { type DoorbellRing, followsDoorbell, onDoorbellRing } from '../things/ki
 import { quietThingNotice } from '../things/quiet/service';
 import { DictationError, voiceTypingFor } from '../voice/service';
 import { speakingVoices, voiceFor, voiceHealth } from '../voice/speech';
+import { loadVoiceSettings } from '../voice/store';
+import { wantsDutchVoice } from '../voice/view';
 import { CALM_SOURCE_WAIT_MS, CalmReads, type CalmSample, calmNow, calmPreview, deskCalmInput } from './calm';
 import { createDeskCalmSources, type DeskCalmSources } from './calm-sources';
+import { dutchSpeechText } from './dutch-speech';
 import { deskFoundNow, type FoundInputs, foundInputsOf } from './found';
 import {
   type AskPlace,
@@ -484,6 +490,7 @@ export class DeskService {
   #outputs: { burrowId: string | null; list: ReportedOutput[] } | null = null;
   /** Each burrow's screens as last read, for the state's grid (read again with the glance's age, or after a change). */
   readonly #screenLists = new Map<string, { at: number; list: ScreenRecord[] }>();
+  readonly #offLocale: () => void;
 
   constructor(
     readonly services: Services,
@@ -535,6 +542,11 @@ export class DeskService {
       const person = this.#cache?.personId;
       if (person && frame.topic === topics.me(person) && frame.event.type === 'home.changed')
         this.#dirty = true;
+    });
+    // Language changed: drop the cached glance so the desk screen switches immediately.
+    this.#offLocale = onLocaleChange(services, () => {
+      this.#cache = null;
+      this.#dirty = true;
     });
     // A tap on the unlock push opens This Whombat (DK-S21).
     this.#offPush = registerPushResolver(services, async (accountId, ref) => {
@@ -609,6 +621,7 @@ export class DeskService {
     this.#closed = true;
     this.#offTick?.();
     this.#offFrames();
+    this.#offLocale();
     this.#offPush();
     this.#offRing();
     for (const t of this.#timers) clearTimeout(t);
@@ -698,13 +711,16 @@ export class DeskService {
       .select({ preferences: accounts.preferences })
       .from(accounts)
       .where(eq(accounts.id, place.accountId));
-    const own = (account?.preferences as { timeZone?: string | null } | null)?.timeZone;
+    const prefs = account?.preferences as { timeZone?: string | null; locale?: unknown } | null;
+    const own = prefs?.timeZone;
+    const locale = safeLocaleOrNull(prefs?.locale) ?? undefined;
     return {
       burrow: place.burrow,
       person: place.person,
       agent: place.agent,
       accountId: place.accountId,
       timeZone: zoneOf(own, place.burrow.timeZone),
+      ...(locale ? { locale } : {}),
     };
   }
 
@@ -882,6 +898,7 @@ export class DeskService {
         // Its name and face (one-agent.md OA-08).
         assistant: { name: assistant, face: faceOf(place.agent) },
         timeZone: place.timeZone,
+        ...(place.locale ? { locale: place.locale } : {}),
         lockedView: settings.lockedView,
         night: settings.night,
         quiet: deskQuietNow(settings, new Date(now), place.timeZone),
@@ -1843,10 +1860,22 @@ export class DeskService {
     if (!port) throw noVoice();
     const place = await this.placeOf(row);
     const assistant = screenText(place?.agent.name, 40) || 'your assistant';
-    const text = deskText(fillDeskWords(DESK_WORDS.settings.sample, { assistant }), VOICE_TTS_TEXT_MAX);
+    const isDutch = resolveLanguage(place?.locale) === 'nl';
+    const voiceSettings = isDutch ? await loadVoiceSettings(this.services.db).catch(() => null) : null;
+    const dutchReady =
+      isDutch &&
+      voiceSettings !== null &&
+      wantsDutchVoice(voiceSettings) &&
+      Boolean((await voiceHealth(this.services).catch(() => null))?.languages?.includes('nl'));
+    const nlSample = `Hoi, ik ben ${assistant}. Vraag maar raak.`;
+    const enSample = deskText(fillDeskWords(DESK_WORDS.settings.sample, { assistant }), VOICE_TTS_TEXT_MAX);
     let wav: Buffer;
     try {
-      wav = await port.tts(text, input.voice);
+      wav = dutchReady
+        ? await port
+            .tts(dutchSpeechText(nlSample), input.voice, 'nl')
+            .catch(() => port.tts(enSample, input.voice))
+        : await port.tts(enSample, input.voice);
     } catch (err) {
       this.services.log.warn({ err: String(err) }, 'desk: the voice sample wasn’t made');
       throw noVoice();
@@ -1977,6 +2006,7 @@ export class DeskService {
       viewer: { accountId: place.accountId, burrowId: place.burrow.id, principal: place.person },
       now,
       timeZone: place.timeZone,
+      ...(place.locale ? { locale: place.locale } : {}),
       assistant: screenText(place.agent.name, 40) || 'Your assistant',
     };
   }

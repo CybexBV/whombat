@@ -10,6 +10,7 @@ import { outsideCommandScope } from '../commit/scope';
 import { HostPower } from '../desk/power';
 import type { DeskService } from '../desk/service';
 import { type DropTimings, FeedbackDropService } from '../feedback/drop/index';
+import { onLocaleChange } from '../i18n/locale';
 import type { Services } from '../services';
 import type { BackupPort } from './backup';
 import { ownNameOf } from './backup-key';
@@ -135,6 +136,7 @@ export class ManagedRuntime {
   private timer: NodeJS.Timeout | null = null;
   private quarantineTimer: NodeJS.Timeout | null = null;
   private offBurrows: (() => void) | null = null;
+  private offLocale: (() => void) | null = null;
   private readonly offRevoked: () => void;
 
   constructor(
@@ -395,6 +397,10 @@ export class ManagedRuntime {
         .refreshConsoleBurrows()
         .catch((err) => this.services.log.warn({ err: String(err) }, 'console: burrows not refreshed'));
     });
+    this.offLocale = onLocaleChange(this.services, (_accountId, locale) => {
+      this.trust.ceremony.setLocale(locale);
+      this.linkEmail.localeChanged();
+    });
     await this.trust.refreshLinks();
     await this.events.start();
     // Receipts retention and pending control reports, every few minutes.
@@ -514,6 +520,8 @@ export class ManagedRuntime {
     this.licence.close();
     this.offBurrows?.();
     this.offBurrows = null;
+    this.offLocale?.();
+    this.offLocale = null;
     this.offRevoked();
     this.trust.ceremony.close();
     this.services.push.control = null;

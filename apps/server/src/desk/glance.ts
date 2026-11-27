@@ -524,13 +524,14 @@ async function questionAsk(
 
 /* The glance ------------------------------------------------------------------------------------ */
 
-/** The paired person's place: their burrow, them, their assistant, their zone. */
+/** The paired person's place: their burrow, them, their assistant, their zone and language. */
 export interface DeskPlace {
   burrow: BurrowRow;
   person: PrincipalRow;
   agent: PrincipalRow;
   accountId: string;
   timeZone: string;
+  locale?: string;
 }
 
 /** Everything the screen could show, with each ask's detail; `trimGlance` cuts it per lock state. */
