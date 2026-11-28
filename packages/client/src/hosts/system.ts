@@ -65,8 +65,13 @@ const SWITCH_NAMES: Record<keyof HostRemoteToggles, string> = {
   diagnose: 'diagnose',
 };
 
-/** The command that switches a blocked switch on on the server itself (no sudo on Unraid, which runs as root). */
+/**
+ * The command that switches a blocked switch on on the server itself (no sudo on Unraid, which runs as root; on a
+ * Windows PC a PowerShell line, as administrator, since the agent isn't on its PATH).
+ */
 export function allowCommand(key: keyof HostRemoteToggles, install?: string | null): string {
+  if (install === 'windows')
+    return `& "$env:ProgramFiles\\Whombat\\whombat-agent.exe" allow ${SWITCH_NAMES[key]}`;
   return `${install === 'unraid' ? '' : 'sudo '}whombat-agent allow ${SWITCH_NAMES[key]}`;
 }
 

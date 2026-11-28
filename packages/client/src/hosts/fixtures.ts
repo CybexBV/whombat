@@ -43,6 +43,7 @@ import { withWb } from './fixtures-wb';
 import { handleWc } from './fixtures-wc';
 import { withConsoleFixtures } from './fixtures-wd';
 import { withWi } from './fixtures-wi';
+import { withWindows } from './fixtures-windows';
 import { withWq } from './fixtures-wq';
 import { withWu } from './fixtures-wu';
 
@@ -2066,18 +2067,21 @@ export function createHostsFixtures(
       handle: withRp(
         withSa(
           withSi(
-            // A Mac (macos-servers.md): its page and its screen.
+            // A Mac (macos-servers.md): its page and its screen; a Windows PC (windows-servers.md): its page.
             withMac(
-              withWq(
-                withWi(
-                  withWu(withWb(withWaFixtures(world, handle), { world, now, refreshServer }), {
-                    world,
-                    now,
-                    refreshServer,
-                  }),
+              withWindows(
+                withWq(
+                  withWi(
+                    withWu(withWb(withWaFixtures(world, handle), { world, now, refreshServer }), {
+                      world,
+                      now,
+                      refreshServer,
+                    }),
+                    { world, now, refreshServer },
+                  ),
                   { world, now, refreshServer },
                 ),
-                { world, now, refreshServer },
+                { world, now },
               ),
               { world, now, ...opts.mac },
             ),

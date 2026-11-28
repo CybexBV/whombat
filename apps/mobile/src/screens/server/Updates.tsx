@@ -8,6 +8,7 @@
 
 import {
   isUnraidServer,
+  isWindowsServer,
   type ServerUpdatesView,
   serverUpdatesView,
   updatesWords,
@@ -28,6 +29,7 @@ export function useServerUpdatesView(
     system: d.health?.system ?? null,
     remoteControl: d.server.remoteControl,
     unraid: isUnraidServer(d),
+    windows: isWindowsServer(d),
     connected: d.server.agent.connected !== false && d.server.status !== 'offline',
     now: Date.parse(d.asOf),
     locale: rawLocale,

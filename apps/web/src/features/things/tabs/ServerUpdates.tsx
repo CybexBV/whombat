@@ -8,6 +8,7 @@
  */
 import {
   isUnraidServer,
+  isWindowsServer,
   type PackageOp,
   type ServerUpdatesView,
   serverUpdatesView,
@@ -67,6 +68,7 @@ export function useServerUpdates(burrow: string, serverId: string, detail: HostS
     system: detail.health?.system ?? null,
     remoteControl: detail.server.remoteControl,
     unraid: isUnraidServer(detail),
+    windows: isWindowsServer(detail),
     connected: detail.server.agent.connected !== false && detail.server.status !== 'offline',
     now: Date.parse(detail.asOf),
   });

@@ -268,6 +268,13 @@ export function commandCopy(locale?: string | null) {
 
 export const COMMAND_COPY = commandCopy('en');
 
+/** The Windows PC words: its PowerShell line and how to remove the agent again (windows-servers.md). */
+export function windowsCopy(locale?: string | null) {
+  return { ...clientTree(locale, HOSTS_INSTALL_WORDS).windows };
+}
+
+export const WINDOWS_COPY = windowsCopy('en');
+
 /* The install job (SI-02, SI-04, SI-07, SI-08, SI-11) ------------------------------------------------------------- */
 
 /** How often a running job is read again when no `hosts.install` frame came (brief §2.5). */

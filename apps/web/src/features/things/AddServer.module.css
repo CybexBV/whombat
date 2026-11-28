@@ -330,6 +330,15 @@
   font: 400 13px var(--font-sans);
 }
 
+/* How to remove the agent from a Windows PC again, folded under its line */
+
+.remove {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
 /* Point them here (backup-file.md AP-4417): a server per step row, “Point it here” on the right where it needs one. */
 
 .serverStep .stepText {
