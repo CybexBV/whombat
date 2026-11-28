@@ -56,6 +56,29 @@ describe('the bucket’s address', () => {
       expect(endpointOf(bad)).toBeNull();
   });
 
+  it('takes plain http by the backup service’s own rule: the home network, this machine, link-local', () => {
+    // The same table as the backup service's own test (appliance/backup/internal/offsite/offsite_test.go).
+    const table: Record<string, boolean> = {
+      '192.168.1.20:9000': true,
+      '10.0.0.5': true,
+      '172.16.0.1': true,
+      '127.0.0.1:9000': true,
+      '169.254.10.10': true,
+      '[fd00::1]:9000': true,
+      '[::1]': true,
+      '[fe80::1]': true,
+      '[::ffff:192.168.1.20]': true,
+      '203.0.113.9': false,
+      '172.32.0.1': false,
+      's3.example.com': false,
+      'localhost:9000': false,
+      '[2001:db8::1]': false,
+      '[::ffff:203.0.113.9]': false,
+    };
+    for (const [host, ok] of Object.entries(table))
+      expect([host, endpointOf(`http://${host}`) !== null]).toEqual([host, ok]);
+  });
+
   it('makes the restic repository and reads it back for the form', () => {
     const repository = offsiteRepository({
       endpoint: 'https://s3.eu-central-003.backblazeb2.com',
@@ -176,6 +199,13 @@ describe('the Inbox’s item', () => {
     expect(behind(new Date(NOW.getTime() - OFFSITE_LATE_MS + 60_000).toISOString())).toBeNull();
     expect(behind(new Date(NOW.getTime() - OFFSITE_LATE_MS - 60_000).toISOString())).not.toBeNull();
     expect(offsiteItem(offsite({ state: 'ok', lastCopyAt: '2026-11-01T00:00:00Z' }), NOW)).toBeNull();
+    // With no backup at the main place there is nothing to copy, so nothing is late.
+    expect(
+      offsiteItem(
+        offsite({ state: 'first', lastCopyAt: null, newestInCopyAt: null, newestBackupAt: null }),
+        NOW,
+      ),
+    ).toBeNull();
   });
 });
 

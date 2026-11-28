@@ -39,6 +39,10 @@ describe('the copy’s line', () => {
     expect(offsiteLine(copy())).toMatchObject({ dot: 'ok' });
     expect(offsiteLine(copy()).text).toContain('Backblaze B2');
     expect(offsiteLine(copy({ state: 'first', lastCopyAt: null })).dot).toBe('mut');
+    // Nothing at the main place yet: nothing to copy, said as such and never as a copy that worked.
+    const empty = offsiteLine(copy({ state: 'first', lastCopyAt: null, newestBackupAt: null }));
+    expect(empty.dot).toBe('mut');
+    expect(empty.text).not.toBe(offsiteLine(copy({ state: 'first', lastCopyAt: null })).text);
     expect(offsiteLine(copy({ state: 'failing' })).dot).toBe('warn');
     // Any other S3 storage goes by its bucket's name.
     expect(offsiteLine(copy({ provider: 's3' })).text).toContain('my-backups');

@@ -231,8 +231,10 @@ export function offsiteItem(offsite: BackupOffsite, now: Date, locale?: string |
   const since = offsite.lastCopyAt ?? offsite.configuredAt;
   const failing =
     offsite.state === 'failing' && offsite.failedAttempts >= OFFSITE_FAILURES && offsite.lastFailure;
+  // Late only while backups wait: with none at the main place yet there is nothing to copy.
   const late =
     (offsite.state === 'behind' || offsite.state === 'first') &&
+    !!offsite.newestBackupAt &&
     now.getTime() - Date.parse(since) > OFFSITE_LATE_MS;
   if (!failing && !late) return null;
   const why = failing

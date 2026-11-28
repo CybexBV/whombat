@@ -21,7 +21,6 @@ import {
   type BackupStatus,
 } from '@whombat/protocol/session';
 import type { z } from 'zod';
-import { isPrivateIpv4 } from '../backup-places/hub';
 import { externalEffect } from '../commit/scope';
 import { tServer } from '../i18n/catalog';
 import { accountLocale } from '../i18n/locale';
@@ -40,6 +39,44 @@ type Step = z.infer<typeof BackupOffsiteStep>;
 /** Setting a place checks the bucket and may make the copy's repository there: a slow storage takes a while. */
 const SET_DEADLINE_MS = 3 * 60_000;
 
+/** The eight 16-bit groups of an IPv6 address as a URL writes it (`[fd00::1]`, `[::ffff:c0a8:114]`); null otherwise. */
+function ipv6Groups(hostname: string): number[] | null {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (!h.includes(':') || !/^[0-9a-f:]+$/.test(h)) return null;
+  const halves = h.split('::');
+  if (halves.length > 2) return null;
+  const part = (x: string | undefined) => (x ? x.split(':').map((g) => Number.parseInt(g, 16)) : []);
+  const head = part(halves[0]);
+  const tail = part(halves[1]);
+  const groups =
+    halves.length === 2 ? [...head, ...Array(8 - head.length - tail.length).fill(0), ...tail] : head;
+  return groups.length === 8 && groups.every((g) => Number.isInteger(g) && g >= 0 && g <= 0xffff)
+    ? groups
+    : null;
+}
+
+/**
+ * Plain http is taken only to a literal address on the owner's own network, by the backup service's own rule (Go's
+ * private, loopback and link-local addresses): 10/8, 172.16/12, 192.168/16, 127/8, 169.254/16, and fc00::/7, ::1,
+ * fe80::/10 (an IPv4 address written as IPv6 by its IPv4 rule).
+ */
+export function plainHttpAllowed(hostname: string): boolean {
+  const v4 = (a: number, b: number) =>
+    a === 10 ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    a === 127 ||
+    (a === 169 && b === 254);
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (m) return m.slice(1).every((x) => Number(x) <= 255) && v4(Number(m[1]), Number(m[2]));
+  const g = ipv6Groups(hostname);
+  if (!g) return false;
+  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) return v4((g[6] ?? 0) >> 8, (g[6] ?? 0) & 0xff);
+  const first = g[0] ?? 0;
+  const loopback = g.slice(0, 7).every((x) => x === 0) && g[7] === 1;
+  return loopback || (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+}
+
 /**
  * The storage's address as the backup service takes it (`https://host[:port]`): typed without `https://` it is https;
  * a path, a user or a query in it is refused (the bucket and the folder have their own fields). Plain `http://` only to
@@ -51,7 +88,7 @@ export function endpointOf(endpoint: string): URL | null {
   const full = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const u = new URL(full);
-    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isPrivateIpv4(u.hostname))) return null;
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && plainHttpAllowed(u.hostname))) return null;
     if (u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== ''))
       return null;
     return u;

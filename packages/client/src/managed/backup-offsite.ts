@@ -45,7 +45,8 @@ export function offsiteLine(offsite: BackupOffsite, locale?: string | null): Off
     case 'copying':
       return { text: interpolate(L.copying, { place }), dot: 'mut' };
     case 'first':
-      return { text: interpolate(L.first, { place }), dot: 'mut' };
+      // No backup at the main place yet: there is nothing to copy, not a copy on its way.
+      return { text: interpolate(offsite.newestBackupAt ? L.first : L.empty, { place }), dot: 'mut' };
     case 'behind':
       return when
         ? { text: interpolate(L.behind, { place, when }), dot: 'ok' }
