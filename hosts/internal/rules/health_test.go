@@ -345,3 +345,32 @@ func TestHealthHints(t *testing.T) {
 		t.Fatalf("forecast hints %v", fh)
 	}
 }
+
+// TestUPSPowerCutIsCritical: a power cut is a red problem after UPSOnBatteryFor (automations shut servers down on it);
+// an almost empty battery adds its own alert, so it is told again even when the power cut was ignored.
+func TestUPSPowerCutIsCritical(t *testing.T) {
+	on := byRule(healthConditions(&proto.Report{UPS: []proto.UPS{{Name: "apc", Status: "on_battery"}}}, nil))
+	c, ok := on["ups.on_battery:ups:apc"]
+	if !ok || c.Severity != SevCritical || c.For != UPSOnBatteryFor {
+		t.Fatalf("on battery = %+v", c)
+	}
+	if _, low := on["ups.on_battery:ups:apc:low"]; low || len(on) != 1 {
+		t.Fatalf("on battery alone has %d conditions", len(on))
+	}
+
+	low := byRule(healthConditions(&proto.Report{UPS: []proto.UPS{{Name: "apc", Status: "low_battery"}}}, nil))
+	cut, nearly := low["ups.on_battery:ups:apc"], low["ups.on_battery:ups:apc:low"]
+	if cut.Severity != SevCritical || nearly.Severity != SevCritical || nearly.For != 0 {
+		t.Fatalf("low battery = %+v / %+v", cut, nearly)
+	}
+	if p := nearly.Render(0).Params; p["low"] != true || p["name"] != "apc" {
+		t.Fatalf("low battery params = %v", p)
+	}
+	if _, says := cut.Render(0).Params["low"]; says {
+		t.Fatalf("the power cut itself isn't the low battery alert")
+	}
+
+	if none := healthConditions(&proto.Report{UPS: []proto.UPS{{Name: "apc", Status: "online"}}}, nil); len(none) != 0 {
+		t.Fatalf("online = %d conditions", len(none))
+	}
+}
