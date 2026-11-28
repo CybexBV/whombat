@@ -29,6 +29,7 @@ import { connectionsFor } from '../../../connections/pool';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { ApiError, conflict, forbidden } from '../../../lib/errors';
 import type { Services } from '../../../services';
+import { AT_WORK, FINISHED, T3_STATUSES, type T3Status } from '../../../t3code/status';
 import { VaultCallError } from '../../../vault/net';
 import type { KindCheck } from '../../quiet/types';
 import {
@@ -110,30 +111,9 @@ export const T3_CHECKS = {
 
 /* What is read -------------------------------------------------------------------------------------------------------- */
 
-export const T3_STATUSES = [
-  'idle',
-  'preparing',
-  'queued',
-  'starting',
-  'running',
-  'waiting',
-  'completed',
-  'interrupted',
-  'failed',
-  'cancelled',
-  'rolled_back',
-] as const;
-export type T3Status = (typeof T3_STATUSES)[number];
+// The statuses live with the hand-overs so the thread list can read them without loading this connection's code.
+export { AT_WORK, FINISHED, T3_STATUSES, type T3Status };
 
-/** A thread at work: `waiting` is a finished turn whose after-work still runs, not a thread waiting for the person. */
-export const AT_WORK: readonly T3Status[] = ['preparing', 'queued', 'starting', 'running', 'waiting'];
-export const FINISHED: readonly T3Status[] = [
-  'completed',
-  'interrupted',
-  'failed',
-  'cancelled',
-  'rolled_back',
-];
 /** What Stop can interrupt: a turn under way. */
 const STOPPABLE: readonly T3Status[] = ['preparing', 'starting', 'running'];
 

@@ -88,7 +88,6 @@ import {
   HANDOFF_RECEIPT_SHOWN_MS,
   handoffOf,
   mergeSteps,
-  outcomeOf,
   programOf,
   runEndedOf,
   shownSteps,
@@ -115,6 +114,7 @@ import {
 import { sameProgress } from './pull-requests';
 import { type JobReport, reportOf } from './result';
 import { settleLater, T3_SETTLE_QUIET_MS } from './settle';
+import { outcomeOf } from './status';
 import {
   approvalKey,
   asksKey,

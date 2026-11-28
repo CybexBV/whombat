@@ -13,7 +13,7 @@ import type { Db } from '../db/client';
 import { dispatches, t3Watches } from '../db/schema/index';
 import { liveDelegationThreads } from '../delegate/commands';
 import { iso } from '../lib/time';
-import { jobEndOf } from '../t3code/handoff';
+import { jobEndOf } from '../t3code/status';
 
 /** The room the threads are in, and whose it is. */
 export interface ThreadRoom {

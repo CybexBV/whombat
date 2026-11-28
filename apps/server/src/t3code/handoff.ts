@@ -3,10 +3,10 @@
  * as a `Handoff` for the Whombat thread it was handed over from, and T3 Code's latest items as steps in plain words.
  * Pure: T3 Code's answers and the watch's row in, words out.
  */
-import { HANDOFF_STEPS_MAX, type Handoff, type HandoffOutcome, type HandoffStep } from '@whombat/core';
-import { AT_WORK, FINISHED, type T3Status } from '../things/kinds/business/t3code';
+import { HANDOFF_STEPS_MAX, type Handoff, type HandoffStep } from '@whombat/core';
 import { list, rec, str } from '../things/words';
 import { commandOf, progressOf, progressParts, shellWriteOf } from './progress';
+import { AT_WORK, FINISHED, outcomeOf, type T3Status } from './status';
 
 /** Ended work shows this long at most, until the agent answered after it. */
 export const HANDOFF_ENDED_SHOWN_MS = 30 * 60_000;
@@ -176,14 +176,6 @@ export function runEndedOf(body: unknown): Date | null {
   return d && Number.isFinite(d.getTime()) ? d : null;
 }
 
-/** How a thread's run ended, as the person sees it. */
-export const outcomeOf = (status: T3Status): HandoffOutcome =>
-  status === 'failed' || status === 'rolled_back'
-    ? 'failed'
-    : status === 'interrupted' || status === 'cancelled'
-      ? 'stopped'
-      : 'completed';
-
 /** The parts of a watch's row a hand-over is made of. */
 export interface HandoffRow {
   threadId: string;
@@ -279,18 +271,4 @@ export function handoffOf(row: HandoffRow, now: Date): Handoff | null {
   if (row.pending === 'question') return { ...base, state: 'asked' };
   if (status === 'waiting') return { ...base, state: 'finishing', asks: null };
   return AT_WORK.includes(status) ? { ...base, state: 'working', asks: null } : null;
-}
-
-/**
- * How a watch's job ended, for its Whombat thread's row (`ChatThread.job`): its outcome and when, once T3 Code said its
- * run is over and nothing it waits for goes on (no pull request's checks, no work it is still finishing). Null while it
- * is at work, waits, or before T3 Code said.
- */
-export function jobEndOf(
-  row: Pick<HandoffRow, 'state' | 'status' | 'prs' | 'progress' | 'runEndedAt'>,
-): { outcome: HandoffOutcome; endedAt: Date } | null {
-  const status = row.status as T3Status | null;
-  if (!status || !(FINISHED.includes(status) || status === 'idle') || !row.runEndedAt) return null;
-  if (row.state === 'watching' && (progressOf(row.progress).held || strings(row.prs).length)) return null;
-  return { outcome: outcomeOf(status), endedAt: row.runEndedAt };
 }
