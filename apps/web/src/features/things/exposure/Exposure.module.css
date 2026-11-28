@@ -49,12 +49,10 @@
   list-style: none;
 }
 
-/* One opening: what it is and how, on the left; what can be done with it on the right, under it on a narrow card. */
+/* One opening: what it is and how, then what can be done with it, always in the same place under it. */
 .row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px 16px;
+  display: grid;
+  gap: 10px;
   padding: 14px 20px;
   border-top: 1px solid var(--line);
 }
@@ -121,8 +119,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px 12px;
+  gap: 6px 14px;
 }
 
 .link {
@@ -201,10 +198,4 @@
 
 .sourceLink:hover {
   color: var(--brand);
-}
-
-@container card (max-width: 560px) {
-  .actions {
-    justify-content: flex-start;
-  }
 }

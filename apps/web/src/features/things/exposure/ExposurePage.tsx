@@ -179,7 +179,7 @@ function Opening({
             {T.pointOut}
           </Button>
         ) : null}
-        <Button size="sm" variant="ghost" onClick={onAsk}>
+        <Button size="sm" variant="secondary" onClick={onAsk}>
           {askLabel}
         </Button>
         {o.leadsTo ? (
