@@ -40,7 +40,8 @@ them once they have been tried on Beta.
   from the service’s page; History tells you what changed in them.
 - Automations can act without AI, right on your Whombat, even when the internet is down: ask your assistant to shut
   your servers down safely when the power goes out, restart a server or machine, or switch a light when Home Assistant
-  sees something change or your doorbell rings. Trying one out asks you before it changes anything.
+  sees something change or your doorbell rings. Trying one out asks you before it changes anything. Each step names
+  the server, machine or light as Whombat itself knows it, and a shutdown counts only once the server says it happened.
 - Add a Windows PC as a server: choose Windows PC in Add a server and paste the line into PowerShell opened as
   administrator. Whombat watches its processor, memory, drives and network, says whether its virus protection is on,
   shows BitLocker and waiting Windows updates, and can restart it. Installing updates stays yours, in Windows Update.

@@ -606,7 +606,7 @@ export const continueStep = defineCommand({
     runId: z.string(),
     stepId: z.string(),
     attempt: z.number().int().nonnegative(),
-    proposal: z.object({ title: z.string(), details: z.string() }),
+    proposal: z.object({ title: z.string(), details: z.string(), target: z.string().optional() }),
     actionsHash: z.string().optional(),
   }),
   async apply(tx, ctx, input) {
@@ -708,6 +708,8 @@ export const continueStep = defineCommand({
             ...(step.output as JsonObject),
             approvalId: ctx.approvalId,
             approvalAttempt: input.attempt,
+            // Where the call went and as whom on the card: the step sends nothing when that changed since.
+            ...(input.proposal.target ? { approvedTarget: input.proposal.target } : {}),
             decidedById: approval?.decidedById ?? null,
           },
         },

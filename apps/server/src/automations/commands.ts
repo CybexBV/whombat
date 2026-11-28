@@ -227,7 +227,9 @@ export async function referenceProblems(
       );
       if (!plan.ok && (plan.fatal || plan.gone)) problems.push(`Step “${s.id}”: ${plan.reason}`);
       else if (plan.ok && s.thing.startsWith('server:') && !plan.server)
-        problems.push(`Step “${s.id}”: there is no server ${s.thingName} on this Whombat.`);
+        problems.push(
+          `Step “${s.id}”: there is no server ${s.thing.slice('server:'.length)} on this Whombat.`,
+        );
     }
     if (s.kind === 'http_callback') {
       try {
@@ -529,9 +531,12 @@ async function addMissingRecipeGrants(
 export async function publishVersion(
   ctx: ApplyContext,
   row: { id: string; name: string; currentVersion: number | null },
-  def: AutomationDefinition,
+  given: AutomationDefinition,
   enable: boolean,
 ): Promise<number> {
+  // A step that acts without AI is kept under the names Whombat knows, never the ones a draft or a file gave it.
+  const { withRealNames } = await import('./direct-action');
+  const def = await withRealNames(ctx.tx, ctx.services, ctx.burrow.id, given);
   await ctx.services.newerAutomations.refuse(def);
   const tx = ctx.tx;
   const [currentAuto] = await tx

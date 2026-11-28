@@ -26,12 +26,16 @@ import {
   automations,
   automationVersions,
   automationWaits,
+  catalogConnections,
+  connectionTools,
   incidents,
   quietWindows,
   vaultNetworks,
 } from '../db/schema/index';
+import { SERVERS_CATALOG } from '../hosts/asks';
 import { serversPrincipal } from '../hosts/principal';
 import { ensureServersConnection } from '../hosts/provision';
+import { hostsFor } from '../hosts/service';
 import { FakeHostsService } from '../hosts/testing/fake';
 import { incidentsPass } from '../incidents/store';
 import { personAccountId } from '../read/principals';
@@ -49,8 +53,16 @@ const w = useAutomationWorld({
   env: { WHOMBAT_HOSTS_SOCKET: fake.socket, WHOMBAT_HOSTS_TOKEN_FILE: fake.tokenFile },
 });
 
-/** A fake Home Assistant on this machine: the states it holds, and the service calls it was asked for. */
-const home = { states: new Map<string, string>(), calls: [] as { path: string; body: Json }[], port: 0 };
+/** A fake Home Assistant on this machine: the states it holds, their names, and the service calls it was asked for. */
+const home = {
+  states: new Map<string, string>([
+    ['light.porch', 'off'],
+    ['script.good_night', 'off'],
+  ]),
+  names: new Map<string, string>([['light.porch', 'Porch light']]),
+  calls: [] as { path: string; body: Json }[],
+  port: 0,
+};
 const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
   const chunks: Buffer[] = [];
   req.on('data', (c: Buffer) => chunks.push(c));
@@ -63,8 +75,9 @@ const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     const state = /^\/api\/states\/(.+)$/.exec(path);
     if (req.method === 'GET' && state?.[1]) {
       const now = home.states.get(state[1]);
+      const name = home.names.get(state[1]);
       return now
-        ? answer(200, { entity_id: state[1], state: now })
+        ? answer(200, { entity_id: state[1], state: now, attributes: name ? { friendly_name: name } : {} })
         : answer(404, { message: 'Entity not found.' });
     }
     if (req.method === 'POST' && path.startsWith('/api/services/')) {
@@ -91,6 +104,19 @@ function homeNetwork() {
   });
 }
 
+/**
+ * Follows the hosts service's events, as the box does (how a power action ended comes that way), and waits until the
+ * stream is open. Again after a restart: it belongs to the services.
+ */
+async function followHosts() {
+  fake.dropStreams();
+  hostsFor(w.services).start();
+  for (let i = 0; fake.streams < 1; i++) {
+    if (i > 100) throw new Error('no event stream');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 beforeAll(async () => {
   await fake.start();
   // The Servers connection, as the box makes it once the hosts service answers.
@@ -98,6 +124,7 @@ beforeAll(async () => {
     if (i > 100) throw new Error('no Servers connection');
     await new Promise((r) => setTimeout(r, 50));
   }
+  await followHosts();
   // basalt's owner allowed restarting the machine itself (granite's fixture has no switches: everything goes).
   const basalt = fake.details.basalt?.server as Json | undefined;
   const switches = basalt?.remote_control as Json | undefined;
@@ -136,6 +163,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  hostsFor(w.services).close();
   await fake.stop();
   await new Promise<void>((r) => haServer.close(() => r()));
 });
@@ -171,6 +199,34 @@ const step = (run: AutomationRun, id: string) => {
 };
 
 const actions = (server: string) => fake.calls('POST', `/api/v1/servers/${server}/actions`);
+
+/** The steps an automation's current version keeps. */
+async function savedSteps(automationId: string) {
+  const [row] = await w.services.db.select().from(automations).where(eq(automations.id, automationId));
+  const [v] = await w.services.db
+    .select()
+    .from(automationVersions)
+    .where(
+      and(
+        eq(automationVersions.automationId, automationId),
+        eq(automationVersions.n, row?.currentVersion ?? 0),
+      ),
+    );
+  if (!v) throw new Error('no version');
+  return v;
+}
+
+/** The Servers connection, as the box made it. */
+async function serversConnection() {
+  const [row] = await w.services.db
+    .select()
+    .from(catalogConnections)
+    .where(
+      and(eq(catalogConnections.burrowId, w.burrowId), eq(catalogConnections.catalogId, SERVERS_CATALOG)),
+    );
+  if (!row) throw new Error('no Servers connection');
+  return row;
+}
 
 /** Says yes on the approval card a step waits on. */
 async function approve(run: AutomationRun, id: string) {
@@ -226,8 +282,10 @@ async function cutShort(automationId: string): Promise<string> {
       output = jsonb_build_object('approvalId', 'apr_cut_short', 'approvalAttempt', 0, 'callId', ${`call_${runId}`}::text)
       where run_id = ${runId as string} and step_id = 'act'`,
   );
+  hostsFor(w.services).close();
   await w.restart();
   homeNetwork();
+  await followHosts();
   await w.services.automations.bootRecovery();
   await w.settle();
   return runId as string;
@@ -352,6 +410,171 @@ describe('a run_action step', () => {
     });
   });
 
+  it('keeps and says the names Whombat knows, never the ones it was given', async () => {
+    const start = {
+      id: 'on',
+      kind: 'run_action' as const,
+      thing: 'server:shale',
+      thingName: 'media box',
+      target: 'pve:107',
+      targetName: 'plex',
+      action: 'start' as const,
+    };
+    const id = await w.publish(definition([start, tell('{{steps.on.text}}')]));
+    expect((await savedSteps(id)).definition.steps[0]).toMatchObject({
+      thingName: 'shale',
+      targetName: 'win11-lab',
+    });
+    const run = await runNow(id);
+    const on = step(run, 'on');
+    expect(on.state).toBe('succeeded');
+    expect(String((on.output as Json).text)).toContain('win11-lab');
+    expect(String((on.output as Json).text)).not.toContain('plex');
+  });
+
+  it('says the names Whombat knows now for an automation saved under other names', async () => {
+    home.states.set('light.porch', 'off');
+    const light = {
+      id: 'act',
+      kind: 'run_action' as const,
+      thing: `connection:${haId}`,
+      thingName: 'Home Assistant',
+      target: 'light.porch',
+      targetName: 'Porch light',
+      action: 'turn_on' as const,
+    };
+    const id = await w.publish(definition([light]), { name: 'Saved under another name' });
+    const v = await savedSteps(id);
+    // As a draft could have saved it before the names were checked: another light's name.
+    const steps = v.definition.steps.map((x) =>
+      x.kind === 'run_action' ? { ...x, thingName: 'Hallway', targetName: 'Kitchen light' } : x,
+    );
+    await w.services.db
+      .update(automationVersions)
+      .set({ definition: { ...v.definition, steps } })
+      .where(and(eq(automationVersions.automationId, id), eq(automationVersions.n, v.n)));
+    const run = await runNow(id);
+    const act = step(run, 'act');
+    expect(act.state).toBe('succeeded');
+    expect(String((act.output as Json).text)).toContain('Porch light');
+    expect(`${(act.output as Json).text} ${act.inputSummary}`).not.toMatch(/Kitchen|Hallway/);
+  });
+
+  it('refuses a step whose machine or entity isn’t there', async () => {
+    const start = {
+      id: 'on',
+      kind: 'run_action' as const,
+      thing: 'server:shale',
+      thingName: 'shale',
+      target: 'pve:999',
+      action: 'start' as const,
+    };
+    await expect(w.publish(definition([start]))).rejects.toThrow(/pve:999/);
+    const light = {
+      id: 'on',
+      kind: 'run_action' as const,
+      thing: `connection:${haId}`,
+      thingName: 'Home Assistant',
+      target: 'light.nowhere',
+      action: 'turn_on' as const,
+    };
+    await expect(w.publish(definition([light]))).rejects.toThrow(/light\.nowhere/);
+  });
+
+  it('keeps to the limits the person set on the tool', async () => {
+    const servers = await serversConnection();
+    const where = and(eq(connectionTools.connectionId, servers.id), eq(connectionTools.name, 'server_power'));
+    await w.services.db
+      .update(connectionTools)
+      .set({ limits: { args: { '/action': { choices: ['reboot'] } } } })
+      .where(where);
+    try {
+      const before = actions('granite').length;
+      const id = await w.publish(definition([shutDown('granite')]));
+      const off = step(await runNow(id), 'off');
+      expect(off.state).not.toBe('succeeded');
+      expect(off.error).toMatch(/wasn’t sent/);
+      expect(actions('granite')).toHaveLength(before);
+    } finally {
+      await w.services.db.update(connectionTools).set({ limits: null }).where(where);
+    }
+  });
+
+  it('counts a shutdown only once the server says so, and says so when it refused', async () => {
+    let refuse = true;
+    fake.on('POST', '/api/v1/servers/obsidian/actions', () => {
+      if (!refuse) return null;
+      // The server says no at once: before Whombat even has the action's id.
+      fake.emit('action.finished', {
+        action_id: 'act_refused_obsidian',
+        server: 'obsidian',
+        guest: 'host',
+        action: 'host_shutdown',
+        result: 'error',
+        message: 'Remote control is turned off',
+        state: null,
+        noop: false,
+        code: 'remote_control_disabled',
+      });
+      return { status: 202, body: { action_id: 'act_refused_obsidian', audit_id: 'au_refused_obsidian' } };
+    });
+    try {
+      const id = await w.publish(
+        definition([shutDown('obsidian', { otherwise: 'skip' }), tell('{{steps.off.text}}')]),
+      );
+      const run = await runNow(id);
+      expect(actions('obsidian')).toHaveLength(1);
+      const off = step(run, 'off');
+      expect(off.state).toBe('skipped');
+      expect(off.output).toMatchObject({ ran: false });
+      expect(String((off.output as Json).text)).toContain('obsidian');
+      expect(String((off.output as Json).text)).toMatch(/allow/);
+    } finally {
+      refuse = false;
+    }
+  });
+
+  it('asks again when the connection went elsewhere after the card, and sends nothing on that yes', async () => {
+    const id = await w.publish(definition([shutDown('basalt', { action: 'restart' })]));
+    const before = actions('basalt').length;
+    const { runId } = await w.ok(IDS.mara, runAutomationNow, { automationId: id });
+    await w.settle();
+    let run = await w.run(runId as string);
+    expect(step(run, 'off').state).toBe('waiting');
+    const servers = await serversConnection();
+    await w.services.db
+      .update(catalogConnections)
+      .set({ fields: { ...(servers.fields ?? {}), moved: 'elsewhere' } })
+      .where(eq(catalogConnections.id, servers.id));
+    try {
+      await approve(run, 'off');
+      run = await w.run(runId as string);
+      expect(step(run, 'off').state).not.toBe('succeeded');
+      expect(actions('basalt')).toHaveLength(before);
+    } finally {
+      await w.services.db
+        .update(catalogConnections)
+        .set({ fields: servers.fields })
+        .where(eq(catalogConnections.id, servers.id));
+    }
+  });
+
+  it('sends nothing on a yes given while the connection went elsewhere', async () => {
+    const id = await w.publish(definition([shutDown('basalt', { action: 'restart' })]));
+    const before = actions('basalt').length;
+    const { runId } = await w.ok(IDS.mara, runAutomationNow, { automationId: id });
+    // A yes for this attempt, as the card kept it, for where the connection went then.
+    await w.services.db.execute(
+      sql`update automation_run_steps set output = jsonb_build_object('approvalId', 'apr_elsewhere',
+        'approvalAttempt', 0, 'approvedTarget', 'elsewhere') where run_id = ${runId as string} and step_id = 'off'`,
+    );
+    await w.settle();
+    const off = step(await w.run(runId as string), 'off');
+    expect(off.state).not.toBe('succeeded');
+    expect(off.error).toMatch(/changed since you said yes/);
+    expect(actions('basalt')).toHaveLength(before);
+  });
+
   it('turns a light off through Home Assistant, and leaves one that is already off', async () => {
     home.states.set('light.porch', 'on');
     const step1 = {
@@ -401,6 +624,19 @@ describe('after Whombat stopped mid-action', () => {
     const run = await w.run(await cutShort(id));
     expect(step(run, 'act').state).toBe('succeeded');
     expect(home.calls.slice(calls).map((c) => c.path)).toEqual(['/api/services/light/turn_on']);
+  });
+
+  it('counts a shutdown it had sent as done when the server is off after the restart', async () => {
+    const id = await w.publish(definition([shutDown('marble', { id: 'act' })]), {
+      name: 'Marble off, cut short',
+    });
+    const run = await w.run(await cutShort(id));
+    const act = step(run, 'act');
+    expect(act.state).toBe('succeeded');
+    expect(act.output).toMatchObject({ ran: true });
+    expect(String((act.output as Json).text)).toContain('marble');
+    expect(String((act.output as Json).text)).not.toMatch(/reach/);
+    expect(actions('marble')).toHaveLength(0);
   });
 
   it('doesn’t run a script again, which could do twice what is in it: a person checks', async () => {
@@ -533,6 +769,18 @@ describe('Home Assistant and Protect starts', () => {
       now.mockReturnValue({ state: 'on', changedAt: wet + 240 });
       await w.settle();
       expect(await w.runs(id)).toHaveLength(0);
+
+      // Wet again, and Home Assistant removed the sensor before its time: the wait ends, nothing starts.
+      const removed = w.now().getTime() / 1000;
+      await change('off', 'on', removed);
+      await w.settle();
+      w.advance(10 * MINUTE);
+      now.mockReturnValue('gone');
+      await w.settle();
+      expect(await w.runs(id)).toHaveLength(0);
+      expect(
+        await w.services.db.select().from(automationWaits).where(eq(automationWaits.automationId, id)),
+      ).toHaveLength(0);
 
       // Wet again, and still wet from that change ten minutes later: one run.
       const again = w.now().getTime() / 1000;

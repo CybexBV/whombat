@@ -22,12 +22,13 @@ type Event = typeof events.$inferSelect;
 
 /**
  * An entity's state now, as Home Assistant's socket last said it, and Home Assistant's time of its last change (its
- * `last_changed`; null when it didn't say); null when Whombat can't tell now.
+ * `last_changed`; null when it didn't say); `gone` when Home Assistant removed it or doesn't have it; null when Whombat
+ * can't tell now.
  */
 export type HomeNow = (
   connectionId: string,
   entity: string,
-) => { state: string; changedAt: number | null } | null;
+) => { state: string; changedAt: number | null } | 'gone' | null;
 
 /** Home Assistant's times are seconds with a fraction: the same change reads the same to well within a millisecond. */
 const SAME_CHANGE_S = 0.001;
@@ -102,7 +103,8 @@ export async function claimHomeChange(
 
 /**
  * A wait whose time came, for its automation: whether it starts a run now. A newer version than the wait's starts
- * nothing; the entity must still be in the trigger's state, and still from the change that started the wait: when Home
+ * nothing, nor an entity Home Assistant removed; the entity must still be in the trigger's state, and still from the
+ * change that started the wait: when Home
  * Assistant's time of its last change isn't that change's any more, it changed and came back meanwhile (unseen while
  * Home Assistant was away, or among a flapping sensor's changes that weren't signed), so it didn't hold. While Whombat
  * can't tell, the wait asks again each minute for an hour after its time.
@@ -121,6 +123,11 @@ export async function claimDueHomeWait(
     return false;
   }
   const heard = current(facts.connectionId, facts.entity);
+  // An entity Home Assistant removed didn't hold: its wait ends without a start.
+  if (heard === 'gone') {
+    await dropHomeWait(tx, wait.automationId, wait.key);
+    return false;
+  }
   if (heard === null) {
     const limit = wait.firstDueAt.getTime() + RETRY_LIMIT_MS;
     if (now.getTime() >= limit) await dropHomeWait(tx, wait.automationId, wait.key);

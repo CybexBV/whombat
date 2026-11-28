@@ -82,7 +82,12 @@ async function proposedDefinition(
     if (!check.ok) return { definition: null, problems: check.problems.slice(0, 8) };
     definition = check.definition;
   }
-  return { definition, problems: await referenceProblems(ctx, definition, false) };
+  const problems = await referenceProblems(ctx, definition, false);
+  if (problems.length) return { definition, problems };
+  // The plan card is the yes for what it shows: a step that acts without AI shows the names Whombat knows, never the
+  // ones the assistant wrote.
+  const { withRealNames } = await import('./direct-action');
+  return { definition: await withRealNames(ctx.tx, ctx.services, ctx.burrow.id, definition), problems };
 }
 
 /**
