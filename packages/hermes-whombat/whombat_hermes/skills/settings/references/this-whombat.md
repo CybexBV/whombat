@@ -85,6 +85,9 @@ Where the box backs up, when, and backup files.
 - Delete a backup file — `backups.remove` · change, always asks
 - Restore a backup file — `backups.restore` · theirs: send them there
 - Choose what a new backup file includes — `backups.setDefaults` · change
+- Read what’s protected and where its copies are — `protected.get` · read
+- Test a machine’s backup now — `restoreTests.run` · change, always asks
+- Turn weekly restore tests of a server’s machines on or off — `restoreTests.set` · change, always asks
 
 ## Settings → This Whombat → Screen (`appliance.screen`)
 

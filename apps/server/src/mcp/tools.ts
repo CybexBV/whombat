@@ -77,6 +77,7 @@ import {
   searchWebTool,
   triageAhead,
 } from '../looks-ahead/turn';
+import { whatsProtectedTool } from '../backup-trust/tool';
 import { whombatBackupTool } from '../managed/backup-tool';
 import { tailnetDevicesTool } from '../managed/tailnet-tool';
 import { newsHeadlinesTool } from '../news/tool';
@@ -640,6 +641,8 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   vault_ask: (ctx, input) => vaultAskTool(ctx, input),
   // This Whombat's own backups (first-day.md): where they go, set only while nothing backs it up.
   whombat_backup: (ctx, input) => whombatBackupTool(ctx, input),
+  // Where everything's data is kept and the restore tests (backup-trust.md): a read.
+  whats_protected: (ctx, input) => whatsProtectedTool(ctx, input),
   // One thing back from a backup (backup-look.md): finding is a read, bringing back asks the person first.
   backup_bring_back: (ctx, input) => backupBringBackTool(ctx, input),
   // A thread by link (share-links.md): always a card first.
