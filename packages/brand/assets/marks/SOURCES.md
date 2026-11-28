@@ -90,6 +90,7 @@ implies no endorsement.
 | `overseerr.svg` | Overseerr | Overseerr's `public/os_icon.svg` (<https://github.com/sct/overseerr>), its gradient drawn as one colour | MIT (sct) |
 | `paperless.svg` | Paperless-ngx | Simple Icons `paperlessngx` (<https://github.com/paperless-ngx/paperless-ngx/blob/e16645b146da24f07004eb772a455450354a37a7/resources/logo/web/svg/square.svg>) | CC0-1.0 |
 | `parrotsecurity.svg` | Parrot Security | Simple Icons `parrotsecurity` (<https://gitlab.com/parrotsec/project/documentation/-/blob/d1d426b9cb3ea0efd16a2b34056c1ebb21bb9af9/static/img/parrot-logo.svg>) | CC0-1.0 |
+| `pc.svg` | Windows PC | Lucide `pc-case` (Microsoft’s logo is a trademark and isn’t drawn) | ISC |
 | `pihole.svg` | Pi-hole | Simple Icons `pihole` (<https://docs.pi-hole.net>) | CC0-1.0 |
 | `pipedrive.svg` | Pipedrive | pipedrive.com's site mark (the “p” on its green circle) | Pipedrive brand |
 | `plausible.svg` | Plausible Analytics | Simple Icons `plausibleanalytics` (<https://github.com/plausible/docs/blob/be5c935484e075f1e0caf3c9b3351ddd62348139/static/img/logo.svg>) | CC0-1.0 |

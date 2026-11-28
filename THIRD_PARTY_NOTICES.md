@@ -142,6 +142,7 @@ CC0 1.0 Universal. The others:
 | NixOS | Simple Icons `nixos` (<https://brand.nixos.org/logos/nixos-logomark-black-flat-minimal.svg>) | CC BY 4.0 |
 | NZBHydra2 | Lucide `search` (NZBHydra2's own logo is GPL-3.0 artwork) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Overseerr | Overseerr's `public/os_icon.svg` (<https://github.com/sct/overseerr>), its gradient drawn as one colour | MIT, Copyright (c) 2020 sct (the MIT License text under T3 Code above) |
+| Windows PC | Lucide `pc-case` (Microsoft’s logo is a trademark and isn’t drawn) | ISC (Lucide Icons and Contributors; the text comes with lucide-react, under Dependencies) |
 | Pipedrive | pipedrive.com's site mark (the “p” on its green circle) | Pipedrive’s brand, drawn as published |
 | Radarr | Radarr's logo (<https://github.com/Radarr/Radarr>, a GPL-3.0 project) as 24-unit path data; not from Simple Icons, which has no Radarr, and where the path data came from isn't recorded | not verified yet |
 | Rocky Linux | Simple Icons `rockylinux` (<https://github.com/rocky-linux/branding/blob/94e97dd30b87d909cc4f6a6838a2926f77f9ac47/logo/src/icon-black.svg>) | CC BY-SA 4.0 |
