@@ -4,7 +4,7 @@
  * the pinned release does.
  */
 export const HERMES_PIN = {
-  version: '0.23.4',
-  tag: 'v0.23.4',
-  commit: '8fc0374447313e276f6b9a2764bfc750190c966a',
+  version: '0.23.5',
+  tag: 'v0.23.5',
+  commit: 'a428f5344f777ccafe389c79d5b09384abef1437',
 };
