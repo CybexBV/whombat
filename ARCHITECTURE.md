@@ -1782,9 +1782,12 @@ Setup and operation: `docs/github.md`.
   words every opening in the owner's language with what it leads to (a connection on that address and port, else a
   server or guest by its address, `lines.ts` `buildLinks`), how it is guarded and at most one certain highlight
   (`openings.ts`), and lists the places and what they couldn't see. The health pass (`home/health.ts`) reads each
-  source connection, keeps fingerprints in `exposure_openings` (`baseline.ts`: the first complete read is the silent
-  first list, an opening after it is new for 14 days, closed openings are forgotten after 30 days) and adds one `exposure.new` line per new opening to the
-  connection's own; a read that fails leaves an Ignore of a gone line as it is. This is meant is Stop watching that one
+  source connection, keeps fingerprints in `exposure_openings` (`baseline.ts`: the first list is kept per list a place
+  has — a proxy's hosts, its streams, a router's port forwards, the list of tunnels and each tunnel's routes — the first
+  time that list is read whole, silently; an opening after it is new for 14 days; closed openings are forgotten after 30
+  days, and only after a read of everything) and adds one `exposure.new` line per new opening to the connection's own;
+  a read that fails, or misses a list while a new opening wasn't in what it read, leaves an Ignore of a gone line as it
+  is. This is meant is Stop watching that one
   opening (`watch_offs` with subject `open:<id>`), which the page reads as meant. The assistant's `internet_exposure`
   (`agent.ts`) gives the same view. The web page is `/internet` in the Servers place, the phone's the `Internet` screen.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
@@ -2067,7 +2070,9 @@ Setup and operation: `docs/github.md`.
   bytes, load the newest photo's preview, find the newest library item and read its first bytes, see a sensor's recent
   reading (aged by Home Assistant's own clock). A step's failure is `access` (401, 403, a sign-in that can't be
   renewed), `broken` (another code, an unreadable answer — one without the service's JSON type and fields, a WebDAV
-  listing that isn't a `207 multistatus`, a file with no bytes —, a web page or redirect where its data should be,
+  listing that isn't a `207 multistatus`, a file with no bytes, a JSON answer where a file should be, a preview that
+  isn't a picture or a film's file that isn't one by its type or first bytes (`fileFits`) —, a web page or redirect
+  where its data should be,
   nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
   (`service_test_runs`, 30 days). The page's card “Does it really work?” (`page.ts`) has Run now and Watch it, which
   go through `things.action` without a change (`actions.ts`). Watch it is the check `works.test` (starts off): the
@@ -2090,9 +2095,10 @@ Setup and operation: `docs/github.md`.
   Settings copies (`changes/copies/`): a 15-minute home job (`home.settings-copies`) takes OPNsense's `config.xml`,
   Pi-hole's Teleporter zip and Nginx Proxy Manager's hosts as JSON, once a night between 02:00 and 05:00 at the box's
   clock (a failed try again after an hour, three times), through the connection's own key. Each copy is sealed with the
-  custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same settings
-  replace the newest) beside a summary of hashed items with secrets cleaned out, and two copies' summaries are compared
-  into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
+  custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same content
+  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key (`custody.mac`) and a
+  hash of what it holds with secrets cleaned out, and a hash of the whole copy's content with its secrets
+  (`CONTENT_KEY`). Two copies' summaries are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
   and, once a copy worked and none has for 48 hours, the “Settings copy failing” line (`settings.copy`).
   `things.settingsCopy` gives the newest copy's bytes as base64 to the person, read through an export stream.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per

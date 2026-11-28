@@ -2,8 +2,9 @@
  * Settings copies (docs/decisions/outside-changes.md): every 15 minutes the pass looks for services due a copy — the
  * first within the hour of connecting, then one a night (between 2 and 5 at the box's clock, or any time when the last
  * try is a day and a half old), a failed try again after an hour, three times. A copy the same as the newest only moves
- * when it was checked; one whose settings compare the same replaces the newest; a different one is kept beside it (the
- * newest ten) and what changed between them goes into the change log. Copies are sealed with the master key.
+ * when it was checked; one whose content is the same, secrets included (its summary's `CONTENT_KEY`), replaces the
+ * newest; a different one is kept beside it (the newest ten) and what changed between them goes into the change log.
+ * Copies are sealed with the master key.
  */
 import { createHash } from 'node:crypto';
 import { newId, SETTINGS_COPIES_KEPT, thingId } from '@whombat/core';
@@ -21,7 +22,14 @@ import { homeAudience, publishHomeChanged } from '../../home/notify';
 import type { Services } from '../../services';
 import { recordRead } from '../store';
 import { COPY_IDS, copyServiceOf } from './index';
-import { diffSummaries, type SettingsSummary } from './summary';
+import {
+  CONTENT_KEY,
+  copyKeyHasher,
+  diffSummaries,
+  hasClearKeys,
+  hashedSummary,
+  type SettingsSummary,
+} from './summary';
 import {
   COPY_MAX_BYTES,
   CopyFailed,
@@ -94,19 +102,29 @@ export async function takeSettingsCopy(
     .orderBy(desc(settingsCopies.madeAt))
     .limit(1);
   let parts: SettingsPartChange[] = [];
+  const hashKey = copyKeyHasher(services);
   const { result } = await services.pipeline.transact(row.burrowId, async (session) => {
     const tx = session.tx;
     let outcome: CopyOutcome;
     if (taken) {
       const sha = sha256(taken.bytes);
-      // A summary that couldn't be read keeps the last one, so the next comparison is with what was known.
-      const summary: SettingsSummary = taken.summary ?? latest?.summary ?? {};
-      const diff = latest && taken.summary ? diffSummaries(latest.summary, taken.summary) : null;
+      const before = latest ? hashedSummary(latest.summary, hashKey) : null;
+      // A summary that couldn't be read keeps the last one's items, so the next comparison is with what was known;
+      // its content hash was the last copy's, not this one's.
+      const { [CONTENT_KEY]: _, ...known } = before ?? {};
+      const summary: SettingsSummary = taken.summary ? hashedSummary(taken.summary, hashKey) : known;
+      const diff = before && taken.summary ? diffSummaries(before, summary) : null;
+      const content = taken.summary?.[CONTENT_KEY];
       if (latest && latest.sha256 === sha) {
-        await tx.update(settingsCopies).set({ checkedAt: now }).where(eq(settingsCopies.id, latest.id));
+        await tx
+          .update(settingsCopies)
+          .set({ checkedAt: now, ...(content ? { summary } : {}) })
+          .where(eq(settingsCopies.id, latest.id));
         outcome = 'same';
-      } else if (latest && diff && !diff.length) {
-        // Different bytes with the same settings (a zip's own times): the newest is replaced, not kept twice.
+      } else if (latest && content && before?.[CONTENT_KEY] === content) {
+        // Different bytes with the same settings, secrets included (a zip's own times): the newest is replaced, not
+        // kept twice. Same items alone aren't enough: a password changed is in no item, and the copy before it is
+        // the one that restores the old password.
         await tx
           .update(settingsCopies)
           .set({
@@ -155,6 +173,17 @@ export async function takeSettingsCopy(
         outcome = latest ? 'kept' : 'first';
       }
     } else outcome = problem ?? 'unreachable';
+    // Copies kept before item keys were hashed keep the items' names no longer.
+    const older = await tx
+      .select({ id: settingsCopies.id, summary: settingsCopies.summary })
+      .from(settingsCopies)
+      .where(eq(settingsCopies.connectionId, row.id));
+    for (const copy of older)
+      if (hasClearKeys(copy.summary))
+        await tx
+          .update(settingsCopies)
+          .set({ summary: hashedSummary(copy.summary, hashKey) })
+          .where(eq(settingsCopies.id, copy.id));
     const ok = taken !== null;
     await tx
       .insert(settingsCopyStates)

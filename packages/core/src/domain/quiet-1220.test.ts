@@ -475,7 +475,7 @@ describe('servers (CT-1066)', () => {
       fyi: 27,
     });
     expect(own.map((k) => hostHintCheck(k).nature)).toEqual(['you', 'you', 'you', 'fyi', 'problem']);
-    // What a backup place's lines say starts off (backup-places.md BPL-11); a backup that didn't come back in a restore
+    // What a backup place's lines say starts off (backup-places.md); a backup that didn't come back in a restore
     // test starts on (backup-trust.md).
     expect(own.slice(2).map((k) => hostHintCheck(k).startsOn)).toEqual([false, false, true]);
   });

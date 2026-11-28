@@ -329,7 +329,7 @@ export class TaskFollow {
     let text = taskOutcomeText(task.words, result, message, code);
     let rebootRequired = false;
     let installed: number | null = null;
-    // A Check's or Install's message is written from its result and the report after it (SWU-08), warnings too; an
+    // A Check's or Install's message is written from its result and the report after it, warnings too; an
     // app update's from each app's outcome, also when one of them was put back (the task then ends in error).
     const updates = isUpdatesAfter(task.words.after) || task.words.after === 'apps';
     const appsEnd = task.words.after === 'apps' && code !== 'not_found';

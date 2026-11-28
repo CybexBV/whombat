@@ -8,7 +8,7 @@ import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
 import { getJson } from '../../things/kinds/read';
 import { list, rec, str } from '../../things/words';
-import { cleaned, type SettingsSummary, SummaryBuilder } from './summary';
+import { cleaned, copyKeyHasher, type KeyHasher, type SettingsSummary, SummaryBuilder } from './summary';
 import type { CopyService } from './types';
 
 const NAME = 'Nginx Proxy Manager';
@@ -42,8 +42,8 @@ const domains = (r: Record<string, unknown>) =>
     .sort()
     .join(',');
 
-export function npmSummary(read: NpmRead): SettingsSummary {
-  const out = new SummaryBuilder();
+export function npmSummary(read: NpmRead, hashKey?: KeyHasher): SettingsSummary {
+  const out = new SummaryBuilder(hashKey);
   const routed = new Set([...VOLATILE, ...ROUTED]);
   for (const h of list(read.proxyHosts)) out.add('proxyHosts', domains(rec(h)), cleaned(h, routed));
   for (const h of list(read.redirects)) out.add('redirects', domains(rec(h)), cleaned(h, VOLATILE));
@@ -56,6 +56,8 @@ export function npmSummary(read: NpmRead): SettingsSummary {
     const r = rec(a);
     out.add('accessLists', str(r.name) ?? '', cleaned(r, VOLATILE));
   }
+  // What the file holds, where hosts point included (secrets are never in it): one pointed elsewhere is another copy.
+  out.content(cleaned(read, VOLATILE));
   return out.summary;
 }
 
@@ -86,7 +88,7 @@ export const NPM_COPY: CopyService = {
       bytes: Buffer.from(`${JSON.stringify(file, null, 2)}\n`, 'utf8'),
       fileName: `nginx-proxy-manager-${fileDate(now)}.json`,
       contentType: 'application/json',
-      summary: npmSummary(read),
+      summary: npmSummary(read, copyKeyHasher(services)),
     };
   },
 };

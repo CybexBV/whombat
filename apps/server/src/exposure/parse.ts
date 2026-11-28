@@ -29,6 +29,24 @@ export interface RawOpening {
   certificateExpires?: Date | null;
   /** The tunnel or rule it belongs to, as the source names it. */
   label?: string;
+  /**
+   * Every public name of a proxy host, lowercase and sorted, when it has more than one: the opening is all of them, so
+   * a name added is a new opening and the order they are listed in changes nothing.
+   */
+  names?: string[];
+  /** The list it was read from (`ReadPart.key`): what is new is told per list. */
+  part: string;
+}
+
+/**
+ * One list a read covered: a proxy's hosts or streams, a router's port forwards, the list of tunnels and each tunnel's
+ * routes. `whole` when all of it was read; a list missing from a read wasn't read at all. A list `within` another (a
+ * tunnel's routes within the list of tunnels) that came after that list was kept is new from the start.
+ */
+export interface ReadPart {
+  key: string;
+  whole: boolean;
+  within?: string;
 }
 
 /** What one source's read found. */
@@ -39,6 +57,8 @@ export interface SourceOpenings {
    * adding to it silently until a full read comes.
    */
   complete: boolean;
+  /** The lists this read covered: the first list is kept per list, so one that can't be read doesn't hold back the rest. */
+  parts: ReadPart[];
   /** What Whombat couldn't see there, as codes `openings.ts` says in words. */
   blind: Blind[];
 }
@@ -88,10 +108,13 @@ function npmSiteOpening(site: NpmSite): RawOpening | null {
   const first = names[0];
   if (!first) return null;
   const at = hostPort(site.target);
+  const all = [...new Set(names.map((n) => n.trim().toLowerCase()))].sort();
   return {
     how: 'proxy',
+    part: 'proxy',
     address: clip(first, 200),
     ...(names.length > 1 ? { moreNames: names.length - 1 } : {}),
+    ...(all.length > 1 ? { names: all } : {}),
     target: site.target,
     targetHost: at.host,
     targetPort: at.port,
@@ -107,6 +130,7 @@ function npmStreamOpening(x: NpmStream): RawOpening | null {
   const at = hostPort(x.target);
   return {
     how: 'stream',
+    part: 'stream',
     address: String(x.incomingPort),
     port: x.incomingPort,
     protocol: protocolWords(x.tcp, x.udp),
@@ -126,6 +150,7 @@ export function npmOpenings(s: NpmSnapshot): SourceOpenings {
   return {
     openings,
     complete: s.streamList !== undefined,
+    parts: [{ key: 'proxy', whole: true }, ...(s.streamList ? [{ key: 'stream', whole: true }] : [])],
     blind: s.streamList === undefined ? [{ code: 'streams_unread' }] : [],
   };
 }
@@ -161,64 +186,113 @@ export function parseTunnelConfig(body: unknown): TunnelRoute[] | null {
     .filter((r): r is TunnelRoute => r !== null);
 }
 
-/** `/accounts/{a}/access/apps`: the names Cloudflare Access guards (an app's domain, its other domains, destinations). */
-export function parseAccessDomains(body: unknown): string[] {
-  const out: string[] = [];
+/**
+ * What an Access application does for the names it covers, from its policies: `guarded` (everyone must sign in, or
+ * nobody gets in), `open` (a Bypass for everyone: nothing in front of it), `unknown` (policies not in the answer, a
+ * Bypass for some, or anyone who can sign in at all).
+ */
+export type AccessVerdict = 'guarded' | 'open' | 'unknown';
+
+/** One name an Access application covers (its domain, other domains, destinations), with what its policies do. */
+export interface AccessApp {
+  domain: string;
+  verdict: AccessVerdict;
+}
+
+/** What an application's `policies` let through. */
+export function accessVerdict(app: Record<string, unknown>): AccessVerdict {
+  if (!Array.isArray(app.policies)) return 'unknown';
+  let verdict: AccessVerdict = 'guarded';
+  for (const raw of app.policies) {
+    const p = rec(raw);
+    const decision = (str(p.decision) ?? '').toLowerCase();
+    if (decision === 'deny') continue;
+    const everyone = list(p.include).some((i) => 'everyone' in rec(i));
+    if (decision === 'bypass' && everyone) return 'open';
+    // A Bypass for some (an address range) lets them in without a sign-in; “everyone” lets anyone who can sign in.
+    if (decision === 'bypass' || everyone) verdict = 'unknown';
+  }
+  return verdict;
+}
+
+/** `/accounts/{a}/access/apps`: the names Cloudflare Access covers and what each application's policies do. */
+export function parseAccessDomains(body: unknown): AccessApp[] {
+  const out: AccessApp[] = [];
   for (const raw of list(rec(body).result).slice(0, 500)) {
     const a = rec(raw);
     const type = str(a.type) ?? 'self_hosted';
     if (type !== 'self_hosted' && type !== 'saas' && type !== 'ssh' && type !== 'vnc' && type !== 'rdp')
       continue;
+    const verdict = accessVerdict(a);
+    const domains: string[] = [];
     const domain = str(a.domain);
-    if (domain) out.push(domain);
-    for (const d of list(a.self_hosted_domains)) if (typeof d === 'string' && d) out.push(d);
+    if (domain) domains.push(domain);
+    for (const d of list(a.self_hosted_domains)) if (typeof d === 'string' && d) domains.push(d);
     for (const d of list(a.destinations)) {
       const uri = str(rec(d).uri);
-      if (uri && (str(rec(d).type) ?? 'public') === 'public') out.push(uri);
+      if (uri && (str(rec(d).type) ?? 'public') === 'public') domains.push(uri);
     }
+    for (const d of domains) out.push({ domain: d.toLowerCase(), verdict });
   }
-  return out.map((d) => d.toLowerCase());
+  return out;
 }
 
-/** Whether an Access app guards this name: the same host, any path of it, or a wildcard over it. */
-export function accessGuards(domains: readonly string[], hostname: string): boolean {
+const WORST: Readonly<Record<AccessVerdict, number>> = { guarded: 0, unknown: 1, open: 2 };
+
+/**
+ * What Access does for this name, null when no application covers it: the applications on the same host (any path of
+ * it) first, as Cloudflare picks the most specific; else a wildcard over it. Of several, the least guarded.
+ */
+export function accessGuards(apps: readonly AccessApp[], hostname: string): AccessVerdict | null {
   const host = hostname.toLowerCase();
-  return domains.some((d) => {
-    const appHost = d.split('/')[0] ?? '';
+  const exact: AccessVerdict[] = [];
+  const wild: AccessVerdict[] = [];
+  for (const { domain, verdict } of apps) {
+    const appHost = domain.split('/')[0] ?? '';
     // An app on one path guards only that path: it doesn't guard the name.
-    if (d.includes('/') && d.split('/').slice(1).join('/').length > 0) return false;
-    if (appHost === host) return true;
-    if (appHost.startsWith('*.')) return host.endsWith(appHost.slice(1)) && host !== appHost.slice(2);
-    return false;
-  });
+    if (domain.includes('/') && domain.split('/').slice(1).join('/').length > 0) continue;
+    if (appHost === host) exact.push(verdict);
+    else if (appHost.startsWith('*.') && host.endsWith(appHost.slice(1)) && host !== appHost.slice(2))
+      wild.push(verdict);
+  }
+  const found = exact.length ? exact : wild;
+  if (!found.length) return null;
+  return found.reduce((a, b) => (WORST[b] > WORST[a] ? b : a));
 }
+
+/** How an opening behind a tunnel is guarded: Access read or not, and what it does for the name. */
+function tunnelGuard(access: readonly AccessApp[] | null, hostname: string): ExposureGuard {
+  if (!access) return 'unknown';
+  const verdict = accessGuards(access, hostname);
+  if (verdict === null || verdict === 'open') return 'none';
+  return verdict === 'guarded' ? 'cloudflare_access' : 'unknown';
+}
+
+/** The list of one tunnel's routes, within the list of tunnels (`TUNNELS_PART`). */
+export const tunnelPart = (id: string) => `tunnel:${id}`;
+export const TUNNELS_PART = 'tunnels';
 
 /** A tunnel's public hostnames as openings. */
 export function tunnelOpenings(
-  tunnel: string,
+  tunnel: { id: string; name: string },
   routes: readonly TunnelRoute[],
-  access: readonly string[] | null,
+  access: readonly AccessApp[] | null,
 ): RawOpening[] {
   return routes
     .filter((r) => isPublicName(r.hostname))
     .map((r) => {
       const at = hostPort(r.service);
-      const guarded = access ? accessGuards(access, r.hostname) : null;
       return {
         how: 'tunnel' as const,
+        part: tunnelPart(tunnel.id),
         address: r.path ? clip(`${r.hostname}/${r.path.replace(/^\^?\/?/, '')}`, 200) : r.hostname,
         target: r.service,
         targetHost: at.host,
         targetPort: at.port,
         // Cloudflare answers the name over HTTPS at its edge.
         https: 'yes' as const,
-        guard:
-          guarded === null
-            ? ('unknown' as const)
-            : guarded
-              ? ('cloudflare_access' as const)
-              : ('none' as const),
-        label: tunnel,
+        guard: tunnelGuard(access, r.hostname),
+        label: tunnel.name,
       };
     });
 }
@@ -332,6 +406,7 @@ export function parseDnat(body: unknown): DnatRead {
       const host = targetHost.toLowerCase();
       return {
         how: 'port_forward',
+        part: 'port_forward',
         address: clip(String(dst), 40),
         port,
         protocol: proto === 'TCP/UDP' ? 'TCP and UDP' : proto,
@@ -375,6 +450,7 @@ export function parseUnifiForwards(body: unknown): RawOpening[] {
       const anyone = fromAnywhere(src);
       return {
         how: 'port_forward',
+        part: 'port_forward',
         address: clip(String(r.dst_port), 40),
         port,
         protocol: proto === 'tcp' ? 'TCP' : proto === 'udp' ? 'UDP' : 'TCP and UDP',

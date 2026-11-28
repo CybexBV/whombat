@@ -11,9 +11,9 @@
 #                                                    Whombat Helper for Macs (NX-515)
 #
 # Static (CGO_ENABLED=0), so the agents run on any Linux server whatever its libc, on any Mac from macOS 13 (Go
-# signs the macOS builds ad hoc itself; Whombat macos-servers.md MAC-01) and on Windows 10 and 11 (without a
+# signs the macOS builds ad hoc itself; Whombat macos-servers.md) and on Windows 10 and 11 (without a
 # Windows code signature, signed for self-update like the others; Whombat windows-servers.md). The hub has no web UI
-# (no `embedweb` tag): Whombat owns every screen (ONE-12). Whombat Helper is a Swift app built, signed and notarized on a Mac
+# (no `embedweb` tag): Whombat owns every screen. Whombat Helper is a Swift app built, signed and notarized on a Mac
 # (hosts/macos/helper/build.sh) and committed as a zip: Nix can't build it, so it is copied after its checksum is
 # checked against the json beside it.
 #
@@ -65,7 +65,7 @@ let
     "amd64"
     "arm64"
   ];
-  # Every agent build: Linux servers, Macs (NX-515) and Windows PCs.
+  # Every agent build: Linux servers, Macs and Windows PCs.
   oses = [
     "linux"
     "darwin"

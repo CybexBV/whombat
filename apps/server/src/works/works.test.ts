@@ -6,6 +6,8 @@ import { NOT_RUN, WORKS_RUN, WORKS_WATCH, worksCard, worksMeta } from './page';
 import { due, failing, fresh, type RunLike, runWords, seconds, worksNotice } from './rules';
 import { testOnce } from './run';
 import {
+  fileFits,
+  fileSignature,
   haSensors,
   jellyfinItem,
   jellyfinLibraries,
@@ -302,6 +304,73 @@ describe('a web page or another answer where the service’s data should be', ()
       step: 'open',
       reason: 'unreadable',
     });
+  });
+
+  it('a JSON answer where a file should be didn’t open it, even with 200', async () => {
+    const error = () => answer(200, { error: 'Asset not found' });
+    const found: [Parameters<typeof testOnce>[0], TestFetch][] = [
+      [
+        'immich',
+        service([
+          [(r) => r.path === '/api/search/metadata', () => answer(200, photo)],
+          [(r) => r.path.endsWith('/thumbnail'), error],
+        ]).fetch,
+      ],
+      [
+        'paperless',
+        service([
+          [(r) => r.path === '/api/documents/', () => answer(200, { results: [{ id: 42 }] })],
+          // Without a type, still JSON by its first bytes.
+          [(r) => r.path.endsWith('/download/'), () => answer(200, '{"detail":"No file."}')],
+        ]).fetch,
+      ],
+      [
+        'jellyfin',
+        service([
+          [
+            (r) => r.path === '/Library/VirtualFolders',
+            () => answer(200, [{ ItemId: 'm1', CollectionType: 'movies' }]),
+          ],
+          [
+            (r) => r.path === '/Items',
+            () => answer(200, { Items: [{ Id: 'abcdef12', MediaType: 'Video' }] }),
+          ],
+          [(r) => r.path.endsWith('/stream'), error],
+        ]).fetch,
+      ],
+    ];
+    for (const [kind, fetch] of found)
+      expect(await testOnce(kind, fetch, row, NOW), kind).toMatchObject({
+        outcome: 'broken',
+        step: 'open',
+        reason: 'unreadable',
+        status: 200,
+      });
+  });
+
+  it('a photo’s preview is a picture and a film’s file is a film', () => {
+    const file = (body: Buffer | string, type?: string): TestAnswer => ({
+      status: 206,
+      body: Buffer.isBuffer(body) ? body : Buffer.from(body),
+      headers: type ? { 'content-type': type } : {},
+    });
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]);
+    const mkv = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x01, 0x00]);
+    const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 0x20]), Buffer.from('ftypisom')]);
+    expect(fileSignature(jpeg)).toBe('image');
+    expect(fileSignature(mkv)).toBe('media');
+    expect(fileSignature(mp4)).toBe('media');
+    expect(fileSignature(Buffer.from('%PDF-1.7'))).toBe('document');
+    expect(fileFits(file(jpeg, 'image/jpeg'), { kind: 'image' })).toBe(true);
+    expect(fileFits(file(jpeg), { kind: 'image' })).toBe(true);
+    expect(fileFits(file('Not found', 'text/plain'), { kind: 'image' })).toBe(false);
+    expect(fileFits(file(mkv, 'application/octet-stream'), { kind: 'media' })).toBe(true);
+    expect(fileFits(file('x', 'video/x-matroska'), { kind: 'media' })).toBe(true);
+    expect(fileFits(file('<MediaContainer size="0"/>', 'application/xml'), { kind: 'media' })).toBe(false);
+    expect(fileFits(file('{"error":1}', 'application/json'), { kind: 'any' })).toBe(false);
+    // A file that is JSON itself (Nextcloud's listing says so) opens as one.
+    expect(fileFits(file('{"a":1}', 'application/json'), { kind: 'any', json: true })).toBe(true);
+    expect(fileFits(file('{ notes', 'text/plain'), { kind: 'any' })).toBe(true);
   });
 
   it('Nextcloud lists files only with a WebDAV listing, and opens a file with bytes that isn’t a page', async () => {

@@ -45,10 +45,15 @@ export function linkOf(links: Links, host: string | null, port: number | null): 
 
 /**
  * The opening's id: the same while its source, public side and target stay the same. A changed target is another
- * opening (something else is reachable now).
+ * opening (something else is reachable now), and so is a proxy host with a name added; one public name is its address,
+ * as it always was, so what the person said is meant stays meant.
  */
-export function openingId(sourceId: string, o: Pick<RawOpening, 'how' | 'address' | 'target'>): string {
-  const key = [sourceId, o.how, o.address.toLowerCase(), (o.target ?? '').toLowerCase()].join('\n');
+export function openingId(
+  sourceId: string,
+  o: Pick<RawOpening, 'how' | 'address' | 'target'> & Partial<Pick<RawOpening, 'names'>>,
+): string {
+  const where = o.names && o.names.length > 1 ? o.names.join(',') : o.address.toLowerCase();
+  const key = [sourceId, o.how, where, (o.target ?? '').toLowerCase()].join('\n');
   return `op_${createHash('sha256').update(key).digest('hex').slice(0, 20)}`;
 }
 

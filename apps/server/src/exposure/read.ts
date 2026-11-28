@@ -15,6 +15,7 @@ import { optional, serviceUrl } from '../things/kinds/infra/shared';
 import { cachedRead, getJson, latestRead } from '../things/kinds/read';
 import { list, rec, str } from '../things/words';
 import {
+  type AccessApp,
   type Blind,
   DNAT_RULES_MAX,
   funnelAllowed,
@@ -25,8 +26,11 @@ import {
   parseTunnelConfig,
   parseUnifiForwards,
   type RawOpening,
+  type ReadPart,
   type SourceOpenings,
+  TUNNELS_PART,
   tunnelOpenings,
+  tunnelPart,
   unifiSiteName,
   unifiUpnp,
 } from './parse';
@@ -80,7 +84,8 @@ async function cloudflare(
           if (!r.ok) throw r.error;
           return r.value;
         });
-  if (!snapshot.tunnels) return { openings: [], complete: false, blind: [{ code: 'tunnels_unread' }] };
+  if (!snapshot.tunnels)
+    return { openings: [], complete: false, parts: [], blind: [{ code: 'tunnels_unread' }] };
   const tunnels = snapshot.tunnels.slice(0, TUNNELS_MAX);
   const accounts = [...new Set(tunnels.map((x) => x.account))];
   const access = await Promise.all(
@@ -107,10 +112,12 @@ async function cloudflare(
       ),
     ),
   );
-  const domains = access.every((d) => d === null) && accounts.length ? null : access.flatMap((d) => d ?? []);
+  const domains: AccessApp[] | null =
+    access.every((d) => d === null) && accounts.length ? null : access.flatMap((d) => d ?? []);
   const blind: Blind[] = [];
   if (accounts.length && access.some((d) => d === null)) blind.push({ code: 'access_unread' });
   const openings: RawOpening[] = [];
+  const parts: ReadPart[] = [];
   let complete = !snapshot.tunnelsPartial && snapshot.tunnels.length <= TUNNELS_MAX;
   if (snapshot.tunnelsPartial) blind.push({ code: 'tunnels_unread' });
   await Promise.all(
@@ -137,11 +144,16 @@ async function cloudflare(
       if (!read) {
         complete = false;
         blind.push({ code: 'tunnel_config_unread', name: tunnel.name });
-      } else if (!read.routes) blind.push({ code: 'tunnel_local', name: tunnel.name });
-      else openings.push(...tunnelOpenings(tunnel.name, read.routes, domains));
+        return;
+      }
+      parts.push({ key: tunnelPart(tunnel.id), whole: true, within: TUNNELS_PART });
+      if (!read.routes) blind.push({ code: 'tunnel_local', name: tunnel.name });
+      else openings.push(...tunnelOpenings(tunnel, read.routes, domains));
     }),
   );
-  return { openings, complete, blind };
+  // The list of tunnels is whole when every tunnel and its routes were read: a tunnel that comes after it is new.
+  parts.push({ key: TUNNELS_PART, whole: complete });
+  return { openings, complete, parts, blind };
 }
 
 /** OPNsense's rules per page of its search. */
@@ -197,7 +209,12 @@ async function opnsense(
   if (forwards.partial) blind.push({ code: 'forwards_partial' });
   if (upnp === true) blind.push({ code: 'upnp_on' });
   else if (upnp === null) blind.push({ code: 'upnp_unknown' });
-  return { openings: forwards.openings, complete: !forwards.partial, blind };
+  return {
+    openings: forwards.openings,
+    complete: !forwards.partial,
+    parts: [{ key: 'port_forward', whole: !forwards.partial }],
+    blind,
+  };
 }
 
 /** The console's older API, beside the official one (`/proxy/network/api/…`). */
@@ -225,6 +242,7 @@ async function unifi(services: Services, row: CatalogConnectionRow, mode: ReadMo
   return {
     openings: read.forwards,
     complete: true,
+    parts: [{ key: 'port_forward', whole: true }],
     blind: read.upnp === true ? [{ code: 'upnp_on' }] : read.upnp === null ? [{ code: 'upnp_unknown' }] : [],
   };
 }
@@ -244,10 +262,11 @@ async function tailscale(
     ),
   );
   // Funnel shares what a device chooses; the API says only who may. Nothing here is an opening of its own.
-  if (who === null) return { openings: [], complete: true, blind: [{ code: 'policy_unread' }] };
+  if (who === null) return { openings: [], complete: true, parts: [], blind: [{ code: 'policy_unread' }] };
   return {
     openings: [],
     complete: true,
+    parts: [],
     blind: who.length ? [{ code: 'funnel_allowed', who: who.join(', ') }] : [],
   };
 }
@@ -269,7 +288,8 @@ export function readOpenings(
   row: CatalogConnectionRow,
   mode: ReadMode,
 ): Promise<SourceOpenings> {
-  if (!isExposureSource(row.catalogId)) return Promise.resolve({ openings: [], complete: true, blind: [] });
+  if (!isExposureSource(row.catalogId))
+    return Promise.resolve({ openings: [], complete: true, parts: [], blind: [] });
   return READERS[row.catalogId](services, row, mode);
 }
 

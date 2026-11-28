@@ -2,6 +2,7 @@
  * Open to the internet (docs/decisions/internet-exposure.md): what each place's settings say is open, the words,
  * links and highlights of an opening, the silent first list and the line of a new opening. Pure.
  */
+import { createHash } from 'node:crypto';
 import { EXPOSURE_NEW_CHECK, ExposureOpening, isPublicName } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { localizePhrase } from '../i18n/phrases';
@@ -9,7 +10,14 @@ import { NPM_PROXY_HOSTS, NPM_STREAMS } from '../things/kinds/infra/fixtures/ngi
 import { type NpmSnapshot, parseProxyHosts, parseStreams } from '../things/kinds/infra/nginx-proxy-manager';
 import { checkStartsOn } from '../things/quiet/defaults';
 import '../things/kinds/index';
-import { baselineStep, FIRST_LIST, FORGET_AFTER_MS, type KeptRow } from './baseline';
+import {
+  baselineStep,
+  FIRST_LIST,
+  FORGET_AFTER_MS,
+  firstListOf,
+  type KeptRow,
+  type SeenOpening,
+} from './baseline';
 import { EXPOSURE_NEW } from './check';
 import { newOpeningNotice, newOpeningNotices } from './lines';
 import {
@@ -70,6 +78,7 @@ const ctx = (over: Partial<OpeningCtx> = {}): OpeningCtx => ({
 
 const raw = (over: Partial<RawOpening> = {}): RawOpening => ({
   how: 'proxy',
+  part: 'proxy',
   address: 'photos.example.com',
   target: 'http://10.100.0.20:2283',
   targetHost: '10.100.0.20',
@@ -125,6 +134,34 @@ describe('Nginx Proxy Manager', () => {
     const read = npmOpenings({ ...npm, streamList: undefined });
     expect(read.complete).toBe(false);
     expect(read.blind).toEqual([{ code: 'streams_unread' }]);
+    // Its proxy hosts are still a list read whole; the streams aren't a list read at all.
+    expect(read.parts).toEqual([{ key: 'proxy', whole: true }]);
+    expect(npmOpenings(npm).parts.map((p) => p.key)).toEqual(['proxy', 'stream']);
+  });
+
+  it('is a proxy host with all its public names: a name added is new, their order isn’t', () => {
+    const [site] = parseProxyHosts([NPM_PROXY_HOSTS[0]]);
+    if (!site) throw new Error('fixture');
+    const id = (domains: string[]) => {
+      const [o] = npmOpenings({ ...npm, sites: [{ ...site, domains }] }).openings;
+      return o ? openingId('con_npm', o) : null;
+    };
+    expect(id(['a.example.com', 'B.example.com'])).toBe(id(['b.example.com', 'a.example.com']));
+    expect(id(['a.example.com', 'b.example.com'])).not.toBe(id(['a.example.com']));
+    expect(id(['a.example.com', 'b.example.com'])).not.toBe(
+      id(['a.example.com', 'b.example.com', 'c.example.com']),
+    );
+    // A name only the house knows isn't part of it.
+    expect(id(['a.example.com', 'nas.lan'])).toBe(id(['a.example.com']));
+    // One public name keeps the id it always had, so what the person said is meant stays meant.
+    const [one] = npmOpenings({ ...npm, sites: [{ ...site, domains: ['a.example.com'] }] }).openings;
+    const before = (o: RawOpening) =>
+      `op_${createHash('sha256')
+        .update(['con_npm', o.how, o.address.toLowerCase(), (o.target ?? '').toLowerCase()].join('\n'))
+        .digest('hex')
+        .slice(0, 20)}`;
+    if (!one) throw new Error('fixture');
+    expect(openingId('con_npm', one)).toBe(before(one));
   });
 });
 
@@ -152,25 +189,67 @@ describe('Cloudflare', () => {
     expect(parseTunnelConfig({ result: { source: 'local', config: null } })).toBeNull();
   });
 
+  const signIn = [{ decision: 'allow', include: [{ email: { email: 'mara@example.com' } }] }];
+  const tunnel = { id: 'tun-1', name: 'home' };
+
   it('guards names with Cloudflare Access when an app covers them', () => {
     const domains = parseAccessDomains({
       result: [
-        { type: 'self_hosted', domain: 'pve.example.com' },
-        { type: 'self_hosted', domain: 'x.example.com/admin' },
-        { type: 'self_hosted', destinations: [{ type: 'public', uri: '*.apps.example.com' }] },
-        { type: 'bookmark', domain: 'ha.example.com' },
+        { type: 'self_hosted', domain: 'pve.example.com', policies: signIn },
+        { type: 'self_hosted', domain: 'x.example.com/admin', policies: signIn },
+        {
+          type: 'self_hosted',
+          destinations: [{ type: 'public', uri: '*.apps.example.com' }],
+          policies: signIn,
+        },
+        { type: 'bookmark', domain: 'ha.example.com', policies: signIn },
       ],
     });
-    expect(accessGuards(domains, 'pve.example.com')).toBe(true);
-    expect(accessGuards(domains, 'x.example.com')).toBe(false);
-    expect(accessGuards(domains, 'a.apps.example.com')).toBe(true);
-    expect(accessGuards(domains, 'ha.example.com')).toBe(false);
+    expect(accessGuards(domains, 'pve.example.com')).toBe('guarded');
+    expect(accessGuards(domains, 'x.example.com')).toBeNull();
+    expect(accessGuards(domains, 'a.apps.example.com')).toBe('guarded');
+    expect(accessGuards(domains, 'ha.example.com')).toBeNull();
     const routes = parseTunnelConfig(config) ?? [];
-    expect(tunnelOpenings('home', routes, domains).map((o) => [o.address, o.guard])).toEqual([
-      ['ha.example.com', 'none'],
-      ['pve.example.com', 'cloudflare_access'],
+    expect(tunnelOpenings(tunnel, routes, domains).map((o) => [o.address, o.guard, o.part])).toEqual([
+      ['ha.example.com', 'none', 'tunnel:tun-1'],
+      ['pve.example.com', 'cloudflare_access', 'tunnel:tun-1'],
     ]);
-    expect(tunnelOpenings('home', routes, null)[0]?.guard).toBe('unknown');
+    expect(tunnelOpenings(tunnel, routes, null)[0]?.guard).toBe('unknown');
+  });
+
+  it('never calls a name guarded when Access lets people through without a sign-in, or can’t say', () => {
+    const app = (domain: string, policies?: unknown[]) => ({
+      type: 'self_hosted',
+      domain,
+      ...(policies ? { policies } : {}),
+    });
+    const domains = parseAccessDomains({
+      result: [
+        app('bypass.example.com', [{ decision: 'bypass', include: [{ everyone: {} }] }]),
+        app('home.example.com', [
+          { decision: 'bypass', include: [{ ip: { ip: '203.0.113.0/24' } }] },
+          ...signIn,
+        ]),
+        app('anyone.example.com', [{ decision: 'allow', include: [{ everyone: {} }] }]),
+        app('unread.example.com'),
+        app('nobody.example.com', []),
+        app('blocked.example.com', [{ decision: 'deny', include: [{ everyone: {} }] }, ...signIn]),
+        // A wildcard that lets everyone in, and the name's own app that asks for a sign-in: the name's own counts.
+        app('*.wild.example.com', [{ decision: 'bypass', include: [{ everyone: {} }] }]),
+        app('own.wild.example.com', signIn),
+      ],
+    });
+    const guard = (name: string) =>
+      tunnelOpenings(tunnel, [{ hostname: name, service: 'http://10.100.0.10:80', path: null }], domains)[0]
+        ?.guard;
+    expect(guard('bypass.example.com')).toBe('none');
+    expect(guard('home.example.com')).toBe('unknown');
+    expect(guard('anyone.example.com')).toBe('unknown');
+    expect(guard('unread.example.com')).toBe('unknown');
+    expect(guard('nobody.example.com')).toBe('cloudflare_access');
+    expect(guard('blocked.example.com')).toBe('cloudflare_access');
+    expect(guard('other.wild.example.com')).toBe('none');
+    expect(guard('own.wild.example.com')).toBe('cloudflare_access');
   });
 });
 
@@ -413,7 +492,7 @@ describe('the places Whombat looked', () => {
     expect(sourceOf(row, { ok: false }, 0, 'en-GB').state).toBe('unread');
     const upnp = sourceOf(
       row,
-      { ok: true, value: { openings: [], complete: true, blind: [{ code: 'upnp_on' }] } },
+      { ok: true, value: { openings: [], parts: [], complete: true, blind: [{ code: 'upnp_on' }] } },
       2,
       'en-GB',
     );
@@ -423,14 +502,18 @@ describe('the places Whombat looked', () => {
     const opn = { id: 'con_o', label: 'OPNsense', catalogId: 'opnsense' };
     const partial = sourceOf(
       opn,
-      { ok: true, value: { openings: [], complete: false, blind: [{ code: 'forwards_partial' }] } },
+      {
+        ok: true,
+        value: { openings: [], parts: [], complete: false, blind: [{ code: 'forwards_partial' }] },
+      },
       0,
       'en-GB',
     );
     expect(partial.state).toBe('partly');
     expect(partial.words).not.toMatch(/^Nothing open\./);
     expect(
-      sourceOf(opn, { ok: true, value: { openings: [], complete: true, blind: [] } }, 0, 'en-GB').words,
+      sourceOf(opn, { ok: true, value: { openings: [], parts: [], complete: true, blind: [] } }, 0, 'en-GB')
+        .words,
     ).toBe('Nothing open');
     const alias = sourceOf(
       opn,
@@ -438,6 +521,7 @@ describe('the places Whombat looked', () => {
         ok: true,
         value: {
           openings: [],
+          parts: [],
           complete: true,
           blind: [{ code: 'forwards_unread', count: 2, names: 'Games, VPN' }],
         },
@@ -449,7 +533,7 @@ describe('the places Whombat looked', () => {
     expect(alias.words).toContain('alias');
     const ts = { id: 'con_t', label: 'Tailscale', catalogId: 'tailscale' };
     expect(
-      sourceOf(ts, { ok: true, value: { openings: [], complete: true, blind: [] } }, 0, 'en-GB'),
+      sourceOf(ts, { ok: true, value: { openings: [], parts: [], complete: true, blind: [] } }, 0, 'en-GB'),
     ).toMatchObject({
       state: 'read',
     });
@@ -460,6 +544,7 @@ describe('the places Whombat looked', () => {
           ok: true,
           value: {
             openings: [],
+            parts: [],
             complete: true,
             blind: [{ code: 'funnel_allowed', who: 'autogroup:member' }],
           },
@@ -479,28 +564,80 @@ describe('the first list and what is new', () => {
     baseline: true,
     ...over,
   });
+  const seen = (part: string, ...ids: string[]): SeenOpening[] => ids.map((id) => ({ id, part }));
+  const proxies = { key: 'proxy', whole: true };
+  const streams = { key: 'stream', whole: true };
+  const listed = (...parts: string[]) => parts.map((p) => row(firstListOf(p)));
 
-  it('keeps the first full read silently', () => {
-    const step = baselineStep([], ['a', 'b'], true, NOW);
+  it('keeps the first whole read of each list silently', () => {
+    const step = baselineStep([], seen('proxy', 'a', 'b'), [proxies, streams], true, NOW);
     expect(step.write.map((r) => [r.openingId, r.baseline])).toEqual([
       ['a', true],
       ['b', true],
-      [FIRST_LIST, true],
+      [firstListOf('proxy'), true],
+      [firstListOf('stream'), true],
     ]);
     expect([...step.kept.values()].every((k) => k.baseline)).toBe(true);
   });
 
-  it('keeps adding silently while reads are partial', () => {
-    const step = baselineStep([row('a')], ['a', 'b'], false, NOW);
+  it('keeps adding silently to a list read only in part', () => {
+    const step = baselineStep(
+      [row('a')],
+      seen('port_forward', 'a', 'b'),
+      [{ key: 'port_forward', whole: false }],
+      false,
+      NOW,
+    );
     expect(step.write.find((r) => r.openingId === 'b')?.baseline).toBe(true);
-    expect(step.write.some((r) => r.openingId === FIRST_LIST)).toBe(false);
+    expect(step.write.some((r) => r.openingId.startsWith(FIRST_LIST))).toBe(false);
+  });
+
+  it('tells what is new in a list it can read, while another list of the place is never read', () => {
+    // Streams Whombat may not read: the proxy hosts' list is kept all the same, and a host added after it is new.
+    const first = baselineStep([], seen('proxy', 'a'), [proxies], false, NOW);
+    expect(first.write.map((r) => r.openingId)).toContain(firstListOf('proxy'));
+    const later = baselineStep(
+      [row('a'), ...listed('proxy')],
+      seen('proxy', 'a', 'c'),
+      [proxies],
+      false,
+      NOW,
+    );
+    expect(later.kept.get('c')).toEqual({ firstSeen: NOW, baseline: false });
+  });
+
+  it('makes a tunnel set up after the list of tunnels was kept new, but not one whose routes came late', () => {
+    const tunnels = { key: 'tunnels', whole: true };
+    const t1 = { key: 'tunnel:1', whole: true, within: 'tunnels' };
+    const t2 = { key: 'tunnel:2', whole: true, within: 'tunnels' };
+    const after = baselineStep(
+      listed('tunnels', 'tunnel:1'),
+      seen('tunnel:2', 'x'),
+      [tunnels, t1, t2],
+      true,
+      NOW,
+    );
+    expect(after.kept.get('x')?.baseline).toBe(false);
+    // More tunnels than one read takes: the list is never kept, each tunnel's routes are, one by one.
+    const many = { key: 'tunnels', whole: false };
+    const late = baselineStep(listed('tunnel:1'), seen('tunnel:2', 'y'), [many, t1, t2], false, NOW);
+    expect(late.kept.get('y')?.baseline).toBe(true);
+    const known = baselineStep(listed('tunnel:1'), seen('tunnel:1', 'z'), [many, t1], false, NOW);
+    expect(known.kept.get('z')?.baseline).toBe(false);
+  });
+
+  it('doesn’t read an older Whombat’s first list: each list is kept again once', () => {
+    const step = baselineStep([row(FIRST_LIST), row('a')], seen('proxy', 'a', 'b'), [proxies], true, NOW);
+    expect(step.kept.get('b')?.baseline).toBe(true);
+    expect(step.forget).not.toContain(FIRST_LIST);
   });
 
   it('marks what opens after the first list as new, and forgets what closed a month ago', () => {
     const old = new Date(NOW.getTime() - FORGET_AFTER_MS - 1);
     const step = baselineStep(
-      [row(FIRST_LIST), row('a'), row('gone', { lastSeen: old })],
-      ['a', 'c'],
+      [...listed('proxy'), row('a'), row('gone', { lastSeen: old })],
+      seen('proxy', 'a', 'c'),
+      [proxies],
       true,
       NOW,
     );
@@ -509,18 +646,46 @@ describe('the first list and what is new', () => {
     expect(step.forget).toEqual(['gone']);
     // Back within a month: not new.
     const back = baselineStep(
-      [row(FIRST_LIST), row('a', { lastSeen: new Date(NOW.getTime() - 3 * 86_400_000) })],
-      ['a'],
+      [...listed('proxy'), row('a', { lastSeen: new Date(NOW.getTime() - 3 * 86_400_000) })],
+      seen('proxy', 'a'),
+      [proxies],
       true,
       NOW,
     );
     expect(back.kept.get('a')?.baseline).toBe(true);
   });
 
+  it('forgets nothing after a read that missed a list, and leaves a new opening’s line as it is', () => {
+    const old = new Date(NOW.getTime() - FORGET_AFTER_MS - 1);
+    const fresh = row('new-there', { firstSeen: new Date(NOW.getTime() - 86_400_000), baseline: false });
+    const stored = [...listed('proxy', 'tunnel:1'), row('a'), row('quiet', { lastSeen: old }), fresh];
+    const partial = baselineStep(stored, seen('proxy', 'a'), [proxies], false, NOW);
+    expect(partial.forget).toEqual([]);
+    expect(partial.unsure).toBe(true);
+    // Read whole, what isn't there is closed: no doubt, and what closed a month ago goes.
+    const whole = baselineStep(stored, seen('proxy', 'a'), [proxies], true, NOW);
+    expect(whole.unsure).toBe(false);
+    expect(whole.forget).toEqual(['quiet']);
+    // Nothing new missing: nothing to hold.
+    expect(
+      baselineStep(
+        stored.filter((r) => r !== fresh),
+        seen('proxy', 'a'),
+        [proxies],
+        false,
+        NOW,
+      ).unsure,
+    ).toBe(false);
+  });
+
   it('writes what stays open at most once an hour', () => {
     const recent = baselineStep(
-      [row(FIRST_LIST), row('a', { lastSeen: new Date(NOW.getTime() - 60_000) })],
-      ['a'],
+      [
+        row(firstListOf('proxy'), { lastSeen: new Date(NOW.getTime() - 60_000) }),
+        row('a', { lastSeen: new Date(NOW.getTime() - 60_000) }),
+      ],
+      seen('proxy', 'a'),
+      [proxies],
       true,
       NOW,
     );
