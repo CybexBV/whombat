@@ -72,6 +72,14 @@ export interface KeptOpening {
   baseline: boolean;
 }
 
+/** How long an opening that came after the first list is new: after two weeks of its line it is known. */
+export const NEW_FOR_MS = 14 * 86_400_000;
+
+/** Whether a kept opening is new now: not in the first list, and first seen less than `NEW_FOR_MS` ago. */
+export function isNewOpening(k: Pick<KeptOpening, 'firstSeen' | 'baseline'> | undefined, now: Date): boolean {
+  return !!k && !k.baseline && now.getTime() - k.firstSeen.getTime() < NEW_FOR_MS;
+}
+
 export interface OpeningCtx {
   locale: string;
   now: Date;
@@ -223,7 +231,7 @@ export function buildOpening(o: RawOpening, ctx: OpeningCtx): ExposureOpening {
     protection: protectionOf(o, locale),
     ...(risk ? { risk } : {}),
     meant,
-    isNew: !!kept && !kept.baseline && !meant,
+    isNew: isNewOpening(kept, ctx.now) && !meant,
     ...(kept ? { firstSeen: kept.firstSeen.toISOString() } : {}),
     ...(source.manageUrl
       ? {

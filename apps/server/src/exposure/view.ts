@@ -40,6 +40,10 @@ export function blindWords(b: Blind, locale: string): string {
   switch (b.code) {
     case 'streams_unread':
       return t('exposure.source.streamsUnread');
+    case 'forwards_partial':
+      return t('exposure.source.forwardsPartial');
+    case 'forwards_unread':
+      return tpServer(locale, 'exposure.source.forwardsUnread', b.count, { count: b.count, names: b.names });
     case 'tunnels_unread':
       return t('exposure.source.tunnelsUnread');
     case 'tunnel_local':
@@ -73,7 +77,8 @@ export function sourceOf(
   };
   if (!read.ok) return { ...base, state: 'unread', words: tServer(locale, 'exposure.source.unread') };
   const blind = read.value.blind.map((b) => blindWords(b, locale));
-  // Tailscale opens nothing by itself: only what its policy lets Funnel share, which is the whole line.
+  // Tailscale opens nothing by itself: only what its policy lets Funnel share, which is the whole line. A read that
+  // missed part of a place never says nothing is open there.
   const head =
     row.catalogId === 'tailscale'
       ? blind.length
@@ -81,7 +86,7 @@ export function sourceOf(
         : tServer(locale, 'exposure.source.funnelOff')
       : count
         ? tpServer(locale, 'exposure.source.openings', count, { count })
-        : tServer(locale, 'exposure.source.nothing');
+        : tServer(locale, read.value.complete ? 'exposure.source.nothing' : 'exposure.source.nothingRead');
   const first = head && blind.length && !/[.!?]$/.test(head) ? `${head}.` : head;
   const words = clip([first, ...blind].filter(Boolean).join(' '), 300);
   return { ...base, state: blind.length ? 'partly' : 'read', words };

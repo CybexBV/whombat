@@ -14,7 +14,16 @@ import type { KindNotice } from '../things/quiet/types';
 import { addressIndex, hostsServing, machineHref } from '../things/runs-on';
 import { clip } from '../things/words';
 import { keptOf, keptRows, recordOpenings } from './baseline';
-import { type Links, type LinkTarget, linkOf, NO_LINKS, openingId, openingSubject } from './openings';
+import {
+  isNewOpening,
+  type KeptOpening,
+  type Links,
+  type LinkTarget,
+  linkOf,
+  NO_LINKS,
+  openingId,
+  openingSubject,
+} from './openings';
 import { hostPort, type RawOpening } from './parse';
 import { isExposureSource, readOpenings } from './read';
 
@@ -96,12 +105,13 @@ export function newOpeningNotice(sourceId: string, o: RawOpening, link: LinkTarg
   };
 }
 
-/** The lines of what is new among `openings`, as kept. */
+/** The lines of what is new among `openings`, as kept: an opening's line goes once it is two weeks old. */
 export function newOpeningNotices(
   sourceId: string,
   openings: readonly RawOpening[],
-  kept: ReadonlyMap<string, { baseline: boolean }>,
+  kept: ReadonlyMap<string, KeptOpening>,
   links: Links,
+  now: Date,
 ): KindNotice[] {
   const seen = new Set<string>();
   const out: KindNotice[] = [];
@@ -109,8 +119,7 @@ export function newOpeningNotices(
     const id = openingId(sourceId, o);
     if (seen.has(id)) continue;
     seen.add(id);
-    const k = kept.get(id);
-    if (!k || k.baseline) continue;
+    if (!isNewOpening(kept.get(id), now)) continue;
     out.push(newOpeningNotice(sourceId, o, linkOf(links, o.targetHost, o.targetPort)));
   }
   return out;
@@ -134,9 +143,9 @@ export async function exposureSeen(
     const read = await readOpenings(services, row, 'pass');
     const ids = read.openings.map((o) => openingId(row.id, o));
     const kept = await recordOpenings(services, row.id, ids, read.complete, now);
-    const fresh = [...kept.values()].some((k) => !k.baseline);
+    const fresh = [...kept.values()].some((k) => isNewOpening(k, now));
     const links = fresh ? await buildLinks(services, row.burrowId).catch(() => NO_LINKS) : NO_LINKS;
-    return { notices: newOpeningNotices(row.id, read.openings, kept, links), read: true };
+    return { notices: newOpeningNotices(row.id, read.openings, kept, links, now), read: true };
   } catch (err) {
     services.log.debug({ err: String(err), connectionId: row.id }, 'exposure: openings not read');
     return { notices: [], read: false };
@@ -155,9 +164,10 @@ export async function exposurePageNotices(
       keptRows(services.db, [row.id]),
     ]);
     const kept = keptOf(rows.get(row.id) ?? []);
-    if (![...kept.values()].some((k) => !k.baseline)) return [];
+    const now = services.clock();
+    if (![...kept.values()].some((k) => isNewOpening(k, now))) return [];
     const links = await buildLinks(services, row.burrowId).catch(() => NO_LINKS);
-    return newOpeningNotices(row.id, read.openings, kept, links);
+    return newOpeningNotices(row.id, read.openings, kept, links, now);
   } catch {
     return [];
   }

@@ -67,6 +67,25 @@ export const EXPOSURE = splitPairs({
     { one: '1 opening', other: '{count} openingen' },
   ],
   'exposure.source.nothing': ['Nothing open', 'Niets open'],
+  'exposure.source.nothingRead': [
+    'Nothing open in what Whombat could read',
+    'Niets open in wat Whombat kon lezen',
+  ],
+  'exposure.source.forwardsPartial': [
+    'It has more port forwards than Whombat reads at once, so some may be missing.',
+    'Er zijn meer port forwards dan Whombat in één keer leest, dus er kunnen er ontbreken.',
+  ],
+  'exposure.source.forwardsUnread': [
+    {
+      one: 'Port forward ‘{names}’ uses an alias Whombat can’t read, so it isn’t listed.',
+      other: '{count} port forwards use aliases Whombat can’t read, so they aren’t listed: {names}.',
+    },
+    {
+      one: 'Port forward ‘{names}’ gebruikt een alias die Whombat niet kan lezen, dus die staat er niet bij.',
+      other:
+        '{count} port forwards gebruiken aliassen die Whombat niet kan lezen, dus die staan er niet bij: {names}.',
+    },
+  ],
   'exposure.source.unread': ['Whombat couldn’t read it just now.', 'Whombat kon het nu niet lezen.'],
   'exposure.source.streamsUnread': [
     'Its streams couldn’t be read.',
