@@ -1556,6 +1556,16 @@ Setup and operation: `docs/github.md`.
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
   ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
   [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
+  A Windows PC is a server too (platform and os family `windows`,
+  [windows-servers.md](docs/decisions/windows-servers.md)): its agent is the Windows build, run as the `whombat-agent`
+  service, which reads the PC's own facts with PowerShell (`hosts/internal/agent/winpc`) and adds them to the detail
+  (`windows`: its Windows, Windows Update's times, virus protection, BitLocker). Each enrollment carries a PowerShell
+  line (`installCommandWindows`) while the box has a Windows build; it fetches `install.ps1` from the agents' address,
+  which takes TLS 1.2 for Windows PowerShell 5.1. Restarts and commands (PowerShell) work as on any server; Whombat
+  reads the PC's updates but leaves installing them to the person (`server_update` refuses, no care-plan step). An app
+  below `WINDOWS_MINOR` gets a PC as a standard server without its Windows facts (`hosts/older-apps.ts`, in the fleet,
+  the page and the live rows). The apps give a PC Summary, Storage and System (the phone its Summary) and Technical
+  details' This PC (`@whombat/client/hosts` `windows.ts`).
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.

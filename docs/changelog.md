@@ -3,6 +3,12 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## Unreleased
+
+- Add a Windows PC as a server: choose Windows PC in Add a server and paste the line into PowerShell opened as
+  administrator. Whombat watches its processor, memory, drives and network, says whether its virus protection is on,
+  shows BitLocker and waiting Windows updates, and can restart it. Installing updates stays yours, in Windows Update.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,
