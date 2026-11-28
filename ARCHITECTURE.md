@@ -1678,18 +1678,23 @@ Setup and operation: `docs/github.md`.
   `protected.get` builds one row per thing that holds data from what Whombat already reads — Proxmox backup jobs and
   each machine's own backup list (copied or same machine only by where its newest backup that worked is: a Backup Server
   or shared storage is a copy elsewhere; at most 20 lists read a build, kept until the machine's newest backup
-  changes; a plan that never worked is `none` with `planned`), Incus snapshots and QEMU/KVM backups
-  (same machine), the box's backup status and its off-site copy's own status (`offsiteNow`) and each connection's own
+  changes; a plan that never worked is `none` with `planned`), Incus snapshots and QEMU/KVM backups that worked
+  (same machine), the box's backup status (copied or same machine only with a backup since backups started going to
+  the place in use, from the `backup.destination_set` events; else `planned`) and its off-site copy's own status
+  (`offsiteNow`) and each connection's own
   backup facts (`catalog_connections.protection`, written by the health pass from what its kind reads; a service
   without them takes its machine's from `glance.machine`) — cached a minute. Restore tests are a home job every minute
   (`runner.ts`): per Proxmox server switched on (`restore_test_servers`), once a week in the quiet hours it picks the
   machine whose turn it is and walks a `restore_tests` row through its steps, each a `restoreTest.step` commit as the
-  agent: restore the newest backup to a free id in 990000–990999 through the hosts service's restore route with
+  agent: read the newest backup's own settings (`GET …/backups/config`) for the room and memory it takes (none for a
+  helper that can't, a container that isn't unprivileged, or a backup that uses parts of the server), then restore it
+  to a free id in 990000–990999 through the hosts service's restore route with
   `isolate`, so the restore itself writes the copy with every network card `link_down=1` (a new MAC), no start with
   the server, its name, tag and the test's mark (`whombat-<test id>` in its notes); a server whose helper can't
   (`choices.restore_isolate`) gets no copy. Then read the copy back, put on what didn't take one part at a time, and
-  refuse a copy whose own settings use parts of the server or keep a cable in; start it, wait until it runs (and its
-  guest agent answers), then stop and delete it. Each change, start, stop and delete first reads the copy's settings
+  refuse a copy whose own settings use parts of the server or keep a cable in; start it, wait until it runs (and the
+  guest agent its settings switch on answers), then stop (`force_stop` for a VM) and delete it. A test whose copy
+  wasn't asked to start within the hour is skipped (`overTime`). Each change, start, stop and delete first reads the copy's settings
   and goes ahead only when they carry the test's mark. Passes never overlap; strays left by an interruption (a lost
   restore answer among them) are swept by range and that mark. The newest failed verdict per machine is a `restore_test.failed` hint in the hosts list while tests are on;
   a machine's page carries its newest result (`HostGuestDetail.restoreTest`). The assistant reads it with

@@ -58,6 +58,9 @@ them once they have been tried on Beta.
   that is cut off from your network and won’t start with the server from the moment it exists, checks that it starts,
   and deletes it again. Your real machine isn’t touched. Turn on “Test my backups” on the What’s protected page; the
   result shows on the machine’s page. A server needs Whombat’s newer helper for this, which it gets by itself.
+- Restore tests check the room and memory a backup really needs before they restore it, and a restore that is only
+  slow no longer counts as a backup that failed. Your own Whombat counts as copied only once a backup worked at the
+  place you chose for it.
 
 ## 27 November 2026
 
