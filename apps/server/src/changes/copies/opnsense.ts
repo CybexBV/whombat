@@ -6,7 +6,14 @@
  */
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
-import { cleaned, type SettingsSummary, SummaryBuilder } from './summary';
+import {
+  cleaned,
+  copyKeyHasher,
+  type KeyHasher,
+  SECRET_FIELD,
+  type SettingsSummary,
+  SummaryBuilder,
+} from './summary';
 import { CopyFailed, type CopyService, getBytes } from './types';
 import { childText, nodesAt, parseXml, type XmlNode, xmlValue } from './xml';
 
@@ -101,23 +108,28 @@ function keyOf(node: XmlNode, any: boolean): string {
   return node.name;
 }
 
+/** An element that is a secret itself (`<system><radius_secret>`), not only a holder of one: never an item. */
+const skipped = (node: XmlNode) => VOLATILE.has(node.name) || SECRET_FIELD.test(node.name);
+
 /** The summary of an OPNsense `config.xml`. */
-export function opnsenseSummary(xml: string): SettingsSummary {
+export function opnsenseSummary(xml: string, hashKey?: KeyHasher): SettingsSummary {
   const doc = parseXml(xml);
   const top = doc.children.find((c) => c.name === 'opnsense');
   if (!top) throw new CopyFailed('unreadable');
-  const out = new SummaryBuilder();
+  const out = new SummaryBuilder(hashKey);
   for (const { part, paths } of PARTS)
     for (const path of paths)
       for (const node of nodesAt(top, path)) {
-        if (VOLATILE.has(node.name)) continue;
+        if (skipped(node)) continue;
         out.add(part, keyOf(node, path[path.length - 1] === '*'), cleaned(xmlValue(node), VOLATILE));
       }
   // The system's own settings, one item each (its users and groups are a part of their own).
   for (const node of nodesAt(top, ['system', '*'])) {
-    if (node.name === 'user' || node.name === 'group' || VOLATILE.has(node.name)) continue;
+    if (node.name === 'user' || node.name === 'group' || skipped(node)) continue;
     out.add('system', node.name, cleaned(xmlValue(node), VOLATILE));
   }
+  // The whole file but OPNsense's own times, secrets in: a password changed is another copy.
+  out.content(cleaned(xmlValue(top), VOLATILE, 'keep'));
   return out.summary;
 }
 
@@ -133,7 +145,7 @@ export const OPNSENSE_COPY: CopyService = {
       bytes,
       fileName: `opnsense-config-${fileDate(now)}.xml`,
       contentType: 'application/xml',
-      summary: opnsenseSummary(xml),
+      summary: opnsenseSummary(xml, copyKeyHasher(services)),
     };
   },
 };

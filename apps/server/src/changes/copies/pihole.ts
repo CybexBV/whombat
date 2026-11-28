@@ -9,7 +9,14 @@ import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
 import { getJson } from '../../things/kinds/read';
 import { list, rec, str } from '../../things/words';
-import { cleaned, type SettingsSummary, SummaryBuilder } from './summary';
+import {
+  cleaned,
+  copyKeyHasher,
+  type KeyHasher,
+  SECRET_FIELD,
+  type SettingsSummary,
+  SummaryBuilder,
+} from './summary';
 import { CopyFailed, type CopyService, getBytes } from './types';
 
 const NAME = 'Pi-hole';
@@ -37,12 +44,14 @@ export interface PiholeRead {
   clients: unknown;
 }
 
-export function piholeSummary(read: PiholeRead): SettingsSummary {
-  const out = new SummaryBuilder();
+export function piholeSummary(read: PiholeRead, hashKey?: KeyHasher): SettingsSummary {
+  const out = new SummaryBuilder(hashKey);
   const config = rec(rec(read.config).config);
   for (const section of SECTIONS) {
     const values = rec(config[section]);
     for (const [key, value] of Object.entries(values)) {
+      // A setting that is a secret itself (a password), not only a holder of one: never an item.
+      if (SECRET_FIELD.test(key)) continue;
       // Local DNS records and fixed DHCP addresses are items of their own.
       if (
         (section === 'dns' && (key === 'hosts' || key === 'cnameRecords')) ||
@@ -78,6 +87,20 @@ export function piholeSummary(read: PiholeRead): SettingsSummary {
     const r = rec(c);
     out.add('clients', str(r.client) ?? '', cleaned(r, VOLATILE));
   }
+  // All of it, secrets in: a password changed is another copy, though no item changed.
+  out.content(
+    cleaned(
+      {
+        config: Object.fromEntries(SECTIONS.map((s) => [s, config[s] ?? null])),
+        lists: read.lists,
+        domains: read.domains,
+        groups: read.groups,
+        clients: read.clients,
+      },
+      VOLATILE,
+      'keep',
+    ),
+  );
   return out.summary;
 }
 
@@ -98,7 +121,7 @@ export const PIHOLE_COPY: CopyService = {
       get('/api/clients'),
     ]).then(
       ([config, lists, domains, groups, clients]) =>
-        piholeSummary({ config, lists, domains, groups, clients }),
+        piholeSummary({ config, lists, domains, groups, clients }, copyKeyHasher(services)),
       () => null,
     );
     return {

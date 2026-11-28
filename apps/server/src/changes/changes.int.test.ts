@@ -22,6 +22,7 @@ import { agentTokenFor } from '../test/tokens';
 import { trackConnection } from './connections';
 import { settingsCopyFile } from './copies/download';
 import { takeSettingsCopy } from './copies/run';
+import { CONTENT_KEY, hasClearKeys } from './copies/summary';
 import { CopyFailed, type CopyService } from './copies/types';
 import { settingsCopyOf } from './copies/view';
 import { changesServerPass } from './servers';
@@ -164,7 +165,7 @@ describe('a settings copy', () => {
   /** A stand-in OPNsense that answers what each test sets. */
   let answer: { bytes: string; summary: Record<string, string> | null } | CopyFailed = {
     bytes: '<opnsense>1</opnsense>',
-    summary: { 'filter/u1': 'a' },
+    summary: { 'filter/u1': 'a', [CONTENT_KEY]: 'settings-1' },
   };
   const fake: CopyService = {
     name: 'OPNsense',
@@ -185,19 +186,46 @@ describe('a settings copy', () => {
   it('keeps the first, finds the same again, and replaces one whose settings compare the same', async () => {
     expect(await takeSettingsCopy(t.services, await row(), at(200), fake)).toBe('first');
     expect(await takeSettingsCopy(t.services, await row(), at(300), fake)).toBe('same');
-    answer = { bytes: '<opnsense>1 </opnsense>', summary: { 'filter/u1': 'a' } };
+    answer = { bytes: '<opnsense>1 </opnsense>', summary: { 'filter/u1': 'a', [CONTENT_KEY]: 'settings-1' } };
     expect(await takeSettingsCopy(t.services, await row(), at(400), fake)).toBe('replaced');
     const kept = await copies();
     expect(kept).toHaveLength(1);
-    // Sealed at rest: the bytes aren't in the row.
+    // Sealed at rest: the bytes aren't in the row, and the summary names no item.
     expect(Buffer.from(kept[0]?.sealed ?? []).includes(Buffer.from('opnsense'))).toBe(false);
+    expect(Object.keys(kept[0]?.summary ?? {})).not.toContain('filter/u1');
     expect(await settingsChanges()).toEqual([]);
   });
 
-  it('keeps one with other settings beside it and tells what changed', async () => {
-    answer = { bytes: '<opnsense>2</opnsense>', summary: { 'filter/u1': 'b', 'filter/u2': 'c' } };
-    expect(await takeSettingsCopy(t.services, await row(), at(500), fake)).toBe('kept');
+  it('keeps a copy whose items compare the same when a password in it changed', async () => {
+    answer = {
+      bytes: '<opnsense>1  </opnsense>',
+      summary: { 'filter/u1': 'a', [CONTENT_KEY]: 'settings-2' },
+    };
+    expect(await takeSettingsCopy(t.services, await row(), at(450), fake)).toBe('kept');
     expect(await copies()).toHaveLength(2);
+    // Nothing a person reads changed: no line in the change log.
+    expect(await settingsChanges()).toEqual([]);
+  });
+
+  it('hashes the keys of a copy an older Whombat kept with its items named', async () => {
+    // The older of the two: the newest is written anew by any try.
+    const [oldest] = await copies().then((all) => all.sort((a, b) => +a.madeAt - +b.madeAt));
+    if (!oldest) throw new Error('no copy');
+    await t.services.db
+      .update(settingsCopies)
+      .set({ summary: { 'filter/u1': 'a' } })
+      .where(eq(settingsCopies.id, oldest.id));
+    expect(await takeSettingsCopy(t.services, await row(), at(470), fake)).toBe('same');
+    for (const copy of await copies()) expect(hasClearKeys(copy.summary)).toBe(false);
+  });
+
+  it('keeps one with other settings beside it and tells what changed', async () => {
+    answer = {
+      bytes: '<opnsense>2</opnsense>',
+      summary: { 'filter/u1': 'b', 'filter/u2': 'c', [CONTENT_KEY]: 'settings-3' },
+    };
+    expect(await takeSettingsCopy(t.services, await row(), at(500), fake)).toBe('kept');
+    expect(await copies()).toHaveLength(3);
     const [change] = await settingsChanges();
     expect(change?.fact).toEqual({
       k: 'settings',
@@ -210,7 +238,7 @@ describe('a settings copy', () => {
     answer = new CopyFailed('notAllowed');
     expect(await takeSettingsCopy(t.services, await row(), at(600), fake)).toBe('notAllowed');
     const soon = await settingsCopyOf(t.services, await row(), now, 'Europe/Amsterdam', 'en');
-    expect(soon?.view).toMatchObject({ failing: true, kept: 2, service: 'OPNsense' });
+    expect(soon?.view).toMatchObject({ failing: true, kept: 3, service: 'OPNsense' });
     expect(soon?.view.detail).toContain('OPNsense');
     expect(soon?.line).toBeNull();
     await takeSettingsCopy(t.services, await row(), at(500 + 49 * 60), fake);
