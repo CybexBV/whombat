@@ -49,6 +49,7 @@ import { withUptime } from '../incidents/history';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
 import type { Services } from '../services';
+import { worksOnPage } from '../works/page';
 import { type AccountTarget, accountPage, findAccount } from './accounts/index';
 import { devicePage, learningPage } from './devices';
 import { genericSlots } from './generic';
@@ -258,13 +259,14 @@ export async function connectionPage(
     viewer,
     quiet,
   };
-  const [view, tools, changed, partOf, connected, states] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states, works] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
     within(partOfServer(services, viewer.burrowId, row), 5_000, null),
     connectedByLine(services, row, viewer, timeZone),
     thingStates(services.db, id),
+    worksOnPage(services, row, quiet, now, timeZone),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
   const misplaced = view?.slots ? slotProblems(view) : [];
@@ -325,6 +327,8 @@ export async function connectionPage(
   const backup = backupNotice(figures, now);
   const lines: LooseNotice[] = [
     ...(view?.notices ?? []),
+    // The service's test, while it is watched and failed twice in a row: the same line the health pass keeps.
+    ...(works.line ? [works.line] : []),
     ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
     ...genericNotices(
@@ -378,6 +382,7 @@ export async function connectionPage(
       )
     : null;
   if (card) summary.push(card);
+  if (works.panel) summary.push(works.panel);
   const items = accessItems(entry, row, tools);
   // A gateway is no agent's (fusebox-page.md), nor is the Vault's sync (onepassword-sync.md): nothing to
   // say about what Whombat may do with it.

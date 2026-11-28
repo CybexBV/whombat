@@ -34,6 +34,7 @@ import { ApiError, badRequest, conflict, forbidden } from '../lib/errors';
 import { actingAgentId } from '../managed/acting-assistant';
 import { loadPrincipalRow } from '../read/principals';
 import type { Services } from '../services';
+import { isWorksAction, worksAction } from '../works/actions';
 import { buttonRefusal } from './kinds/buttons';
 import { kindOf } from './kinds/index';
 import { forgetConnectionReads } from './kinds/read';
@@ -173,6 +174,9 @@ async function executeThingAction(
   const target = await findThing(services, viewer, value);
   if (target.kind !== 'connection') throw badRequest('This has no such action.');
   const row = target.row;
+  // A service's test only reads and its watch is Whombat's own setting: no change, and Look only may press them.
+  if (isWorksAction(input.action))
+    return { outcome: await worksAction(services, viewer, row, input, timeZone), uncertain: false };
   // Repointed at another service or account since: the old value would land there, not where it was changed.
   if (!undoGoesWhereChangeWent(row, destination)) throw conflict(changedSinceChangeText(row.label));
   // Where it goes and as whom: the connection as it was checked here, or where a yes the assistant asked for was bound

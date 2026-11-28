@@ -34,7 +34,7 @@
  * (BP-07, SL-D55), never Whombat's rules.
  */
 import type { DispatchContext } from '@whombat/core/contracts';
-import { describeScheduleWhen, shortNameOf } from '@whombat/core/domain';
+import { describeScheduleWhen, SERVICE_TEST_CHECK, shortNameOf } from '@whombat/core/domain';
 import { formatClock, formatDate, formatShortWeekday } from '@whombat/core/text';
 import { defuseDelimiters } from './defuse';
 
@@ -550,6 +550,20 @@ const STILL_ASKS =
   'Go ahead covers exactly these steps: anything on this Whombat’s own server, deleting or restoring still asks with its card.';
 
 /** Every line of the thing the research covers, as data (handle-it.md); none when there is only the one. */
+/**
+ * Whombat's own test of the service failed (it opened, but a file, photo, document or library didn't): `service_test`
+ * says at which step, and runs it again to check a fix worked.
+ */
+function serviceTestLine(l: NonNullable<DispatchContext['look']>): string[] {
+  const tested =
+    l.check === SERVICE_TEST_CHECK || (l.lines ?? []).some((x) => x.check === SERVICE_TEST_CHECK);
+  return tested
+    ? [
+        'Whombat’s own test of it failed: read service_test to see at which step it got stuck, and run it again (run: true) after any fix to check it worked. When the sign-in Whombat uses was refused, only the person can fix that, in the connection.',
+      ]
+    : [];
+}
+
 function lookLinesBlock(l: NonNullable<DispatchContext['look']>): string[] {
   const lines = l.lines ?? [];
   if (lines.length < 2) return [];
@@ -656,6 +670,7 @@ export function lookTurnLines(ctx: DispatchContext): string[] {
         `${personWord(ctx)} said go ahead to your plan for ${name}: their yes to exactly these steps.`,
         ...planBlock(l.plan),
         ...(where ? [where] : []),
+        ...serviceTestLine(l),
         'Take them now, in order, nothing more, and check each worked.',
         STILL_ASKS,
         ...tail,
@@ -668,6 +683,7 @@ export function lookTurnLines(ctx: DispatchContext): string[] {
       '[[/step]]',
       ...(l.found ? [`What you had found: ${defuseDelimiters(l.found.title)}.`] : []),
       ...(where ? [where] : []),
+      ...serviceTestLine(l),
       'Take exactly that step now, nothing more, and check it worked.',
       ...tail,
     ];
@@ -696,6 +712,7 @@ export function lookTurnLines(ctx: DispatchContext): string[] {
         ]
       : []),
     ...(where ? [where] : []),
+    ...serviceTestLine(l),
     'Read first: its state, its logs, recent changes and what you remember about it.',
     lookOnly
       ? 'It is Look only: change nothing and offer no step; the summary says what the person can do.'

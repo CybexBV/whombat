@@ -12,6 +12,8 @@
  * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period, read-only.
  * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
  *   (Whombat).
+ * - `service_test`: whether a service really works, by Whombat's read-only test of it: the last results, or a run now
+ *   (Whombat service-works.md).
  */
 import { z } from 'zod';
 import { DeviceDriver, DeviceProfile, DeviceReading } from '../domain/devices.js';
@@ -25,6 +27,7 @@ import {
   ThingWatchLimit,
   WatchLimitValue,
 } from '../domain/quiet.js';
+import { ServiceTestRunView } from '../domain/service-works.js';
 import { ThingWatchEvent, ThingWatchMinutes, ThingWatchView } from '../domain/thing-watch.js';
 import { DeviceSkillProposalId, ThingWatchId, WidgetId } from '../ids.js';
 import { commitOutcome } from './errors.js';
@@ -268,6 +271,28 @@ export const ONE_MCP_TOOLS = {
     }),
     requiredKey: null,
     readOnly: false,
+    personal: true,
+  }),
+  service_test: oneTool({
+    name: 'service_test',
+    title: 'Does it really work?',
+    description:
+      'Whether a service really works, by Whombat’s own test of it, which only reads: Nextcloud opens one of the person’s files, Immich their newest photo, Paperless their newest document, Jellyfin and Plex the newest item of a library, Home Assistant sees a sensor change. thing: its page id (connection:con_…) or a connection’s handle. Without run it gives the last results, newest first; with run: true it runs the test now and says where it got stuck. The words tell apart a service that is broken from a sign-in that expired or lost access (only the person can fix that, in the connection). Use it when the person asks whether something works, when you look into a failed test, and after a restart or fix to check it worked.',
+    input: z.object({
+      thing: z.string().trim().min(1).max(220),
+      run: z.boolean().optional(),
+    }),
+    output: commitOutcome({
+      name: z.string(),
+      /** The test in plain words (“Open your newest photo”); absent when Whombat has no test for it. */
+      test: z.string().optional(),
+      /** Whombat runs it every 15 minutes and says when it stops working. */
+      watched: z.boolean(),
+      runs: z.array(ServiceTestRunView),
+      note: z.string().optional(),
+    }),
+    requiredKey: null,
+    readOnly: true,
     personal: true,
   }),
 } as const;

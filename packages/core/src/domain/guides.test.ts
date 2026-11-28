@@ -337,6 +337,8 @@ describe('the assistant’s tools (AG-18)', () => {
       // A report to the Whombat Team, drafted for the person's press (Whombat team-reports.md).
       'report_to_whombat_team',
       'search_web',
+      // Whether a service really works, by Whombat's read-only test (Whombat service-works.md).
+      'service_test',
       'set_chat_title',
       // Whombat's settings for the person (Whombat assistant-settings.md).
       'settings_change',

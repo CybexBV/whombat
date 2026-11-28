@@ -50,6 +50,7 @@ export * from './schedules';
 export * from './server-asks';
 export * from './server-cares';
 export * from './server-names';
+export * from './service-tests';
 export * from './shares';
 export * from './t3code';
 export * from './team-reports';
