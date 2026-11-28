@@ -20,8 +20,8 @@ import {
   plansEmptyText,
   plansHereEmptyText,
 } from '../data/planList';
-import { overviewTitle } from '../data/shell';
 import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -39,7 +39,7 @@ export function PlansScreen({ route, navigation }: Props) {
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
   const { slug, bootstrap } = useBurrow();
-  const back = route.params?.back ?? overviewTitle(rawLocale);
+  const back = route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale);
   const conversationId = route.params?.conversationId;
   const [filter, setFilter] = useState<PlanListFilter>('open');
   const query = usePlans({

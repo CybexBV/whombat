@@ -1,9 +1,8 @@
-/** Overview's Servers on the phone (overview-one-page.md): groups that keep a child with its parent, and the facts Search shows. */
+/** The servers' facts Search shows on the phone. */
 
-import { overviewServerRows } from '@whombat/client/hosts';
 import type { HostServer } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { serverFacts, serverGroups } from './homeServers';
+import { serverFacts } from './homeServers';
 
 function server(id: string, over: Partial<HostServer> = {}): HostServer {
   return {
@@ -39,28 +38,7 @@ function server(id: string, over: Partial<HostServer> = {}): HostServer {
   } as HostServer;
 }
 
-describe('Overview’s servers on the phone (overview-one-page.md)', () => {
-  const NOW = Date.parse('2026-11-12T14:00:00Z');
-
-  it('keeps a server and the servers that run on it in one group', () => {
-    const rows = overviewServerRows(
-      [
-        server('pve-02', { status: 'warn', statusNote: 'running warm' }),
-        server('docker-01', { parent: 'pve-02' }),
-        server('blackbox', { status: 'bad', statusNote: 'disk array failed' }),
-        server('alpha'),
-      ],
-      NOW,
-      'Europe/Amsterdam',
-    );
-    expect(serverGroups(rows).map((g) => g.map((r) => r.id))).toEqual([
-      ['blackbox'],
-      ['pve-02', 'docker-01'],
-      ['alpha'],
-    ]);
-    expect(serverGroups([])).toEqual([]);
-  });
-
+describe('the servers’ facts on the phone', () => {
   it('gives Search and Places each server’s logo, system and how it is', () => {
     const facts = serverFacts([
       server('pve-01'),

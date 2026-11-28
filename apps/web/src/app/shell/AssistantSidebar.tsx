@@ -7,7 +7,6 @@ import {
   ChevronRight,
   Folder,
   Inbox,
-  LayoutGrid,
   Lock,
   LogOut,
   type LucideIcon,
@@ -57,9 +56,6 @@ const NAV_ICONS: Record<AssistantNavId, LucideIcon> = {
   // Servers and Connections, places of their own (servers-connections-places.md).
   servers: Server,
   connections: Plug,
-  // Overview, at `/connections` or (before the Chat shell) `/` (sidebar-tabs.md): the servers and connections at a glance.
-  dashboard: LayoutGrid,
-  home: LayoutGrid,
   automations: Zap,
   files: Folder,
   vault: Lock,

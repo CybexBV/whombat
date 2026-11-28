@@ -38,14 +38,13 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
         needsYou: 3,
       },
     );
-    // The places in one order; before the Chat shell Overview is the home page. Servers with its server, selected on
-    // its page, with the mark of the one that needs a look. Automations without a count;
-    // Settings is in the account menu.
+    // The places in one order. Servers with its server, selected on its page, with the mark of the one that needs a
+    // look; Connections even with nothing connected. Automations without a count; Settings is in the account menu.
     expect(model.nav.map((r) => [r.label, r.href, r.badge])).toEqual([
       ['Chat', '/chat', null],
       ['Inbox', '/inbox', 3],
-      ['Overview', '/', null],
       ['Servers', '/servers', null],
+      ['Connections', '/connected', null],
       ['Automations', '/automations', null],
       ['Files', '/files', null],
       ['Vault', '/vault', null],
@@ -89,8 +88,8 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
     expect(build({ present: false }).servers).toBeNull();
     expect(build({ present: false }).nav.map((r) => r.id)).not.toContain('servers');
     const model = build({ present: true });
-    // Add a server opens on Overview's Servers tab: `/` before the Chat shell (AP-2523, AP-2608).
-    expect(model.servers).toMatchObject({ addHref: '/?tab=servers&add=1', rows: [] });
+    // Add a server opens over the Servers list.
+    expect(model.servers).toMatchObject({ addHref: '/servers?add=1', rows: [] });
     expect(model.things.map((t) => t.id)).toEqual(['connection:ha']);
     expect(
       model.nav.filter((r) => r.id === 'servers' || r.id === 'connections').map((r) => [r.id, r.mark]),
@@ -104,9 +103,9 @@ describe('the assistant shell before Chat (one-whombat-shell.md AP-1256…AP-125
       selected: true,
       href: '/connected',
     });
-    // Every guest of every server is reached from Overview, which stays selected.
+    // Every guest of every server is reached from Servers, which stays selected.
     const guests = build({ present: true }, { kind: 'thing', id: 'servers' } as never);
-    expect(guests.nav.find((r) => r.id === 'home')?.selected).toBe(true);
+    expect(guests.nav.find((r) => r.id === 'servers')?.selected).toBe(true);
   });
 });
 
@@ -135,7 +134,7 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     expect(build('warn').nav.map((r) => r.id)).toEqual([
       'chat',
       'needsYou',
-      'dashboard',
+      'connections',
       'automations',
       'files',
       'vault',
@@ -163,12 +162,12 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     expect(watch(build('info'))?.badgeTone).toBe('info');
     expect(watch(build('bad'))?.badgeTone).toBe('bad');
     expect(watch(build(null, 0))).toMatchObject({ badge: null, badgeTone: null });
-    // Servers' `+` opens Add a server on Overview's Servers tab (AP-2608).
+    // Servers' `+` opens Add a server over the Servers list.
     expect(
       buildAssistantSidebarModel(
         { burrow: { name: 'Lumio', slug: 'lumio' } as never, me },
         {
-          location: { kind: 'dashboard' } as never,
+          location: { kind: 'place', place: 'servers' } as never,
           things: [],
           chats: [],
           needsYou: 0,
@@ -176,7 +175,7 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
           hosts: { present: true },
         },
       ).servers?.addHref,
-    ).toBe('/connections?tab=servers&add=1');
+    ).toBe('/servers?add=1');
   });
 
   it('counts every thread of Chat with news on Chat, software work too, and has no place apart for it', () => {
@@ -194,7 +193,7 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     expect(model.nav.some((r) => r.href === '/code')).toBe(false);
   });
 
-  it('carries the worst mark of what each place holds, and Connections only once something is connected', () => {
+  it('carries the worst mark of what each place holds, and Connections even with nothing connected', () => {
     const thing = (id: string, kind: 'server' | 'connection', status: string) => ({
       id,
       kind,
@@ -221,7 +220,6 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
     expect(model.nav.map((r) => r.id)).toEqual([
       'chat',
       'needsYou',
-      'dashboard',
       'servers',
       'connections',
       'automations',
@@ -236,14 +234,15 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
       href: '/connected',
       ariaLabel: 'Connections, something isn’t working',
     });
-    // Nothing connected and no server: neither place.
-    expect(build([]).nav.map((r) => r.id)).not.toContain('connections');
+    // Nothing connected and no server: Connections, where the first one is added, and no Servers.
+    expect(build([]).nav.map((r) => r.id)).toContain('connections');
+    expect(build([]).nav.find((r) => r.id === 'connections')?.mark).toBeNull();
     expect(build([]).nav.map((r) => r.id)).not.toContain('servers');
   });
 
   it('has Servers and Connections as places with their marks, and keeps the theme in the account menu', async () => {
     const user = userEvent.setup();
-    renderApp('/connections', assistant());
+    renderApp('/connected', assistant());
     const side = await sidebar();
     // The burrow alone at the top: the theme moved to the account menu (AP-2605).
     expect(within(side).queryByRole('button', { name: /theme/ })).toBeNull();
@@ -296,82 +295,25 @@ describe('the sidebar (sidebar.md AP-2600…AP-2609)', () => {
   });
 });
 
-describe('Overview (one-whombat-shell.md AP-1265…AP-1273; connections-page.md AP-2501; overview-one-page.md)', () => {
-  it('shows every section of #conn-web from home.overview', async () => {
+describe('the Overview’s old addresses and Everything I did', () => {
+  it('opens Connections from the Overview’s and the Dashboard’s addresses, the query kept', async () => {
     const app = renderApp('/dashboard?x=1', assistant());
-    // The Dashboard's address opens Overview, the query kept (AP-2501).
-    await waitFor(() => expect(app.location()).toBe('/connections?x=1'));
-    expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeTruthy();
-    expect(
-      within(await sidebar())
-        .getByRole('link', { name: 'Overview' })
-        .getAttribute('aria-current'),
-    ).toBe('page');
-    // The broken thing first (overview-server-connection-final.md): its title leads to its Inbox row, one Look into it,
-    // and how many other things need Mara.
-    const broken = await screen.findByRole('region', { name: /disk array on blackbox has failed/ });
-    expect(
-      within(broken)
-        .getByRole('link', { name: /disk array on blackbox has failed/ })
-        .getAttribute('href'),
-    ).toMatch(/^\/inbox\?item=/);
-    expect(
-      within(broken)
-        .getAllByRole('button')
-        .map((b) => b.textContent),
-    ).toEqual(['Look into it']);
-    expect(screen.getByRole('link', { name: /^\d+ other things? needs? you/ }).getAttribute('href')).toBe(
-      '/inbox',
+    await waitFor(() => expect(app.location()).toBe('/connected?x=1'));
+    const side = await sidebar();
+    expect(within(side).queryByRole('link', { name: 'Overview' })).toBeNull();
+    await waitFor(() =>
+      expect(
+        within(side)
+          .getByRole('link', { name: /^Connections/ })
+          .getAttribute('aria-current'),
+      ).toBe('page'),
     );
-    // What needs Mara is the Inbox's, not a card here (needs-you-list.md NYL-01).
-    expect(screen.queryByRole('region', { name: 'Needs you' })).toBeNull();
-    // No Ask box, Chats or Done recently on Home (AP-2269): asking is the sidebar's, changes are each thing's.
-    expect(screen.queryByRole('region', { name: 'Chats with Neo' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Done recently' })).toBeNull();
-    expect(screen.queryByRole('textbox', { name: /^Ask Neo/ })).toBeNull();
-    // One page, no tabs (overview-one-page.md OVP-01): the jump links at the top, each with its count and a dot when
-    // something in it isn't fine; without servers here, Connections and Pinned.
-    const page = document.querySelector('[data-screen="home"]') as HTMLElement;
-    expect(within(page).queryByRole('tablist')).toBeNull();
-    const nav = within(page).getByRole('navigation', { name: 'On this page' });
-    const jumps = within(nav).getAllByRole('link');
-    expect(jumps.map((l) => l.getAttribute('href'))).toEqual(['#overview-connections', '#overview-pinned']);
-    expect(within(jumps[0] as HTMLElement).getByRole('img', { name: 'something needs a look' })).toBeTruthy();
-    expect(within(page).getByText('2 connected · 2 need a look · 1 learning')).toBeTruthy();
-    // Connections as small tiles, worst first (OVP-09), each level in the server's order; Add a connection in its
-    // heading (OVP-10).
-    const things = within(page).getByRole('region', { name: 'Connections' });
-    const rows = within(things)
-      .getAllByRole('link')
-      .map((r) => r.dataset.thing)
-      .filter(Boolean);
-    expect(rows).toEqual([
-      'connection:con_home-assistant',
-      'connection:con_unifi',
-      'device:con_heat-pump',
-      'connection:con_hetzner',
-      'connection:con_mara',
-    ]);
-    // Why, in plain words, on what isn't connected; a tile's line has no full stop.
-    expect(within(things).getByText('2 integrations not loading')).toBeTruthy();
-    const ha = within(things).getByRole('link', { name: /^Home Assistant, needs a look, / });
-    expect(ha.getAttribute('href')).toBe('/things/connection%3Acon_home-assistant');
-    expect(ha.dataset.edge).toBe('warn');
-    expect(within(things).getByRole('link', { name: /^Google, .*Used today$/ })).toBeTruthy();
-    const heat = within(things).getByRole('link', { name: /^Heat pump, learning/ });
-    expect(within(heat).getByText(/Neo is still learning it/)).toBeTruthy();
-    expect(within(heat).getByRole('img', { name: 'Learning' })).toBeTruthy();
-    expect(within(things).getAllByText('Used today').length).toBeGreaterThan(0);
-    expect(within(things).getByRole('link', { name: 'Add a connection' }).getAttribute('href')).toBe(
-      '/connections?connection=add',
-    );
-    // Pinned is the last section, its widgets as they were.
-    const pinned = within(page).getByRole('region', { name: 'Pinned' });
-    expect(within(pinned).getByRole('region', { name: 'Heat pump · today' })).toBeTruthy();
-    expect(
-      screen.getByText('You pinned this from a conversation. It updates every minute without asking the AI.'),
-    ).toBeTruthy();
-    expect(app.location()).toBe('/connections?x=1');
+    // An old section of the Overview goes to the place that holds it now.
+    app.history.push('/connections?tab=servers');
+    await waitFor(() => expect(app.location()).toBe('/servers'));
+    // A connection's own pages stay at their address.
+    app.history.push('/connections?connection=add');
+    await waitFor(() => expect(app.location()).toBe('/connections?connection=add'));
   });
 
   it('undoes a change on Everything I did', async () => {

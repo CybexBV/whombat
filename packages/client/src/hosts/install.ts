@@ -62,9 +62,13 @@ export function addServerPrefill(search: Record<string, unknown>): AddServerPref
   };
 }
 
+/** The Servers list's address, where Add a server opens. */
+const SERVERS_PLACE_HREF = '/servers';
+
 /**
- * Add a server's address, with only what was given: on Connections, where Add a server opens now (Whombat
- * connections-page.md CN-09; app AP-2523). The assistant's card still says `/things/servers?add=1…`, which goes there.
+ * Add a server's address, with only what was given: over the Servers list (`/servers?add=1…`,
+ * servers-connections-places.md). The assistant's card says `/things/servers?add=1…` and older messages
+ * `/connections?add=1…`, which go there too.
  */
 export function addServerHref(p: Partial<AddServerPrefill> = {}): string {
   const pairs: [string, string | undefined][] = [
@@ -78,11 +82,14 @@ export function addServerHref(p: Partial<AddServerPrefill> = {}): string {
     .filter((x): x is [string, string] => !!x[1])
     .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
     .join('&');
-  return `${CONNECTIONS_HREF}?${q}`;
+  return `${SERVERS_PLACE_HREF}?${q}`;
 }
 
-/** The paths Add a server opens on: Connections, and the servers list's old address the servers' cards still use. */
-const ADD_SERVER_PATHS: readonly string[] = [CONNECTIONS_HREF, SERVERS_HREF];
+/**
+ * The paths Add a server opens on: the Servers list, its old address the servers' cards still use, and the Overview's
+ * old one in older messages.
+ */
+const ADD_SERVER_PATHS: readonly string[] = [SERVERS_PLACE_HREF, SERVERS_HREF, CONNECTIONS_HREF];
 
 /**
  * Whether an in-app link opens Add a server, and with what (Android maps the guide card's href to its screen); null

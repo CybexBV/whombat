@@ -1,10 +1,13 @@
 /**
  * Pinned widgets (docs/decisions/one-whombat.md ONE-09; one-whombat-assistant.md ONE-DW22…ONE-DW24).
  *
- * Whombat pins a panel on the person's Home from a chat (`pin_widget`): a declarative source — one read-only tool of a
- * connection with fixed arguments and up to three JSON pointers into its answer, or a server's metrics (read by the
+ * Whombat pins a panel on a page of the person's from a chat (`pin_widget`): a declarative source — one read-only tool
+ * of a connection with fixed arguments and up to three JSON pointers into its answer, or a server's metrics (read by the
  * hosts stream's registered reader) — and the server refreshes it on a timer without the model, keeping 24 hours of
- * points. The read is the person's own (`runConnectionRead`): only what they may see, only reads, no agent.
+ * points. The read is the person's own (`runConnectionRead`): only what they may see, only reads, no agent. A pin goes
+ * on the page it names, else on the page of what it reads (its connection's or device's, its server's): the Overview
+ * page that held the others is gone (servers-connections-places.md). Those pinned there before stay for the box's
+ * screen.
  */
 import {
   ConversationId,
@@ -12,6 +15,7 @@ import {
   jsonPointerGet,
   MCP_TOOLS,
   newId,
+  thingId,
   WIDGET_HISTORY_S,
   WIDGET_REFRESH_DEFAULT_S,
   WIDGET_REFRESH_MAX_S,
@@ -326,7 +330,20 @@ export async function widgetPlace(
 /** `pin_widget` for anyone but the agent (assistant-name.md AN-01: the assistant isn't “Whombat”). */
 export const ONLY_ASSISTANTS_PIN_TEXT = 'Only the assistant pins widgets.';
 
-/** `pin_widget` (MCP, the agent): a widget on the person's Home, read once right after. */
+/**
+ * The page a pin without one goes on: the page of what it reads, a server's for its metrics, a connection's or else a
+ * device's (one connection is one of the two) for its tool; null when the person can see neither.
+ */
+async function pageOfSource(services: Services, viewer: ConnectionViewer, source: WidgetSource) {
+  const pages =
+    source.kind === 'server_metric'
+      ? [thingId('server', source.serverId)]
+      : [thingId('connection', source.connectionId), thingId('device', source.connectionId)];
+  for (const page of pages) if (await thingVisible(services, viewer, page)) return page;
+  return null;
+}
+
+/** `pin_widget` (MCP, the agent): a widget on a page of the person's, read once right after. */
 export const pinWidget = defineCommand({
   name: 'pin_widget',
   schema: MCP_TOOLS.pin_widget.input.extend({ conversationId: ConversationId.optional() }),
@@ -340,18 +357,20 @@ export const pinWidget = defineCommand({
       agentId: agent.id,
     });
     if (!person) throw notFound('Person');
-    // On a thing's page (CP-14): one the person may see.
-    const thingId = input.thingId ?? null;
-    if (thingId && !(await thingVisible(ctx.services, viewerFor(person), thingId))) throw notFound('Thing');
+    // On a thing's page (CP-14): the one it names or the one of what it reads, which the person may see.
+    const viewer = viewerFor(person);
+    const thingId = input.thingId
+      ? (await thingVisible(ctx.services, viewer, input.thingId))
+        ? input.thingId
+        : null
+      : await pageOfSource(ctx.services, viewer, input.source);
+    if (!thingId) throw notFound('Thing');
     const [{ n } = { n: 0 }] = await tx
       .select({ n: count() })
       .from(widgets)
       .where(and(eq(widgets.burrowId, ctx.burrow.id), eq(widgets.ownerId, person.id), placeOf(thingId)));
     if (n >= WIDGETS_MAX)
-      throw conflict(
-        // Home is called Connections where the person reads it (connections-page.md CN-10).
-        `${thingId ? 'That page' : 'Your Overview page'} has ${WIDGETS_MAX} widgets already. Ask to remove one first.`,
-      );
+      throw conflict(`That page has ${WIDGETS_MAX} widgets already. Ask to remove one first.`);
     await checkSource(tx, person, input.source);
     const id = newId('widget');
     const refreshSec = Math.min(
@@ -383,7 +402,7 @@ export const pinWidget = defineCommand({
         widgetId: id,
         ownerId: person.id,
         sourceKind: input.source.kind,
-        ...(thingId ? { thingId } : {}),
+        thingId,
       },
     });
     publishHomeChanged(ctx, [person.id], ['widgets']);

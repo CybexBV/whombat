@@ -51,7 +51,7 @@ export function SpendScreen({ navigation, route }: Props) {
       <BackBar
         label={route.params?.back ?? tMobile('managed.back')}
         onPress={goBack}
-        right={<PlacesButton current="usage" here={usageTextHere.title} />}
+        right={<PlacesButton current={null} here={usageTextHere.title} />}
       />
       <ScrollView
         style={{ flex: 1 }}

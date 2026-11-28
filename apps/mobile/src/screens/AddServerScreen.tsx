@@ -71,7 +71,8 @@ import {
   stepSpoken,
 } from '../data/addServer';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
-import { mobileTranslator, useI18n, useMobileT } from '../i18n';
+import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -89,41 +90,6 @@ import { showNotice } from './feedback';
 type Props = NativeStackScreenProps<RootStackParamList, 'AddServer'>;
 
 type Way = 'signIn' | 'command';
-
-/** The “‹ …” label: what the screen under this one is (a tab's name, a chat's title), else “Back”. */
-function backLabel(navigation: Props['navigation'], key: string, locale?: string | null): string {
-  const tr = mobileTranslator(locale);
-  const back = tr.t('screens2.common.back');
-  // A tab's own name in the person's language; its route name is only an id.
-  const tabWord = (name: string): string => {
-    const place = TAB_PLACES[name];
-    return place ? tr.t(place) : back;
-  };
-  const state = navigation.getState();
-  const at = state.routes.findIndex((r) => r.key === key);
-  const under = state.routes[(at < 0 ? state.routes.length : at) - 1];
-  if (!under) return back;
-  if (under.name === 'Tabs') {
-    const tabs = under.state as { index?: number; routes: { name: string }[] } | undefined;
-    const tab = tabs?.routes[tabs.index ?? 0]?.name;
-    if (tab) return tabWord(tab);
-    const asked = (under.params as { screen?: unknown } | undefined)?.screen;
-    return typeof asked === 'string' ? tabWord(asked) : back;
-  }
-  const title = (under.params as { title?: unknown } | undefined)?.title;
-  return typeof title === 'string' && title ? title : back;
-}
-
-const TAB_PLACES: Record<
-  string,
-  'places.chat' | 'places.overview' | 'places.inbox' | 'places.automations' | 'places.settings'
-> = {
-  ChatRoom: 'places.chat',
-  Dashboard: 'places.overview',
-  NeedsYou: 'places.inbox',
-  Automations: 'places.automations',
-  Settings: 'places.settings',
-};
 
 export function AddServerScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
@@ -143,7 +109,9 @@ export function AddServerScreen({ route, navigation }: Props) {
       refetchInterval: 10_000,
     },
   );
-  const [back] = useState(() => route.params?.back ?? backLabel(navigation, route.key, rawLocale));
+  const [back] = useState(
+    () => route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale),
+  );
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const openServer = (serverId: string, name: string) =>
     navigation.replace('Thing', { thingId: thingId('server', serverId), title: name, back });

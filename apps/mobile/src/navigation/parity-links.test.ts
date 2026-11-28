@@ -117,31 +117,34 @@ describe('Settings → Agent (MQ-01, MQ-02; one-agent.md AP-4961)', () => {
   });
 });
 
-describe('the Connections page’s addresses (connections-page.md AP-2550)', () => {
-  it('opens Connections from the web’s page and its old names, and Add a server where it was', () => {
+describe('the Overview’s addresses (connections-page.md AP-2550)', () => {
+  it('opens the Connections place from the web’s page and its old names, and Add a server where it was', () => {
     for (const path of ['/connections', '/dashboard', '/dashboard?from=chat', '/home', '/things'])
-      expect(appScreenUrlForPath(path)).toBe('whombat://connections');
-    // The servers' old list lands on Overview's Servers section.
-    expect(appScreenUrlForPath('/things/servers')).toBe('whombat://connections?tab=servers');
+      expect(appScreenUrlForPath(path)).toBe('whombat://connected');
+    // The servers' old list opens Servers.
+    expect(appScreenUrlForPath('/things/servers')).toBe('whombat://servers');
     expect(appScreenUrlForPath('/things/servers?add=1&address=10.100.0.40')).toBe(
       'whombat://servers/add?address=10.100.0.40&user=root&control=full',
     );
     expect(urlTarget('https://dev.whombat.com/connections', ['https://dev.whombat.com'])).toMatchObject({
       kind: 'app',
-      url: 'whombat://connections',
+      url: 'whombat://connected',
     });
   });
 });
 
 describe('Servers and Connections as places (servers-connections-places.md)', () => {
-  it('opens /servers and /connected on their list screens, in either form; /connections stays Overview', () => {
+  it('opens /servers and /connected on their list screens, in either form, and the Overview’s addresses too', () => {
     expect(appScreenUrlForPath('/servers')).toBe('whombat://servers');
     expect(appScreenUrlForPath('/connected')).toBe('whombat://connected');
     expect(appScreenUrlForPath('/connected/')).toBe('whombat://connected');
     expect(appScreenUrlForPath('/burrow-hq/servers')).toBe('whombat://servers');
-    expect(appScreenUrlForPath('/connections')).toBe('whombat://connections');
-    expect(appScreenUrlForPath('/things/servers')).toBe('whombat://connections?tab=servers');
-    expect(LINKING_SCREENS).toMatchObject({ ServersPlace: 'servers', ConnectionsPlace: 'connected' });
+    expect(appScreenUrlForPath('/things/servers')).toBe('whombat://servers');
+    expect(appScreenUrlForPath('/connections')).toBe('whombat://connected');
+    expect(LINKING_SCREENS).toMatchObject({
+      ServersPlace: 'servers',
+      ConnectionsPlace: { path: 'connected' },
+    });
     expect(urlTarget('https://app.whombat.com/servers', ['https://app.whombat.com'])).toMatchObject({
       kind: 'app',
       url: 'whombat://servers',

@@ -1,19 +1,17 @@
 /**
- * Overview's parts on the phone (docs/design-handoff/council-ui-2026-11/16-final/overview; the decision file
- * docs/decisions/overview-server-connection-final.md; the broken thing leads the summary card, `SummaryCard.tsx`): the
- * note a page shows when its first read fails or a refresh fails (the saved readings stay under it); page-shaped placeholders while it loads (shared by
- * Overview, a server's page and a connection's page); and Overview's jump chips under its title.
+ * A page's read parts on the phone (docs/design-handoff/council-ui-2026-11/16-final/overview; the decision file
+ * docs/decisions/overview-server-connection-final.md): the note a page shows when its first read fails or a refresh
+ * fails (the saved readings stay under it), and page-shaped placeholders while it loads (shared by a server's page, a
+ * connection's page and Find My).
  */
 
-import { type ConnectionsTab, type OverviewSectionView, overviewWords } from '@whombat/client';
+import { overviewWords } from '@whombat/client';
 import { View } from 'react-native';
 import { useI18n } from '../../i18n';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { MoreFold } from '../../ui/fold';
 import { Button, Skeleton } from '../../ui/primitives';
-import { Touchable } from '../../ui/Touchable';
-import { hitSlopFor } from '../../ui/touchTarget';
 import { errorText } from '../feedback';
 
 /**
@@ -74,7 +72,7 @@ export function ReadNote({
 
 /**
  * Page-shaped placeholders (mock `-loading`): `count` cards each with a title bar, a line and `tiles` figure blocks, in
- * the shape of what comes, under “Loading Overview…”.
+ * the shape of what comes, under its label (“Loading pve-02…”).
  */
 export function CardSkeletons({
   label,
@@ -115,71 +113,6 @@ export function CardSkeletons({
             ))}
           </View>
         </View>
-      ))}
-    </View>
-  );
-}
-
-/**
- * Overview's jump chips (docs/decisions/overview-one-page.md OVP-01; the mock's `.jump` at phone width): one per
- * section, wrapping — 34 tall, padded 13, round, a `line2` hairline, the name 14 in `ink2`, its count mono 11.5/500 in
- * `mut` and a 7dp dot in `bad` or `warn` when something in it isn't fine; 7 between them, 6 apart. A tap scrolls to the
- * section; each is a link named “Servers, 6, something needs a look”.
- */
-export function JumpChips({
-  chips,
-  onJump,
-}: {
-  chips: readonly OverviewSectionView[];
-  onJump: (key: ConnectionsTab) => void;
-}) {
-  const { rawLocale } = useI18n();
-  const overviewWordsHere = overviewWords(rawLocale);
-
-  const theme = useTheme();
-  if (!chips.length) return null;
-  return (
-    <View
-      accessibilityLabel={overviewWordsHere.onThisPage}
-      style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}
-    >
-      {chips.map((c) => (
-        <Touchable
-          key={c.key}
-          onPress={() => onJump(c.key)}
-          feedback="fade"
-          ringRadius={17}
-          accessibilityRole="link"
-          accessibilityLabel={c.spoken}
-          hitSlop={hitSlopFor(34)}
-          style={{
-            height: 34,
-            paddingHorizontal: 13,
-            borderRadius: 17,
-            borderWidth: 1,
-            borderColor: theme.colors.line2,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 7,
-          }}
-        >
-          <Text size={14} color={theme.colors.ink2}>
-            {c.label}
-          </Text>
-          <Text size={11.5} weight={500} mono color={theme.colors.mut}>
-            {c.count}
-          </Text>
-          {c.tone ? (
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 3.5,
-                backgroundColor: c.tone === 'bad' ? theme.colors.bad : theme.colors.warn,
-              }}
-            />
-          ) : null}
-        </Touchable>
       ))}
     </View>
   );

@@ -72,7 +72,7 @@ describe('the Search catalogue', () => {
   it('lists the places but Search itself and Usage, in the sidebar’s order, each at its one address', () => {
     const places = catalog().filter((e) => e.group === 'places');
     const order = APP_PLACES.filter((p) => p !== 'search' && p !== 'usage').flatMap((p) =>
-      p === 'overview' ? [p, 'servers', 'connections'] : [p],
+      p === 'inbox' ? [p, 'servers', 'connections'] : [p],
     );
     expect(places.map((e) => e.key)).toEqual(order.map((p) => `place:${p}`));
     expect(places.find((e) => e.key === 'place:connections')?.href).toBe('/connected');

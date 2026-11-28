@@ -19,8 +19,8 @@ import { useHomeOverview, useTheAgent } from '@whombat/client/react';
 import { useMemo } from 'react';
 import { ADD_CONNECTION_HREF } from '../../../app/shell/assistantSidebarModel';
 import { useWebI18n } from '../../../i18n/provider';
-import { useOverviewFleet } from '../../home/OverviewServers';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
+import { useServerFleet } from './useServerFleet';
 
 export interface PlaceLists {
   servers: PlaceRow[];
@@ -38,8 +38,10 @@ export interface PlaceLists {
   hostsDown: boolean;
   /** Read Home and the servers again. */
   retry: () => void;
-  /** Add a server (on Overview's Servers section) with the hosts service; else null. */
+  /** Add a server (over the Servers list) with the hosts service; else null. */
   addServer: string | null;
+  /** Servers that ran the install command and wait to be added or turned away (Add a server's waiting list). */
+  pendingServers: number;
   /** Add a connection, for whoever may add one; else null. */
   addConnection: string | null;
 }
@@ -47,7 +49,7 @@ export interface PlaceLists {
 export function usePlaceLists(burrow: string): PlaceLists {
   const { me, timeZone } = useBurrowContext(burrow);
   const now = useNow(30_000);
-  const hosts = useOverviewFleet(burrow);
+  const hosts = useServerFleet(burrow);
   const home = useHomeOverview({ params: { burrow } }, { retry: false });
   const { data } = home;
   const homeFailed = !data && !!home.error;
@@ -97,7 +99,8 @@ export function usePlaceLists(burrow: string): PlaceLists {
         void refetchStatus();
         if (hostsPresent) void refetchFleet();
       },
-      addServer: hosts.present ? addServerHref().replace('?', '?tab=servers&') : null,
+      addServer: hosts.present ? addServerHref() : null,
+      pendingServers: hosts.present ? (hosts.fleet.data?.pendingEnrollments ?? 0) : 0,
       addConnection: canAdd ? ADD_CONNECTION_HREF : null,
     };
   }, [
@@ -111,6 +114,7 @@ export function usePlaceLists(burrow: string): PlaceLists {
     hostsDown,
     hosts.servers,
     hosts.present,
+    hosts.fleet.data?.pendingEnrollments,
     hostsSettled,
     now,
     timeZone,

@@ -52,9 +52,9 @@ const SHOTS: Shot[] = [
     },
   },
   {
-    name: 'overview',
-    path: '/connections',
-    prepare: (page) => page.getByText('The disk array on blackbox has failed').first().waitFor(),
+    name: 'servers',
+    path: '/servers',
+    prepare: (page) => page.getByRole('heading', { name: 'blackbox' }).first().waitFor(),
   },
   {
     name: 'automations',

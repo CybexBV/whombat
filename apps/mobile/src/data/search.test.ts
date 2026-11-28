@@ -97,7 +97,7 @@ describe('Search (phone-shell-final.md)', () => {
     ]);
   });
 
-  it('finds settings and places, in that order, with Usage a place and not an Advanced row', () => {
+  it('finds settings and places, in that order, with Usage an Advanced row and no place of its own', () => {
     const groups = searchMatches(entries, 'notifications');
     expect(groups.map((g) => g.group)).toEqual(['settings']);
     // You holds notifications too; Notifications itself opens its page.
@@ -107,8 +107,13 @@ describe('Search (phone-shell-final.md)', () => {
       target: { kind: 'page', name: 'SettingsNotifications' },
     });
     const usage = searchMatches(entries, 'usage').flatMap((g) => keys(g.rows));
-    expect(usage).toContain('place:usage');
-    expect(usage).not.toContain('setting:advanced:spend');
+    expect(usage).toContain('setting:advanced:spend');
+    expect(usage.filter((k) => k.startsWith('place:'))).toEqual([]);
+    // Search itself and the Overview are no places to find.
+    const placeKeys = entries.filter((e) => e.group === 'places').map((e) => e.key);
+    expect(placeKeys).not.toContain('place:search');
+    expect(placeKeys).not.toContain('place:overview');
+    expect(placeKeys).toContain('place:connections');
     expect(searchMatches(entries, 'theme')[0]?.rows[0]?.open).toEqual({
       kind: 'setting',
       target: { kind: 'tab' },

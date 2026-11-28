@@ -593,7 +593,7 @@ export function ServerScreen({
                   </OneCard>
                 ) : null}
                 {findMy ? (
-                  // The one link to Find My on this Mac: its connection's page, with its line from Overview.
+                  // The one link to Find My on this Mac: its connection's page, with its line from Connections.
                   <OneCard>
                     <OneRow
                       first
@@ -769,7 +769,7 @@ function ServerMenu({
 /**
  * The head (DS-01): the name — a host name in the mono face, a name a person gave it in the sans face with its id
  * quietly under it in mono — its status pill (red only when it isn't working) with when its own report was read (“Read 2
- * min ago”, as on Overview), then the verdict (“pve-02 is running warm. 2 things need you.”) and, when this Whombat runs
+ * min ago”), then the verdict (“pve-02 is running warm. 2 things need you.”) and, when this Whombat runs
  * on it, that. Its versions, processor, address and helper are the Summary's
  * Technical details. Before the server's page is read, the fleet's status words. While it is renamed the name is a box.
  */
@@ -847,7 +847,7 @@ function ServerHead({
             {idLine}
           </Text>
         ) : null}
-        {/* The pill (red only when it isn't working) and when its readings were taken, as on Overview. */}
+        {/* The pill (red only when it isn't working) and when its readings were taken. */}
         <View
           style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 10, rowGap: 6 }}
         >

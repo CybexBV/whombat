@@ -4,8 +4,8 @@
  * server” to Add a server, “Add a connection” to Add a connection), the place's line under it (`placeSummary`), then one
  * row each, Chat's shape: the logo on a 40pt tile, the name, a server's processor at the
  * end, and under the name how it is in a few words, with its status mark and in the problem's colour when it isn't
- * fine. A server that runs on another is set in under it with an elbow. The rows are `usePlaceLists`' (what Overview
- * reads, nothing new). A row opens the thing's page (`Thing`), or the address a thing without a page follows; a long
+ * fine. A server that runs on another is set in under it with an elbow. The rows are `usePlaceLists`' (the same reads as
+ * the Places sheet's marks). A row opens the thing's page (`Thing`), or the address a thing without a page follows; a long
  * press offers Open and Rename (server-names.md). From the two-page width the list is the left page and the picked
  * page shows beside it (`SplitStack`); opened there with nothing beside, it opens the row it opened last, else the
  * first (`placeOpening`), so the right page is never empty.
@@ -29,10 +29,12 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { listPlaceOfScreen, type PhonePlaceRow } from '../data/places';
 import { parseThingRowPick, renameCopy, thingRowMenu } from '../data/rename';
-import { overviewTitle, type Tab, tabWords } from '../data/shell';
+import { type Tab, tabWords } from '../data/shell';
 import { useLastInPlace, usePlaceLists } from '../data/usePlaceLists';
 import { type ThingRenaming, useThingRename } from '../data/useThingRename';
 import { useI18n } from '../i18n';
+import { mobileTranslator } from '../i18n/translate';
+import { backWordUnder } from '../navigation/backWord';
 import { openHref } from '../navigation/hooks';
 import { isBeside, useBeside, useLastTab, usePaneRole } from '../navigation/panes';
 import type { RootStackParamList } from '../navigation/routes';
@@ -44,7 +46,7 @@ import { Plus } from '../ui/icons';
 import { InlineRename } from '../ui/inlineRename';
 import { hasNativeMenu, MenuSheet, NativeMenu } from '../ui/nativeMenu';
 import { PlacesButton, SHELL_TARGET } from '../ui/places';
-import { SkeletonRows } from '../ui/primitives';
+import { Button, SkeletonRows } from '../ui/primitives';
 import { useBottomRoom } from '../ui/screenBottom';
 import { StatusMark } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
@@ -130,7 +132,7 @@ export function PlaceScreen({ navigation, route }: Props) {
     open(row);
   }, [role, beside, last, loading, rows]);
 
-  const overview = overviewTitle(rawLocale);
+  const chat = tabWords(rawLocale).ChatRoom;
   const renameWords = renameCopy(rawLocale);
   const summary = placeSummaryParts(place, rows, rawLocale);
   const empty = !rows.length && !loading;
@@ -140,8 +142,8 @@ export function PlaceScreen({ navigation, route }: Props) {
         // As the list, back goes to the tabs: it names the tab they show, not the screen this was opened from.
         label={
           role === 'list'
-            ? (tabWords(rawLocale)[lastTab as Tab] ?? overview)
-            : (route.params?.back ?? overview)
+            ? (tabWords(rawLocale)[lastTab as Tab] ?? chat)
+            : (route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale))
         }
         onPress={goBack}
         right={<PlacesButton current={place} here={words.title} />}
@@ -226,6 +228,9 @@ export function PlaceScreen({ navigation, route }: Props) {
                   ? words.failed
                   : words.empty}
             </Text>
+          ) : null}
+          {place === 'servers' && lists.hosts && lists.pendingServers ? (
+            <WaitingCard pending={lists.pendingServers} onReview={add} />
           ) : null}
         </View>
       </ScrollView>
@@ -434,6 +439,62 @@ function PlaceListRow({
         }}
       />
       <View style={{ flex: 1, minWidth: 0 }}>{pressable}</View>
+    </View>
+  );
+}
+
+/**
+ * A server waiting to be added, under Servers' rows: a dashed `line2` frame, the server glyph on its tile, what it is
+ * and what to do, and Review, which opens Add a server with its waiting list.
+ */
+function WaitingCard({ pending, onReview }: { pending: number; onReview: () => void }) {
+  const { rawLocale } = useI18n();
+  const tr = mobileTranslator(rawLocale);
+  const theme = useTheme();
+  const waiting = tr.tp('data.homeServers.waiting', pending, { count: pending });
+  const review = tr.t('data.homeServers.review');
+  return (
+    <View
+      style={{
+        backgroundColor: theme.colors.sf,
+        borderWidth: 1,
+        borderStyle: 'dashed',
+        borderColor: theme.colors.line2,
+        borderRadius: 16,
+        padding: 16,
+        gap: 14,
+        marginHorizontal: 8,
+        marginTop: 12,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 11,
+            backgroundColor: theme.colors.sf2,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ThingIcon glyph="server" size={22} color={theme.colors.ink2} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text size={17} weight={600} lh={1.35} tracking={-0.01}>
+            {waiting}
+          </Text>
+          <Text size={13} lh={1.4} color={theme.colors.mut} style={{ marginTop: 2 }}>
+            {tr.t('data.homeServers.waitingLine')}
+          </Text>
+        </View>
+      </View>
+      <Button
+        label={review}
+        onPress={onReview}
+        accessibilityLabel={`${review}: ${waiting}`}
+        style={{ alignSelf: 'flex-start', paddingHorizontal: 16 }}
+      />
     </View>
   );
 }

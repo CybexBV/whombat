@@ -93,47 +93,20 @@ describe('one cause', () => {
   });
 });
 
-describe('Overview while things are held', () => {
-  /** Overview's own page (the sidebar lists the servers too). */
-  const overview = () =>
-    waitFor(() => {
-      const el = document.querySelector<HTMLElement>('[data-screen="home"]');
-      if (!el) throw new Error('Overview isn’t there yet');
+describe('the Connections list while things are held', () => {
+  it('says a connection down because of something else isn’t answering, on its row', async () => {
+    renderApp('/connected', seeded());
+    const list = await waitFor(() => {
+      const el = document.querySelector<HTMLElement>('[data-place="connections"]');
+      if (!el) throw new Error('the list isn’t there yet');
       return el;
     }, T);
-
-  it('counts a connection down because of something else as not answering, its tile still grey', async () => {
-    renderApp('/connections', seeded());
-    const page = await overview();
-    const label = await within(page).findByText('Connections working', {}, T);
-    const figure = label.closest('div') as HTMLElement;
-    // Home Assistant is down while its machine is stopped: one of five isn't working.
-    await waitFor(() => expect(figure.textContent).toContain('1 not answering'));
-    expect(figure.textContent).toMatch(/4\s*of 5/);
-    expect(figure.querySelector('[data-tone="off"]')).toBeTruthy();
-    expect(await within(page).findByText('Not answering while homeassistant is stopped', {}, T)).toBeTruthy();
-  });
-
-  it('says on a server’s row until when it is kept quiet, as the phone’s card does', async () => {
-    const user = userEvent.setup();
-    renderApp(PVE02, calm());
-    await user.click(await screen.findByRole('button', { name: 'More for pve-02' }, T));
-    await user.click(await screen.findByRole('menuitem', { name: 'Keep quiet…' }));
-    await user.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Keep quiet' }));
-    await screen.findByRole('region', { name: 'Kept quiet' }, T);
-    await user.click(screen.getAllByRole('link', { name: 'Overview' })[0] as HTMLElement);
-    const page = await overview();
     const row = await waitFor(() => {
-      const el = page.querySelector<HTMLElement>('[data-server="pve-02"]');
-      if (!el?.querySelector('[data-quiet]')) throw new Error('no quiet line yet');
+      const el = list.querySelector<HTMLElement>('[data-row="connection:con_home-assistant"]');
+      if (!el) throw new Error('no Home Assistant row yet');
       return el;
     }, T);
-    const quiet = row.querySelector('[data-quiet]') as HTMLElement;
-    expect(quiet.textContent).toMatch(/^Quiet until /);
-    const name = within(row).getByRole('link', { name: /^pve-02, / });
-    expect(name.getAttribute('aria-label')).toContain(`. ${quiet.textContent}`);
-    // Only the server kept quiet says so.
-    expect(page.querySelector('[data-server="pve-01"] [data-quiet]')).toBeNull();
+    expect(await within(row).findByText('Not answering while homeassistant is stopped', {}, T)).toBeTruthy();
   });
 });
 

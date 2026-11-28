@@ -31,13 +31,12 @@ export interface TabBadge {
 }
 
 /**
- * The SF Symbols closest to our bar's icons (a speech bubble, an inbox tray, a grid, a lightning bolt, a gear), filled as
+ * The SF Symbols closest to our bar's icons (a speech bubble, an inbox tray, a lightning bolt, a gear), filled as
  * iOS's own apps draw their tabs.
  */
 export const TAB_SYMBOLS: Record<Tab, string> = {
   ChatRoom: 'message.fill',
   NeedsYou: 'tray.fill',
-  Dashboard: 'square.grid.2x2.fill',
   Automations: 'bolt.fill',
   Settings: 'gearshape.fill',
 };

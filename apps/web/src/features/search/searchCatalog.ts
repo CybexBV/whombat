@@ -22,7 +22,6 @@ import {
   youParts,
 } from '@whombat/client';
 import {
-  CONNECTIONS_HREF,
   NEWS_KIND_WORDS,
   NEWS_WORDS,
   PLACE_SETTING_WORDS,
@@ -80,7 +79,6 @@ const PLACE_HREFS: Record<AppPlace, string> = {
   search: '/search',
   chat: '/chat',
   inbox: INBOX_PATH,
-  overview: CONNECTIONS_HREF,
   automations: '/automations',
   files: '/files',
   vault: '/vault',
@@ -206,17 +204,17 @@ export function searchCatalog({ things, agent, here, news = false }: CatalogInpu
         icon: { kind: 'place', place },
         terms: SEARCH_WORDS.groups.places,
       });
-  // Servers and Connections after Overview, as in the sidebar, each once it holds something (an empty one is
-  // Overview's to offer).
-  const overview = entries.findIndex((e) => e.key === 'place:overview');
+  // Servers and Connections after the Inbox, as in the sidebar: Servers once it holds something, Connections always
+  // (its list is where the first one is added).
+  const inbox = entries.findIndex((e) => e.key === 'place:inbox');
   const listed = thingRows(things ?? []);
   const serverIds = new Set((things ?? []).filter((t) => t.kind === 'server').map((t) => t.id));
   const held: Record<ThingPlace, boolean> = {
     servers: listed.some((r) => serverIds.has(r.id)),
-    connections: listed.some((r) => !serverIds.has(r.id)),
+    connections: true,
   };
   entries.splice(
-    overview + 1,
+    inbox + 1,
     0,
     ...(['servers', 'connections'] as const)
       .filter((place) => held[place])

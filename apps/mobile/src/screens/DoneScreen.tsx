@@ -12,9 +12,9 @@ import { useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { doneCopy } from '../data/done';
-import { overviewTitle } from '../data/shell';
 import { useAgentWords } from '../data/useAgent';
 import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -43,7 +43,10 @@ export function DoneScreen({ navigation, route }: Props) {
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   return (
     <Screen>
-      <BackBar label={route.params?.back ?? overviewTitle(rawLocale)} onPress={goBack} />
+      <BackBar
+        label={route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale)}
+        onPress={goBack}
+      />
       <ScrollView
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}

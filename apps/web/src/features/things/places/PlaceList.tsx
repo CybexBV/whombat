@@ -3,7 +3,8 @@
  * the heading, the line of what it holds, the `+` that adds one, then a row each: the logo, the name (a server's in the
  * row's sans face as the mock draws it), a server's processor at the end, and under the name how it is, with its status mark when it isn't fine.
  * A row is a link to its page (read while the pointer rests on it, page-speed.md); right-click offers Open and
- * Rename, F2 renames the row in focus (server-names.md).
+ * Rename, F2 renames the row in focus (server-names.md). Under Servers' rows, a server that ran the install command and
+ * waits to be added, with Review (Add a server's waiting list).
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
@@ -43,6 +44,8 @@ export interface PlaceListProps {
   loading?: boolean;
   /** Nothing could be read and nothing is listed: what went wrong and Retry, which reads again. */
   failure?: { message: string; onRetry: () => void } | null;
+  /** Servers waiting to be added (only Servers has them); Review goes to `addHref`. */
+  pending?: number;
 }
 
 /** The tones a row's line and the place's line take (a problem in red, a look in amber). */
@@ -57,6 +60,7 @@ export function PlaceList({
   alone,
   loading = false,
   failure,
+  pending = 0,
 }: PlaceListProps) {
   const i18n = useWebI18n();
   const words = placeWords(i18n.tag)[place];
@@ -124,6 +128,17 @@ export function PlaceList({
         ) : (
           <p className={styles.empty}>{words.empty}</p>
         )}
+        {pending && addHref ? (
+          <div className={styles.waiting} data-server-waiting={pending}>
+            <div className={styles.waitingText}>
+              <span className={styles.waitingName}>{i18n.tp('servers.waiting', pending)}</span>
+              <span className={styles.waitingHint}>{i18n.t('servers.waitingHint')}</span>
+            </div>
+            <AppLink href={addHref} className={styles.waitingReview}>
+              {i18n.t('servers.review')}
+            </AppLink>
+          </div>
+        ) : null}
       </nav>
       {menu.element}
     </div>

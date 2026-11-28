@@ -2006,14 +2006,13 @@ shows its way forward (a line that needs the person only that, Settle with the r
 web and in the swipe's More on the phone (`ui/swipeRow.tsx`, as Chat's threads), and Settled is a bar pinned to the
 bottom of the screen that opens upward. An approval is the same card in its thread, its dialog, the Inbox and the
 phone's approval screen (core `approvalCardFacts`, web `AskCard`;
-[approval-card.md](docs/decisions/approval-card.md)). Chat's head leads to everything the assistant did (`/done`). The web's sidebar is Chat · Inbox · Overview · Servers · Connections · Automations · Files · Vault (`assistantSidebarModel.ts`; Feedback opens from Chat's head, Search is ⌘K / Ctrl K, Settings is ⌘, / Ctrl , and in the account menu; Usage isn't offered). Servers (`/servers`) and Connections (`/connected`) are places with the worst mark of what they hold: a list in Chat's column beside the picked server's or connection's page (`/things/<id>`), alone below 1240 px with “‹ Servers” on the page, its rows from `@whombat/client` `home/placeLists.ts` (web `features/things/places/`; the phone's `PlaceScreen`, side by side from 840 points; [servers-connections-places.md](docs/decisions/servers-connections-places.md)). Then the person, whose row opens the account menu (their profile, Light · Dark · Auto, Settings, Get the phone app, Report a problem or idea, Sign out, and the version with whether an update is ready; [account-menu.md](docs/app/decisions/account-menu.md)). Browser notifications come on by themselves on a page load where the browser already allows them and this browser isn't registered; where it never asked, the Chat asks once, and Settings → Notifications has the switch (`push/useWebPush.ts`, `push/pushChoice.ts`); below 1024 px it is the Places drawer under a 56px bar with Places at the left and what needs you at the right. Search (`/search`) groups the Whombat's chat results with the things, settings and places it matches in the page (`features/search/searchCatalog.ts`). The phone's tabs are Chat · Inbox · Overview ·
+[approval-card.md](docs/decisions/approval-card.md)). Chat's head leads to everything the assistant did (`/done`). The web's sidebar is Chat · Inbox · Servers · Connections · Automations · Files · Vault (there is no Overview; `assistantSidebarModel.ts`; Feedback opens from Chat's head, Search is ⌘K / Ctrl K, Settings is ⌘, / Ctrl , and in the account menu; Usage isn't offered). Servers (`/servers`) and Connections (`/connected`) are places with the worst mark of what they hold: a list in Chat's column beside the picked server's or connection's page (`/things/<id>`), alone below 1240 px with “‹ Servers” on the page; Add a server and Point them here open over the Servers list (`/servers?add=1`, `?repoint=1`) and the Overview's old addresses (`/connections` without a page, `/dashboard`, `/things/servers`) open one of the two lists; its rows from `@whombat/client` `home/placeLists.ts` (web `features/things/places/`; the phone's `PlaceScreen`, side by side from 840 points; [servers-connections-places.md](docs/decisions/servers-connections-places.md)). Then the person, whose row opens the account menu (their profile, Light · Dark · Auto, Settings, Get the phone app, Report a problem or idea, Sign out, and the version with whether an update is ready; [account-menu.md](docs/app/decisions/account-menu.md)). Browser notifications come on by themselves on a page load where the browser already allows them and this browser isn't registered; where it never asked, the Chat asks once, and Settings → Notifications has the switch (`push/useWebPush.ts`, `push/pushChoice.ts`); below 1024 px it is the Places drawer under a 56px bar with Places at the left and what needs you at the right. Search (`/search`) groups the Whombat's chat results with the things, settings and places it matches in the page (`features/search/searchCatalog.ts`). The phone's tabs are Chat · Inbox ·
 Automations · Settings; a tab's screen has one top row: Places' ☰ at the left, the tab's title, and Search's magnifier at
 the right ([chat-inbox-phone.md](docs/app/decisions/chat-inbox-phone.md), [one-chat.md](docs/decisions/one-chat.md), [automations-tab.md](docs/app/decisions/automations-tab.md),
-[sidebar-tabs.md](docs/decisions/sidebar-tabs.md), [final-shell-web.md](docs/decisions/final-shell-web.md)); Overview is the page at `/connections`: the broken thing first, then
-Servers, Connections and Pinned as sections of one page with jump links to them (an old `?tab=` scrolls to its
-section). The servers are one list with the same columns (a card each on a narrow page and in the phone app), a
-connection is a small tile, and what a row and a tile say is shared by web and phone (`@whombat/client`
-`hosts/overview.ts`, `home/overview.ts`; [overview-one-page.md](docs/decisions/overview-one-page.md)). The web's Inbox is `/inbox`; a push or a link about an item (`/needs-you?item=`, which
+[sidebar-tabs.md](docs/decisions/sidebar-tabs.md), [final-shell-web.md](docs/decisions/final-shell-web.md)). What a
+server's or connection's row says is shared by web and phone (`@whombat/client` `hosts/overview.ts`,
+`home/overview.ts`). A chart Whombat pins from a chat (`pin_widget`) goes on the page of what it reads, or the page it
+names. The web's Inbox is `/inbox`; a push or a link about an item (`/needs-you?item=`, which
 the web sends on to `/inbox`) opens that item. The phone app lays out by its window's shape
 (`src/data/screenShape.ts`): the tabs along the bottom of a phone (on iPhone iOS's own tab bar,
 `navigation/GlassTabs.tsx`), down the side where the system keeps its own vertical
@@ -2081,7 +2080,7 @@ in the sign-in frame only where no Whombat is open), then seven groups —
 You (profile, notifications, devices), the assistant by its name (name and face, the AI sign-in, memory with its notes,
 and what it may do — every permission by thing in the words Just watch · Ask me first · Go ahead), Connections (what
 this Whombat is signed in to: what needs you, accounts, apps and services; `@whombat/client/connections`
-`settingsList.ts`; also on Overview), This Whombat (overview, backups, About), News and weather (where it is and the
+`settingsList.ts`), This Whombat (overview, backups, About), News and weather (where it is and the
 news sources it reads, in order, with suggestions by country and topic and an OPML import; where the Whombat answers
 them), Screens (where it has a screen) and Advanced, a folded list of the expert pages (the model, the AI programs, what runs, skills, the audit log and signing
 keys, diagnostics); each group is a page of its own. What the assistant may do holds its keys, the commands always
@@ -2092,7 +2091,7 @@ alone is the home, each group is `?tab=` with its `&part=` (You has no tab and n
 `&section=`), and every older Settings address is redirected to where its content went (`routing/search.ts`
 `settingsRedirect`). The Spend report is Usage, a page of its own without Settings' frame that nothing on the web links to (the words `@whombat/client` `usageView`).
 Vault, Files and Usage share the home's look (`features/settings/Place.tsx`, the phone's `ui/place.tsx`). Adding a connection
-and a connection's own pages live at Overview's address (`/connections?connection=…`). Search's developer kinds and
+and a connection's own pages live at `/connections?connection=…`. Search's developer kinds and
 settling on a merge show only where GitHub or website feedback is connected
 ([settings-groups.md](docs/decisions/settings-groups.md)).
 

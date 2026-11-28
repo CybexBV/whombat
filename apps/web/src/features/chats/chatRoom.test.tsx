@@ -28,12 +28,17 @@ const sidebar = () => screen.findByRole('complementary', { name: 'Sidebar' });
 const room = () => screen.findByRole('region', { name: 'Chat' });
 
 describe('the Chat shell’s sidebar and routes (AP-2401, AP-2403)', () => {
-  it('opens Chat at /, with Chat · Overview · Watch · Automations and no conversations or Ask button', async () => {
+  it('opens Chat at /, with Chat · Inbox · Connections · Automations and no conversations or Ask button', async () => {
     const app = renderApp('/', chatShell());
     await waitFor(() => expect(app.location()).toBe('/chat'));
     const side = await sidebar();
     expect(within(side).getByRole('link', { name: 'Chat' }).getAttribute('aria-current')).toBe('page');
-    expect(within(side).getByRole('link', { name: 'Overview' }).getAttribute('href')).toBe('/connections');
+    expect(within(side).queryByRole('link', { name: 'Overview' })).toBeNull();
+    expect(
+      within(side)
+        .getByRole('link', { name: /^Connections/ })
+        .getAttribute('href'),
+    ).toBe('/connected');
     expect(within(side).queryByRole('link', { name: /^Feedback/ })).toBeNull();
     expect(within(side).queryByRole('heading', { name: 'Conversations' })).toBeNull();
     expect(within(side).queryByRole('link', { name: 'Ask Neo' })).toBeNull();
@@ -51,12 +56,16 @@ describe('the Chat shell’s sidebar and routes (AP-2401, AP-2403)', () => {
     await waitFor(() => expect(feedback.location()).toBe('/feedback'));
   });
 
-  it('shows Overview at /connections, Overview selected; /dashboard goes there (AP-2501)', async () => {
+  it('opens Connections at the Overview’s old addresses, Connections selected', async () => {
     const app = renderApp('/dashboard', chatShell());
-    await waitFor(() => expect(app.location()).toBe('/connections'));
-    expect(await screen.findByRole('heading', { name: 'Overview', level: 1 })).toBeTruthy();
+    await waitFor(() => expect(app.location()).toBe('/connected'));
+    expect(await screen.findByRole('heading', { name: 'Connections', level: 1 })).toBeTruthy();
     const side = await sidebar();
-    expect(within(side).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
+    expect(
+      within(side)
+        .getByRole('link', { name: /^Connections/ })
+        .getAttribute('aria-current'),
+    ).toBe('page');
   });
 });
 

@@ -172,8 +172,9 @@ describe('Home is called Dashboard (CT-447), then Connections (CT-451), then Ove
   it('says Overview in the endpoints’ and tools’ words', () => {
     expect(api.home.overview.summary).toContain('Overview');
     expect(api.widgets.list.summary).toContain('Overview');
-    expect(MCP_TOOLS.pin_widget.title).toContain('Overview');
-    expect(MCP_TOOLS.pin_widget.description).toContain('Overview');
+    // A pin goes on a page: the Overview is gone (servers-connections-places.md).
+    expect(MCP_TOOLS.pin_widget.description).not.toContain('Overview');
+    expect(MCP_TOOLS.pin_widget.description).toContain('thingId');
     expect(MCP_TOOLS.report_change.description).toContain('Changes here');
     expect(HOST_ASKS_FIRST_WORDS.hint.never).toContain('Changes here');
   });

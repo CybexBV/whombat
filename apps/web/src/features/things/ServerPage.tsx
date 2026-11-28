@@ -10,7 +10,15 @@
  * once asked for (`?ask=1`), with a notice's question ready to send. Live through `hosts:<burrowId>` (AP-1304,
  * AP-1308).
  */
-import { holdView, KEEP_QUIET_WORDS, limitNow, lineLimit, partsOf, readingsMoment } from '@whombat/client';
+import {
+  holdView,
+  KEEP_QUIET_WORDS,
+  limitNow,
+  lineLimit,
+  partsOf,
+  placeWords,
+  readingsMoment,
+} from '@whombat/client';
 import {
   arrayGroups,
   detailGuests,
@@ -50,14 +58,14 @@ import {
 } from '@whombat/client/hosts';
 import { useFindMyOnMac, useHostServer, useHostsLive, useServerDashboard } from '@whombat/client/hosts/react';
 import { useHomeOverview, useRenameThing, useTheAgent } from '@whombat/client/react';
-import { CONNECTIONS_HREF, HOST_SERVER_NAME_MAX, thingId } from '@whombat/core';
+import { HOST_SERVER_NAME_MAX, thingId } from '@whombat/core';
 import type { HostServerDetail } from '@whombat/core/domain';
 import { Server } from 'lucide-react';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
 import { InlineRename } from '../../components/InlineRename';
 import { Tabs } from '../../components/Tabs';
-import { useWebI18n } from '../../i18n/provider';
-import { CHAT_WORDS } from '../../i18n/shared';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useOverviewWords } from '../../i18n/words';
 import { ReadNote, ReadTime } from '../home/ReadState';
 import { useBurrowContext, useNow } from '../messaging/useRoom';
@@ -213,7 +221,7 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
   if (!d) {
     body = detail.error ? (
       <>
-        <Crumb href={CONNECTIONS_HREF} label={CHAT_WORDS.dashboard} />
+        <Crumb href={PLACE_HREFS.servers} label={placeWords(currentLocale()).servers.title} />
         <h1 className={styles.title}>{serverId}</h1>
         {/* The first read failed: nothing saved, so no figures that could look current. */}
         <ReadNote
@@ -477,7 +485,7 @@ function ServerHead({
   return (
     <>
       <PageHead
-        crumb={{ href: CONNECTIONS_HREF, label: CHAT_WORDS.dashboard }}
+        crumb={{ href: PLACE_HREFS.servers, label: placeWords(currentLocale()).servers.title }}
         icon={Server}
         mark={serverMark(detail.server)}
         iconTone="plain"

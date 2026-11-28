@@ -2,20 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { isWidePage, listHiding, parseFullWidthTabs, withFullWidth, writeFullWidthTabs } from './fullWidth';
 
 describe('the tabs whose list is hidden', () => {
-  it('reads what the phone kept, ignoring Chat and words it does not know', () => {
-    expect([...parseFullWidthTabs('Automations,ChatRoom,Nope,Dashboard')]).toEqual([
+  it('reads what the phone kept, ignoring Chat, the Overview that is gone and words it does not know', () => {
+    expect([...parseFullWidthTabs('Automations,ChatRoom,Nope,Dashboard,NeedsYou')]).toEqual([
       'Automations',
-      'Dashboard',
+      'NeedsYou',
     ]);
     expect(parseFullWidthTabs(null).size).toBe(0);
     expect(parseFullWidthTabs('').size).toBe(0);
   });
 
   it('writes them in the tabs’ order and reads them back', () => {
-    const tabs = withFullWidth(withFullWidth(new Set(), 'Automations', true), 'Dashboard', true);
-    expect(writeFullWidthTabs(tabs)).toBe('Dashboard,Automations');
+    const tabs = withFullWidth(withFullWidth(new Set(), 'Automations', true), 'NeedsYou', true);
+    expect(writeFullWidthTabs(tabs)).toBe('NeedsYou,Automations');
     expect(parseFullWidthTabs(writeFullWidthTabs(tabs))).toEqual(tabs);
-    expect(writeFullWidthTabs(withFullWidth(tabs, 'Dashboard', false))).toBe('Automations');
+    expect(writeFullWidthTabs(withFullWidth(tabs, 'NeedsYou', false))).toBe('Automations');
   });
 });
 

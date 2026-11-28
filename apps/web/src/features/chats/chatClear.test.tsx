@@ -39,11 +39,6 @@ describe('the places’ right-click menus (AP-4500, AP-4501)', () => {
     await waitFor(() => expect(app.location()).toBe('/chat?settled=1'));
     expect(await screen.findByRole('complementary', { name: 'Settled' })).toBeTruthy();
 
-    await user.pointer({ keys: '[MouseRight]', target: place(side, 'Overview') });
-    // No servers service in this world: Add a server shows only where it runs (navMenu.test.ts).
-    expect(items()).toEqual(['Add a connection']);
-    await user.keyboard('{Escape}');
-
     // Nothing a menu would add: no menu, and not the browser's either (a row, the sidebar's own space).
     expect(fireEvent.contextMenu(place(side, /^Inbox/))).toBe(false);
     expect(fireEvent.contextMenu(within(side).getByRole('navigation', { name: 'Whombat' }))).toBe(false);

@@ -1,5 +1,7 @@
 # Overview, arranged (OVA)
 
+**Superseded by `servers-connections-places.md` SCP-18** (2026-11-28): there is no Overview; OVA-01…OVA-12 are history.
+
 John found the Overview plain (2026-11-24) and accepted the mockup `docs/design-handoff/overview-arranged/overview.html`
 (switch State, Theme and Width at its top; press Arrange, then a gear; the mock wins on look, copy and layout). He asked
 that a person choose what each connection's tile shows (Home Assistant's isn't fixed to power), remove tiles, make some

@@ -65,7 +65,7 @@ import { homeOverview, watchList, workingTask } from './overview';
 import { registerNeedsYouSource, registerThingsSource, unregister } from './registry';
 import { ignoreNeedsYou, snoozeNeedsYou } from './snoozes';
 import { nextLocalTime } from './time';
-import { pinWidget, refreshWidget } from './widgets';
+import { listWidgets, pinWidget, refreshWidget } from './widgets';
 
 const t = useTestServer({ seed: true, listen: true });
 const TOKEN = 'ha-llat-Home9Zx8Wc2Vb6Nn1Kd5Hf';
@@ -740,10 +740,17 @@ describe('widgets', () => {
       .from(widgetPoints)
       .where(eq(widgetPoints.widgetId, res.result.widgetId));
     expect(points.length).toBeGreaterThanOrEqual(1);
-    const home = await homeOverview(t.services, await viewer(IDS.mara));
-    const w = home.widgets.find((x) => x.id === res.result.widgetId);
+    // With no page named it goes on the page of what it reads: Home Assistant's.
+    const onPage = await listWidgets(
+      t.services.db,
+      { id: IDS.mara, burrowId: t.burrowId },
+      t.services.clock(),
+      thingId('connection', ha),
+    );
+    const w = onPage.find((x) => x.id === res.result.widgetId);
     expect(w).toMatchObject({
       title: 'Heat pump',
+      thingId: thingId('connection', ha),
       series: [
         { key: 'flow', label: 'Water to radiators', unit: '°C', color: 1 },
         { key: 'outside', label: 'Outside', unit: '°C', color: 2 },
@@ -800,7 +807,8 @@ describe('REST', () => {
     const watch = await get('/watch?state=all');
     expect(watch.statusCode, watch.body).toBe(200);
     expect(WatchListResponse.safeParse(watch.json()).success).toBe(true);
-    const list = await get('/widgets');
+    // The widget pinned above is on Home Assistant's page.
+    const list = await get(`/widgets?thing=${encodeURIComponent(thingId('connection', ha))}`);
     expect(WidgetsResponse.parse(list.json()).widgets).toHaveLength(1);
     const id = list.json().widgets[0].id as string;
     const moved = await t.api.inject({

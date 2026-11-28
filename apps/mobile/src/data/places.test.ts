@@ -27,49 +27,42 @@ const thing = (kind: ThingSummary['kind'], id: string, extra: Partial<ThingSumma
 });
 
 describe('Places (phone-shell-final.md)', () => {
-  it('lists the places in the web sidebar’s order, Servers and Connections right after Overview', () => {
+  it('lists the places, Servers and Connections right after the Inbox; no Search, Usage or Overview', () => {
     expect(PLACES.map((p) => PLACE_WORDS[p])).toEqual([
-      'Search',
       'Chat',
       'Inbox',
-      'Overview',
       'Servers',
       'Connections',
       'Automations',
       'Files',
       'Vault',
-      'Usage',
       'Settings',
     ]);
   });
 
-  it('keeps the five tabs as the places that are tabs, in the bar’s order', () => {
+  it('keeps the four tabs as the places that are tabs, in the bar’s order', () => {
     const tabs = PLACES.map((p) => placeRoute(p, 'Chat')).flatMap((r) => (r.kind === 'tab' ? [r.tab] : []));
     expect(tabs).toEqual([...TABS]);
   });
 
-  it('pushes Search, Files, Vault and Usage (the Spend page) with “‹ …” naming where they were opened', () => {
-    expect(placeRoute('search', 'Chat')).toEqual({ kind: 'page', name: 'Search', params: { back: 'Chat' } });
-    expect(placeRoute('files', 'Overview')).toEqual({
+  it('pushes Files and Vault with “‹ …” naming where they were opened', () => {
+    expect(placeRoute('files', 'Connections')).toEqual({
       kind: 'page',
       name: 'Files',
-      params: { back: 'Overview' },
+      params: { back: 'Connections' },
     });
     expect(placeRoute('vault', 'Search')).toEqual({
       kind: 'page',
       name: 'Vault',
       params: { back: 'Search' },
     });
-    expect(placeRoute('usage', 'Settings')).toEqual({
-      kind: 'page',
-      name: 'Spend',
-      params: { back: 'Settings' },
-    });
   });
 
-  it('marks the place on screen, a tab or a page it opens', () => {
+  it('marks the place on screen, a tab or a page it opens; Search and Usage are no place of the sheet', () => {
     expect(placeOfScreen('ChatRoom')).toBe('chat');
-    expect(placeOfScreen('Spend')).toBe('usage');
+    expect(placeOfScreen('Spend')).toBeNull();
+    expect(placeOfScreen('Search')).toBeNull();
+    expect(placeOfScreen('Dashboard')).toBeNull();
     expect(placeOfScreen('ServersPlace')).toBe('servers');
     expect(placeOfScreen('ConnectionsPlace')).toBe('connections');
     expect(placeOfScreen('Thread')).toBeNull();
@@ -81,32 +74,29 @@ describe('Places (phone-shell-final.md)', () => {
       name: 'ServersPlace',
       params: { back: 'Chat' },
     });
-    expect(placeRoute('connections', 'Overview')).toEqual({
+    expect(placeRoute('connections', 'Inbox')).toEqual({
       kind: 'page',
       name: 'ConnectionsPlace',
-      params: { back: 'Overview' },
+      params: { back: 'Inbox' },
     });
     expect(listPlaceOfScreen('ServersPlace')).toBe('servers');
     expect(listPlaceOfScreen('ConnectionsPlace')).toBe('connections');
     expect(listPlaceOfScreen('Connections')).toBeNull();
   });
 
-  it('shows Servers and Connections in the sheet only when they hold something', () => {
-    expect(sheetPlaces({ servers: false, connections: false })).not.toContain('servers');
-    expect(sheetPlaces({ servers: false, connections: false })).not.toContain('connections');
+  it('shows Servers in the sheet only when it holds something', () => {
+    expect(sheetPlaces({ servers: false, connections: true })).not.toContain('servers');
     const all = sheetPlaces({ servers: true, connections: true });
-    expect(all.slice(all.indexOf('overview'), all.indexOf('automations') + 1)).toEqual([
-      'overview',
+    expect(all.slice(all.indexOf('inbox'), all.indexOf('automations') + 1)).toEqual([
+      'inbox',
       'servers',
       'connections',
       'automations',
     ]);
-    expect(sheetPlaces({ servers: true, connections: false })).toContain('servers');
   });
 
   it('names the assistant in the places’ lines', () => {
     expect(placeLine('chat', 'Neo')).toContain('Neo');
-    expect(placeLine('usage', 'Neo')).toContain('Neo');
   });
 
   it('says a count once, in words, and that something isn’t working only when it is so', () => {
@@ -229,7 +219,7 @@ describe('the Servers and Connections lists (servers-connections-places.md)', ()
     expect(fine.tone).toEqual({ servers: null, connections: null });
   });
 
-  it('shows Servers with a server or the hosts service, Connections with something connected', () => {
+  it('shows Servers with a server or the hosts service, Connections always (where the first one is added)', () => {
     const none = placeLists({
       things: [],
       fleet: null,
@@ -238,9 +228,9 @@ describe('the Servers and Connections lists (servers-connections-places.md)', ()
       now: NOW,
       timeZone: 'UTC',
     });
-    expect(none.shown).toEqual({ servers: false, connections: false });
+    expect(none.shown).toEqual({ servers: false, connections: true });
     const hosts = placeLists({ things: [], fleet: [], hosts: true, tiles: null, now: NOW, timeZone: 'UTC' });
-    expect(hosts.shown).toEqual({ servers: true, connections: false });
+    expect(hosts.shown).toEqual({ servers: true, connections: true });
     const one = placeLists({
       things: [thing('connection', 'con_ha', { catalogId: 'homeassistant', name: 'Home Assistant' })],
       fleet: null,

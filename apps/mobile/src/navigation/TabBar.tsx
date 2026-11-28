@@ -5,8 +5,8 @@
  *
  * The bottom tab bar (mock 4; one-whombat-mobile.md AP-1350, AP-1375; chat-channel.md AP-2450, AP-2452;
  * connections-page.md AP-2550, AP-2552; one-layout-android.md AP-2640; needs-you-list.md NYL-05; automations-tab.md
- * AP-6310, AP-6311): **Chat · Inbox · Overview · Automations · Settings** (a speech bubble, an inbox, a grid, a lightning
- * bolt, a gear) on `bg`, 24dp icons over 11/500 words (600 on the open tab, `tabBarFit` on the narrowest phones); ink
+ * AP-6310, AP-6311): **Chat · Inbox · Automations · Settings** (a speech bubble, an inbox, a lightning bolt, a gear) on
+ * `bg`, 24dp icons over 11/500 words (600 on the open tab, `tabBarFit` on the narrowest phones); ink
  * when open, mut otherwise. Automations has no badge: what waits there counts on the Inbox.
  *
  * Badges: the Inbox counts what needs the viewer, the one count (the app icon follows it), Chat what is unread in Chat
@@ -34,14 +34,7 @@ import { settingsText } from '../settings/list';
 import { useSettingsTabDot } from '../settings/useSettingsFacts';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
-import {
-  Inbox,
-  LayoutGrid,
-  type LucideIcon,
-  MessageCircle,
-  Settings as SettingsIcon,
-  Zap,
-} from '../ui/icons';
+import { Inbox, type LucideIcon, MessageCircle, Settings as SettingsIcon, Zap } from '../ui/icons';
 import { tabBarBottomPadding } from '../ui/insets';
 import { useScreenShape } from '../ui/screenShape';
 import { Touchable } from '../ui/Touchable';
@@ -55,7 +48,6 @@ type TabSpec = { name: keyof TabParamList; icon: LucideIcon };
 const TAB_SPECS: readonly TabSpec[] = [
   { name: 'ChatRoom', icon: MessageCircle },
   { name: 'NeedsYou', icon: Inbox },
-  { name: 'Dashboard', icon: LayoutGrid },
   { name: 'Automations', icon: Zap },
   { name: 'Settings', icon: SettingsIcon },
 ];

@@ -640,3 +640,20 @@ export function validateFilesSearch(raw: Raw): FilesSearch {
       : undefined;
   return clean({ folder: folder || undefined, repo });
 }
+
+/**
+ * Where an address of the Overview goes, now that Servers and Connections are its places (servers-connections-places.md):
+ * `/connections`, `/dashboard` and `/things/servers` without a connection's page. Add a server (`?add=`), Point them
+ * here (`?repoint=1`) and the old Servers section (`?tab=servers`) open Servers; everything else Connections. The old
+ * section (`?tab=`) and anchor are dropped; the rest of the query (an approval, a thread) goes along.
+ */
+export function overviewGoneHref(raw: Raw): string {
+  const servers = raw.add !== undefined || raw.repoint !== undefined || raw.tab === 'servers';
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(raw)) {
+    if (k === 'tab' || v === undefined || v === null || typeof v === 'object') continue;
+    q.set(k, String(v));
+  }
+  const rest = q.toString();
+  return `${servers ? '/servers' : '/connected'}${rest ? `?${rest}` : ''}`;
+}

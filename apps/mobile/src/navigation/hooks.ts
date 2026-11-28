@@ -131,5 +131,5 @@ export function useOpenLink(): (link: LinkRef, back?: string) => boolean {
  * opens Connections (AP-2550).
  */
 export function openHref(href: string): boolean {
-  return openAppUrl(appScreenUrlForPath(href) ?? `${APP_SCHEME}://connections`);
+  return openAppUrl(appScreenUrlForPath(href) ?? `${APP_SCHEME}://connected`);
 }

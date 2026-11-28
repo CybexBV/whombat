@@ -4,7 +4,6 @@ import {
   agentPartPlace,
   appPath,
   BURROW_SECTIONS,
-  overviewSectionForTab,
   parseChatShellLink,
   splitBurrowPath,
   withBurrow,
@@ -26,15 +25,13 @@ import { mobileTranslator } from '../i18n/translate';
 import { type AccountPage, connectionsScreenUrl, legacyConnectionsTabUrl } from './connectionLinks';
 
 /**
- * The bar's tabs (one-layout-android.md, `data/shell.ts`): Chat, Inbox, Overview, Automations, Settings. `ChatRoom` is
- * the Chat tab: `Chat` is a task chat's screen. `Dashboard` is the Overview tab: `Connections` is Settings' list of
- * connections, and the names in code stay.
+ * The bar's tabs (one-layout-android.md, `data/shell.ts`): Chat, Inbox, Automations, Settings. `ChatRoom` is the Chat
+ * tab: `Chat` is a task chat's screen. `NeedsYou` is the Inbox. `Connections` is Settings' list of connections,
+ * `ConnectionsPlace` the Connections place.
  */
 export type TabParamList = {
   ChatRoom: undefined;
   NeedsYou: undefined;
-  /** `tab`: the section to scroll to, as the web's old `?tab=` names it (`servers`, `services`, `connections`, `pinned`). */
-  Dashboard: { tab?: string } | undefined;
   Automations: undefined;
   Settings: undefined;
 };
@@ -272,13 +269,13 @@ export type RootStackParamList = {
   /** A room's settled threads, the latest first: Chat's by default, `room: 'feedback'` the Feedback room's. */
   Settled: { room?: 'chat' | 'feedback' } | undefined;
   /** Everything I did (home-redesign-mobile.md AP-2261): every change the assistant made, `whombat://done`. */
-  /** `back`: the page it was opened from (Chat's head), else Overview. */
+  /** `back`: the page it was opened from, else the page under it (`backWordUnder`). */
   Done: { back?: string } | undefined;
   /**
    * A Needs you item by id, as a page: with two pages a row opens it on the right page instead of its sheet
    * (docs/app/decisions/iphone-duo.md), and a push or a link about it lands on it (`whombat://needs-you/<id>`, NYL-09).
    */
-  /** `back`: the page it was opened from when that isn't the Inbox (Overview's headline). */
+  /** `back`: the page it was opened from when that isn't the Inbox. */
   NeedsYouItem: { itemId: string; back?: string };
   /**
    * A thing by its id (`server:pve-02`, `connection:con_…`, `device:con_…`, contracts `thingId`): a server's page; a
@@ -353,7 +350,7 @@ export type Route =
   | { name: 'Search'; params: NonNullable<RootStackParamList['Search']> }
   | {
       name: 'Tabs';
-      params: { screen: 'NeedsYou' | 'Dashboard' | 'ChatRoom' };
+      params: { screen: 'NeedsYou' | 'ChatRoom' };
     };
 
 export interface SidebarLookup {
@@ -504,8 +501,6 @@ export const LINKING_SCREENS = {
       // Needs you (NYL-05, NYL-09), Watch's old address, and the inbox's, where pushes, unknown paths and the inbox's
       // own links land (AP-1351).
       NeedsYou: { path: 'needs-you', alias: ['watch', 'inbox'] },
-      // Connections (AP-2550): the Dashboard's and Things' old addresses.
-      Dashboard: { path: 'connections', alias: ['dashboard', 'home', 'things'] },
       Automations: 'automations',
       Settings: 'settings',
     },
@@ -539,9 +534,10 @@ export const LINKING_SCREENS = {
   Spend: 'spend',
   // Search (phone-shell-final.md): `search?q=…`.
   Search: 'search',
-  // Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`.
+  // Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`. The
+  // old Overview's addresses (`connections`, and `dashboard`, `home` and `things` before it) open Connections.
   ServersPlace: 'servers',
-  ConnectionsPlace: 'connected',
+  ConnectionsPlace: { path: 'connected', alias: ['connections', 'dashboard', 'home', 'things'] },
   AuditLog: 'log',
   // Settings → the assistant (AP-4961): `?part=may`.
   SettingsAgent: 'settings/agent',
@@ -766,7 +762,7 @@ export function appScreenUrlForPath(path: string): string | null {
     ['connection', 'found', 'connect_error'].some((k) => query.has(k))
   )
     return connectionsScreenUrl(search);
-  const place = placeScreenUrl(pathname);
+  const place = placeScreenUrl(pathname, query);
   if (place) return place;
   const settingsTab = settingsTabScreenUrl(pathname, search);
   if (settingsTab) return settingsTab;
@@ -845,12 +841,13 @@ export function appScreenUrlForPath(path: string): string | null {
 
 /**
  * Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`, burrow-less
- * or after a burrow (a first segment that is a screen's isn't one: `/things/servers` stays Overview's).
+ * or after a burrow (a first segment that is a screen's isn't one: `/things/servers` is the old servers' list).
+ * `/servers?add=1` is Add a server, `?repoint=1` Point them here.
  */
-function placeScreenUrl(pathname: string): string | null {
+function placeScreenUrl(pathname: string, query: Map<string, string>): string | null {
   const m = /^(?:\/([^/]+))?\/(servers|connected)\/?$/.exec(pathname);
   if (!m || (m[1] !== undefined && BURROW_SECTIONS.includes(m[1]))) return null;
-  return `${APP_SCHEME}://${m[2]}`;
+  return m[2] === 'servers' ? serverAskUrl(query) : `${APP_SCHEME}://${m[2]}`;
 }
 
 /** An assistant's draft of a report, as `teamReports.draft` names it. */
@@ -1031,7 +1028,7 @@ function oldWorkScreenUrl(pathname: string): string | null {
 
 /**
  * Chat's places (contracts 0.93 CT-445; AP-2456): `/chat`, `/feedback` and `/dashboard` (the shared
- * `parseChatShellLink`; the Dashboard is Connections now, AP-2550), burrow-less or after the burrow; a thread in a room
+ * `parseChatShellLink`; the Dashboard opens Connections), burrow-less or after the burrow; a thread in a room
  * (`?thread=`) is read before this.
  */
 function chatShellScreenUrl(pathname: string, query: Map<string, string>): string | null {
@@ -1039,13 +1036,27 @@ function chatShellScreenUrl(pathname: string, query: Map<string, string>): strin
   const link = split ? parseChatShellLink(split.path) : null;
   if (!link) return null;
   if (link.place !== 'dashboard') return `${APP_SCHEME}://${link.room}`;
-  return overviewAppUrl(query.get('tab'));
+  return overviewAddressUrl(query);
 }
 
-/** Overview, scrolled to the section an old `?tab=` names (overview-one-page.md OVP-01); else at its top. */
-function overviewAppUrl(tab: string | null | undefined): string {
-  const section = overviewSectionForTab(tab);
-  return section ? `${APP_SCHEME}://connections?tab=${section}` : `${APP_SCHEME}://connections`;
+/**
+ * Where the Overview's old addresses (`/connections`, `/dashboard`, `/home`, `/things`) open now that servers and
+ * connections live in their places: Add a server (`?add=1` or `add=server`, filled in) and Point them here
+ * (`?repoint=1`) as before, Servers for its old section (`?tab=servers`), else Connections.
+ */
+function overviewAddressUrl(query: Map<string, string>): string {
+  const add = query.get('add');
+  if (add === '1' || add === 'server' || repointRequested(Object.fromEntries(query)))
+    return serverAskUrl(query);
+  return query.get('tab') === 'servers' ? `${APP_SCHEME}://servers` : `${APP_SCHEME}://connected`;
+}
+
+/** Servers, or what a server address asks of it: Add a server (`?add=1`, filled in) or Point them here (`?repoint=1`). */
+function serverAskUrl(query: Map<string, string>): string {
+  const add = query.get('add');
+  if (add === '1' || add === 'server') return addServerAppUrl(addServerPrefill(Object.fromEntries(query)));
+  if (repointRequested(Object.fromEntries(query))) return `${APP_SCHEME}://servers/repoint`;
+  return `${APP_SCHEME}://servers`;
 }
 
 /**
@@ -1080,13 +1091,10 @@ function assistantScreenUrl(
   }
   switch (section) {
     case 'things': {
-      // `/things/servers` was the servers' list: Connections now (CN-09). A server's `?guest=` opens the guest (AP-1485).
-      // `/things/servers?add=1` is Add a server (AP-1697), filled in from `address`, `user`, `control` and `name`.
-      const add = query.get('add');
-      if (id === 'servers' && (add === '1' || add === 'server'))
-        return addServerAppUrl(addServerPrefill(Object.fromEntries(query)));
-      // `/things/servers?repoint=1` is Point them here (BF-16's Needs you item, AP-4421).
-      if (id === 'servers' && repointRequested(Object.fromEntries(query))) return `${base}servers/repoint`;
+      // `/things/servers` was the servers' list: Servers now. A server's `?guest=` opens the guest (AP-1485).
+      // `/things/servers?add=1` is Add a server (AP-1697), filled in from `address`, `user`, `control` and `name`, and
+      // `?repoint=1` Point them here (BF-16's Needs you item, AP-4421).
+      if (id === 'servers') return serverAskUrl(query);
       const guest = query.get('guest');
       if (id && guest && /^server:/.test(id) && guest.length <= 200)
         return `${base}things/${encodeURIComponent(id)}/guests/${encodeURIComponent(guest)}`;
@@ -1097,9 +1105,8 @@ function assistantScreenUrl(
       const tab = query.get('tab');
       const on =
         tab && /^[a-z][a-z0-9_-]{0,39}$/.test(tab) && !/^server:/.test(id ?? '') ? `?tab=${tab}` : '';
-      if (id && id !== 'servers') return `${base}things/${encodeURIComponent(id)}${on}`;
-      // The servers' old list is Overview's Servers section.
-      return overviewAppUrl(id === 'servers' ? 'servers' : null);
+      if (id) return `${base}things/${encodeURIComponent(id)}${on}`;
+      return overviewAddressUrl(query);
     }
     case 'chats':
       return id && /^[A-Za-z0-9_-]{1,80}$/.test(id)
@@ -1107,7 +1114,7 @@ function assistantScreenUrl(
         : `${base}chats`;
     case 'home':
     case 'connections':
-      return id ? null : overviewAppUrl(query.get('tab'));
+      return id ? null : overviewAddressUrl(query);
     // The one Needs you list (NYL-05), Watch's address too; `?item=` opens that item (a push, a link; NYL-09).
     case 'needs-you':
     case 'watch': {

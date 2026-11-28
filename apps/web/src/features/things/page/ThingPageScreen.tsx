@@ -29,6 +29,7 @@ import {
   pageHeadBadge,
   pageHeadVerdict,
   parseThingTab,
+  placeWords,
   runsOnParts,
   serverTab,
   type ThingHeadPreview,
@@ -58,7 +59,6 @@ import {
   useUndoChange,
 } from '@whombat/client/react';
 import {
-  CONNECTIONS_HREF,
   HOST_SERIES_RANGES,
   type HostSeriesRange,
   type ThingPage,
@@ -76,14 +76,14 @@ import { ONEPASSWORD_TAB } from '@whombat/core/vault';
 import { ExternalLink } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
+import { PLACE_HREFS } from '../../../app/shell/assistantSidebarModel';
 import { ButtonLink } from '../../../components/Button';
 import { copyText } from '../../../components/CopyButton';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { Tabs } from '../../../components/Tabs';
 import { useToast } from '../../../components/Toast';
-import { useWebI18n } from '../../../i18n/provider';
-import { CHAT_WORDS } from '../../../i18n/shared';
+import { currentLocale, useWebI18n } from '../../../i18n/provider';
 import { useOverviewWords } from '../../../i18n/words';
 import { ReadNote } from '../../home/ReadState';
 import { useBurrowContext, useNow } from '../../messaging/useRoom';
@@ -233,7 +233,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
     const gone = query.error instanceof ApiError && query.error.status === 404;
     body = query.error ? (
       <>
-        <Crumb href={CONNECTIONS_HREF} label={CHAT_WORDS.dashboard} />
+        <Crumb href={PLACE_HREFS.connections} label={placeWords(currentLocale()).connections.title} />
         <h1 className={styles.title}>{gone ? 'Not found' : (early?.name ?? 'This page couldn’t load')}</h1>
         {gone ? (
           <p className={things.dialogBody}>It isn’t here any more, or it isn’t yours to see.</p>
@@ -414,7 +414,7 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
 function headLook(thing: Pick<ThingPage, 'icon' | 'catalogId' | 'kind'>) {
   const glyph = thingGlyph(thing);
   return {
-    crumb: { href: CONNECTIONS_HREF, label: CHAT_WORDS.dashboard },
+    crumb: { href: PLACE_HREFS.connections, label: placeWords(currentLocale()).connections.title },
     icon: THING_ICONS[glyph],
     mark: thingMark(thing),
     iconTone: glyph === 'cloud' ? ('warm' as const) : ('blue' as const),

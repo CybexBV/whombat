@@ -90,7 +90,6 @@ const PARITY_FILES = [
   // Remote help (app remote-help.md AP-4479): REMOTE HELP and the command line's sheet read top to bottom as shown.
   'managed/RemoteHelpSection.tsx',
   // One Whombat (one-whombat-mobile.md AP-1378): Connections, a server, Chats, a chat, Watch, their sheets and cards.
-  'screens/HomeScreen.tsx',
   'screens/NeedsYouSheet.tsx',
   // Point them here (backup-file.md AP-4421): the servers and their state read top to bottom as shown.
   'screens/RepointServersScreen.tsx',
@@ -149,15 +148,8 @@ const PARITY_FILES = [
   'ui/deviceSkillCard.tsx',
   // Connections (connections-page.md AP-2553; home-redesign-mobile.md AP-2268): its groups and Everything I did.
   'screens/home/Section.tsx',
-  'screens/home/ServersCard.tsx',
-  'screens/home/ServicesCard.tsx',
   'screens/home/DoneParts.tsx',
-  'screens/home/PanelsCards.tsx',
   // The arranged Overview (overview-arranged.md): the summary card, Today, the parts and a gear's sheet.
-  'screens/home/SummaryCard.tsx',
-  'screens/home/TodayCard.tsx',
-  'screens/home/ArrangedParts.tsx',
-  'screens/home/ArrangeSheets.tsx',
   'screens/DoneScreen.tsx',
   // Tabs with an underline (underline-tabs-android.md AP-2636): the tabs, then a trailing Settings, as shown.
   'ui/UnderlineTabs.tsx',

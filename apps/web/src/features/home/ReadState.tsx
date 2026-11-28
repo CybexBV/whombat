@@ -1,9 +1,8 @@
 /**
- * How a page says what it read (docs/decisions/overview-server-connection-final.md), shared by Overview, a server's
- * page, a connection's page and a pinned widget: each reading's own time (“Read 12 min ago”, the moment in full for a
- * screen reader), the note after a refresh failed (the saved readings stay under it) or the first read failed (nothing
- * saved to show), with Try again — which only reads again — and what the app said folded under More detail. Overview's
- * placeholders are its own (`OverviewServers.tsx`).
+ * How a page says what it read (docs/decisions/overview-server-connection-final.md), shared by a server's page, a
+ * connection's page and a pinned widget: each reading's own time (“Read 12 min ago”, the moment in full for a screen
+ * reader), the note after a refresh failed (the saved readings stay under it) or the first read failed (nothing saved
+ * to show), with Try again — which only reads again — and what the app said folded under More detail.
  */
 import { readingTime } from '@whombat/client';
 import { hostErrorInfo } from '@whombat/client/hosts';

@@ -218,7 +218,6 @@ const FILES: Record<string, number> = {
   'src/ui/oneSheet.tsx': 1,
   'src/ui/deviceSkillCard.tsx': 1,
   // The headline's sentence that opens its Inbox row, 44dp (phone-refresh-status.md).
-  'src/screens/HomeScreen.tsx': 1,
   // A Looks ahead finding's 44dp send for the reply and its sources' links (32dp, padded).
   'src/screens/NeedsYouSheet.tsx': 2,
   'src/screens/NewChatSheet.tsx': 0,
@@ -322,24 +321,10 @@ const FILES: Record<string, number> = {
   // Needs you (needs-you-list.md NYL-05): a row (52dp min), the heads-ups' fold row, the foot's link (44dp) and a row's
   // More beside its way forward (44pt / 48dp, approval-card.md).
   'src/screens/NeedsYouScreen.tsx': 4,
-  // Overview (overview-one-page.md): a server's card and a connection's tile (no size of their own, tall with content),
-  // a section heading's 44dp “Add a server” or “Add a connection”, a change's Undo or Review (44dp); Everything I did
-  // and the pinned panels are card rows, Buttons and the chart's own element.
-  'src/screens/home/ServersCard.tsx': 1,
-  // Try again is a Button, More detail the fold's own; the jump chips under the title (34dp, padded).
-  'src/screens/home/OverviewParts.tsx': 1,
-  // The arranged Overview (overview-arranged.md): a tile (tall with content) and the dashed Add
-  // to Overview (150dp); Arrange beside the title (40dp, padded) and a gear (34dp, padded); the summary card's 44dp
-  // “2 other things need you” (Look into it is a Button); Today's 44dp All activity, a moment (44dp) and Show all; a
-  // gear's sheet: Close (40dp, padded), a choice (44dp), a size (44dp) and Remove from Overview (44dp).
-  'src/screens/home/ServicesCard.tsx': 2,
-  'src/screens/home/ArrangedParts.tsx': 2,
-  'src/screens/home/SummaryCard.tsx': 1,
-  'src/screens/home/TodayCard.tsx': 3,
-  'src/screens/home/ArrangeSheets.tsx': 4,
-  'src/screens/home/Section.tsx': 1,
+  // A page's read note: Try again is a Button, More detail the fold's own. The Inbox's group labels have no control.
+  'src/screens/home/OverviewParts.tsx': 0,
+  'src/screens/home/Section.tsx': 0,
   'src/screens/home/DoneParts.tsx': 1,
-  'src/screens/home/PanelsCards.tsx': 0,
   'src/screens/DoneScreen.tsx': 0,
   // Connecting from the phone (phone-connect.md PC-11, AP-2915): a radio card's row (52dp), a 44dp text link, a value's
   // 44dp Copy, More options' 44dp toggle, a service's 48dp checkbox row; the rest is Button, FormField, Segmented.

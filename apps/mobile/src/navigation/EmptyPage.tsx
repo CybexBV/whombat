@@ -17,7 +17,6 @@ export function emptyPageWords(locale?: string): Record<Exclude<Tab, 'ChatRoom'>
   const { t } = mobileTranslator(locale);
   return {
     NeedsYou: t('data.emptyPage.needsYou'),
-    Dashboard: t('data.emptyPage.dashboard'),
     Automations: t('data.emptyPage.automations'),
     Settings: t('data.emptyPage.settings'),
   };

@@ -253,7 +253,7 @@ export function ApplianceApp({
   returnedCb.current = onConnectReturned;
   useEffect(() => {
     if (!connectReturn || !setup) return;
-    const fallback = heldGoogleConnect(tabStorage)?.returnTo ?? '/connections';
+    const fallback = heldGoogleConnect(tabStorage)?.returnTo ?? '/connected';
     const done = (to: string) => {
       holdGoogleConnect(tabStorage, null);
       window.history.replaceState(null, '', to);

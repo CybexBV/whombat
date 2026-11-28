@@ -248,7 +248,7 @@ export function ThingPageScreen({
   const [pulling, setPulling] = useState(false);
   const scroller = useRef<ScrollView>(null);
   const tabsAt = useRef(0);
-  const name = page?.name ?? early?.name ?? title ?? thingPageCopyHere.back;
+  const name = page?.name ?? early?.name ?? title ?? thingPageCopyHere.unnamed;
   const parsed = parseThingId(thingId);
 
   // Its settings are the Connection screen, with What Whombat watches for this thing (a device's is its own, AP-4865);

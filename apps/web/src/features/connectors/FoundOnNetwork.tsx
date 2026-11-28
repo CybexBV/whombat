@@ -171,7 +171,7 @@ export function FoundStrip({ found }: { found: FoundScan }) {
           <li key={row.key} data-found={row.catalogId}>
             {row.action === 'server' && row.serverAddress ? (
               <Link
-                to="/connections"
+                to="/servers"
                 search={foundServerSearch(row.serverAddress) as never}
                 className={k.stripChip}
                 aria-label={`Add ${row.name} at ${row.serverAddress} as a server`}
@@ -484,7 +484,7 @@ function FoundItem({
             <RouterButtonLink
               variant="primary"
               size="sm"
-              to="/connections"
+              to="/servers"
               search={foundServerSearch(row.serverAddress) as never}
               aria-label={`Add ${row.name} at ${row.serverAddress} as a server`}
             >

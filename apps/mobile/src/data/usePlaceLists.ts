@@ -1,5 +1,5 @@
 /**
- * The Servers and Connections lists (servers-connections-places.md) from the reads Overview already makes — Home's
+ * The Servers and Connections lists (servers-connections-places.md) from the reads the Inbox badge already makes — Home's
  * things, the hosts service's status and fleet — so opening a place or the Places sheet asks nothing new. And the row
  * each place opened last, kept on this phone, which a place opens on from the two-page width when it is still listed.
  */
@@ -22,6 +22,8 @@ export interface PlaceListsRead extends PlaceLists {
   failed: boolean;
   /** The hosts service can't be reached right now. */
   hostsDown: boolean;
+  /** Servers that ran the install command and wait to be added or turned away (Add a server's waiting list). */
+  pendingServers: number;
   /** Reads Home and the servers again; settles once every read has answered. */
   refetch: () => Promise<void>;
 }
@@ -88,6 +90,7 @@ export function usePlaceLists(): PlaceListsRead {
       (present && !!fleet.error) ||
       (status.data?.present === true && status.data.healthy === false),
     failed: !home.data && !!home.error,
+    pendingServers: present ? (fleet.data?.pendingEnrollments ?? 0) : 0,
     refetch,
   };
 }

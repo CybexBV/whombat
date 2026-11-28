@@ -5,7 +5,9 @@
  *   place's list sits beside it; on a narrower one the page is alone with “‹ Servers” back to the list. A page neither
  *   list holds keeps the whole width and its own crumb.
  * - `PlaceScreen` is `/servers` and `/connected`: on a wide window it opens the page looked at last in that place, else
- *   the first row (never an empty right side); on a narrow one, or with nothing listed, it is the list alone.
+ *   the first row (never an empty right side); on a narrow one, or with nothing listed, it is the list alone. Add a
+ *   server (`/servers?add=1`, filled in by `&address=&user=&control=&name=`) and Point them here (`?repoint=1`) open
+ *   over the Servers list, which stays put under them.
  */
 
 import { useRouterState } from '@tanstack/react-router';
@@ -22,7 +24,9 @@ import { useNavigateHref } from '../../../app/routing/navigation';
 import { PLACE_HREFS } from '../../../app/shell/assistantSidebarModel';
 import { useWebI18n } from '../../../i18n/provider';
 import { useInboxSplit } from '../../chats/inboxNav';
+import { AddServerDialog } from '../AddServer';
 import { isAskOpen } from '../AskPane';
+import { RepointServersDialog } from '../RepointServers';
 import { useThingSearch } from '../search';
 import { keepLastViewed, readLastViewed } from './lastViewed';
 import { PlaceList } from './PlaceList';
@@ -96,6 +100,7 @@ export function ThingInPlace({
           rows={rowsOf(lists, place)}
           selected={thing}
           addHref={addOf(lists, place)}
+          pending={place === 'servers' ? lists.pendingServers : 0}
           alone={false}
           loading={!lists.settled[place]}
           failure={failureOf(lists, place, rowsOf(lists, place), locale)}
@@ -108,14 +113,46 @@ export function ThingInPlace({
   );
 }
 
+/** Add a server and Point them here, over the Servers list; closing one takes its part off the address. */
+function ServerDialogs({ burrow }: { burrow: string }) {
+  const [search, set] = useThingSearch();
+  if (search.add === '1' || search.add === 'server')
+    return (
+      <AddServerDialog
+        burrow={burrow}
+        onClose={() =>
+          set(
+            { add: undefined, address: undefined, user: undefined, control: undefined, name: undefined },
+            { replace: true },
+          )
+        }
+      />
+    );
+  if (search.repoint === '1')
+    return (
+      <RepointServersDialog
+        burrow={burrow}
+        onClose={() => set({ repoint: undefined }, { replace: true })}
+        onAddServer={(address) =>
+          set({ repoint: undefined, add: '1', address: address || undefined }, { replace: true })
+        }
+      />
+    );
+  return null;
+}
+
 export function PlaceScreen({ burrow, place }: { burrow: string; place: ThingPlace }) {
   const lists = usePlaceLists(burrow);
   const { tag: locale } = useWebI18n();
   const wide = useInboxSplit();
   const navigate = useNavigateHref();
+  const [search] = useThingSearch();
   const rows = rowsOf(lists, place);
+  // A dialog over the list keeps the list where it is: the page looked at last opens once it closes.
+  const dialog = place === 'servers' && (!!search.add || search.repoint === '1');
   // Only once the rows are final: before, a wide window waits a moment rather than show the list alone and jump.
-  const opening = wide && lists.settled[place] ? placeOpening(rows, readLastViewed(burrow, place)) : null;
+  const opening =
+    wide && !dialog && lists.settled[place] ? placeOpening(rows, readLastViewed(burrow, place)) : null;
   // What the address carries for the shell (an approval or a thread opened over it) goes along to the page.
   const carried = useRouterState({
     select: (st) => `${st.location.searchStr}${st.location.hash ? `#${st.location.hash}` : ''}`,
@@ -135,10 +172,12 @@ export function PlaceScreen({ burrow, place }: { burrow: string; place: ThingPla
           rows={rows}
           selected={null}
           addHref={addOf(lists, place)}
+          pending={place === 'servers' ? lists.pendingServers : 0}
           alone={false}
           loading
         />
         <div className={styles.page} aria-busy="true" />
+        {dialog ? <ServerDialogs burrow={burrow} /> : null}
       </div>
     );
   return (
@@ -149,10 +188,12 @@ export function PlaceScreen({ burrow, place }: { burrow: string; place: ThingPla
         rows={rows}
         selected={null}
         addHref={addOf(lists, place)}
+        pending={place === 'servers' ? lists.pendingServers : 0}
         alone
         loading={!lists.settled[place]}
         failure={failureOf(lists, place, rows, locale)}
       />
+      {dialog ? <ServerDialogs burrow={burrow} /> : null}
     </div>
   );
 }

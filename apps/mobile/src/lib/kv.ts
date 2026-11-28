@@ -18,7 +18,7 @@ export const STORAGE_KEYS = {
   pageSplit: 'whombat.pageSplit',
   /** With two pages, `1` while Chat's list is hidden and what is beside it takes the whole width. */
   chatFullWidth: 'whombat.chatFullWidth',
-  /** With two pages, the other tabs whose list is hidden while something is open beside it (`Dashboard,Automations`). */
+  /** With two pages, the other tabs whose list is hidden while something is open beside it (`NeedsYou,Automations`). */
   fullWidthTabs: 'whombat.fullWidthTabs',
   /** `off` while this phone's “Moving faces” is off; absent: on. */
   faceMotion: 'whombat.faceMotion',

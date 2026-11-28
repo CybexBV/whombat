@@ -1,10 +1,11 @@
 /**
- * Places (docs/decisions/phone-shell-final.md, servers-connections-places.md): the one list of where the app goes, in
- * the web sidebar's order — Search, Chat, Inbox, Overview, Servers, Connections, Automations, Files, Vault, Usage,
- * Settings. Chat, the Inbox, Overview, Automations and Settings are the bar's tabs; Servers and Connections are list
- * screens (each a list beside the picked page from the two-page width); Files, Vault and Usage are pages pushed over
- * the tabs, Search its own page. Servers shows once there is a server or the hosts service runs, Connections once
- * something is connected; each carries the worst mark of what it holds. The two lists' rows are the shared
+ * Places (docs/decisions/phone-shell-final.md, servers-connections-places.md): the one list of where the app goes —
+ * Chat, Inbox, Servers, Connections, Automations, Files, Vault, Settings. Chat, the Inbox, Automations and Settings are
+ * the bar's tabs; Servers and Connections are list screens (each a list beside the picked page from the two-page width)
+ * and where servers and connections live; Files and Vault are pages pushed over the tabs. Search is the magnifier at
+ * the top of each tab and Usage a page of Settings, so neither is listed. Servers shows once there is a server or the
+ * hosts service runs; Connections always, so a new person adds their first connection there. Each carries the worst
+ * mark of what it holds. The two lists' rows are the shared
  * `serverPlaceRows` and `connectionPlaceRows` (`@whombat/client`) with the phone's glyph and the address a thing without
  * a page follows. Pure: the sheet is `ui/places.tsx`, the row above a tab's screen `ui/topRow.tsx`, the lists
  * `screens/PlaceScreen.tsx`.
@@ -28,47 +29,38 @@ import type { Tab } from './shell';
 import { type PhoneGlyph, phoneThingGlyph } from './thingLook';
 
 export type PlaceId =
-  | 'search'
   | 'chat'
   | 'inbox'
-  | 'overview'
   | 'servers'
   | 'connections'
   | 'automations'
   | 'files'
   | 'vault'
-  | 'usage'
   | 'settings';
 
-/** Every place, in the order the web's sidebar and Places show them. */
+/** Every place, in the order Places shows them. */
 export const PLACES: readonly PlaceId[] = [
-  'search',
   'chat',
   'inbox',
-  'overview',
   'servers',
   'connections',
   'automations',
   'files',
   'vault',
-  'usage',
   'settings',
 ];
 
-/** What each place is called: the tabs' own words, Overview's title, and Usage for what was Spend. */
+/** What each place is called: the tabs' own words, and the pages'. */
 export function placeWords(locale?: string): Record<PlaceId, string> {
   const { t } = mobileTranslator(locale);
   return {
-    search: t('places.search'),
     chat: t('places.chat'),
     inbox: t('places.inbox'),
-    overview: t('places.overview'),
     servers: t('places.servers'),
     connections: t('places.connections'),
     automations: t('places.automations'),
     files: t('places.files'),
     vault: t('places.vault'),
-    usage: t('places.usage'),
     settings: t('places.settings'),
   };
 }
@@ -87,7 +79,7 @@ export function placesCopy(locale?: string) {
 export const PLACES_COPY = placesCopy();
 
 /** One line on what is in each place, under its name in Search's results. */
-export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string, locale?: string): string {
+export function placeLine(place: PlaceId, assistant: string, locale?: string): string {
   return mobileTranslator(locale).t(`places.line.${place}`, { assistant });
 }
 
@@ -95,20 +87,19 @@ export function placeLine(place: Exclude<PlaceId, 'search'>, assistant: string, 
 export const PLACE_TABS: Partial<Record<PlaceId, Tab>> = {
   chat: 'ChatRoom',
   inbox: 'NeedsYou',
-  overview: 'Dashboard',
   automations: 'Automations',
   settings: 'Settings',
 };
 
 /**
  * Where a place goes: a tab (the pages above the tabs close), or a page pushed on top whose “‹ …” names the page it was
- * opened from (`back`). Usage is the Spend screen under its new name.
+ * opened from (`back`).
  */
 export type PlaceRoute =
   | { kind: 'tab'; tab: Tab }
   | {
       kind: 'page';
-      name: 'Search' | 'ServersPlace' | 'ConnectionsPlace' | 'Files' | 'Vault' | 'Spend';
+      name: 'ServersPlace' | 'ConnectionsPlace' | 'Files' | 'Vault';
       params: { back: string };
     };
 
@@ -128,18 +119,16 @@ export function listPlaceOfScreen(name: string | undefined): ThingPlace | null {
 }
 
 const PLACE_PAGES = {
-  search: 'Search',
   servers: PLACE_SCREENS.servers,
   connections: PLACE_SCREENS.connections,
   files: 'Files',
   vault: 'Vault',
-  usage: 'Spend',
 } as const satisfies Partial<Record<PlaceId, string>>;
 
 export function placeRoute(place: PlaceId, back: string): PlaceRoute {
   const tab = PLACE_TABS[place];
   if (tab) return { kind: 'tab', tab };
-  const name = PLACE_PAGES[place as keyof typeof PLACE_PAGES] ?? 'Search';
+  const name = PLACE_PAGES[place as keyof typeof PLACE_PAGES] ?? PLACE_SCREENS.connections;
   return { kind: 'page', name, params: { back } };
 }
 
@@ -150,14 +139,10 @@ export function placeOfScreen(name: string | undefined): PlaceId | null {
       return 'chat';
     case 'NeedsYou':
       return 'inbox';
-    case 'Dashboard':
-      return 'overview';
     case 'Automations':
       return 'automations';
     case 'Settings':
       return 'settings';
-    case 'Search':
-      return 'search';
     case 'ServersPlace':
       return 'servers';
     case 'ConnectionsPlace':
@@ -166,8 +151,6 @@ export function placeOfScreen(name: string | undefined): PlaceId | null {
       return 'files';
     case 'Vault':
       return 'vault';
-    case 'Spend':
-      return 'usage';
     default:
       return null;
   }
@@ -201,7 +184,7 @@ export interface ServerFacts {
 
 /**
  * The servers' and connections' rows Search finds; a server wears the logo of what it runs where the hosts service
- * knows it (as on Overview), never a plain server where there is a real logo.
+ * knows it (as Servers does), never a plain server where there is a real logo.
  */
 export function placesThings(
   things: readonly ThingSummary[] | undefined,
@@ -261,13 +244,13 @@ export interface PlaceLists {
   tone: Record<ThingPlace, 'bad' | 'warn' | null>;
   /** The hosts service runs here: Servers' `+` (Add a server) needs it. */
   hosts: boolean;
-  /** Whether the place is in the sheet: Servers with a server or the hosts service, Connections with one connected. */
+  /** Whether the place is in the sheet: Servers with a server or the hosts service, Connections always. */
   shown: Record<ThingPlace, boolean>;
 }
 
 /**
- * The two lists from what Overview reads: Home's things, the hosts fleet (Servers in Overview's order and words) and
- * Overview's connection tiles (Connections worst first with each tile's line).
+ * The two lists: Home's things, the hosts fleet (Servers in the fleet's order and words) and the connection tiles
+ * (Connections worst first with each tile's line).
  */
 export function placeLists(input: {
   things: readonly ThingSummary[] | undefined;
@@ -309,11 +292,12 @@ export function placeLists(input: {
     // The marks from the rows the lists show, so the sheet and the list never disagree.
     tone: { servers: placeRowsTone(servers), connections: placeRowsTone(connections) },
     hosts: input.hosts,
-    shown: { servers: servers.length > 0 || input.hosts, connections: connections.length > 0 },
+    // Connections even while nothing is connected: its empty state and `+` are where a new person adds the first.
+    shown: { servers: servers.length > 0 || input.hosts, connections: true },
   };
 }
 
-/** The places the sheet lists: every place, Servers and Connections only when they hold something. */
+/** The places the sheet lists: every place, Servers only when there is a server or the hosts service runs. */
 export function sheetPlaces(shown: Record<ThingPlace, boolean>): PlaceId[] {
   return PLACES.filter((p) => (p === 'servers' || p === 'connections' ? shown[p] : true));
 }

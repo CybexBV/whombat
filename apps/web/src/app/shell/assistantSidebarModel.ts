@@ -2,19 +2,19 @@
  * The assistant shell's sidebar (mock 1; one-whombat.md ONE-04; app one-whombat-shell.md AP-1256): pure, so its rules
  * are unit-tested.
  *
- * - The burrow's name (its switcher), then the places in one order: Chat, Inbox, Overview, Servers, Connections,
- *   Automations, Files, Vault (servers-connections-places.md). Settings is in the account menu (and ⌘, / Ctrl ,),
+ * - The burrow's name (its switcher), then the places in one order: Chat, Inbox, Servers, Connections, Automations,
+ *   Files, Vault (servers-connections-places.md). Settings is in the account menu (and ⌘, / Ctrl ,),
  *   Search is ⌘K / Ctrl K, Usage opens only at its address: none is a row of its own. Chat's badge counts its unread
  *   replies and Feedback's (Feedback opens from Chat's head); the Inbox's is the one count of what needs the person
  *   (`summary.needsYou`) in the colour of the worst of them. A count shows once the Whombat has answered and never at
  *   zero.
- * - Servers shows once there is a server or the Whombat runs the hosts service, Connections once something is
- *   connected; each carries the worst mark of what it holds and is the selected place on the page of one of its
- *   own. Their lists are drawn beside the page (`features/things/places`), not in the sidebar.
+ * - Servers shows once there is a server or the Whombat runs the hosts service; Connections always shows, since it is
+ *   where the first connection is added. Each carries the worst mark of what it holds and is the selected place on the
+ *   page of one of its own (Servers also on the view of every guest). Their lists are drawn beside the page (`features/things/places`), not in the sidebar.
  * - The person at the bottom, with the account menu.
  *
- * Before the Chat shell (no rooms; tests and an older Whombat): Overview is the home page (`/`), and CONVERSATIONS and
- * **Ask Neo** stay (the assistant's name, Whombat assistant-name.md AN-01).
+ * Before the Chat shell (no rooms; tests and an older Whombat): CONVERSATIONS and **Ask Neo** stay (the assistant's
+ * name, Whombat assistant-name.md AN-01).
  */
 import {
   agentWords,
@@ -47,15 +47,13 @@ import { INBOX_PATH, type ShellLocation } from './location';
 export type AssistantNavId =
   | 'chat'
   | 'needsYou'
-  | 'dashboard'
-  | 'home'
   | 'servers'
   | 'connections'
   | 'automations'
   | 'files'
   | 'vault';
 
-/** The addresses of the two places: `/connections` stays Overview's, so Connections is `/connected`. */
+/** The addresses of the two places: `/connections` holds the connections' own pages, so Connections is `/connected`. */
 export const PLACE_HREFS: Record<ThingPlace, string> = { servers: '/servers', connections: '/connected' };
 
 export interface AssistantNavRow {
@@ -146,7 +144,7 @@ export function buildAssistantSidebarModel(
     mark: null,
     ariaLabel: label,
   });
-  // The view of every guest is reached from Overview's Servers (“All guests”, CN-09): Overview stays selected.
+  // The view of every guest is reached from Servers (“All guests”): Servers stays selected.
   const allGuests = location.kind === 'thing' && location.id === 'servers';
   const inRoom = location.kind === 'room' ? location.room : null;
   // Chat's badge: what is unread in the rooms you aren't reading now (Feedback opens from Chat's head).
@@ -176,6 +174,7 @@ export function buildAssistantSidebarModel(
   const placeRow = (place: ThingPlace, held: readonly ThingRow[]) => {
     const here =
       (location.kind === 'place' && location.place === place) ||
+      (place === 'servers' && allGuests) ||
       (location.kind === 'thing' && held.some((r) => r.id === location.id));
     const r = row(place, placeWords(currentLocale())[place].title, PLACE_HREFS[place], here);
     r.mark = placeTone(held);
@@ -186,13 +185,9 @@ export function buildAssistantSidebarModel(
   const nav: AssistantNavRow[] = [
     chat,
     inbox,
-    // Before the Chat shell Overview is the home page (`/`).
-    rooms
-      ? row('dashboard', words.overview.label, CONNECTIONS_HREF, location.kind === 'dashboard' || allGuests)
-      : row('home', words.overview.label, '/', location.kind === 'home' || allGuests),
     ...(servers ? [placeRow('servers', servers.rows)] : []),
-    // Nothing connected yet: no empty place (first-day.md); Overview leads to adding one.
-    ...(connections.length ? [placeRow('connections', connections)] : []),
+    // Also with nothing connected yet: its list is where the first one is added.
+    placeRow('connections', connections),
     // Automations without a count: a total says nothing, a failed run is in the Inbox (SB-07, AP-2606).
     row('automations', words.automations.label, '/automations', location.kind === 'automations'),
     row('files', words.files.label, '/files', location.kind === 'files'),
@@ -220,20 +215,13 @@ export function buildAssistantSidebarModel(
   };
 }
 
-/**
- * Servers: shown with a server or the hosts service; Add a server with the hosts service, on Overview's Servers
- * section (`/connections?tab=servers&add=1`; before the Chat shell `/?…`, the same page).
- */
+/** Servers: shown with a server or the hosts service; Add a server (`/servers?add=1`) with the hosts service. */
 function serversSection(input: AssistantSidebarInput, rows: ThingRow[]): AssistantServersSection | null {
   if (!rows.length && !input.hosts?.present) return null;
-  const add = addServerHref().replace('?', '?tab=servers&');
-  return {
-    addHref: input.hosts?.present ? (input.rooms ? add : add.replace(CONNECTIONS_HREF, '/')) : null,
-    rows,
-  };
+  return { addHref: input.hosts?.present ? addServerHref() : null, rows };
 }
 
-/** Add a connection, the page Overview's own button opens. */
+/** Add a connection, the page the Connections list's + opens. */
 export const ADD_CONNECTION_HREF = `${CONNECTIONS_HREF}?connection=add`;
 
 /**
@@ -315,18 +303,6 @@ export function navMenu(
               },
             ]
           : []),
-      ];
-    case 'dashboard':
-    case 'home':
-      return [
-        ...(model.servers?.addHref
-          ? [{ id: 'add-server' as const, label: t('sidebar.addServer'), href: model.servers.addHref }]
-          : []),
-        {
-          id: 'add-connection',
-          label: t('sidebar.addConnection'),
-          href: ADD_CONNECTION_HREF,
-        },
       ];
     // Servers adds a server, Connections a connection.
     case 'servers':

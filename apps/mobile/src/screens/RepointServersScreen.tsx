@@ -16,8 +16,8 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBurrowBase } from '../data/BurrowProvider';
-import { overviewTitle } from '../data/shell';
 import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
@@ -32,7 +32,7 @@ export function RepointServersScreen({ route, navigation }: Props) {
   const { slug, currentBootstrap } = useBurrowBase();
   const { rawLocale } = useI18n();
   useHostsLive(currentBootstrap().burrow.id);
-  const back = route.params?.back ?? overviewTitle(rawLocale);
+  const back = route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale);
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   return (
     <Screen>
