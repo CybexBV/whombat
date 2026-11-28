@@ -42,6 +42,11 @@ func runPlatform(dir, level string) error {
 	if isService {
 		return svc.Run(serviceName, &service{dir: dir, level: level})
 	}
+	// In a console too, the agent reads nothing of its folder before it
+	// made it its own.
+	if err := prepareDirs(dir, ""); err != nil {
+		return err
+	}
 	log := newLogger(level)
 	slog.SetDefault(log)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -94,7 +99,7 @@ func (s *service) Execute(_ []string, req <-chan svc.ChangeRequest, status chan<
 	if err := prepareDirs(s.dir, ""); err != nil {
 		// Nothing in the agent's folder can be trusted, its log neither:
 		// Windows' own event log says why the agent stopped.
-		eventLog("The Whombat agent stopped before it started: " + err.Error())
+		eventLog(windows.EVENTLOG_ERROR_TYPE, "The Whombat agent stopped before it started: "+err.Error())
 		return true, exitFailed
 	}
 	logf, err := openServiceLog()
@@ -157,9 +162,9 @@ func (s *service) Execute(_ []string, req <-chan svc.ChangeRequest, status chan<
 	}
 }
 
-// eventLog writes msg to Windows' Application log as an error of the
-// agent's service (Event Viewer, Windows Logs, Application).
-func eventLog(msg string) {
+// eventLog writes msg to Windows' Application log as an error or a warning
+// (kind) of the agent's service (Event Viewer, Windows Logs, Application).
+func eventLog(kind uint16, msg string) {
 	src, err := windows.UTF16PtrFromString(serviceName)
 	if err != nil {
 		return
@@ -173,7 +178,7 @@ func eventLog(msg string) {
 		return
 	}
 	defer windows.DeregisterEventSource(h)
-	_ = windows.ReportEvent(h, windows.EVENTLOG_ERROR_TYPE, 0, 1, 0, 1, 0, &text, nil)
+	_ = windows.ReportEvent(h, kind, 0, 1, 0, 1, 0, &text, nil)
 }
 
 // logMax is the size of the service's log before it starts a new one (the
