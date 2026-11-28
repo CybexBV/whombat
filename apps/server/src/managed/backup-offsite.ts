@@ -21,6 +21,7 @@ import {
   type BackupStatus,
 } from '@whombat/protocol/session';
 import type { z } from 'zod';
+import { isPrivateIpv4 } from '../backup-places/hub';
 import { externalEffect } from '../commit/scope';
 import { tServer } from '../i18n/catalog';
 import { accountLocale } from '../i18n/locale';
@@ -41,14 +42,16 @@ const SET_DEADLINE_MS = 3 * 60_000;
 
 /**
  * The storage's address as the backup service takes it (`https://host[:port]`): typed without `https://` it is https;
- * a path, a user or a query in it is refused (the bucket and the folder have their own fields). Null when it isn't one.
+ * a path, a user or a query in it is refused (the bucket and the folder have their own fields). Plain `http://` only to
+ * an address on the home network (a storage at home may have no certificate); anywhere else the key and the backups
+ * would cross the internet unprotected. Null when it isn't one.
  */
 export function endpointOf(endpoint: string): URL | null {
   const raw = endpoint.trim().replace(/\/+$/, '');
   const full = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
   try {
     const u = new URL(full);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.protocol !== 'https:' && !(u.protocol === 'http:' && isPrivateIpv4(u.hostname))) return null;
     if (u.username || u.password || u.search || u.hash || (u.pathname !== '/' && u.pathname !== ''))
       return null;
     return u;
