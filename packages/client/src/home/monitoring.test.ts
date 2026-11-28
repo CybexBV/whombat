@@ -221,6 +221,40 @@ describe('what happened', () => {
     expect(view.empty).toBeNull();
   });
 
+  it('puts what changed among the incidents, newest first, with who changed it (outside-changes.md)', () => {
+    const view = historyView(
+      {
+        ...history,
+        changes: [
+          {
+            id: 'och_2',
+            kind: 'restart',
+            words: 'Kernel updated to 6.12.1 and the server restarted',
+            at: '2026-11-24T12:40:00Z',
+            since: '2026-11-24T12:30:00Z',
+            by: 'outside',
+          },
+          {
+            id: 'och_1',
+            kind: 'system',
+            words: '12 updates were installed',
+            at: '2026-11-20T03:10:00Z',
+            by: 'whombat',
+          },
+        ],
+      },
+      NOW,
+      ZONE,
+    );
+    expect(view.rows.map((r) => r.id)).toEqual(['inc_2', 'och_2', 'och_1', 'inc_1']);
+    expect(view.rows[1]).toMatchObject({ tone: 'change', open: false, cause: 'Changed outside Whombat' });
+    expect(view.rows[1]?.when).toBe('Today 13:40');
+    expect(view.rows[2]?.cause).toBe('Changed by Whombat');
+    expect(
+      historyView({ ...history, incidents: [], alerts: [], changes: [] }, NOW, ZONE).empty,
+    ).not.toBeNull();
+  });
+
   it('says when server alerts could not be read and keeps the incident rows', () => {
     const partial = { ...history, alerts: undefined, alertsUnavailable: { serverName: 'pve-02' } };
     const empty = historyView({ ...partial, incidents: [] }, NOW, ZONE);

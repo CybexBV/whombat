@@ -1,6 +1,7 @@
 /**
  * Monitoring in the demo world: UniFi and the-falcon kept quiet,
- * Seerr down while its machine is stopped, What happened for every thing, and a server check's limit with Undo — each
+ * Seerr down while its machine is stopped, What happened and what changed for every thing, Pi-hole's settings copy,
+ * and a server check's limit with Undo — each
  * answer through the session, parsed with its endpoint's schema.
  */
 import { heldLine, historyView, thingStateWords, withoutHoldLine } from '@whombat/client';
@@ -149,6 +150,30 @@ describe('monitoring in the demo world', () => {
     );
     expect(quiet.incidents).toEqual([]);
     expect(quiet.alerts).toEqual([]);
+  });
+
+  it('lists what changed beside what happened, and gives Pi-hole’s settings copy for Download', async () => {
+    const { client } = setup();
+    const seerr = await ok(
+      client.request(api.things.history, {
+        params: { burrow, thing: MONITORING_THINGS.seerr },
+        query: { days: 30 },
+      }),
+    );
+    expect(seerr.changes?.map((c) => [c.kind, c.by])).toContainEqual(['version', 'outside']);
+    const view = historyView(seerr, Date.parse(at('14:05')), ZONE);
+    expect(view.rows.map((r) => r.tone)).toContain('change');
+    const page = await ok(
+      client.request(api.things.page, { params: { burrow, thing: MONITORING_THINGS.pihole } }),
+    );
+    expect(page.settingsCopy).toMatchObject({ service: 'Pi-hole', failing: false });
+    const file = await ok(
+      client.request(api.things.settingsCopy, {
+        params: { burrow, thing: MONITORING_THINGS.pihole },
+        query: {},
+      }),
+    );
+    expect(file.fileName).toBe(page.settingsCopy?.fileName);
   });
 
   it('lists only outages the product can make: red dots and things not answering, never a warning', async () => {

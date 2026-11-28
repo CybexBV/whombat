@@ -6,7 +6,8 @@
  * because of something else is grey with `causedBy`. With `monitoring` (`VITE_FIXTURE_MONITORING=1`, or
  * `localStorage['whombat:fixture-monitoring']` for the visual suite) the world starts with the states to look at:
  * blackbox kept quiet until 23:00 while Mara moves the NAS, UniFi kept quiet until tomorrow morning, Home Assistant not
- * answering while its machine is stopped, each page's week in one line and 30 days of what happened. Without it the
+ * answering while its machine is stopped, each page's week in one line, 30 days of what happened and what changed
+ * (session minor 22), and Pi-hole's settings copy of last night with Download (`things.settingsCopy`). Without it the
  * world starts calm: nothing kept quiet and nothing happened.
  */
 import { localAt, untilText } from '@whombat/client';
@@ -19,7 +20,10 @@ import {
   type KeptQuiet,
   type NoticeQuiet,
   type SetThingWatchLimitBody,
+  type SettingsCopyFile,
+  type SettingsCopyView,
   type ThingCause,
+  type ThingChange,
   type ThingHistory,
   type ThingHistoryAlert,
   type ThingIncident,
@@ -51,6 +55,7 @@ const HA = 'connection:con_home-assistant';
 const UNIFI = 'connection:con_unifi';
 const BLACKBOX = 'server:blackbox';
 const PVE02 = 'server:pve-02';
+const PIHOLE = 'connection:con_pihole';
 const BY = { id: mara.id, name: 'Mara' } as NonNullable<KeptQuiet['by']>;
 
 /** A server check's own limit or one item's: `server|check|subject`. */
@@ -284,6 +289,8 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
           : {}),
       };
     }
+    const copy = settingsCopyOf(thing);
+    if (copy && !p.settingsCopy) p = { ...p, settingsCopy: copy };
     const uptime = uptimeOf(thing);
     if (uptime && !p.uptime) {
       const fact = marked(UPTIME_MARKED[thing] ?? 'Up **all week**');
@@ -469,9 +476,69 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
     return [];
   }
 
+  function change(
+    id: string,
+    kind: ThingChange['kind'],
+    words: string,
+    ago: number,
+    by: ThingChange['by'] = 'outside',
+  ): ThingChange {
+    return {
+      id,
+      kind,
+      words,
+      at: new Date(now() - ago).toISOString(),
+      since: new Date(now() - ago - 5 * MIN).toISOString(),
+      by,
+    };
+  }
+
+  /** What changed on each thing: Home Assistant's update just before it stopped answering, pve-02's kernel. */
+  function changesOf(thing: string): ThingChange[] {
+    if (!opts.seeded) return [];
+    switch (thing) {
+      case HA:
+        return [
+          change('och_fx_ha_2', 'version', 'Home Assistant went from 2026.11.2 to 2026.11.3', 27 * MIN),
+          change('och_fx_ha_1', 'version', 'Home Assistant went from 2026.11.1 to 2026.11.2', 12 * DAY),
+        ];
+      case PVE02:
+        return [
+          change(
+            'och_fx_pve02_2',
+            'restart',
+            'Kernel updated to 6.8.12-4-pve and the server restarted',
+            2 * DAY + 3 * HOUR + 30 * MIN,
+            'whombat',
+          ),
+          change(
+            'och_fx_pve02_1',
+            'system',
+            '14 updates were installed',
+            2 * DAY + 3 * HOUR + 40 * MIN,
+            'whombat',
+          ),
+          change('och_fx_pve02_0', 'image', 'immich-server got a new image of release', 8 * DAY),
+        ];
+      case PIHOLE:
+        return [
+          change(
+            'och_fx_pihole_2',
+            'settings',
+            'Pi-hole’s settings changed: local DNS records (1 added)',
+            20 * HOUR,
+          ),
+          change('och_fx_pihole_1', 'version', 'Pi-hole went from 6.1.4 to 6.2.1', 9 * DAY),
+        ];
+      default:
+        return [];
+    }
+  }
+
   function history(thing: string, days: number): ThingHistory {
     const from = now() - days * DAY;
     const within = (at: string) => Date.parse(at) >= from;
+    const changed = changesOf(thing).filter((c) => within(c.at));
     return {
       thing,
       days,
@@ -479,7 +546,47 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
       uptime: uptimeOf(thing, days),
       incidents: incidentsOf(thing).filter((i) => within(i.startedAt) || i.endedAt === null),
       ...(thing.startsWith('server:') ? { alerts: alertsOf(thing).filter((a) => within(a.openedAt)) } : {}),
+      ...(changed.length ? { changes: changed } : {}),
     };
+  }
+
+  /* Settings copy ------------------------------------------------------------------------------------------------ */
+
+  const COPY_TEXT = '{"config":{"dns":{"hosts":["10.100.0.12 photos.example.com"]}}}\n';
+
+  /** Pi-hole's copy of last night at 03:12. */
+  function copyAt(): number {
+    const at = Date.parse(localAt(now(), TZ, '03:12'));
+    return at <= now() ? at : at - DAY;
+  }
+
+  function settingsCopyOf(thing: string): SettingsCopyView | null {
+    if (!opts.seeded || thing !== PIHOLE) return null;
+    return {
+      service: 'Pi-hole',
+      title: 'Settings copy · last night',
+      detail: 'Whombat keeps a copy of Pi-hole’s settings every night. Restore one in Pi-hole itself.',
+      copyId: 'scp_fx_pihole',
+      fileName: 'pihole-teleporter-2026-11-24.zip',
+      size: 18_432,
+      at: new Date(copyAt()).toISOString(),
+      kept: 6,
+      failing: false,
+    };
+  }
+
+  function settingsCopyFile(thing: string): Response {
+    const view = settingsCopyOf(thing);
+    if (!view?.fileName) return refused(404, 'not_found', 'There’s no settings copy yet.');
+    const bytes = new TextEncoder().encode(COPY_TEXT);
+    const file: SettingsCopyFile = {
+      fileName: view.fileName,
+      contentType: 'application/zip',
+      size: bytes.length,
+      madeAt: new Date(copyAt()).toISOString(),
+      base64: btoa(String.fromCharCode(...bytes)),
+    };
+    return json(file);
   }
 
   /* Limits ------------------------------------------------------------------------------------------------------- */
@@ -603,7 +710,10 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
       const path = url.pathname;
       if (!path.startsWith(`${base}/`)) return inner(req);
       const rest = path.slice(base.length);
-      const own = /^\/things\/([^/]+)\/(keep-quiet|keep-quiet\/end|history|watch\/limit|watch)$/.exec(rest);
+      const own =
+        /^\/things\/([^/]+)\/(keep-quiet|keep-quiet\/end|history|settings-copy|watch\/limit|watch)$/.exec(
+          rest,
+        );
       if (own) {
         const thing = decodeURIComponent(own[1] as string);
         const what = own[2];
@@ -614,6 +724,7 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
           const days = Number(url.searchParams.get('days') ?? 30);
           return json(history(thing, days === 90 ? 90 : 30));
         }
+        if (what === 'settings-copy' && req.method === 'GET') return settingsCopyFile(thing);
         if (what === 'watch/limit' && req.method === 'PUT') {
           const watch = await read<ThingWatch>(
             await inner(new Request(new URL(`${base}/things/${own[1]}/watch`, url).toString())),

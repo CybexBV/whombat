@@ -2,7 +2,8 @@
  * The demo world's monitoring: a thing kept quiet for a while
  * (`things.keepQuiet`, `things.endQuiet`: UniFi until 23:00 while its access points move, the-falcon while its backup
  * disk moves), a connection down because of something else (Seerr while its machine `media` is stopped), the
- * week's line and “What happened” (`things.history`) for every thing, and a server check's limit
+ * week's line and “What happened” (`things.history`, with what changed since session minor 22) for every thing,
+ * Pi-hole's settings copy of last night with Download (`things.settingsCopy`), and a server check's limit
  * (`things.setWatchLimit`, Undo through `changes.undo`). It changes the pages, Home's things and a server's page the way
  * the server does: the page carries `keptQuiet` or `causedBy`, its Worth a look starts with the hold's heads-up for an
  * older app, its watched lines are held (End now, not Undo), and Home's thing has `quietUntil` or `causedBy`. Pure
@@ -14,7 +15,10 @@ import {
   type KeepQuietBody,
   type KeptQuiet,
   type NoticeQuiet,
+  type SettingsCopyFile,
+  type SettingsCopyView,
   type ThingCause,
+  type ThingChange,
   type ThingHistory,
   type ThingIncident,
   type ThingPage,
@@ -38,6 +42,7 @@ export const MONITORING_THINGS = {
   seerr: 'connection:con_seerr',
   falcon: 'server:the-falcon',
   pve02: 'server:pve-02',
+  pihole: 'connection:con_pihole',
 } as const;
 
 /** Seerr runs on this machine of pve-02, stopped: it doesn't answer while it is. */
@@ -243,6 +248,71 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     };
   }
 
+  /** What changed: Seerr's update just before it stopped answering, pve-02's kernel, Pi-hole's DNS records. */
+  const CHANGES: Record<string, [ThingChange['kind'], string, number, string, ThingChange['by']][]> = {
+    'connection:con_seerr': [
+      ['version', 'Seerr went from 2.7.2 to 2.7.3', 0, '13:44', 'outside'],
+      ['image', 'seerr got a new image of latest', 0, '13:44', 'outside'],
+    ],
+    'server:pve-02': [
+      ['restart', 'Kernel updated to 6.8.12-4-pve and the server restarted', 4, '03:20', 'whombat'],
+      ['system', '14 updates were installed', 4, '03:05', 'whombat'],
+    ],
+    'connection:con_pihole': [
+      ['settings', 'Pi-hole’s settings changed: local DNS records (1 added)', 1, '03:12', 'outside'],
+      ['version', 'Pi-hole went from 6.1.4 to 6.2.1', 8, '11:30', 'outside'],
+    ],
+  };
+
+  function changesOf(thing: string, from: number): ThingChange[] {
+    return (CHANGES[thing] ?? []).flatMap(([kind, words, days, hhmm, by], i) => {
+      const seen = local(hhmm, -days);
+      if (seen < from || seen > now().getTime()) return [];
+      return [
+        {
+          id: `och_${thing.replace(/[^a-z0-9]/gi, '')}_${i}`,
+          kind,
+          words,
+          at: at(seen),
+          since: at(seen - 5 * MINUTE),
+          by,
+        },
+      ];
+    });
+  }
+
+  /** Pi-hole's settings copy, made last night at 03:12. */
+  function settingsCopyOf(thing: string): SettingsCopyView | null {
+    if (thing !== MONITORING_THINGS.pihole) return null;
+    const made = local('03:12') <= now().getTime() ? local('03:12') : local('03:12', -1);
+    return {
+      service: 'Pi-hole',
+      title: 'Settings copy · last night',
+      detail: 'Whombat keeps a copy of Pi-hole’s settings every night. Restore one in Pi-hole itself.',
+      copyId: 'scp_pihole',
+      fileName: 'pihole-teleporter-2026-11-24.zip',
+      size: 18_432,
+      at: at(made),
+      kept: 6,
+      failing: false,
+    };
+  }
+
+  /** `things.settingsCopy`: the copy's bytes, as base64. */
+  function settingsCopy(thing: string): Answer {
+    const view = settingsCopyOf(thing);
+    if (!view?.fileName || !view.at) return refusal(404, 'not_found', 'There’s no settings copy yet.');
+    const text = '{"config":{"dns":{"hosts":["10.100.0.12 photos.example.com"]}}}\n';
+    const body: SettingsCopyFile = {
+      fileName: view.fileName,
+      contentType: 'application/zip',
+      size: text.length,
+      madeAt: view.at,
+      base64: btoa(text),
+    };
+    return { status: 200, body };
+  }
+
   /** `things.history?days=`. */
   function history(thing: string, days: number): ThingHistory {
     const from = now().getTime() - days * DAY;
@@ -269,6 +339,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
       uptime: uptimeOf(thing, days),
       incidents: incidentsOf(thing, from),
       ...(alerts ? { alerts } : {}),
+      ...(changesOf(thing, from).length ? { changes: changesOf(thing, from) } : {}),
     };
   }
 
@@ -310,7 +381,8 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     const uptime = uptimeOf(page.id);
     // The week's words are also one of its facts, after the first, for an app that doesn't draw `uptime`.
     const facts = [...page.facts.slice(0, 1), [{ text: uptime.text }], ...page.facts.slice(1)];
-    let out: ThingPage = { ...page, uptime, facts };
+    const copy = settingsCopyOf(page.id);
+    let out: ThingPage = { ...page, uptime, facts, ...(copy ? { settingsCopy: copy } : {}) };
     const w = windowOf(page.id);
     const cause = w ? null : causeOf(page.id);
     const quiet = heldQuiet(w, cause);
@@ -541,6 +613,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     withServer,
     withLimits,
     history,
+    settingsCopy,
     keepQuiet,
     endQuiet,
     setWatchLimit,
