@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 
 	"rackoon/internal/agent"
+	"rackoon/internal/agent/winpc"
 )
 
 // isRoot: the commands that change the agent's own settings run elevated
@@ -31,14 +32,11 @@ func asRoot(cmd string) string {
 		agentCommand + strings.TrimPrefix(cmd, "whombat-agent")
 }
 
-// The agent's folders hold its key and what it runs: only SYSTEM and the
-// administrators may read or change them. A protected list, so nothing
-// above it (%ProgramData% lets every user add files) widens it.
-const dataDirSDDL = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
-
-// prepareDirs creates %ProgramData%\Whombat with the agent's access list,
-// or puts that list back on it, before the agent writes its identity
-// there. Folders elsewhere (given with --config-dir) are the person's.
+// prepareDirs creates %ProgramData%\Whombat as the agent's own, or takes it
+// over with everything in it, before the agent reads or writes anything
+// there; it fails when something in it can't be made the agent's (a link
+// to another place, say). Folders elsewhere (given with --config-dir) are
+// the person's.
 func prepareDirs(dir, stateDir string) error {
 	top := agent.WindowsDataDir
 	under := func(p string) bool {
@@ -48,23 +46,7 @@ func prepareDirs(dir, stateDir string) error {
 	if !under(dir) && (stateDir == "" || !under(stateDir)) {
 		return nil
 	}
-	if err := os.MkdirAll(top, 0o700); err != nil {
-		return err
-	}
-	sd, err := windows.SecurityDescriptorFromString(dataDirSDDL)
-	if err != nil {
-		return err
-	}
-	dacl, _, err := sd.DACL()
-	if err != nil {
-		return err
-	}
-	if err := windows.SetNamedSecurityInfo(top, windows.SE_FILE_OBJECT,
-		windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION,
-		nil, nil, dacl, nil); err != nil {
-		return fmt.Errorf("securing %s: %w", top, err)
-	}
-	return nil
+	return winpc.SecureDataDir(top)
 }
 
 // openService opens the agent's service; nil, nil when there is none.
@@ -311,6 +293,9 @@ func cmdService(args []string) error {
 	case "install":
 		exe, err := agent.ExecutablePath()
 		if err != nil {
+			return err
+		}
+		if err := prepareDirs(*dir, ""); err != nil {
 			return err
 		}
 		return installService(exe, *dir)

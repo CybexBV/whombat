@@ -482,6 +482,13 @@ describe('what the switches say about an install (task-feedback.md TF-03)', () =
     expect(String(off.next)).not.toMatch(/needs Full control/);
     expect(String(updatesSummary('PVE-02', { updates: 3 }, true).next)).toContain('server_update install');
   });
+
+  it('points nowhere near an install on a Windows PC, where the person installs them', () => {
+    const pc = updatesSummary('OFFICE-PC', { updates: 3 }, false, true);
+    expect(pc.canInstall).toBe(false);
+    expect(pc.next).toBeUndefined();
+    expect(JSON.stringify(pc)).not.toContain('server_update');
+  });
 });
 
 describe('the waiting updates hint’s way out (SWU-13)', () => {
