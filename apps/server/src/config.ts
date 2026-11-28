@@ -195,7 +195,7 @@ export const ConfigSchema = z
     /** The backup service's local API (`/run/whombat-backup/api.sock`), for the person's backup ops. */
     WHOMBAT_BACKUP_SOCKET: z.string().optional(),
     /**
-     * The hosted UI's origin (`https://app.whombat.com`, `https://dev.whombat.com`). Links the server writes (run
+     * The hosted UI's origin (`https://app.whombat.com`). Links the server writes (run
      * notices, burrow addresses, invites) point there at this appliance, `/appliances/<device id>/…` (MR-45).
      * Required in production (`serverIssues`): https, or http on a loopback address outside production, where it
      * defaults to `DEV_APP_URL`.

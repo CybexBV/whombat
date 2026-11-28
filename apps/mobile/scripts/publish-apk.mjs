@@ -5,11 +5,9 @@
 //
 //   pnpm --filter @whombat/mobile publish:apk --dir <dir>      # production, the one app for everyone (arm64-v8a)
 //   … --arch all      x86_64 too, for an emulator (every phone would download its libraries)
-//   pnpm --filter @whombat/mobile publish:apk --env dev --dir ~/.whombat-stack-dev/downloads
 //   … --skip-build    publish build/whombat-release.apk as it is (it must have been built for the same --env)
 //
-// Production is the only environment (Whombat one-environment.md), so `--env` defaults to `prod`; `dev` stays only
-// until the move to production is done, and goes with DEV.
+// Production is the only environment (Whombat one-environment.md): `--env` is `prod`, its default.
 //
 // The key: WHOMBAT_ANDROID_KEYSTORE + WHOMBAT_ANDROID_KEYSTORE_PASS_FILE, else ~/.config/whombat/android/
 // whombat-release.{p12,pass}. Without a release key it refuses (a debug-signed APK never opens links by itself).
@@ -46,12 +44,11 @@ const flag = (name, fallback) => {
 };
 
 const ENVIRONMENTS = {
-  dev: { control: 'https://api-dev.whombat.com', ui: 'https://dev.whombat.com' },
   prod: { control: 'https://api.whombat.com', ui: 'https://app.whombat.com' },
 };
 const envName = flag('env', 'prod');
 const target = ENVIRONMENTS[envName];
-if (!target) throw new Error('--env must be prod (the default) or dev');
+if (!target) throw new Error('--env must be prod (the default)');
 const dirArg = flag('dir');
 if (!dirArg) throw new Error('--dir <control DOWNLOADS_DIR> is required');
 const downloads = resolve(dirArg.replace(/^~(?=\/|$)/, homedir()));
