@@ -146,6 +146,10 @@ export const ID_PREFIXES = {
   /** One thing Looks ahead keeps an eye on (“Keeping an eye on”, Whombat looks-ahead.md). */
   aheadMatter: 'ahm',
   thingWatch: 'thw',
+  /** A change Whombat saw on a thing that it didn't make through a tool (Whombat outside-changes.md). */
+  thingChange: 'och',
+  /** A copy of a service's settings kept on the box (Whombat outside-changes.md). */
+  settingsCopy: 'scp',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

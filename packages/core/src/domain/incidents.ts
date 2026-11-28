@@ -6,6 +6,7 @@
  * may start on (`thing.down`, `thing.problem`, `thing.back`).
  */
 import { z } from 'zod';
+import { ThingChange } from './changes.js';
 import { Timestamp } from './common.js';
 
 /** `down`: it doesn't answer (offline); `problem`: it answers but its dot is bad. */
@@ -81,8 +82,8 @@ export const ThingHistoryQuery = z.object({
 export type ThingHistoryQuery = z.infer<typeof ThingHistoryQuery>;
 
 /**
- * `things.history` (session minor 9): a thing's incidents over the period, newest first, its uptime over it, and for a
- * server the alerts the hosts service had in it, newest first.
+ * `things.history` (session minor 9): a thing's incidents over the period, newest first, its uptime over it, for a
+ * server the alerts the hosts service had in it, newest first, and (minor 22) what changed on it.
  */
 export const ThingHistory = z.object({
   thing: z.string().min(3).max(220),
@@ -93,6 +94,11 @@ export const ThingHistory = z.object({
   alerts: z.array(ThingHistoryAlert).max(500).optional(),
   /** When present, the server's own alerts couldn't be read. */
   alertsUnavailable: z.object({ serverName: z.string().min(1).max(120) }).optional(),
+  /**
+   * What changed on it in the period, newest first (session minor 22, Whombat outside-changes.md): its version, its
+   * system, a container's image, a restart, firmware, routes, settings. Absent from an older Whombat.
+   */
+  changes: z.array(ThingChange).max(500).optional(),
 });
 export type ThingHistory = z.infer<typeof ThingHistory>;
 

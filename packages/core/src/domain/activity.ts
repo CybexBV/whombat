@@ -165,6 +165,7 @@ const WHOMBAT_VERBS: Record<string, readonly [string, string]> = {
   watch_checks: ['Checking what Whombat watches', 'Checked what Whombat watches'],
   watch_status: ['Checking how everything is', 'Checked how everything is'],
   watch_history: ['Looking back at what went wrong', 'Looked back at what went wrong'],
+  what_changed: ['Looking at what changed', 'Looked at what changed'],
   quiet_until: ['Keeping it quiet', 'Kept it quiet'],
 };
 

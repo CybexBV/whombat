@@ -91,9 +91,17 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
- * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md); minor
+ * 22 adds what changed on a thing to its history (`ThingHistory.changes`) and settings copies (`ThingPage.settingsCopy`,
+ * `things.settingsCopy`; Whombat outside-changes.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
+
+/**
+ * Session protocol minor (major 5) with what changed on a thing (`ThingHistory.changes`) and settings copies
+ * (`ThingPage.settingsCopy`, `things.settingsCopy`); an app asks for a copy only from a box at this minor or later.
+ */
+export const OUTSIDE_CHANGES_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim
