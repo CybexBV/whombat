@@ -438,7 +438,7 @@ func (rt *Runtime) collectOnce(ctx context.Context) {
 	if rt.Helper != nil {
 		ai.Caps = append(ai.Caps, proto.CapHelperUpdate)
 	}
-	ai.Caps = append(ai.Caps, proto.CapRestoreIsolate)
+	ai.Caps = append(ai.Caps, proto.CapRestoreIsolate, proto.CapBackupConfig)
 	r.Agent = ai
 	r.Checks = rt.checkRunner().Results()
 	// The running package task and the last one that ended (the broker's

@@ -16,11 +16,12 @@ import {
   type RestoreTestServer,
   thingHref,
 } from '@whombat/core';
-import { type BackupOffsite, offsitePlaceName } from '@whombat/protocol/session';
+import { type BackupOffsite, type BackupServiceStatus, offsitePlaceName } from '@whombat/protocol/session';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { placesNow } from '../backup-places/places';
 import { changeWindowOf } from '../care/window';
 import {
+  applianceEvents,
   burrows,
   catalogConnections,
   restoreTestServers,
@@ -130,6 +131,18 @@ interface StorageInfo {
 function storageState(s: StorageInfo | undefined): 'copied' | 'local' | null {
   if (!s) return null;
   return AWAY_TYPES.has(s.type) || s.shared ? 'copied' : 'local';
+}
+
+/**
+ * An Incus or QEMU/KVM machine's state: its snapshots stay in its own storage pool, its backups on its own server, and
+ * only a backup that worked counts (a failed one is none worked yet).
+ */
+export function sameMachineState(
+  platform: string,
+  f: { snapshots?: number | null; last: { result: string } | null },
+): ProtectedState {
+  if (platform === 'incus') return (f.snapshots ?? 0) > 0 ? 'local' : 'none';
+  return f.last && f.last.result !== 'error' ? 'local' : 'none';
 }
 
 /** The newest backup on a machine's backup list: the storage it is on (its id and kind, when known) and when. */
@@ -320,11 +333,8 @@ async function serverMachines(
       lastAt = p.lastAt;
       where = p.where;
       planned = !!p.planned;
-    } else if (g.platform === 'incus') {
-      // Snapshots stay in the same storage pool as the instance.
-      state = (g.snapshots ?? 0) > 0 ? 'local' : 'none';
     } else {
-      state = last ? 'local' : 'none';
+      state = sameMachineState(g.platform, { snapshots: g.snapshots, last });
     }
     const row: ProtectedRow = {
       ...base,
@@ -417,6 +427,55 @@ export async function restoreTestServerView(
 
 /* The whole view ---------------------------------------------------------------------------------------------------- */
 
+/**
+ * When backups started going to the repository they go to now, from the places Whombat set (oldest first): the newest
+ * change to it from another one, or the first. A move of the same repository to a new address isn't a change. Null
+ * when Whombat set no place or the newest one it set isn't this repository (set some other way): then it can't tell.
+ */
+export function placeChosenAt(
+  sets: readonly { repositoryId: string | null; at: string }[],
+  repositoryId: string | null | undefined,
+): string | null {
+  let since: string | null = null;
+  let current: string | null = null;
+  for (const set of sets) {
+    if (set.repositoryId !== current) since = set.at;
+    current = set.repositoryId;
+  }
+  return repositoryId && current === repositoryId ? since : null;
+}
+
+/**
+ * This Whombat's own row from its backup service's status: copied or local only once a backup worked at the place
+ * backups go now. The service keeps its last backup when the place changes, so one from before the place was chosen
+ * doesn't count; until a backup works there the place is a plan (with the failure while backups there fail).
+ */
+export function whombatProtection(
+  status: Pick<BackupServiceStatus, 'state' | 'destination' | 'lastSuccess' | 'lastFailure'>,
+  chosenAt: string | null,
+): { state: ProtectedState; lastAt: string | null; planned?: true; failedAt?: string } {
+  const failed = status.state === 'failing' && status.lastFailure ? { failedAt: status.lastFailure.at } : {};
+  if (!status.destination.configured) return { state: 'none', lastAt: null, ...failed };
+  const last = status.lastSuccess?.at ?? null;
+  const here = last !== null && (chosenAt === null || Date.parse(last) >= Date.parse(chosenAt));
+  if (!here) return { state: 'none', lastAt: null, planned: true, ...failed };
+  return { state: status.destination.kind === 'local' ? 'local' : 'copied', lastAt: last, ...failed };
+}
+
+/** The places Whombat set for this Whombat's backups, oldest first (the newest 200). */
+async function placeSets(services: Services): Promise<{ repositoryId: string | null; at: string }[]> {
+  const rows = await services.db
+    .select({ payload: applianceEvents.payload, at: applianceEvents.createdAt })
+    .from(applianceEvents)
+    .where(eq(applianceEvents.type, 'backup.destination_set'))
+    .orderBy(desc(applianceEvents.seq))
+    .limit(200);
+  return rows.reverse().map((r) => ({
+    repositoryId: typeof r.payload.repositoryId === 'string' ? r.payload.repositoryId : null,
+    at: r.at.toISOString(),
+  }));
+}
+
 async function whombatRow(services: Services, unread: string[], name: string): Promise<ProtectedRow | null> {
   const status = await boxBackupStatus(services).catch(() => null);
   // A development box has no backup service: nothing to say about it.
@@ -430,17 +489,14 @@ async function whombatRow(services: Services, unread: string[], name: string): P
   const now = configured ? await placesNow(services).catch(() => null) : null;
   const place = now?.places.find((p) => p.id === now.currentPlaceId);
   const where = configured ? (place?.name ?? status.destination.display ?? null) : null;
-  const state: ProtectedState = !configured
-    ? 'none'
-    : status.destination.kind === 'local'
-      ? 'local'
-      : 'copied';
+  const chosenAt = configured
+    ? placeChosenAt(await placeSets(services).catch(() => []), status.destination.repositoryId)
+    : null;
+  const p = whombatProtection(status, chosenAt);
   return {
     ...base,
-    state,
-    lastAt: status.lastSuccess?.at ?? null,
-    where: state === 'copied' && where ? where.slice(0, 160) : null,
-    ...(status.state === 'failing' && status.lastFailure ? { failedAt: status.lastFailure.at } : {}),
+    ...p,
+    where: p.state === 'copied' && where ? where.slice(0, 160) : null,
     offsite: offsiteOf(await offsiteNow(services).catch(() => undefined)),
   };
 }

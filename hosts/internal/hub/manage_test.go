@@ -3,6 +3,7 @@ package hub
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -495,6 +496,64 @@ func TestManageIsolatedRestore(t *testing.T) {
 	req := fa.lastManage(t)
 	if req.Op != proto.OpBackupRestore || req.NewID != 990001 || req.Isolate == nil ||
 		*req.Isolate != (proto.RestoreIsolation{Name: "whombat-test-of-web", Marker: "whombat-rst_abc123", Tag: "whombat-restore-test"}) {
+		t.Errorf("agent got %+v", req)
+	}
+}
+
+// A backup's own settings are read only from an agent that can, only on
+// Proxmox VE, and come back as a configuration.
+func TestManageBackupConfig(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	fa := setupManageHost(t, e, admin)
+	const vol = "pbs-01:backup/vm/100/2026-10-17T01:00:00Z"
+	path := "/api/v1/servers/shale/backups/config?platform=pve&volume=" + url.QueryEscape(vol)
+	sent := func() int {
+		fa.mu.Lock()
+		defer fa.mu.Unlock()
+		return len(fa.manages)
+	}
+
+	// The agent from before: refused, nothing sent.
+	before := sent()
+	if p := admin.problem(http.MethodGet, path, nil, 409); p.Code != "agent_outdated" {
+		t.Errorf("old agent: %+v", p)
+	}
+	if sent() != before {
+		t.Fatal("a backup config read reached an agent that doesn't know it")
+	}
+
+	rep := fa.report("shale")
+	rep.Agent.Caps = []string{proto.CapRestoreIsolate, proto.CapBackupConfig}
+	fa.send(proto.MsgReport, rep)
+	waitFor(t, "the capability", 3*time.Second, func() bool {
+		st, _ := e.h.snapshotOne("shale")
+		return st != nil && agentCan(st.Report, proto.CapBackupConfig)
+	})
+	fa.mu.Lock()
+	fa.manage = func(req proto.ManageRequest) proto.ManageResponse {
+		if req.Op != proto.OpBackupConfig {
+			return fakeManage(req)
+		}
+		return proto.ManageResponse{OK: true, Config: &proto.GuestConfig{Platform: proto.PlatformPVE, Kind: "vm",
+			Values: map[string]string{"memory": "8192", "agent": "1", "scsi0": "local-zfs:vm-100-disk-0,size=64G"},
+			Disks:  []proto.GuestDisk{{Key: "scsi0", Storage: "local-zfs", SizeBytes: 64 << 30, Media: "disk"}}}}
+	}
+	fa.mu.Unlock()
+
+	// Only a Proxmox VE backup, and only with a volume.
+	if p := admin.problem(http.MethodGet, "/api/v1/servers/shale/backups/config?platform=incus&volume=web-backup", nil, 501); p.Code != "unsupported" {
+		t.Errorf("incus: %+v", p)
+	}
+	if p := admin.problem(http.MethodGet, "/api/v1/servers/shale/backups/config?platform=pve", nil, 400); p.FieldErrors["volume"] == "" {
+		t.Errorf("no volume: %+v", p)
+	}
+
+	var c proto.GuestConfig
+	admin.json(http.MethodGet, path, nil, 200, &c)
+	if c.Values["memory"] != "8192" || len(c.Disks) != 1 || c.Disks[0].SizeBytes != 64<<30 {
+		t.Errorf("config %+v", c)
+	}
+	if req := fa.lastManage(t); req.Op != proto.OpBackupConfig || req.Volume != vol || req.Platform != proto.PlatformPVE {
 		t.Errorf("agent got %+v", req)
 	}
 }

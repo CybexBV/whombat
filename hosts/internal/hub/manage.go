@@ -59,6 +59,7 @@ var manageRoutes = []manageRoute{
 	{method: "POST", path: "/guests/{guestId}/backups", op: proto.OpBackupCreate, body: []string{"storage", "mode", "compress", "notes", "protected"}},
 	{method: "POST", path: "/backups/restore", op: proto.OpBackupRestore, admin: true,
 		body: []string{"platform", "volume", "new_id", "guest", "storage", "start", "unique", "isolate", "confirm"}},
+	{method: "GET", path: "/backups/config", op: proto.OpBackupConfig, query: []string{"platform", "volume"}},
 	{method: "PATCH", path: "/backups", op: proto.OpBackupUpdate, body: []string{"platform", "volume", "notes", "protected"}},
 	{method: "DELETE", path: "/backups", op: proto.OpBackupDelete, admin: true, query: []string{"platform", "volume"}},
 	{method: "GET", path: "/storage/{storage}/content", op: proto.OpContentList, query: []string{"platform", "content"}},
@@ -185,6 +186,16 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 		}
 		if isBackupJobOp(req.Op) && req.Platform != proto.PlatformPVE {
 			return apiErr(http.StatusNotImplemented, "unsupported", "Backup jobs are a Proxmox VE feature, and this server does not run it.")
+		}
+		if req.Op == proto.OpBackupConfig {
+			if req.Platform != proto.PlatformPVE {
+				return apiErr(http.StatusNotImplemented, "unsupported", "Only a Proxmox VE backup's settings can be read.")
+			}
+			// An agent from before this read doesn't know the operation.
+			if !agentCan(t.st.Report, proto.CapBackupConfig) {
+				return deny(apiErr(http.StatusConflict, "agent_outdated",
+					"This server's agent can't read a backup's settings yet; it gets a newer one by itself."))
+			}
 		}
 		if e := incusRouteCheck(req, t); e != nil {
 			return e
@@ -620,7 +631,8 @@ func validateManage(req *proto.ManageRequest, guestOp bool) map[string]string {
 	}
 
 	// Backups and storage content.
-	needVolume := op == proto.OpBackupRestore || op == proto.OpBackupUpdate || op == proto.OpBackupDelete || op == proto.OpContentDelete
+	needVolume := op == proto.OpBackupRestore || op == proto.OpBackupUpdate || op == proto.OpBackupDelete || op == proto.OpContentDelete ||
+		op == proto.OpBackupConfig
 	bad(req.Volume != "" || !needVolume, "volume", "Choose a volume.")
 	if req.Platform == proto.PlatformIncus { // a backup or custom volume name
 		bad(req.Volume == "" || incusNameRe.MatchString(req.Volume), "volume", "Not a backup or volume name.")
@@ -831,7 +843,7 @@ func manageAgentError(err error) *apiError {
 func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 	empty := apiErr(http.StatusBadGateway, "agent_error", "The agent sent an empty answer.")
 	switch op {
-	case proto.OpConfigGet:
+	case proto.OpConfigGet, proto.OpBackupConfig:
 		c := resp.Config
 		if c == nil {
 			return nil, empty

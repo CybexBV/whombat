@@ -1062,6 +1062,9 @@ export class FakeHostsService implements ManageHost {
       'snapshot_restore',
       'snapshot_delete',
     ];
+    // As the hub: a VM is stopped with force_stop and restarted with reboot; stop and restart are a container's.
+    if (guest.kind === 'vm' && (action === 'stop' || action === 'restart'))
+      return problem(400, 'invalid_action', 'This action does not apply to this guest.');
     if (destructive.includes(action) && body.confirm !== true)
       return problem(400, 'confirm_required', 'Confirm this action.');
     // The guest this Whombat runs in (the Incus and unRAID build brief §2.1): only snapshots and consoles.

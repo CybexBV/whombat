@@ -29,7 +29,10 @@ const GIB = 1024 ** 3;
  * moves the next a little later, at most to the next night's quiet hours.
  */
 export const TEST_EVERY_MS = 7 * DAY;
-/** A test that hasn't come to an outcome in an hour failed. */
+/**
+ * A test takes at most an hour. One whose copy wasn't asked to start by then is skipped (a slow restore says nothing
+ * about the backup); a copy asked to start fails as too long once its own limits have passed too (`overTime`).
+ */
 export const TEST_MAX_MS = 60 * MIN;
 /** A copy whose guest agent was expected may take this long from running to answering. */
 export const BOOT_WAIT_MS = 10 * MIN;
@@ -185,11 +188,18 @@ function volumeOf(value: string): string {
 
 const isCdrom = (value: string) => /(^|,)media=cdrom(,|$)/.test(value);
 
-/** Whether a machine's settings use parts of the server itself (then it isn't tested). */
-export function usesHostParts(config: {
-  values: Record<string, string>;
-  restricted?: readonly string[];
-}): boolean {
+/**
+ * Whether a machine's settings use parts of the server itself (then it isn't tested). A container that isn't
+ * unprivileged runs as the server's own root, so its copy would too.
+ */
+export function usesHostParts(
+  config: {
+    values: Record<string, string>;
+    restricted?: readonly string[];
+  },
+  kind: 'vm' | 'container',
+): boolean {
+  if (kind === 'container' && config.values.unprivileged !== '1') return true;
   const keys = [...Object.keys(config.values), ...(config.restricted ?? [])];
   if (keys.some((k) => HOST_KEYS.test(k))) return true;
   for (const [k, v] of Object.entries(config.values)) {
@@ -314,12 +324,15 @@ export function copyProblem(
     pending?: Record<string, string>;
     restricted?: readonly string[];
   },
+  kind: 'vm' | 'container',
   copyId: number,
   testId: string,
 ): RestoreTestReason | null {
   const values = { ...config.values, ...(config.pending ?? {}) };
   if (!carriesMarker(config.values, testId)) return 'not_ours';
-  if (usesHostParts({ values, restricted: config.restricted })) return 'host_parts';
+  if (usesHostParts({ values, restricted: config.restricted }, kind)) return 'host_parts';
+  // Unprivileged as it is now, not only once a waiting change applies.
+  if (kind === 'container' && config.values.unprivileged !== '1') return 'host_parts';
   if (!copyOwnsDisks(config.values, copyId) || !copyOwnsDisks(values, copyId)) return 'host_parts';
   if (!networkDown(config.values) || !networkDown(values)) return 'network_kept';
   if (startsAtBoot(config.values) || startsAtBoot(values)) return 'refused';
@@ -335,14 +348,64 @@ export interface StorageFacts {
   totalBytes?: number;
 }
 
+/** Proxmox's memory for a machine whose settings name none (MiB). */
+const DEFAULT_MEMORY_MB = 512;
+const UNITS: Record<string, number> = { '': 1, K: 1024, M: 1024 ** 2, G: GIB, T: 1024 * GIB };
+
+/** A disk value's size (`size=32G`) in bytes; null when it names none. */
+function sizeOf(value: string): number | null {
+  const m = /(^|,)size=(\d+(?:\.\d+)?)([KMGT]?)(,|$)/.exec(value);
+  return m ? Math.round(Number(m[2]) * (UNITS[m[3] ?? ''] ?? 1)) : null;
+}
+
+/** What restoring a backup takes, from its own settings: its disks' sizes and its memory. */
+export interface BackupNeeds {
+  /** The disks a restore makes, in bytes (those with a size). */
+  diskBytes: number;
+  /** Every disk named its size (else `diskBytes` is only part of it). */
+  allSized: boolean;
+  memoryMb: number;
+}
+
 /**
- * How much room a copy needs: the size of the machine's disks, else a generous multiple of the backup (it is
- * compressed), else nothing known.
+ * What a restore of a backup takes, read from the backup's own settings (not the machine's today, which may have lost
+ * or gained a disk since): every disk and mount point a restore makes, apart from CD drives, empty drives and host
+ * paths (nothing is made for them) and a VM's disks left out of its backups (a restore leaves them out too); and its
+ * memory (Proxmox's default when it names none).
  */
-export function roomNeeded(diskBytes: number, backupBytes: number | null): number | null {
-  if (diskBytes > 0) return diskBytes;
-  if (backupBytes && backupBytes > 0) return backupBytes * 3;
-  return null;
+export function backupNeeds(kind: 'vm' | 'container', values: Record<string, string>): BackupNeeds {
+  let diskBytes = 0;
+  let allSized = true;
+  for (const [k, v] of Object.entries(values)) {
+    if (!DISK_KEYS.test(k) || isCdrom(v)) continue;
+    const volume = volumeOf(v);
+    if (volume === '' || volume === 'none' || volume.startsWith('/')) continue;
+    if (kind === 'vm' && /(^|,)backup=(0|no|off|false)(,|$)/.test(v)) continue;
+    const size = sizeOf(v);
+    if (size === null) allSized = false;
+    else diskBytes += size;
+  }
+  // `memory: 4096`, or `memory: current=4096` on newer Proxmox.
+  const memory = (values.memory ?? '')
+    .split(',')
+    .map((p) => p.replace(/^current=/, ''))
+    .find((p) => /^\d+$/.test(p));
+  return { diskBytes, allSized, memoryMb: memory ? Number(memory) : DEFAULT_MEMORY_MB };
+}
+
+/**
+ * How much room a copy needs: the size of the backup's disks, else a generous multiple of the backup (it is
+ * compressed), and the larger of the two when some disk named no size; null when nothing is known (then there is no
+ * test: Whombat can't tell that it fits).
+ */
+export function roomNeeded(
+  needs: Pick<BackupNeeds, 'diskBytes' | 'allSized'>,
+  backupBytes: number | null,
+): number | null {
+  const guess = backupBytes && backupBytes > 0 ? backupBytes * 3 : 0;
+  if (needs.allSized && needs.diskBytes > 0) return needs.diskBytes;
+  const need = Math.max(needs.diskBytes, guess);
+  return need > 0 ? need : null;
 }
 
 /**
@@ -385,14 +448,64 @@ export function storagesOf(values: Record<string, string>): string[] {
 
 /* Whether the copy started -------------------------------------------------------------------------------------------- */
 
+const TRUE_WORDS = new Set(['1', 'yes', 'on', 'true']);
+
+/** Whether a VM's settings switch its QEMU guest agent on (`agent: 1`, `agent: enabled=1,fstrim_cloned_disks=1`). */
+export function agentEnabled(values: Record<string, string>): boolean {
+  for (const part of (values.agent ?? '').split(',')) {
+    const [k, v] = part.includes('=') ? part.split('=', 2) : ['enabled', part];
+    if (k === 'enabled') return TRUE_WORDS.has((v ?? '').trim().toLowerCase());
+  }
+  return false;
+}
+
+/**
+ * Whether the real machine leaves room for a guest agent in the copy: its agent answers, or it isn't running so
+ * nothing says it doesn't. A running machine whose agent doesn't answer hasn't got one that works (switched on, never
+ * installed), so asking its copy would fail a good backup.
+ */
+export function agentMayAnswer(real: { state: string; agent: boolean }): boolean {
+  return real.agent || real.state !== 'running';
+}
+
+/**
+ * Whether the copy's guest agent must answer for the test to work: a VM whose own settings (the backup's) switch the
+ * agent on, where the real machine leaves room for one (`agentMayAnswer`, decided when the test chose its backup).
+ */
+export function agentExpectedOf(
+  kind: 'vm' | 'container',
+  copyValues: Record<string, string>,
+  mayAnswer: boolean,
+): boolean {
+  return kind === 'vm' && mayAnswer && agentEnabled(copyValues);
+}
+
+/**
+ * What a test past its hour comes to: one whose copy wasn't asked to start yet (the restore still running, or the copy
+ * still being made ready) is skipped, which says nothing about the backup; one whose copy was asked to start waits for
+ * its own limits (a start, then the guest agent) and fails as too long only after those too; one still choosing its
+ * backup couldn't reach the server. Null: carry on.
+ */
+export function overTime(
+  t: { step: string; startedAt: Date; stepAt: Date },
+  now: Date,
+): { outcome: 'failed' | 'skipped'; reason: RestoreTestReason } | null {
+  if (t.step === 'cleaning' || t.step === 'done') return null;
+  if (now.getTime() - t.startedAt.getTime() <= TEST_MAX_MS) return null;
+  if (t.step === 'pick') return { outcome: 'skipped', reason: 'unreachable' };
+  if (t.step !== 'booting') return { outcome: 'skipped', reason: 'too_long' };
+  if (now.getTime() - t.stepAt.getTime() <= START_WAIT_MS + BOOT_WAIT_MS) return null;
+  return { outcome: 'failed', reason: 'too_long' };
+}
+
 export type BootVerdict =
   | { verdict: 'wait'; runningAt: Date | null }
   | { verdict: 'worked'; booted: boolean }
   | { verdict: 'failed'; reason: RestoreTestReason };
 
 /**
- * What a copy's state says about the test: running long enough (and, when the real machine has a guest agent, that
- * agent answering inside the copy) worked; stopping after it ran, not starting, or never answering failed.
+ * What a copy's state says about the test: running long enough (and, when its guest agent is expected, that agent
+ * answering inside the copy) worked; stopping after it ran, not starting, or never answering failed.
  */
 export function bootVerdict(input: {
   kind: 'vm' | 'container';

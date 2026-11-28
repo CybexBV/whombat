@@ -101,6 +101,7 @@ var pveOps = map[string]func(*pveReq, context.Context) (proto.ManageResponse, er
 	proto.OpBackupList:         (*pveReq).backupList,
 	proto.OpBackupCreate:       (*pveReq).backupCreate,
 	proto.OpBackupRestore:      (*pveReq).backupRestore,
+	proto.OpBackupConfig:       (*pveReq).backupConfig,
 	proto.OpBackupUpdate:       (*pveReq).backupUpdate,
 	proto.OpBackupDelete:       (*pveReq).backupDelete,
 	proto.OpContentList:        (*pveReq).contentList,

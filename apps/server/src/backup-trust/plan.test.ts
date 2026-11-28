@@ -1,6 +1,11 @@
 import { CHANGE_WINDOW_DEFAULT, RESTORE_TEST_TAG } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
+  agentEnabled,
+  agentExpectedOf,
+  agentMayAnswer,
+  BOOT_WAIT_MS,
+  backupNeeds,
   bootVerdict,
   carriesMarker,
   copyMarker,
@@ -15,6 +20,9 @@ import {
   networkDown,
   nextGuest,
   nextTestAt,
+  overTime,
+  roomNeeded,
+  START_WAIT_MS,
   storageFor,
   storagesOf,
   testDue,
@@ -141,29 +149,42 @@ describe('the copy', () => {
   });
 
   it('refuses machines that use parts of the server itself', () => {
-    expect(usesHostParts({ values: { hostpci0: '0000:01:00.0' } })).toBe(true);
-    expect(usesHostParts({ values: { args: '-device vfio-pci,host=01:00.0' } })).toBe(true);
-    expect(usesHostParts({ values: { hookscript: 'local:snippets/hook.pl' } })).toBe(true);
-    expect(usesHostParts({ values: { usb0: 'host=1234:5678' } })).toBe(true);
-    expect(usesHostParts({ values: { mp0: '/srv/media,mp=/media' } })).toBe(true);
-    expect(usesHostParts({ values: { ide2: 'cdrom,media=cdrom' } })).toBe(true);
-    expect(usesHostParts({ values: {}, restricted: ['lxc.cgroup2.devices.allow'] })).toBe(true);
-    expect(usesHostParts({ values: {}, restricted: ['lxc.mount.entry'] })).toBe(true);
-    expect(usesHostParts({ values: { ivshmem: 'size=32,name=looking-glass' } })).toBe(true);
-    expect(usesHostParts({ values: { virtiofs0: 'media-share' } })).toBe(true);
-    expect(usesHostParts({ values: { dev0: '/dev/dri/renderD128' } })).toBe(true);
-    expect(usesHostParts({ values: { mp1: 'volume=/mnt/data,mp=/data' } })).toBe(true);
-    expect(usesHostParts({ values: { rng0: 'source=/dev/hwrng' } })).toBe(true);
-    expect(usesHostParts({ values: { rng0: 'source=/dev/urandom' } })).toBe(false);
+    expect(usesHostParts({ values: { hostpci0: '0000:01:00.0' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { args: '-device vfio-pci,host=01:00.0' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { hookscript: 'local:snippets/hook.pl' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { usb0: 'host=1234:5678' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { mp0: '/srv/media,mp=/media' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { ide2: 'cdrom,media=cdrom' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: {}, restricted: ['lxc.cgroup2.devices.allow'] }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: {}, restricted: ['lxc.mount.entry'] }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { ivshmem: 'size=32,name=looking-glass' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { virtiofs0: 'media-share' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { dev0: '/dev/dri/renderD128' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { mp1: 'volume=/mnt/data,mp=/data' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { rng0: 'source=/dev/hwrng' } }, 'vm')).toBe(true);
+    expect(usesHostParts({ values: { rng0: 'source=/dev/urandom' } }, 'vm')).toBe(false);
     expect(
-      usesHostParts({
-        values: {
-          scsi0: 'local-lvm:vm-101-disk-0',
-          ide2: 'local:iso/debian.iso,media=cdrom',
-          serial0: 'socket',
+      usesHostParts(
+        {
+          values: {
+            scsi0: 'local-lvm:vm-101-disk-0',
+            ide2: 'local:iso/debian.iso,media=cdrom',
+            serial0: 'socket',
+          },
         },
-      }),
+        'vm',
+      ),
     ).toBe(false);
+  });
+
+  it('never tests a container that runs as the server’s own root', () => {
+    expect(
+      usesHostParts({ values: { rootfs: 'local-zfs:subvol-102-disk-0', unprivileged: '1' } }, 'container'),
+    ).toBe(false);
+    expect(usesHostParts({ values: { rootfs: 'local-zfs:subvol-102-disk-0' } }, 'container')).toBe(true);
+    expect(usesHostParts({ values: { rootfs: 'x', unprivileged: '0' } }, 'container')).toBe(true);
+    // The key is a container's: a VM doesn't have it.
+    expect(usesHostParts({ values: { scsi0: 'local-lvm:vm-101-disk-0' } }, 'vm')).toBe(false);
   });
 
   it('starts only when every disk is its own', () => {
@@ -201,35 +222,57 @@ describe('the copy', () => {
       net0: 'virtio=BC:24:11:00:00:09,bridge=vmbr0,link_down=1',
       scsi0: 'local-lvm:vm-990001-disk-0',
     };
-    expect(copyProblem({ values: ready }, 990001, 'rst_0a1b2c')).toBeNull();
+    expect(copyProblem({ values: ready }, 'vm', 990001, 'rst_0a1b2c')).toBeNull();
     // A person's machine at the number.
-    expect(copyProblem({ values: { ...ready, description: '' } }, 990001, 'rst_0a1b2c')).toBe('not_ours');
+    expect(copyProblem({ values: { ...ready, description: '' } }, 'vm', 990001, 'rst_0a1b2c')).toBe(
+      'not_ours',
+    );
     // The backup still has a hook script, a raw argument or a passed-through device, though the machine doesn't today.
     expect(
-      copyProblem({ values: { ...ready, hookscript: 'local:snippets/hook.pl' } }, 990001, 'rst_0a1b2c'),
+      copyProblem({ values: { ...ready, hookscript: 'local:snippets/hook.pl' } }, 'vm', 990001, 'rst_0a1b2c'),
     ).toBe('host_parts');
     expect(
-      copyProblem({ values: ready, restricted: ['args'], pending: { args: '-x' } }, 990001, 'rst_0a1b2c'),
+      copyProblem(
+        { values: ready, restricted: ['args'], pending: { args: '-x' } },
+        'vm',
+        990001,
+        'rst_0a1b2c',
+      ),
     ).toBe('host_parts');
-    expect(copyProblem({ values: ready, pending: { usb0: 'host=1-2' } }, 990001, 'rst_0a1b2c')).toBe(
+    expect(copyProblem({ values: ready, pending: { usb0: 'host=1-2' } }, 'vm', 990001, 'rst_0a1b2c')).toBe(
       'host_parts',
     );
     expect(
-      copyProblem({ values: { ...ready, scsi1: 'local-lvm:vm-101-disk-1' } }, 990001, 'rst_0a1b2c'),
+      copyProblem({ values: { ...ready, scsi1: 'local-lvm:vm-101-disk-1' } }, 'vm', 990001, 'rst_0a1b2c'),
     ).toBe('host_parts');
     expect(
       copyProblem(
         { values: { ...ready, net0: 'virtio=BC:24:11:00:00:09,bridge=vmbr0' } },
+        'vm',
         990001,
         'rst_0a1b2c',
       ),
     ).toBe('network_kept');
     expect(
-      copyProblem({ values: ready, pending: { net1: 'virtio,bridge=vmbr1' } }, 990001, 'rst_0a1b2c'),
+      copyProblem({ values: ready, pending: { net1: 'virtio,bridge=vmbr1' } }, 'vm', 990001, 'rst_0a1b2c'),
     ).toBe('network_kept');
+    // A container copy that isn't unprivileged (the backup's, though the machine is unprivileged today), also when
+    // only a waiting change would make it so.
+    const ct = {
+      ...ready,
+      net0: 'name=eth0,bridge=vmbr0,link_down=1',
+      rootfs: 'local-zfs:subvol-990001-disk-0',
+    };
+    expect(
+      copyProblem({ values: { ...ct, unprivileged: '1' } }, 'container', 990001, 'rst_0a1b2c'),
+    ).toBeNull();
+    expect(copyProblem({ values: ct }, 'container', 990001, 'rst_0a1b2c')).toBe('host_parts');
+    expect(
+      copyProblem({ values: ct, pending: { unprivileged: '1' } }, 'container', 990001, 'rst_0a1b2c'),
+    ).toBe('host_parts');
     // Still starting with the server.
-    expect(copyProblem({ values: { ...ready, onboot: '1' } }, 990001, 'rst_0a1b2c')).toBe('refused');
-    expect(copyProblem({ values: { ...ready, onboot: '0' } }, 990001, 'rst_0a1b2c')).toBeNull();
+    expect(copyProblem({ values: { ...ready, onboot: '1' } }, 'vm', 990001, 'rst_0a1b2c')).toBe('refused');
+    expect(copyProblem({ values: { ...ready, onboot: '0' } }, 'vm', 990001, 'rst_0a1b2c')).toBeNull();
   });
 
   it('goes where there is room, the machine’s own storage first', () => {
@@ -246,6 +289,99 @@ describe('the copy', () => {
     expect(
       storagesOf({ scsi0: 'local-lvm:vm-101-disk-0', ide2: 'local:iso/x.iso,media=cdrom', net0: 'x' }),
     ).toEqual(['local-lvm']);
+  });
+});
+
+describe('what a backup takes', () => {
+  it('reads the disks and memory a restore makes from the backup’s own settings', () => {
+    expect(
+      backupNeeds('vm', {
+        memory: '8192',
+        scsi0: 'local-lvm:vm-101-disk-0,size=32G',
+        scsi1: 'tank:vm-101-disk-1,size=2T',
+        efidisk0: 'local-lvm:vm-101-disk-2,efitype=4m,size=4M',
+        ide2: 'local:iso/debian.iso,media=cdrom,size=600M',
+        ide0: 'none,media=cdrom',
+        unused0: 'local-lvm:vm-101-disk-3',
+        // Left out of its backups: a restore leaves it out too.
+        scsi2: 'tank:vm-101-disk-4,backup=0,size=8T',
+      }),
+    ).toEqual({ diskBytes: 32 * GIB + 2048 * GIB + 4 * 1024 ** 2, allSized: true, memoryMb: 8192 });
+    // A container's mount points are made whatever their backup flag; newer Proxmox writes memory as current=.
+    expect(
+      backupNeeds('container', {
+        memory: 'current=1024',
+        rootfs: 'local-zfs:subvol-102-disk-0,size=8G',
+        mp0: 'local-zfs:subvol-102-disk-1,mp=/data,backup=0,size=100G',
+      }),
+    ).toEqual({ diskBytes: 108 * GIB, allSized: true, memoryMb: 1024 });
+    // Proxmox's default memory; a disk without a size.
+    expect(backupNeeds('vm', { scsi0: 'local-lvm:vm-101-disk-0' })).toEqual({
+      diskBytes: 0,
+      allSized: false,
+      memoryMb: 512,
+    });
+  });
+
+  it('needs the room of the backup’s disks, else a multiple of the backup, else can’t tell', () => {
+    expect(roomNeeded({ diskBytes: 40 * GIB, allSized: true }, 5 * GIB)).toBe(40 * GIB);
+    expect(roomNeeded({ diskBytes: 0, allSized: true }, 5 * GIB)).toBe(15 * GIB);
+    // A disk without a size: the larger of what is known.
+    expect(roomNeeded({ diskBytes: 40 * GIB, allSized: false }, 5 * GIB)).toBe(40 * GIB);
+    expect(roomNeeded({ diskBytes: 4 * GIB, allSized: false }, 5 * GIB)).toBe(15 * GIB);
+    expect(roomNeeded({ diskBytes: 0, allSized: false }, null)).toBeNull();
+  });
+});
+
+describe('the guest agent', () => {
+  it('is on only where the settings switch it on', () => {
+    expect(agentEnabled({ agent: '1' })).toBe(true);
+    expect(agentEnabled({ agent: 'enabled=1,fstrim_cloned_disks=1' })).toBe(true);
+    expect(agentEnabled({ agent: '0' })).toBe(false);
+    expect(agentEnabled({ agent: 'fstrim_cloned_disks=1' })).toBe(false);
+    expect(agentEnabled({})).toBe(false);
+  });
+
+  it('must answer in the copy when the copy’s own settings have it, unless the real machine shows it missing', () => {
+    expect(agentMayAnswer({ state: 'running', agent: true })).toBe(true);
+    // Stopped: nothing says it doesn't work.
+    expect(agentMayAnswer({ state: 'stopped', agent: false })).toBe(true);
+    // Running without an answer: switched on but not installed.
+    expect(agentMayAnswer({ state: 'running', agent: false })).toBe(false);
+    expect(agentExpectedOf('vm', { agent: '1' }, true)).toBe(true);
+    // A backup from before the agent was switched on has none.
+    expect(agentExpectedOf('vm', { agent: '0' }, true)).toBe(false);
+    expect(agentExpectedOf('vm', {}, true)).toBe(false);
+    expect(agentExpectedOf('vm', { agent: '1' }, false)).toBe(false);
+    expect(agentExpectedOf('container', { agent: '1' }, true)).toBe(false);
+  });
+});
+
+describe('overTime', () => {
+  const startedAt = new Date('2026-11-29T02:00:00Z');
+  const at = (min: number) => new Date(startedAt.getTime() + min * 60_000);
+
+  it('skips a test whose copy wasn’t asked to start within the hour, which says nothing about the backup', () => {
+    expect(overTime({ step: 'restoring', startedAt, stepAt: at(1) }, at(59))).toBeNull();
+    expect(overTime({ step: 'restoring', startedAt, stepAt: at(1) }, at(61))).toEqual({
+      outcome: 'skipped',
+      reason: 'too_long',
+    });
+    expect(overTime({ step: 'configuring', startedAt, stepAt: at(58) }, at(61))?.outcome).toBe('skipped');
+    expect(overTime({ step: 'pick', startedAt, stepAt: at(0) }, at(61))).toEqual({
+      outcome: 'skipped',
+      reason: 'unreachable',
+    });
+    expect(overTime({ step: 'cleaning', startedAt, stepAt: at(1) }, at(200))).toBeNull();
+  });
+
+  it('lets a copy asked to start near the hour finish its own limits before it fails as too long', () => {
+    const wait = (START_WAIT_MS + BOOT_WAIT_MS) / 60_000;
+    expect(overTime({ step: 'booting', startedAt, stepAt: at(58) }, at(61))).toBeNull();
+    expect(overTime({ step: 'booting', startedAt, stepAt: at(58) }, at(58 + wait + 1))).toEqual({
+      outcome: 'failed',
+      reason: 'too_long',
+    });
   });
 });
 

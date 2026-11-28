@@ -390,30 +390,63 @@ func (r *pveReq) backupVolume(ctx context.Context) (string, error) {
 	return st, nil
 }
 
-func (r *pveReq) backupRestore(ctx context.Context) (proto.ManageResponse, error) {
-	req := r.req
+// listedBackup checks the request's volume, a backup on a backup storage of
+// this node that its content list shows, and tells its kind (vm | container).
+func (r *pveReq) listedBackup(ctx context.Context) (string, error) {
 	st, err := r.backupVolume(ctx)
 	if err != nil {
-		return proto.ManageResponse{}, err
+		return "", err
 	}
 	// The volume must be listed (and tells the guest kind).
 	items, err := r.content(ctx, st, url.Values{"content": {"backup"}})
 	if err != nil {
+		return "", err
+	}
+	for _, it := range items {
+		if it.VolID != r.req.Volume {
+			continue
+		}
+		kind := backupKind(it.Subtype, it.VolID)
+		if kind == "" {
+			return "", codeErr(CodePlatformError, "cannot tell whether "+r.req.Volume+" is a VM or a container backup")
+		}
+		return kind, nil
+	}
+	return "", codeErr(proto.CodeNotFound, "backup "+r.req.Volume+" does not exist on this node")
+}
+
+// backupConfig is a backup's own configuration as vzdump stored it, read
+// without restoring it: what a restore brings back (its disks and their
+// sizes, its memory, its guest agent), which can differ from the guest's
+// today. Its notes, snapshots and pending changes are left out.
+func (r *pveReq) backupConfig(ctx context.Context) (proto.ManageResponse, error) {
+	kind, err := r.listedBackup(ctx)
+	if err != nil {
 		return proto.ManageResponse{}, err
 	}
-	kind := ""
-	found := false
-	for _, it := range items {
-		if it.VolID == req.Volume {
-			found, kind = true, backupKind(it.Subtype, it.VolID)
-			break
+	var raw string
+	if err := r.api.get(ctx, r.nodePath()+"/vzdump/extractconfig", url.Values{"volume": {r.req.Volume}}, &raw); err != nil {
+		return proto.ManageResponse{}, err
+	}
+	values := backupConfigValues(raw)
+	if _, ok := values["cipassword"]; ok {
+		values["cipassword"] = maskedSecret
+	}
+	c := &proto.GuestConfig{Platform: proto.PlatformPVE, Kind: kind, Values: values, Disks: pveDisks(kind, values, nil)}
+	for k, v := range values {
+		if pveRestricted(kind, k, v) && k != "rootfs" {
+			c.Restricted = append(c.Restricted, k)
 		}
 	}
-	if !found {
-		return proto.ManageResponse{}, codeErr(proto.CodeNotFound, "backup "+req.Volume+" does not exist on this node")
-	}
-	if kind == "" {
-		return proto.ManageResponse{}, codeErr(CodePlatformError, "cannot tell whether "+req.Volume+" is a VM or a container backup")
+	sort.Strings(c.Restricted)
+	return proto.ManageResponse{OK: true, Config: c}, nil
+}
+
+func (r *pveReq) backupRestore(ctx context.Context) (proto.ManageResponse, error) {
+	req := r.req
+	kind, err := r.listedBackup(ctx)
+	if err != nil {
+		return proto.ManageResponse{}, err
 	}
 	params := url.Values{}
 	if req.Isolate != nil && (r.g != nil || req.Start) {

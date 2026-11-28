@@ -626,6 +626,9 @@ const (
 	// CapRestoreIsolate: the agent restores a Proxmox VE backup as a copy
 	// cut off from the start (ManageRequest.Isolate).
 	CapRestoreIsolate = "restore_isolate"
+	// CapBackupConfig: the agent reads a Proxmox VE backup's own
+	// configuration (ManageRequest Op OpBackupConfig).
+	CapBackupConfig = "backup_config"
 )
 
 // ---- Hub-initiated RPCs -----------------------------------------------------

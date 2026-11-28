@@ -32,14 +32,14 @@ var manageHostOps = map[string]bool{
 	proto.OpBackupDelete: true, proto.OpContentList: true, proto.OpContentDownload: true, proto.OpContentDelete: true,
 	proto.OpApplianceList: true, proto.OpApplianceDownload: true, proto.OpTaskList: true, proto.OpTaskStatus: true,
 	proto.OpTaskStop: true, proto.OpBackupJobList: true, proto.OpBackupJobCreate: true, proto.OpBackupJobUpdate: true,
-	proto.OpBackupJobDelete: true, proto.OpBackupJobRun: true, proto.OpStorageAdd: true,
+	proto.OpBackupJobDelete: true, proto.OpBackupJobRun: true, proto.OpStorageAdd: true, proto.OpBackupConfig: true,
 }
 
 // manageReadOps change nothing and skip the per-guest lock.
 var manageReadOps = map[string]bool{
 	proto.OpConfigGet: true, proto.OpChoices: true, proto.OpBackupList: true, proto.OpContentList: true,
 	proto.OpApplianceList: true, proto.OpTaskList: true, proto.OpTaskStatus: true, proto.OpFirewallGet: true,
-	proto.OpBackupJobList: true,
+	proto.OpBackupJobList: true, proto.OpBackupConfig: true,
 }
 
 // Manage implements agent.Broker.
