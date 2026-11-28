@@ -597,7 +597,7 @@ export class RestoreTests {
     let copy: GuestFacts | null;
     try {
       copy = await this.#copy(t);
-    } catch (err) {
+    } catch {
       if (t.tries + 1 >= CLEANUP_TRIES) return this.#step(as, t, { finished: true });
       await this.#step(as, t, { tries: t.tries + 1 });
       return;
