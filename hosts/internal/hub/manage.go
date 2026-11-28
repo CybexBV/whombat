@@ -107,6 +107,9 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 	if packageOps[rt.op] {
 		return h.packagesManageHandler(rt) // manage_packages.go
 	}
+	if appOps[rt.op] {
+		return h.appsManageHandler(rt) // manage_apps.go
+	}
 	if placeOps[rt.op] {
 		return h.placeHandler(rt) // manage_backupplace.go
 	}
@@ -127,8 +130,8 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 			}
 			req.Platform, req.GuestID = platform, id
 		}
-		if req.Platform == "" && isPackageTask(req.Task) {
-			req.Platform = proto.PlatformHost // a package task (manage_packages.go)
+		if req.Platform == "" && isHostTask(req.Task) {
+			req.Platform = proto.PlatformHost // a package or app task (manage_packages.go, manage_apps.go)
 		}
 		if h.libvirtRequest(rt, serverID, &req, guestOp) {
 			return h.libvirtManage(w, r, p, rt, req, confirm, confirmName, gid) // manage_libvirt.go
@@ -474,7 +477,7 @@ var (
 	manageIDRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`) // storages, nodes, profiles, disks, devices
 	manageVolumeRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[!-~]{1,400}$`)
 	manageSizeRe   = regexp.MustCompile(`^\+?[0-9]{1,9}(\.[0-9]{1,3})?[KMGT]?$`)
-	manageTaskRe   = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16})$`)
+	manageTaskRe   = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16}|app:[0-9a-f]{16})$`)
 	manageFileRe   = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,199}$`)
 	manageTmplRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,254}$`)
 	manageWordRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+-]{0,63}$`) // firewall actions, macros, protocols
@@ -521,11 +524,11 @@ func validateManage(req *proto.ManageRequest, guestOp bool) map[string]string {
 	oneOf := func(v string, allowed ...string) bool { return slices.Contains(allowed, v) }
 	op := req.Op
 	if !guestOp {
-		// host: the package tasks (manage_packages.go).
-		hostTasks := op == proto.OpTaskList || ((op == proto.OpTaskStatus || op == proto.OpTaskStop) && isPackageTask(req.Task))
+		// host: the package and app tasks (manage_packages.go, manage_apps.go).
+		hostTasks := op == proto.OpTaskList || ((op == proto.OpTaskStatus || op == proto.OpTaskStop) && isHostTask(req.Task))
 		bad(oneOf(req.Platform, "", proto.PlatformPVE, proto.PlatformIncus, proto.PlatformUnraid) || (hostTasks && req.Platform == proto.PlatformHost),
-			"platform", "platform is pve, incus, unraid or, for package tasks, host.")
-		bad(!isPackageTask(req.Task) || req.Platform == proto.PlatformHost, "platform", "A package task's platform is host.")
+			"platform", "platform is pve, incus, unraid or, for package and app tasks, host.")
+		bad(!isHostTask(req.Task) || req.Platform == proto.PlatformHost, "platform", "A package or app task's platform is host.")
 	}
 	bad(manageText(req.Digest, 128, false) && !strings.ContainsRune(req.Digest, ' '), "digest", "Not a digest.")
 
@@ -827,6 +830,7 @@ func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 	case proto.OpTaskList:
 		for i := range resp.Tasks {
 			packageResultArrays(&resp.Tasks[i])
+			appResultArrays(&resp.Tasks[i])
 		}
 		return map[string]any{"items": nonNil(resp.Tasks)}, nil
 	case proto.OpBackupJobList:
@@ -840,6 +844,7 @@ func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 			return nil, empty
 		}
 		packageResultArrays(resp.TaskStatus)
+		appResultArrays(resp.TaskStatus)
 		return resp.TaskStatus, nil
 	case proto.OpFirewallGet:
 		f := resp.Firewall
@@ -1069,6 +1074,11 @@ func (h *Hub) pollTask(ctx context.Context, w *taskWatch) {
 	if st.Status != "running" && st.Packages != nil {
 		h.tasks.mu.Lock()
 		w.details = mergeDetails(w.details, packageTaskDetails(st))
+		h.tasks.mu.Unlock()
+	}
+	if st.Status != "running" && len(st.Apps) > 0 {
+		h.tasks.mu.Lock()
+		w.details = mergeDetails(w.details, appTaskDetails(st))
 		h.tasks.mu.Unlock()
 	}
 	switch st.Status {

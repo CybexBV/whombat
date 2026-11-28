@@ -851,6 +851,81 @@ agents before the kit user), and the locations. Nothing is pulled or changed. Th
 the machine the hosts service runs on (one of its network cards' MACs is
 the hub's) or one of its guests is.
 
+### 2.11 Docker Compose app updates
+
+Whombat's `app-updates.md` (APU-01…) decides what this is for. The agent
+updates containers Docker Compose started, one service at a time, and puts
+the previous image back by itself when the new one doesn't come up. Code:
+`internal/agent/apps` (labels, versions, the runner, the docker CLI),
+`internal/agent/broker/app_tasks.go` (tasks, the operation), the runner
+command `whombat-agent app-task` (`cmd/whombat-agent/apptask.go`), the
+collector's `composeApp` (`collect/docker.go`) and the newer image's
+version (`collect/imageupd.go`).
+
+**Which containers.** A Docker guest whose labels name a Compose project
+and service (`com.docker.compose.project`, `…service`; not a one-off
+`compose run` container) has `Guest.App` (`app`): `{svc, ver, new_ver,
+blocked, busy, last}`. `ver` is the image's `org.opencontainers.image.version`
+label, else a version-like tag (`16.4`, `v2.3.0`); `new_ver` the newer
+image's label when the image check found one (once per new digest: the
+manifest, this machine's image in a list, its config blob; one pull on
+Docker Hub's count). `blocked` is `pinned` for an image named by digest.
+The project's folder and files are checked when the update runs: the
+agent's sandbox hides home folders. A container `docker run` started has
+no `app`; neither does any container of an agent older than this, which
+is how Whombat tells an old agent (it gets the newer one by itself).
+
+**Operation** `app.update` (`Platform: "host"` or empty; the manage switch
+on both sides): `Apps` (`apps`) names up to 10 containers, `HoldMajor`
+(`hold_major`) leaves a new major version for a person (unattended runs).
+It answers at once with a task `app:<16 hex>`; one app task at a time.
+Refused before anything runs: no such container `not_found`, not a Compose
+app, pinned, one of Whombat's own services `not_allowed`, not Linux
+`unsupported`, a task already running `busy`. An agent older than this
+answers `unsupported` “unknown operation”.
+
+**How it runs**: like a package task (2.9): spec in
+`<state_dir>/apps/app-<hex>/task.json`, `whombat-agent app-task --dir …`
+in a transient unit `whombat-app-<hex>.service` (`TimeoutStopSec=600s`,
+`RuntimeMaxSec` 30 minutes per app plus 5, at most 3 hours) or its own
+session, `log`, `result.json` last; tasks are kept a day, each container's
+last outcome for good (`last.json`). It can't be stopped (`not_allowed`):
+an app half updated is worse than a slow update. Per app, in order:
+
+1. Inspect the container: project, service, working folder, config and
+   environment files (labels `…project.working_dir`, `…project.config_files`,
+   `…project.environment_file`), the image it runs and the reference it
+   was created from. Gone, no Compose, files missing, pinned: `failed`.
+2. Tag the running image `<repo>:whombat-previous-<service>`.
+3. `docker compose --project-name … --project-directory … --file … pull
+   --quiet <service>` (20 minutes at most). The same image id: `current`.
+4. A new major version (first numbers differ; calendar versions, a year
+   first, have none) with `HoldMajor`: the old image is tagged back,
+   nothing restarts: `held`.
+5. `docker compose … up --detach --no-deps <service>`, then watch the
+   service's containers: running for 30 s, healthy when they have a health
+   check (5 minutes at most); exited, dead, two restarts or unhealthy
+   fails.
+6. Works: the backup tag goes, `updated`. Fails: the old image id is
+   tagged as the reference again and `up --detach --no-deps --pull never
+   <service>` recreates it (without `--pull` on an older Compose), watched
+   the same way: `rolled_back`; when that fails too, `failed` with reason
+   `back_failed` and the backup tag stays for a person.
+
+Commands run with `HOME=/root` (registry sign-ins `docker login` saved),
+`docker compose` or else `docker-compose`.
+
+**Task status** (`task.status` with an `app:` id): type `app.update`, the
+log, `guest` when one app, and once it ended `apps: [{app, service,
+status: updated|current|held|rolled_back|failed, reason?, from?, to?,
+message?}]`. Reasons: `gone`, `no_compose`, `no_files`, `pinned`, `pull`,
+`no_cli`, `start`, `stopped`, `restarting`, `unhealthy`, `back_failed`,
+`docker`, `timeout`.
+
+**The report**: `app.busy` while a task updates the container, `app.last`
+`{status, reason, from, to, finished}` after. When a task starts or ends
+the agent reads the containers and image checks again and reports at once.
+
 ## 3. Hub
 
 - Switch `rc_manage` everywhere the four existing switches are wired

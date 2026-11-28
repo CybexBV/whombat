@@ -2,7 +2,7 @@ package proto
 
 import "time"
 
-// App updates (docs/MANAGE.md 2.10, Whombat's app-updates.md): the agent
+// App updates (docs/MANAGE.md 2.11): the agent
 // updates Docker Compose apps one service at a time as a task "app:<16
 // hex>" that runs outside the agent (a transient systemd unit, or its own
 // session without systemd), so it survives an agent restart. For each app it

@@ -1030,3 +1030,20 @@ HS-360…HS-372).
   one comes back and restarts (a first install takes out the app and the
   LaunchAgent it wrote), `no_answer`. Nobody at the screen: installed, OK,
   “it starts when someone logs in”.
+
+## Additions (2026-11-28): Docker Compose app updates
+
+`proto.Version` is unchanged; everything is additive (Whombat
+`app-updates.md`, `docs/MANAGE.md` 2.11).
+
+- **Manage op** `app.update` (`Platform: "host"` or empty;
+  `ManageRequest.Apps` (`apps`) names up to 10 containers,
+  `ManageRequest.HoldMajor` (`hold_major`) leaves a new major version
+  alone). It answers with a task `app:<16 hex>` that runs outside the agent
+  and survives an agent restart; `task.status` takes `app:` ids, `task.list`
+  with `Platform: "host"` lists them with the package tasks.
+- **TaskStatus** gains `Apps` (`apps`: `[{app, svc, status, reason, from,
+  to, msg}]`) once an app task ended.
+- **Report**: a Docker `Guest` gains `App` (`app`: `{svc, ver, new_ver,
+  blocked, busy, last: {status, reason, from, to, finished}}`) for a
+  container Compose started. Agents older than this never send it.

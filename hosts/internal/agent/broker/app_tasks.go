@@ -25,7 +25,7 @@ import (
 	"rackoon/internal/proto"
 )
 
-// App updates (docs/MANAGE.md 2.10): app.update runs as a task "app:<16
+// App updates (docs/MANAGE.md 2.11): app.update runs as a task "app:<16
 // hex>" the way a package task does (pkg_tasks.go): the agent writes the
 // task's spec into <state>/apps/app-<hex>/ and starts `whombat-agent
 // app-task` there in a transient systemd unit (outside the agent's sandbox,

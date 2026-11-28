@@ -18,7 +18,7 @@ var appTaskDirRe = regexp.MustCompile(`^app-[0-9a-f]{16}$`)
 
 // cmdAppTask runs one app task to its end (internal: the agent starts it
 // through systemd-run, or in its own session without systemd; docs/MANAGE.md
-// 2.10). It doesn't stop when asked: an app half updated is worse than a
+// 2.11). It doesn't stop when asked: an app half updated is worse than a
 // slow update, and each app goes back by itself when it fails.
 func cmdAppTask(args []string) error {
 	fs := flag.NewFlagSet("app-task", flag.ExitOnError)
