@@ -759,6 +759,8 @@ export const HostGuest = z.object({
   platform: HostPlatform,
   kind: HostGuestKind,
   image: z.string(),
+  /** A container's image id (`sha256:…`), when its agent says it: a new image under the same tag has another. */
+  imageId: z.string().max(160).optional(),
   state: HostGuestState,
   vcpu: OptN,
   cpuPct: N,

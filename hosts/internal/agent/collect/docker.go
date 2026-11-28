@@ -524,6 +524,7 @@ func (d *dockerCollector) run(ctx context.Context) error {
 			Name:    e.name(),
 			Kind:    "container",
 			Image:   dockerImage(e.Image, e.ImageID),
+			ImageID: e.ImageID,
 			State:   dockerState(e.State, e.health()),
 			Project: e.Labels["com.docker.compose.project"],
 			// Whombat's own services carry this label; Whombat hides them.

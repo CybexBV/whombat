@@ -420,6 +420,9 @@ type Guest struct {
 	// (label whombat.service=1): Whombat leaves it out of what people see.
 	WhombatService  bool  `cbor:"wb_svc,omitempty"`
 	UpdateAvailable *bool `cbor:"update,omitempty"` // the registry has a newer image for the tag
+	// ImageID: the id of the image it runs ("sha256:…"), so Whombat tells a
+	// new image pulled under the same tag from the one before.
+	ImageID string `cbor:"image_id,omitempty"`
 
 	// unRAID (unraid.go): Autostart for Docker on unRAID (dockerMan's
 	// autostart list) and libvirt (everywhere); WebUI is a container's web
