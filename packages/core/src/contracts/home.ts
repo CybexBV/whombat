@@ -20,6 +20,7 @@ import {
 } from '../domain/conversation.js';
 import { DESK_SCREEN_VIEWS_MAX, DeskCatalog, DeskWidgetRef, DeskWidgetView } from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
+import { ExposureView } from '../domain/exposure.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
 import { ThingHistory, ThingHistoryQuery } from '../domain/incidents.js';
 import { LookResearch } from '../domain/look-research.js';
@@ -544,6 +545,15 @@ export const thingEndpoints = {
     params: B.extend({ thing: ThingParam }),
     query: ThingHistoryQuery,
     response: ThingHistory,
+  }),
+  exposure: endpoint({
+    id: 'things.exposure',
+    method: 'GET',
+    path: '/burrows/:burrow/exposure',
+    summary:
+      'Open to the internet (session minor 22): every opening Whombat finds in the settings of what it is connected to (proxy hosts, Cloudflare tunnels, port forwards, Tailscale Funnel), what each leads to, what guards it, what is new and what is worth a look, and which places Whombat read or can’t see. Read from those settings only; nothing is checked from outside the house.',
+    params: B,
+    response: ExposureView,
   }),
   setWatch: endpoint({
     id: 'things.setWatch',

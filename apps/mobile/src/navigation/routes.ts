@@ -203,6 +203,8 @@ export type RootStackParamList = {
    */
   ServersPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
   ConnectionsPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
+  /** Open to the internet (Whombat internet-exposure.md), from the end of Servers and a new opening's line. */
+  Internet: { back?: string } | undefined;
   /** The audit log (MQ-03): filters as the web's `?actor=&kind=&who=&open=`, strings checked by the screen. */
   AuditLog: { actor?: string; kind?: string; who?: string; open?: string } | undefined;
   /**
@@ -538,6 +540,7 @@ export const LINKING_SCREENS = {
   // old Overview's addresses (`connections`, and `dashboard`, `home` and `things` before it) open Connections.
   ServersPlace: 'servers',
   ConnectionsPlace: { path: 'connected', alias: ['connections', 'dashboard', 'home', 'things'] },
+  Internet: 'internet',
   AuditLog: 'log',
   // Settings → the assistant (AP-4961): `?part=may`.
   SettingsAgent: 'settings/agent',
@@ -842,10 +845,10 @@ export function appScreenUrlForPath(path: string): string | null {
 /**
  * Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`, burrow-less
  * or after a burrow (a first segment that is a screen's isn't one: `/things/servers` is the old servers' list).
- * `/servers?add=1` is Add a server, `?repoint=1` Point them here.
+ * `/servers?add=1` is Add a server, `?repoint=1` Point them here. `/internet` is Open to the internet.
  */
 function placeScreenUrl(pathname: string, query: Map<string, string>): string | null {
-  const m = /^(?:\/([^/]+))?\/(servers|connected)\/?$/.exec(pathname);
+  const m = /^(?:\/([^/]+))?\/(servers|connected|internet)\/?$/.exec(pathname);
   if (!m || (m[1] !== undefined && BURROW_SECTIONS.includes(m[1]))) return null;
   return m[2] === 'servers' ? serverAskUrl(query) : `${APP_SCHEME}://${m[2]}`;
 }

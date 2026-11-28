@@ -279,6 +279,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Does it really work? (docs/decisions/service-works.md): a new table service_test_runs cascading with the burrow and the connection, one row per run of a service's read-only test (its result only), kept 30 days. The release before it never reads or writes the table."
+    },
+    "0045_exposure": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Open to the internet (docs/decisions/internet-exposure.md): a new table exposure_openings (connection_id, opening_id, first_seen, last_seen, baseline), the fingerprints of the openings Whombat has seen per connection, deleted with the connection. The release before it never reads or writes it."
     }
   }
 }

@@ -559,6 +559,7 @@ const TABLE = {
   'things.quiet': NEVER,
   'things.watch': READ,
   'things.history': READ,
+  'things.exposure': READ,
   'things.setWatch': NEVER,
   'things.setWatchLimit': NEVER,
   'things.cancelWatch': RECEIPT,

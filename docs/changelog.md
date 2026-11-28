@@ -9,6 +9,12 @@ them once they have been tried on Beta.
   the service really works, by opening a file, your newest photo or document, a library's newest item or a sensor's
   latest reading. Run now says where it got stuck, and whether the sign-in Whombat uses lost access or the service
   itself is broken. Watch it runs the test every 15 minutes and tells you when it fails twice in a row.
+- Open to the internet, at the end of Servers: everything your proxy, Cloudflare tunnels and router let in from the
+  internet, what each leads to and how it’s protected, with what’s worth a look first. It also says what Whombat
+  couldn’t see, like ports your router opens by itself.
+- When something new opens to the internet, Whombat tells you once and asks whether it’s meant. Press This is meant
+  and it won’t point it out again.
+- Ask your agent “what can the internet reach?” and it answers from the same list.
 
 ## 27 November 2026
 

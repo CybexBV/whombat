@@ -32,6 +32,7 @@ export * from './desk-screens.js';
 export * from './devices.js';
 export * from './dispatch.js';
 export * from './display-text.js';
+export * from './exposure.js';
 export * from './feature-request.js';
 export * from './feedback.js';
 export * from './file-view.js';

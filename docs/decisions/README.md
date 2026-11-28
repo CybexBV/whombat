@@ -148,6 +148,7 @@ How the split was made: `docs.md`.
 - `monitoring.md` — monitoring servers, networks and services: your own checks, keeping quiet, one push per outage, one cause, uptime and outage history.
 - `service-works.md` — does a service really work: a read-only test per service (open a file, the newest photo), Run now,
   Watch it, a refused sign-in told apart from a broken service.
+- `internet-exposure.md` — Open to the internet: what the proxies, tunnels and routers let in, what is new, and This is meant.
 - `../app/decisions/monitoring-web.md` — monitoring on the web: Keep quiet… and End now, the hold under a page's head,
   What happened, Change the limit, catalog fields that follow another.
 - `on-purpose.md` — stop watching what is set up so on purpose (the assistant asks and switches it on your word, the

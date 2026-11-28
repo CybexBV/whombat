@@ -42,6 +42,7 @@ import type { CatalogConnectionRow } from '../connections/types';
 import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
+import { exposurePageNotices } from '../exposure/lines';
 import { listChanges } from '../home/changes';
 import { burrowLocale } from '../i18n/locale';
 import { localizeTree } from '../i18n/phrases';
@@ -92,7 +93,7 @@ import {
   UP_KEY,
 } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
-import type { LooseNotice } from './quiet/types';
+import type { KindNotice, LooseNotice } from './quiet/types';
 import { heldPage, type MarkedLines, markLines } from './quiet/wire';
 import {
   hostsServing,
@@ -259,7 +260,7 @@ export async function connectionPage(
     viewer,
     quiet,
   };
-  const [view, tools, changed, partOf, connected, states, works] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states, works, exposure] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
@@ -267,6 +268,8 @@ export async function connectionPage(
     connectedByLine(services, row, viewer, timeZone),
     thingStates(services.db, id),
     worksOnPage(services, row, quiet, now, timeZone),
+    // What its settings opened to the internet lately (internet-exposure.md); never slows the page down.
+    within(exposurePageNotices(services, row), 3_000, [] as KindNotice[]),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
   const misplaced = view?.slots ? slotProblems(view) : [];
@@ -329,6 +332,7 @@ export async function connectionPage(
     ...(view?.notices ?? []),
     // The service's test, while it is watched and failed twice in a row: the same line the health pass keeps.
     ...(works.line ? [works.line] : []),
+    ...exposure,
     ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
     ...genericNotices(

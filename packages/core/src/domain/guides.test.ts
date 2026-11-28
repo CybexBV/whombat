@@ -324,6 +324,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'delegate_read',
       'delegate_update',
       'device_probe',
+      // What the internet can reach, read-only (Whombat internet-exposure.md).
+      'internet_exposure',
       // What the assistant found out about a look (Whombat look-research.md LR-05).
       'look_report',
       'pin_widget',

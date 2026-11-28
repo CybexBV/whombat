@@ -17,6 +17,7 @@ import {
 } from '@whombat/core/i18n';
 import { CHAT } from './messages/chat';
 import { DESK } from './messages/desk';
+import { EXPOSURE } from './messages/exposure';
 import { GUIDES } from './messages/guides';
 import { HOME } from './messages/home';
 import { HOSTS } from './messages/hosts';
@@ -41,6 +42,7 @@ export const EN = {
   ...SEARCH.en,
   ...SETTINGS.en,
   ...CHAT.en,
+  ...EXPOSURE.en,
 };
 
 export type ServerMessageKey = keyof typeof EN & string;
@@ -58,6 +60,7 @@ export const NL: { [K in ServerMessageKey]: MessageValue } = {
   ...SEARCH.nl,
   ...SETTINGS.nl,
   ...CHAT.nl,
+  ...EXPOSURE.nl,
 };
 
 export type ServerTranslator = Translator<typeof EN>;

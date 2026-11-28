@@ -1681,6 +1681,19 @@ Setup and operation: `docs/github.md`.
   that starts on (“The internet is down since 14:02”), listing the connections down with it. It ends at the first pass
   where its own step works: every step working, or a later step failing instead, which confirms on its own. A development box and
   tests never probe unless `WHOMBAT_WAY_OUT=on`.
+- **Open to the internet** (`apps/server/src/exposure/`, [internet-exposure.md](docs/decisions/internet-exposure.md)):
+  `read.ts` reads each place's openings with the connection's own sign-in (Nginx Proxy Manager's proxy hosts and
+  streams through its page's reader; Cloudflare's tunnel settings and Access applications; OPNsense's destination NAT
+  rules and its UPnP service; UniFi's port forwards and UPnP switch through the console's older API; Tailscale's policy
+  for Funnel), kept 10 minutes, and `parse.ts` turns them into openings and blind spots. `things.exposure` (`view.ts`)
+  words every opening in the owner's language with what it leads to (a connection on that address and port, else a
+  server or guest by its address, `lines.ts` `buildLinks`), how it is guarded and at most one certain highlight
+  (`openings.ts`), and lists the places and what they couldn't see. The health pass (`home/health.ts`) reads each
+  source connection, keeps fingerprints in `exposure_openings` (`baseline.ts`: the first complete read is the silent
+  first list, closed openings are forgotten after 30 days) and adds one `exposure.new` line per new opening to the
+  connection's own; a read that fails leaves an Ignore of a gone line as it is. This is meant is Stop watching that one
+  opening (`watch_offs` with subject `open:<id>`), which the page reads as meant. The assistant's `internet_exposure`
+  (`agent.ts`) gives the same view. The web page is `/internet` in the Servers place, the phone's the `Internet` screen.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); the Vault and pictures add their own
   destination rules. A single UDP datagram and its answer (a console's discovery) go through `outboundDatagram` under

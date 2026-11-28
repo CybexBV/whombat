@@ -33,7 +33,7 @@ What starts on. Every other check starts off (the full list with natures: `start
 | Every connection | Whether it answers, whether it's still signed in, its sign-in and tools, its disk | New tools to decide on, reading its details, when its disk will be full |
 | Devices, mail | Whether it answers, whether it's still signed in | Readings it can't read, counting unread mail |
 | Home Assistant | Recovery mode, integrations not loading, backups | Repairs, an integration filling the log, updates, devices not answering |
-| UniFi Network | The gateway offline, access points and switches offline | A busy gateway, firmware updates |
+| UniFi Network | The gateway offline, access points and switches offline, something new open to the internet | A busy gateway, firmware updates |
 | Hetzner | Servers not running, traffic past what's included (it costs money) | No Hetzner backups, delete protection off, paid servers that look idle |
 | Fusebox | Expired sign-ins | Claude or ChatGPT used up, a week running out early, failing requests, its usage history, its own warnings, one subscription used up or switched off |
 | NZBHydra2 | — | All: indexers resting, VIP ending, daily limits, an old version |
@@ -48,10 +48,10 @@ What starts on. Every other check starts off (the full list with natures: `start
 | Frigate | Cameras offline | Recordings disk filling up, slow object detector, cameras dropping frames |
 | UniFi Access | Doors left open or kept unlocked, readers and hubs offline | — |
 | Pi-hole, AdGuard Home | DNS stopping | Blocking or lists switched off, lists failing or old, its own warnings, new versions |
-| Cloudflare | Tunnels down, certificates ending | Tunnels losing connections, domains about to expire, sites not active or paused, the API token hint |
+| Cloudflare | Tunnels down, certificates ending, something new open to the internet | Tunnels losing connections, domains about to expire, sites not active or paused, the API token hint |
 | Grafana | Its database, firing alerts | Data sources failing |
-| Nginx Proxy Manager | Certificates ending, sites not answering | Config errors, switched-off sites |
-| OPNsense | Gateways down, services stopping | Packet loss, the connection table filling up, its own messages, a restart after an update, updates |
+| Nginx Proxy Manager | Certificates ending, sites not answering, something new open to the internet | Config errors, switched-off sites |
+| OPNsense | Gateways down, services stopping, something new open to the internet | Packet loss, the connection table filling up, its own messages, a restart after an update, updates |
 | Portainer | Environments down, unhealthy containers, containers stopping in a stack | Newer images, updates |
 | Pterodactyl | Game servers stopping on their own | Suspended servers, failed installs, game server disks filling up |
 | Tailscale | Device keys ending | Devices waiting for approval, updates, devices offline for a week |

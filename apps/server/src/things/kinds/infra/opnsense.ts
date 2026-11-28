@@ -21,6 +21,7 @@ import type {
   ThingTone,
 } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
+import { EXPOSURE_NEW } from '../../../exposure/check';
 import { ApiError, badRequest } from '../../../lib/errors';
 import type { Services } from '../../../services';
 import { readPoints } from '../../points';
@@ -529,6 +530,8 @@ export const OPNSENSE_CHECKS: readonly KindCheck[] = [
     startsOn: false,
   },
   { check: 'opnsense.updates', name: 'OPNsense updates', nature: 'fyi', perItem: false, startsOn: false },
+  // Something new is open to the internet: a new opening in its settings (internet-exposure.md).
+  EXPOSURE_NEW,
 ];
 
 /** What this read couldn't see (QN-11): a part that didn't answer, or a table without its limit. */

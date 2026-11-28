@@ -12,6 +12,7 @@ export * from './changeWindow';
 export * from './chat';
 export * from './chatRuntime';
 export * from './context';
+export * from './exposure';
 export * from './files';
 export * from './handoffs';
 export * from './home';

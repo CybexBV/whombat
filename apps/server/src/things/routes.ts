@@ -6,6 +6,7 @@
  */
 import { api, parseThingId } from '@whombat/core';
 import { viewerOf } from '../connections/routes';
+import { exposureView } from '../exposure/view';
 import { setServerWatchLimit } from '../hosts/quiet';
 import { thingHistory } from '../incidents/history';
 import { cancelThingWatch } from '../incidents/thing-watch';
@@ -82,6 +83,11 @@ export const thingRoutes: RouteDef[] = [
       ctx.query.days ?? 30,
       ctx.access.burrow.timeZone,
     );
+  }),
+  // Open to the internet: every opening Whombat reads in the settings of what it is connected to.
+  route(api.things.exposure, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can see pages here.');
+    return exposureView(ctx.services, await viewerOf(ctx), ctx.access.burrow.timeZone);
   }),
   route(api.things.setWatch, async (ctx) =>
     setThingWatch(

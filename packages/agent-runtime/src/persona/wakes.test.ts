@@ -408,6 +408,15 @@ describe('lookTurnLines (Whombat look-research.md LR-05…LR-08)', () => {
     expect(lookTurnLines(woken('look')).join('\n')).not.toContain('service_test');
   });
 
+  it('reads what is newly open to the internet and asks whether it is meant (internet-exposure.md)', () => {
+    const text = lookTurnLines(woken('look', { ...look, check: 'exposure.new' })).join('\n');
+    expect(text).toContain('internet_exposure');
+    expect(text).toContain('exposure.new');
+    expect(text).toContain('watch_checks');
+    const other = lookTurnLines(woken('look', { ...look, check: 'ha.zigbee' })).join('\n');
+    expect(other).not.toContain('internet_exposure');
+  });
+
   it('changes nothing and offers no step on Look only', () => {
     const text = lookTurnLines(woken('look', { ...look, access: 'read' })).join('\n');
     expect(text).toContain('Look only');

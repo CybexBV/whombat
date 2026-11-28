@@ -14,6 +14,7 @@ import { StackActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   clientTranslator,
+  exposureText,
   placeWords as listWords,
   type PlaceRowTone,
   type PlaceSummaryPart,
@@ -23,6 +24,8 @@ import {
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
+import { useSessionProtocol } from '@whombat/client/react';
+import { EXPOSURE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import type { NativeTheme as Theme } from '@whombat/tokens';
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
@@ -42,7 +45,7 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ThingIcon } from '../ui/assistant';
 import { BackBar, Screen } from '../ui/headers';
-import { Plus } from '../ui/icons';
+import { Globe, Plus } from '../ui/icons';
 import { InlineRename } from '../ui/inlineRename';
 import { hasNativeMenu, MenuSheet, NativeMenu } from '../ui/nativeMenu';
 import { PlacesButton, SHELL_TARGET } from '../ui/places';
@@ -228,6 +231,12 @@ export function PlaceScreen({ navigation, route }: Props) {
                   ? words.failed
                   : words.empty}
             </Text>
+          ) : null}
+          {place === 'servers' ? (
+            <InternetRow
+              selected={beside?.name === 'Internet'}
+              onPress={() => navigation.navigate('Internet', { back: words.title })}
+            />
           ) : null}
           {place === 'servers' && lists.hosts && lists.pendingServers ? (
             <WaitingCard pending={lists.pendingServers} onReview={add} />
@@ -439,6 +448,60 @@ function PlaceListRow({
         }}
       />
       <View style={{ flex: 1, minWidth: 0 }}>{pressable}</View>
+    </View>
+  );
+}
+
+/**
+ * Open to the internet at the end of Servers (Whombat internet-exposure.md), set apart by a hairline: what the internet
+ * can reach through the proxies, tunnels and routers Whombat is connected to. Only on a Whombat that can say.
+ */
+function InternetRow({ selected, onPress }: { selected: boolean; onPress: () => void }) {
+  const theme = useTheme();
+  const { rawLocale } = useI18n();
+  const supported = protocolAtLeast(useSessionProtocol(), EXPOSURE_MINOR);
+  if (!supported) return null;
+  const words = exposureText(rawLocale);
+  return (
+    <View style={{ borderTopWidth: 1, borderTopColor: theme.colors.line, marginTop: 6, paddingTop: 6 }}>
+      <Touchable
+        onPress={onPress}
+        feedback="wash"
+        ringRadius={12}
+        accessibilityRole="button"
+        accessibilityLabel={`${words.title}, ${words.row}`}
+        accessibilityState={{ selected }}
+        style={{
+          minHeight: SHELL_TARGET,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          padding: 10,
+          borderRadius: 12,
+          backgroundColor: selected ? theme.colors.sel : undefined,
+        }}
+      >
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 11,
+            backgroundColor: theme.colors.sf2,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Globe size={21} color={theme.colors.ink2} strokeWidth={1.75} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text size={15} weight={600} tracking={-0.005} numberOfLines={1}>
+            {words.title}
+          </Text>
+          <Text size={13} color={theme.colors.mut} numberOfLines={1}>
+            {words.row}
+          </Text>
+        </View>
+      </Touchable>
     </View>
   );
 }
