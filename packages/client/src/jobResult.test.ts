@@ -118,6 +118,28 @@ describe('jobReport', () => {
     expect(left?.outro).toBe('That is all of them.');
   });
 
+  it('reads advice and choices written without a bullet', () => {
+    const plain = jobReport(
+      [
+        '## Left for you',
+        '1. **Android app release.** The fixes reach phones only through a new app version.',
+        '   Advice: release one version with all the fixes after you merge.',
+        '   Choices: release now | wait for more changes',
+        '2. **Merge and deploy.** I didn’t push or deploy.',
+        '   **Advice:** merge and deploy.',
+        '   **Choices**: merge and deploy | review first',
+        '   Advice is something I always give, but this line is text.',
+      ].join('\n'),
+    );
+    const [first, second] = plain.points;
+    expect(first?.advice).toBe('release one version with all the fixes after you merge.');
+    expect(first?.choices).toEqual(['release now', 'wait for more changes']);
+    expect(first?.text).not.toContain('Choices');
+    expect(second?.advice).toBe('merge and deploy.');
+    expect(second?.choices).toEqual(['merge and deploy', 'review first']);
+    expect(second?.text).toContain('Advice is something');
+  });
+
   it('takes a report without headings as its outcome, and bold lines as headings', () => {
     expect(jobReport('It works again.').sections).toEqual([]);
     const old = jobReport(

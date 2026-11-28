@@ -191,6 +191,9 @@ const ADVICE = /^[-*+]\s*(?:\*\*)?\s*(council(?:['’]s)?(?: advice)?|advice)\s*
 const CHOICES = /^[-*+]\s*(?:\*\*)?\s*choices?\s*:?\s*(?:\*\*)?\s*:?\s*(.+)$/i;
 const CHOICE_MAX = 60;
 const CHOICES_MAX = 4;
+/** “Advice: …” or “Choices: …” written as a plain line under the point, without the asked-for bullet. */
+const LABELLED = /^(?:\*\*)?\s*(?:council(?:['’]s)?(?: advice)?|advice|choices?)\s*(?:\*\*\s*:|:)/i;
+const bulleted = (line: string) => (/^[-*+]\s/.test(line) || !LABELLED.test(line) ? line : `- ${line}`);
 
 /** `**Title** rest`, else the first sentence as the title. */
 function titled(line: string): { title: string; rest: string } {
@@ -208,7 +211,8 @@ function pointOf(item: ListItem, n: number): JobReportPoint {
   let council = false;
   let choices: string[] = [];
   for (const raw of item.lines.slice(1)) {
-    const line = raw.trim();
+    // Reports don't always bullet these lines; read them the same either way.
+    const line = bulleted(raw.trim());
     const a = ADVICE.exec(line);
     const c = a ? null : CHOICES.exec(line);
     if (a?.[2]) {
