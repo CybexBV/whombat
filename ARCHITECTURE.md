@@ -318,6 +318,19 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   paper copy holds only the backup part (`backup.paperCopy.confirm` notes it). `bringBack` in the backup summary says
   where it stands (`ready`, `needs_passkey`, `paper_only`, `none`), and while no passkey holds the key the Inbox asks
   once for the same passkey setup (`managed/backup-key-inbox.ts`). [backup-passkey.md](docs/decisions/backup-passkey.md)
+- **A copy somewhere else** (`managed/backup-offsite.ts`): a second place for the backups, an S3 bucket the person
+  owns. The backup service keeps it (`appliance/backup/internal/offsite`, `GET|PUT|DELETE /v1/offsite`,
+  `POST /v1/offsite/copy`): setting it writes, reads and deletes a small file with the key, then opens or makes the
+  copy's repository with the main one's password and chunker; the key is sealed like the main destination's. After each
+  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` runs `restic copy`
+  of this Whombat's checkpoints not there yet (a failure waits 15 minutes, doubling to 6 hours) and clears old ones by
+  the same keep windows at most every 23 hours; nothing is copied during a restore. The runtime reads its document
+  (kept a minute) into the backup summary as `offsite` (`withOffsite`; null: none, absent: a box from before) and says a
+  failed step in the person's language; `backup.setOffsite` is a secret op. The recovery details carry an `offsite`
+  part (left out for apps below protocol minor 22), `backup.adopt` falls back to the copy when the main place is gone
+  (`from`), and a change locks the passkey's copies again. Three failed tries, or newer backups waiting two days, are
+  one Inbox item (`box.offsite_copy`); `whombat_backup`'s status names the copy for the assistant.
+  [offsite-copy.md](docs/decisions/offsite-copy.md)
 - **Push** goes through the manager to control as requests with opaque references and at most a short preview the
   person can turn off (`managed/push.ts`). A `security` push (a new device, the recovery kit) says what happened in
   fixed words and its tap opens the page it is about (`managed/security-push.ts`,
