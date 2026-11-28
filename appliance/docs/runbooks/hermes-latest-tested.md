@@ -1,8 +1,8 @@
 # The latest-tested Hermes job (Whombat HU-03, HU-06, HU-07, HU-09; NX-485, NX-490, NX-492)
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 Whombat's assistant runs on Hermes Agent, pinned to a release Whombat tested (Whombat HE-10, HU-01). This job follows
 Hermes's stable releases, tests each new one with Whombat's plugin, runtime and this appliance, and when everything

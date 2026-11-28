@@ -1,8 +1,7 @@
 # Local integrated environment (W3-INT)
 
-> Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> Commands written `dev/<name>` run as `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 One command starts the whole managed product on this machine from the commit that is checked out (the component
 list, `manifest/components.json`, with control and the relay at the commits production runs):
@@ -82,8 +81,7 @@ dev/up --live app
 
 Container names must start with `whombat-mgd-` (the harness refuses to touch anything else).
 
-A public instance behind a tunnel (dev.whombat.com) is the same `dev/up` with `WB_MGD_PUBLIC_*` set:
-`docs/runbooks/dev-instance.md`.
+`WB_MGD_PUBLIC_*` give the environment public origins instead of loopback ones (`harness/src/lib/paths.ts`).
 
 ## Agents: Hermes and the commands (IN-38, IN-403)
 
@@ -127,7 +125,7 @@ Off unless set, so a reset never spends a label and a Let's Encrypt certificate 
   socket (`WHOMBAT_MANAGER_ACME_SOCKET`).
 - `WB_MGD_OWN_ADDRESS_ZONE` and `WB_MGD_OWN_ADDRESS_LBL` are control's `OWN_ADDRESS_ZONE` and `OWN_ADDRESS_LBL` (an
   older control ignores them). `lbl` on needs a relay with the door: an older relay refuses every ticket carrying it.
-- `WB_MGD_DOOR_LISTEN` (with `WB_MGD_DOOR_ZONE`, default `dev.whombat.app`, and `WB_MGD_DOOR_PROXY_FROM`, the
+- `WB_MGD_DOOR_LISTEN` (with `WB_MGD_DOOR_ZONE`, the zone it serves, required, and `WB_MGD_DOOR_PROXY_FROM`, the
   forwarder's CIDRs) switches the relay's door on; a relay from before the door gets none, and `dev/up` says so.
 - The maintainers' `candidate --relay <rev>` moves the relay the candidate pins and deploys it to production, as `--api`
   does control (IN-835).

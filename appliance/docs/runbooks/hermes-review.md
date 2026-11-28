@@ -1,8 +1,8 @@
 # Reviewing a new Hermes Agent release (NX-492; Whombat HU-09)
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 For the agent that the T3 Code task “Hermes Agent release review” starts on The Titan every morning at 05:20, after the
 latest-tested Hermes job (`docs/runbooks/hermes-latest-tested.md`) had its daily look for a new stable Hermes release.
