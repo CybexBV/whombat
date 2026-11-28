@@ -4,7 +4,8 @@
  * now — and reads the page again after. A box from before has no `summary.offsite`: the page doesn't offer it.
  */
 import { useMutation } from '@tanstack/react-query';
-import type { BackupSetOffsiteInput } from '@whombat/protocol/session';
+import type { BackupOffsiteState, BackupSetOffsiteInput } from '@whombat/protocol/session';
+import { useEffect } from 'react';
 import type { z } from 'zod';
 import { sessionOps } from '../session/managed-ops';
 import type { ApplianceSession } from '../session/types';
@@ -26,4 +27,17 @@ export function useBackupOffsiteActions(session: ApplianceSession | null | undef
     onSettled: () => reload(),
   });
   return { set, remove, copyNow };
+}
+
+/** How often the page reads Backups again while a copy runs: the box re-reads the copy's state once a minute too. */
+export const OFFSITE_FOLLOW_MS = 60_000;
+
+/** While a copy runs (or the first one is on its way) the page reads Backups again now and then, to say when it's done. */
+export function useFollowOffsiteCopy(state: BackupOffsiteState | null | undefined): void {
+  const reload = useReloadBackupOptions();
+  useEffect(() => {
+    if (state !== 'first' && state !== 'copying') return;
+    const timer = setInterval(() => void reload(), OFFSITE_FOLLOW_MS);
+    return () => clearInterval(timer);
+  }, [reload, state]);
 }

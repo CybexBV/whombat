@@ -18,7 +18,12 @@ import {
   offsiteText,
   offsiteView,
 } from '@whombat/client/managed';
-import { useBackupOffsiteActions, useBackupPlaces, useBackupServiceStatus } from '@whombat/client/react';
+import {
+  useBackupOffsiteActions,
+  useBackupPlaces,
+  useBackupServiceStatus,
+  useFollowOffsiteCopy,
+} from '@whombat/client/react';
 import { interpolate } from '@whombat/core/i18n';
 import type { BackupOffsite, BackupOffsiteProvider } from '@whombat/protocol/session';
 import { type FormEvent, useId, useState } from 'react';
@@ -59,6 +64,7 @@ export function BackupOffsiteSection() {
   const [removing, setRemoving] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
   const offsite = status.data?.summary.offsite;
+  useFollowOffsiteCopy(offsite?.state);
   // A box from before (or one whose backup service isn't answering now) doesn't say: nothing to show or offer.
   if (offsite === undefined) return null;
 

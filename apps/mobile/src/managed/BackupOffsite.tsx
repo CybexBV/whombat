@@ -16,7 +16,7 @@ import {
   offsiteText,
   offsiteView,
 } from '@whombat/client/managed';
-import { useBackupOffsiteActions, useBackupPlaces } from '@whombat/client/react';
+import { useBackupOffsiteActions, useBackupPlaces, useFollowOffsiteCopy } from '@whombat/client/react';
 import type { ApplianceSession } from '@whombat/client/session';
 import { interpolate } from '@whombat/core/i18n';
 import type { BackupOffsite } from '@whombat/protocol/session';
@@ -39,6 +39,7 @@ export function BackupOffsiteCard({ session }: { session: ApplianceSession }) {
   const [editing, setEditing] = useState(false);
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
   const offsite = status.data?.summary.offsite;
+  useFollowOffsiteCopy(offsite?.state);
   // A box from before (or one whose backup service isn't answering now) doesn't say: nothing to show or offer.
   if (offsite === undefined) return null;
   const placeName = places.data?.places.find((p) => p.id === places.data?.currentPlaceId)?.name ?? null;
