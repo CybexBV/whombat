@@ -1,19 +1,61 @@
+import { createHmac } from 'node:crypto';
+import { deflateRawSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { npmSummary } from './npm';
 import { opnsenseSummary } from './opnsense';
-import { piholeSummary } from './pihole';
+import { piholeSummary, teleporterFiles } from './pihole';
 import { copyDue } from './run';
 import {
   CONTENT_KEY,
   cleaned,
+  copyHasher,
   diffSummaries,
   hasClearKeys,
   hashedSummary,
+  MADE_KEY,
   plainKeyHasher,
+  SECRET_FIELD,
   SummaryBuilder,
 } from './summary';
 import { copyWhen } from './view';
 import { parseXml, xmlValue } from './xml';
+import { zipFiles } from './zip';
+
+/** A zip as an export makes one: each file deflated, or stored. */
+function zip(files: Record<string, string | Buffer>, stored = false): Buffer {
+  const parts: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const data = Buffer.from(content);
+    const packed = stored ? data : deflateRawSync(data);
+    const n = Buffer.from(name);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(stored ? 0 : 8, 8);
+    local.writeUInt32LE(packed.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(n.length, 26);
+    const entry = Buffer.alloc(46);
+    entry.writeUInt32LE(0x02014b50, 0);
+    entry.writeUInt16LE(stored ? 0 : 8, 10);
+    entry.writeUInt32LE(packed.length, 20);
+    entry.writeUInt32LE(data.length, 24);
+    entry.writeUInt16LE(n.length, 28);
+    entry.writeUInt32LE(offset, 42);
+    parts.push(local, n, packed);
+    central.push(entry, n);
+    offset += 30 + n.length + packed.length;
+  }
+  const dir = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(central.length / 2, 8);
+  end.writeUInt16LE(central.length / 2, 10);
+  end.writeUInt32LE(dir.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...parts, dir, end]);
+}
 
 const CONFIG = (rules: string, extra = '') => `<?xml version="1.0"?>
 <opnsense>
@@ -31,7 +73,8 @@ const CONFIG = (rules: string, extra = '') => `<?xml version="1.0"?>
 
 /** An item's key as a summary keeps it. */
 const k = (part: string, key: string) => `${part}/~${plainKeyHasher(key)}`;
-const items = (summary: Record<string, string>) => Object.keys(summary).filter((key) => key !== CONTENT_KEY);
+/** A summary's items' keys, without the content hash and the mark of how it was made. */
+const items = (summary: Record<string, string>) => Object.keys(summary).filter((key) => key.includes('/'));
 
 const RULE = (uuid: string, descr: string, port = '443') =>
   `<rule uuid="${uuid}"><descr>${descr} &amp; more</descr><destination><port>${port}</port></destination><updated><time>1</time></updated></rule>`;
@@ -100,6 +143,7 @@ describe('Pi-hole’s settings compared', () => {
     domains: { domains: [{ domain: 'ads.example.com', type: 'deny', kind: 'exact', enabled: true, id: 3 }] },
     groups: { groups: [{ name: 'Default', enabled: true }] },
     clients: { clients: [] },
+    files: {},
   };
 
   it('keeps no line, address or name in the clear', () => {
@@ -151,6 +195,68 @@ describe('Pi-hole’s settings compared', () => {
   });
 });
 
+describe('Pi-hole’s Teleporter file compared', () => {
+  const TOML = (when: string, upstream = '9.9.9.9') =>
+    `# Pi-hole configuration file (v6.0)\n# Last updated on ${when}\n[dns]\n  upstreams = ["${upstream}"]\n`;
+  const teleporter = (over: Record<string, string> = {}) =>
+    zip({
+      'etc/pihole/pihole.toml': TOML('2026-11-27 03:00:00 UTC'),
+      'etc/hosts': '127.0.0.1 localhost\n10.100.0.5 nas.lan\n',
+      'etc/pihole/dhcp.leases': '1764300000 aa:bb:cc:dd:ee:ff 10.100.0.50 phone *\n',
+      'etc/pihole/gravity.db': 'SQLite format 3\u0000one',
+      ...over,
+    });
+  const read = {
+    config: { config: { dns: { upstreams: ['9.9.9.9'] } } },
+    lists: { lists: [] },
+    domains: { domains: [] },
+    groups: { groups: [] },
+    clients: { clients: [] },
+  };
+  const content = (bytes: Buffer) => piholeSummary({ ...read, files: teleporterFiles(bytes) })[CONTENT_KEY];
+
+  it('reads the files of a zip, deflated or stored', () => {
+    const files = zipFiles(zip({ 'a.txt': 'one', 'dir/': '', 'b.bin': Buffer.from([0, 1, 2]) }, true));
+    expect([...(files?.keys() ?? [])]).toEqual(['a.txt', 'b.bin']);
+    expect(
+      zipFiles(zip({ 'a.txt': 'one'.repeat(100) }))
+        ?.get('a.txt')
+        ?.toString(),
+    ).toBe('one'.repeat(100));
+    expect(zipFiles(Buffer.from('<html>error</html>'))).toBeNull();
+  });
+
+  it('keeps a new copy when a file in it changed that Pi-hole’s API doesn’t show', () => {
+    const a = content(teleporter());
+    expect(a).toBeDefined();
+    expect(content(teleporter({ 'etc/hosts': '127.0.0.1 localhost\n10.100.0.6 nas.lan\n' }))).not.toBe(a);
+    expect(
+      content(teleporter({ 'etc/pihole/pihole.toml': TOML('2026-11-27 03:00:00 UTC', '1.1.1.1') })),
+    ).not.toBe(a);
+    expect(
+      content(teleporter({ 'etc/dnsmasq.d/02-own.conf': 'address=/printer.lan/10.100.0.9\n' })),
+    ).not.toBe(a);
+  });
+
+  it('is the same copy when only what changes by itself changed', () => {
+    const a = content(teleporter());
+    expect(
+      content(
+        teleporter({
+          'etc/pihole/pihole.toml': TOML('2026-11-28 03:00:00 UTC'),
+          'etc/pihole/dhcp.leases': '1764400000 aa:bb:cc:dd:ee:ff 10.100.0.51 phone *\n',
+          'etc/pihole/gravity.db': 'SQLite format 3\u0000two',
+        }),
+      ),
+    ).toBe(a);
+  });
+
+  it('never calls a file it couldn’t read the same as another', () => {
+    expect(teleporterFiles(Buffer.from('PK not really a zip'))).toBeNull();
+    expect(piholeSummary({ ...read, files: null })[CONTENT_KEY]).toBeUndefined();
+  });
+});
+
 describe('Nginx Proxy Manager’s hosts compared', () => {
   const host = (domain: string, over: Record<string, unknown> = {}) => ({
     id: 1,
@@ -196,12 +302,97 @@ describe('Nginx Proxy Manager’s hosts compared', () => {
   });
 });
 
+describe('a summary’s hashes', () => {
+  const custody = (key: string) => ({
+    custody: {
+      mac: (purpose: string, message: string) =>
+        createHmac('sha256', `${key}/${purpose}`).update(message).digest('base64url'),
+    },
+  });
+  const build = (hasher?: ReturnType<typeof copyHasher>, port = 443) => {
+    const b = new SummaryBuilder(hasher);
+    b.add('filter', 'web', { port, enabled: true });
+    b.content({ port, password: 'one' });
+    return b.summary;
+  };
+
+  it('keys values and the content with the box’s key, not only the item’s key', () => {
+    const plain = build();
+    const box = build(copyHasher(custody('box-a') as never));
+    const other = build(copyHasher(custody('box-b') as never));
+    const values = (s: Record<string, string>) =>
+      Object.entries(s)
+        .filter(([k]) => k.includes('/'))
+        .map(([, v]) => v);
+    expect(values(box)).not.toEqual(values(plain));
+    expect(values(box)).not.toEqual(values(other));
+    expect(box[CONTENT_KEY]).not.toBe(plain[CONTENT_KEY]);
+    expect(box[CONTENT_KEY]).not.toBe(other[CONTENT_KEY]);
+    // The same settings on the same box compare the same, a changed one as changed.
+    const hasher = copyHasher(custody('box-a') as never);
+    expect(build(hasher)).toEqual(box);
+    expect(diffSummaries(box, build(hasher, 8443))).toEqual([
+      { part: 'filter', added: 0, removed: 0, changed: 1 },
+    ]);
+  });
+
+  it('tells nothing changed against a summary made before, whose hashes can’t be compared', () => {
+    const now = build(copyHasher(custody('box-a') as never));
+    expect(now[MADE_KEY]).toBeDefined();
+    const { [MADE_KEY]: _, ...before } = build();
+    expect(diffSummaries(before, now)).toEqual([]);
+    expect(before[CONTENT_KEY]).not.toBe(now[CONTENT_KEY]);
+  });
+});
+
+describe('secret fields', () => {
+  it('leaves out credentials, auth values, DSNs, webhooks, sessions and seeds, not their harmless neighbours', () => {
+    for (const name of [
+      'credentials',
+      'aws_credential',
+      'auth',
+      'basic_auth',
+      'basicAuth',
+      'auth_pass',
+      'authkey',
+      'dsn',
+      'sentry_dsn',
+      'webhook',
+      'webhook_url',
+      'webhookUrl',
+      'session_id',
+      'sessionid',
+      'session_cookie',
+      'seed',
+      'otp_seed',
+      'seed_phrase',
+    ])
+      expect(SECRET_FIELD.test(name), name).toBe(true);
+    for (const name of [
+      'author',
+      'authority',
+      'authmode',
+      'auth_method',
+      'authserver',
+      'pass_auth',
+      'session',
+      'session_timeout',
+      'webhook_enabled',
+      'credentials_file',
+      'speed',
+      'seeders',
+      'hostname',
+    ])
+      expect(SECRET_FIELD.test(name), name).toBe(false);
+  });
+});
+
 describe('a summary’s keys', () => {
   it('hashes each item’s key, a second of the same with its number', () => {
     const b = new SummaryBuilder();
     b.add('records', '10.100.0.5 nas.lan', 1);
     b.add('records', '10.100.0.5 nas.lan', 2);
-    expect(Object.keys(b.summary)).toEqual([
+    expect(items(b.summary)).toEqual([
       k('records', '10.100.0.5 nas.lan'),
       k('records', '10.100.0.5 nas.lan#2'),
     ]);
@@ -219,7 +410,7 @@ describe('a summary’s keys', () => {
     now.add('records', '10.100.0.5 nas.lan', 2);
     now.add('domains', 'deny/exact:a', 3);
     const rekeyed = hashedSummary(before, plainKeyHasher);
-    expect(Object.keys(rekeyed)).toEqual(Object.keys(now.summary));
+    expect(Object.keys(rekeyed)).toEqual(items(now.summary));
     expect(hasClearKeys(rekeyed)).toBe(false);
     expect(hashedSummary(rekeyed, plainKeyHasher)).toEqual(rekeyed);
   });

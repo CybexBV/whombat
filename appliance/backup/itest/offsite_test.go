@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,7 @@ import (
 	"github.com/CybexBV/whombat/appliance/backup/pkg/kit"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/manifest"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/pgtool"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/restic"
 )
 
 func copyNow(t *testing.T, w *World, want int) {
@@ -232,6 +234,22 @@ func TestOffsiteFollowsTheBucketsOwnList(t *testing.T) {
 	if after, _ := copyRepo.Snapshots(ctx, manifest.TagProduct); len(after) != 2 {
 		t.Fatalf("the copy holds %d backups, want %s and %s", len(after), ck1.Manifest.ID, ck2.Manifest.ID)
 	}
+
+	// Someone empties the folder and makes a new repository there (with the same password): it isn't the copy that was
+	// set up, so nothing is copied into it or cleared there, and the run says so.
+	if err := os.RemoveAll(copyDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyRepo.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var oe *offsite.Error
+	if _, err := offsite.Copy(ctx, w.Cfg, t.Logf); !errors.As(err, &oe) || oe.Step != offsite.StepRepository {
+		t.Fatalf("a run into another repository at the place: %v", err)
+	}
+	if after, err := copyRepo.Snapshots(ctx, manifest.TagProduct); err != nil || len(after) != 0 {
+		t.Fatalf("the new repository got %d backups (%v)", len(after), err)
+	}
 }
 
 // A real S3 storage (MinIO): the place is checked with a signed write, read and delete before it is saved, made with
@@ -356,6 +374,163 @@ func TestOffsiteOnlyThisBoxsBackupsElsewhere(t *testing.T) {
 	}
 }
 
+// Clearing the copy touches only this box's own backups there, the ones its signed manifests vouch for, and removes
+// those the keep windows don't keep by their ids: a Whombat writing into the same folder under this box's machine name
+// (the one it was brought back from, still running) keeps its backups, however old.
+func TestOffsiteClearsOnlyItsOwnBackups(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	copyRepo := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg))
+	first, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("the copy holds %d backups: %v", len(first), err)
+	}
+	file := filepath.Join(t.TempDir(), "old.txt")
+	if err := os.WriteFile(file, []byte("an old backup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := func(tags ...string) string {
+		args := []string{"backup", "--host", w.Cfg.ApplianceID, "--time", "2023-01-02 03:00:00"}
+		for _, tag := range tags {
+			args = append(args, "--tag", tag)
+		}
+		if _, err := copyRepo.Run(ctx, nil, append(args, file)...); err != nil {
+			t.Fatal(err)
+		}
+		snaps, err := copyRepo.Snapshots(ctx, manifest.TagIDPrefix+tagValue(tags, manifest.TagIDPrefix))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, sn := range snaps {
+			if sn.Time.Year() == 2023 {
+				return sn.ID
+			}
+		}
+		t.Fatal("the old backup isn't in the copy")
+		return ""
+	}
+	// One of this box's own, signed by it, dated long ago (its tags are those of the backup it copied).
+	mine := old(first[0].Tags...)
+	// Another Whombat's under the same machine name, as old: its manifest isn't one this box signed.
+	theirs := old(manifest.TagProduct, manifest.TagIDPrefix+"theirs", manifest.TagMFPrefix+strings.Repeat("cd", 32))
+
+	// The next copy clears (a day has passed since the last clearing).
+	st := offsite.LoadStatus(w.Cfg, mustPlace(t, w.Cfg))
+	if st.Clearing == nil || !st.Clearing.OK {
+		t.Fatalf("the first copy's clearing: %+v", st.Clearing)
+	}
+	st.Clearing.At = st.Clearing.At.Add(-2 * offsite.ClearEvery)
+	if err := state.WriteJSON(filepath.Join(w.Cfg.StateDir, "offsite-status.json"), st, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	copyNow(t, w, 1)
+	if st := offsite.LoadStatus(w.Cfg, mustPlace(t, w.Cfg)); st.Clearing == nil || !st.Clearing.OK {
+		t.Fatalf("clearing: %+v", st.Clearing)
+	}
+	after, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	for _, sn := range after {
+		left = append(left, sn.ID)
+	}
+	if slices.Contains(left, mine) || !slices.Contains(left, theirs) || len(left) != 3 {
+		t.Fatalf("after clearing the copy holds %v (this box's old one %s, the other's %s)", left, mine, theirs)
+	}
+}
+
+func tagValue(tags []string, prefix string) string {
+	for _, tag := range tags {
+		if v, ok := strings.CutPrefix(tag, prefix); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// The keep windows the copy's clearing works out itself remove exactly what restic's own forget would, over the same
+// snapshots (the main place clears with restic's): several a day lately, then weekly, monthly and older ones, and two
+// dated ahead of the clock (it was put back since).
+func TestKeepRuleIsResticsOwn(t *testing.T) {
+	ctx := context.Background()
+	bin := lookFirst("RESTIC", "restic")
+	if bin == "" {
+		t.Skip("missing tools: restic")
+	}
+	dir := t.TempDir()
+	pw := filepath.Join(dir, "password")
+	if err := os.WriteFile(pw, []byte("keep-rule"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := restic.Repo{Binary: bin, Repository: filepath.Join(dir, "repo"), PasswordFile: pw, NoCache: true}
+	if _, err := repo.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ago := []time.Duration{-40 * time.Hour, -2 * time.Hour, 3 * time.Hour, 20 * time.Hour, 30 * time.Hour, 50 * time.Hour,
+		51 * time.Hour, 70 * time.Hour}
+	for d := 4; d < 500; d += 12 + d/8 {
+		ago = append(ago, time.Duration(d)*24*time.Hour)
+		if d < 60 {
+			ago = append(ago, time.Duration(d)*24*time.Hour+3*time.Hour)
+		}
+	}
+	for _, a := range ago {
+		at := now.Add(-a).Local().Format("2006-01-02 15:04:05")
+		if _, err := repo.Run(ctx, nil, "backup", "--host", "box", "--tag", manifest.TagProduct, "--time", at, file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snaps, err := repo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(snaps) != len(ago) {
+		t.Fatalf("%d snapshots: %v", len(snaps), err)
+	}
+	for _, keep := range []state.PolicyKeep{state.DefaultPolicy().Keep, {AllDays: 1, DailyDays: 3, WeeklyWeeks: 2, MonthlyMonths: 3},
+		{AllDays: 30}, {AllDays: 1, MonthlyMonths: 120}} {
+		args := append([]string{"forget", "--dry-run", "--json", "--tag", manifest.TagProduct, "--group-by", ""}, keep.ForgetArgs()...)
+		out, err := repo.Run(ctx, nil, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var groups []struct {
+			Remove []struct {
+				ID string `json:"id"`
+			} `json:"remove"`
+		}
+		if err := json.Unmarshal(out, &groups); err != nil || len(groups) != 1 {
+			t.Fatalf("restic forget --json: %v %s", err, out)
+		}
+		var want, got []string
+		for _, sn := range groups[0].Remove {
+			want = append(want, sn.ID)
+		}
+		for _, sn := range keep.Expired(snaps, time.Now()) {
+			got = append(got, sn.ID)
+		}
+		slices.Sort(want)
+		slices.Sort(got)
+		if !slices.Equal(got, want) || len(want) == 0 {
+			for _, sn := range snaps {
+				t.Logf("%s %s restic removes it: %v", sn.ShortID, sn.Time, slices.Contains(want, sn.ID))
+			}
+			t.Fatalf("keep %+v: restic removes %d, the copy's rule %d", keep, len(want), len(got))
+		}
+	}
+}
+
 // A main place over https with a private certificate authority (a NAS's own): the copy reaches it through the relay
 // that trusts only that authority, while restic's own trust stays the copy's, and the relay is gone afterwards.
 func TestOffsiteFromAPrivateCA(t *testing.T) {
@@ -374,6 +549,26 @@ func TestOffsiteFromAPrivateCA(t *testing.T) {
 	}
 	w.Checkpoint()
 	copyDir := filepath.Join(t.TempDir(), "copy")
+	// A main place's certificate authority that can't be read keeps every copy from reaching it: setup refuses at once
+	// and keeps no place.
+	caPath := mustDest(t, w.Cfg).CACert
+	good, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caPath, []byte("not a certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var oe *offsite.Error
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); !errors.As(err, &oe) || oe.Step != offsite.StepMain {
+		t.Fatalf("setup with an unreadable authority: %v", err)
+	}
+	if p, _ := offsite.Load(w.Cfg); p != nil {
+		t.Fatal("a place was kept that no copy can reach")
+	}
+	if err := os.WriteFile(caPath, good, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
 		t.Fatal(err)
 	}

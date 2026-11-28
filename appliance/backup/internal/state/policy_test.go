@@ -1,8 +1,11 @@
 package state
 
 import (
+	"slices"
 	"testing"
 	"time"
+
+	"github.com/CybexBV/whombat/appliance/backup/pkg/restic"
 )
 
 func TestPolicyDue(t *testing.T) {
@@ -166,5 +169,51 @@ func TestLimitLadder(t *testing.T) {
 	}
 	if n := (PolicyKeep{AllDays: 30, DailyDays: 5}).LimitLadder(); len(n) != 0 {
 		t.Fatalf("nothing to shorten: %+v", n)
+	}
+}
+
+// The keep windows count back from the newest backup (one dated ahead of the clock doesn't move them), never from the
+// clock: every one of the last days, then the newest of each day, ISO week and month inside their windows, and the
+// oldest of all when a window reaches back to it; the rest expires.
+func TestKeepExpired(t *testing.T) {
+	at := func(id string, y int, m time.Month, d, h int) restic.Snapshot {
+		return restic.Snapshot{ID: id, Time: time.Date(y, m, d, h, 0, 0, 0, time.UTC)}
+	}
+	now := time.Date(2026, 11, 28, 13, 0, 0, 0, time.UTC)
+	snaps := []restic.Snapshot{
+		at("e", 2026, 10, 10, 9),  // the newest of ISO week 41 and of October
+		at("h", 2025, 11, 28, 11), // the oldest, just outside the twelve months
+		at("a", 2026, 11, 28, 12), // the newest: every window counts back from it
+		at("d", 2026, 11, 25, 8),  // the same day as c, and its week and month are taken already
+		at("i", 2025, 12, 1, 9),   // the newest of December 2025
+		at("z", 2026, 12, 20, 9),  // dated ahead of the clock (it was put back): kept, but no window counts from it
+		at("b", 2026, 11, 27, 2),  // within the last two days
+		at("g", 2026, 2, 1, 9),    // the newest of February
+		at("c", 2026, 11, 25, 20), // the newest of its day
+		at("f", 2026, 10, 9, 9),   // the same week and month as e
+	}
+	keep := DefaultPolicy().Keep
+	var got []string
+	for _, sn := range keep.Expired(snaps, now) {
+		got = append(got, sn.ID)
+	}
+	if !slices.Equal(got, []string{"d", "f", "h"}) {
+		t.Fatalf("expired %v", got)
+	}
+	if got := keep.Expired(nil, now); got != nil {
+		t.Fatalf("nothing given, %v expired", got)
+	}
+	// Alone, the oldest is the newest: nothing expires however old it is.
+	if got := keep.Expired(snaps[1:2], now); got != nil {
+		t.Fatalf("a lone old backup expired: %v", got)
+	}
+	// The oldest of all is kept when a window still reaches it, even on a day already kept.
+	got = nil
+	for _, sn := range keep.Expired([]restic.Snapshot{at("x", 2026, 11, 20, 20), at("y", 2026, 11, 20, 10),
+		at("w", 2026, 11, 20, 8), at("n", 2026, 11, 28, 12)}, now) {
+		got = append(got, sn.ID)
+	}
+	if !slices.Equal(got, []string{"y"}) {
+		t.Fatalf("expired %v, want only the middle one of that day", got)
 	}
 }

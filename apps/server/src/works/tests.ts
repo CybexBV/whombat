@@ -192,6 +192,29 @@ const MEDIA_TYPES: ReadonlySet<string> = new Set([
   'application/vnd.rn-realmedia',
 ]);
 
+/**
+ * Whether a file's first bytes read as text: valid UTF-8 with no control characters but tabs and line ends (an empty
+ * answer too). A film or song is binary from its first bytes; text there is an error message.
+ */
+export function readsAsText(b: Buffer): boolean {
+  const head = b.subarray(0, 512);
+  // A character cut at the end of what was read is still text.
+  for (let cut = 0; cut <= (b.length > head.length ? 3 : 0); cut++) {
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true }).decode(head.subarray(0, head.length - cut));
+    } catch {
+      continue;
+    }
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      if ((c < 0x20 && c !== 0x09 && c !== 0x0a && c !== 0x0d) || c === 0x7f) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 /** Whether an answer is the file a step opens: not JSON where a file should be, and what the service says it is. */
 export function fileFits(answer: TestAnswer, expect: FileExpect): boolean {
   const type = mediaType(answer);
@@ -205,8 +228,9 @@ export function fileFits(answer: TestAnswer, expect: FileExpect): boolean {
       /^(video|audio)\//.test(type) ||
       MEDIA_TYPES.has(type) ||
       signature === 'media' ||
-      // A container Whombat doesn't know by its first bytes, sent without a type: binary, not a text answer.
-      (generic && signature === null && !/^[{[<]/.test(head))
+      // A container Whombat doesn't know by its first bytes, sent without a type: binary, never text (a plain error
+      // message such as “Storage unavailable”, a page, an empty answer).
+      (generic && signature === null && !readsAsText(answer.body))
     );
   return true;
 }

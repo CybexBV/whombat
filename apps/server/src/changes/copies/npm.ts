@@ -8,7 +8,7 @@ import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
 import { getJson } from '../../things/kinds/read';
 import { list, rec, str } from '../../things/words';
-import { cleaned, copyKeyHasher, type KeyHasher, type SettingsSummary, SummaryBuilder } from './summary';
+import { type CopyHasher, cleaned, copyHasher, type SettingsSummary, SummaryBuilder } from './summary';
 import type { CopyService } from './types';
 
 const NAME = 'Nginx Proxy Manager';
@@ -42,8 +42,8 @@ const domains = (r: Record<string, unknown>) =>
     .sort()
     .join(',');
 
-export function npmSummary(read: NpmRead, hashKey?: KeyHasher): SettingsSummary {
-  const out = new SummaryBuilder(hashKey);
+export function npmSummary(read: NpmRead, hasher?: CopyHasher): SettingsSummary {
+  const out = new SummaryBuilder(hasher);
   const routed = new Set([...VOLATILE, ...ROUTED]);
   for (const h of list(read.proxyHosts)) out.add('proxyHosts', domains(rec(h)), cleaned(h, routed));
   for (const h of list(read.redirects)) out.add('redirects', domains(rec(h)), cleaned(h, VOLATILE));
@@ -88,7 +88,7 @@ export const NPM_COPY: CopyService = {
       bytes: Buffer.from(`${JSON.stringify(file, null, 2)}\n`, 'utf8'),
       fileName: `nginx-proxy-manager-${fileDate(now)}.json`,
       contentType: 'application/json',
-      summary: npmSummary(read, copyKeyHasher(services)),
+      summary: npmSummary(read, copyHasher(services)),
     };
   },
 };

@@ -248,8 +248,8 @@ export const MANAGED = splitPairs({
     'Met deze sleutel kun je geen bestanden in die bucket verwijderen. Whombat heeft dat nodig om oude kopieën op te ruimen, dus geef hem verwijderrechten.',
   ],
   'managed.offsite.step.repository': [
-    'That folder already holds backups this Whombat can’t open. Choose another folder.',
-    'In die map staan al back-ups die deze Whombat niet kan openen. Kies een andere map.',
+    'That folder holds backups that aren’t this Whombat’s copy. Choose another folder.',
+    'In die map staan back-ups die niet de kopie van deze Whombat zijn. Kies een andere map.',
   ],
   'managed.offsite.step.same': [
     'That’s where your backups go already. Choose another place for the copy.',

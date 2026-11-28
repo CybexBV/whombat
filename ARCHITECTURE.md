@@ -321,11 +321,13 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   owns. The backup service keeps it (`appliance/backup/internal/offsite`, `GET|PUT|DELETE /v1/offsite`,
   `POST /v1/offsite/copy`): setting it writes, reads and deletes a small file with the key, then opens or makes the
   copy's repository with the main one's password and chunker; the key is sealed like the main destination's. After each
-  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` checks by both
-  repositories' ids that the copy isn't the main place, then runs `restic copy` of this Whombat's checkpoints (those its
+  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` checks by the
+  repositories' ids that the copy isn't the main place and is still the one set up, then runs `restic copy` of this
+  Whombat's checkpoints (those its
   backup list trusts, `listing.Trusted`) not in the bucket's own list, read on every run, which is also all its status
-  says is there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (its machines' snapshots
-  only) by the same keep windows at most every 23 hours; with none of its own at the main place a run copies and clears
+  says is there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (the copy's snapshots it
+  trusts, by restic's keep rule worked out over just those, `PolicyKeep.Expired`, removed by id) by the same keep
+  windows at most every 23 hours; with none of its own at the main place a run copies and clears
   nothing; nothing is copied during a restore. A REST main place over https is reached through a relay on a private
   socket that trusts only its certificate authority (`pkg/restic/relay.go`), so restic's `--cacert` stays the copy's;
   the setup's S3 check never follows a redirect. The runtime reads its document
@@ -2126,9 +2128,10 @@ Setup and operation: `docs/github.md`.
   Pi-hole's Teleporter zip and Nginx Proxy Manager's hosts as JSON, once a night between 02:00 and 05:00 at the box's
   clock (a failed try again after an hour, three times), through the connection's own key. Each copy is sealed with the
   custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same content
-  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key (`custody.mac`) and a
-  hash of what it holds with secrets cleaned out, and a hash of the whole copy's content with its secrets
-  (`CONTENT_KEY`). Two copies' summaries are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
+  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key and of what it holds
+  with secrets cleaned out (`custody.mac`), and a keyed hash of the whole copy's content with its secrets
+  (`CONTENT_KEY`; Pi-hole's covers the Teleporter zip's own files too, `copies/zip.ts`). Two copies' summaries made the
+  same way (`MADE_KEY`) are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
   and, once a copy worked and none has for 48 hours, the “Settings copy failing” line (`settings.copy`).
   `things.settingsCopy` gives the newest copy's bytes as base64 to the person, read through an export stream.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per

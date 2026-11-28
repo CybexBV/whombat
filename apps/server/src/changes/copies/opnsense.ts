@@ -7,9 +7,9 @@
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { Services } from '../../services';
 import {
+  type CopyHasher,
   cleaned,
-  copyKeyHasher,
-  type KeyHasher,
+  copyHasher,
   SECRET_FIELD,
   type SettingsSummary,
   SummaryBuilder,
@@ -112,11 +112,11 @@ function keyOf(node: XmlNode, any: boolean): string {
 const skipped = (node: XmlNode) => VOLATILE.has(node.name) || SECRET_FIELD.test(node.name);
 
 /** The summary of an OPNsense `config.xml`. */
-export function opnsenseSummary(xml: string, hashKey?: KeyHasher): SettingsSummary {
+export function opnsenseSummary(xml: string, hasher?: CopyHasher): SettingsSummary {
   const doc = parseXml(xml);
   const top = doc.children.find((c) => c.name === 'opnsense');
   if (!top) throw new CopyFailed('unreadable');
-  const out = new SummaryBuilder(hashKey);
+  const out = new SummaryBuilder(hasher);
   for (const { part, paths } of PARTS)
     for (const path of paths)
       for (const node of nodesAt(top, path)) {
@@ -145,7 +145,7 @@ export const OPNSENSE_COPY: CopyService = {
       bytes,
       fileName: `opnsense-config-${fileDate(now)}.xml`,
       contentType: 'application/xml',
-      summary: opnsenseSummary(xml, copyKeyHasher(services)),
+      summary: opnsenseSummary(xml, copyHasher(services)),
     };
   },
 };
