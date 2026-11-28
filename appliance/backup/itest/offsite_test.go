@@ -3,7 +3,11 @@ package itest
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -293,4 +297,89 @@ func mustPlace(t *testing.T, c *state.Config) *offsite.Place {
 		t.Fatalf("second place: %v", err)
 	}
 	return p
+}
+
+// The copy is never the main place under another address, at setup or on a later run (restic's repository ids tell,
+// whatever the addresses say); only this box's own backups are copied, never another box's in the same place; and a
+// main place without backups yet has nothing to copy, which the status doesn't call a copy that worked.
+func TestOffsiteOnlyThisBoxsBackupsElsewhere(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := offsite.Copy(ctx, w.Cfg, t.Logf); err != nil || res.Copied != 0 {
+		t.Fatalf("with nothing to copy: %+v %v", res, err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.State != offsite.StateFirst || doc.LastCopy != nil || doc.NewestBackupAt != nil {
+		t.Fatalf("with nothing to copy the status says: %+v", doc)
+	}
+
+	// The main place's own folder, named as a path instead of its server's address.
+	mainDir := filepath.Join(w.Rest.DataDir, w.RepoPath)
+	var oe *offsite.Error
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: mainDir, AllowLocal: true}); !errors.As(err, &oe) || oe.Step != offsite.StepSame {
+		t.Fatalf("the main place under another address was taken: %v", err)
+	}
+
+	// Another box writes into the same main place, under a name of its own.
+	w.Checkpoint()
+	other := filepath.Join(t.TempDir(), "theirs.txt")
+	if err := os.WriteFile(other, []byte("another box's data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mainRepo := w.Cfg.Repo(mustDest(t, w.Cfg))
+	if _, err := mainRepo.Run(ctx, nil, "backup", "--host", "another-box", "--tag", manifest.TagProduct,
+		"--tag", manifest.TagIDPrefix+"theirs", "--tag", manifest.TagMFPrefix+strings.Repeat("ab", 32), other); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	copied, err := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg)).Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(copied) != 1 || copied[0].Hostname != w.Cfg.ApplianceID {
+		t.Fatalf("the copy holds %+v (%v)", copied, err)
+	}
+
+	// The place is changed by hand to the main place's folder: the next run refuses before it copies or clears.
+	place := mustPlace(t, w.Cfg)
+	place.Repository = mainDir
+	if err := state.WriteJSON(filepath.Join(w.Cfg.StateDir, "offsite.json"), place, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	if _, err := offsite.Copy(ctx, w.Cfg, t.Logf); !errors.As(err, &oe) || oe.Step != offsite.StepSame {
+		t.Fatalf("a run into the main place: %v", err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.State != offsite.StateFailing || doc.LastFailure == nil || doc.LastFailure.Step != offsite.StepSame {
+		t.Fatalf("after refusing: %+v", doc)
+	}
+}
+
+// A main place over https with a private certificate authority (a NAS's own): the copy reaches it through the relay
+// that trusts only that authority, while restic's own trust stays the copy's, and the relay is gone afterwards.
+func TestOffsiteFromAPrivateCA(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	upstream, err := url.Parse(w.Rest.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nas := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(upstream))
+	defer nas.Close()
+	ca := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: nas.Certificate().Raw}))
+	if _, err := dest.Configure(ctx, w.Cfg, dest.Request{Repository: "rest:" + nas.URL + "/" + w.RepoPath + "/",
+		RESTUser: w.RestUser, RESTPassword: w.RestPass, CACert: ca, AllowInit: true}); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	left, _ := filepath.Glob(filepath.Join(w.Cfg.StateDir, ".copy-*"))
+	if len(left) > 0 {
+		t.Fatalf("pairing left %v", left)
+	}
 }

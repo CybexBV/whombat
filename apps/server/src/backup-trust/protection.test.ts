@@ -4,11 +4,12 @@ import {
   betterProtection,
   haAgentName,
   haProtection,
+  provenProtection,
   synologyProtection,
   truenasProtection,
 } from './protection';
 import { failingTests } from './runner';
-import { offsiteOf, pveState } from './view';
+import { offsiteOf, pveProtection } from './view';
 
 const d = (s: string) => new Date(s);
 
@@ -45,9 +46,38 @@ describe('a NAS’s own backups', () => {
     const failed = synologyProtection([
       { name: 'To B2', result: 'failed', last: d('2026-11-27T02:00:00Z'), target: 'cloud' },
     ]);
+    expect(failed).toMatchObject({ state: 'none', planned: true, lastAt: null });
     expect(failed?.failedAt).toBe('2026-11-27T02:00:00.000Z');
-    expect(failed?.lastAt).toBeNull();
     expect(synologyProtection(null)).toBeUndefined();
+  });
+  it('a task that never worked copies nothing: none and planned, or the copy that did work', () => {
+    const never = { name: 'To B2', result: 'none', last: null, target: 'cloud' };
+    expect(synologyProtection([never])).toMatchObject({ state: 'none', planned: true, lastAt: null });
+    expect(
+      synologyProtection([
+        never,
+        { name: 'USB', result: 'ok', last: d('2026-11-27T04:00:00Z'), target: 'local' },
+      ]),
+    ).toMatchObject({ state: 'local', where: null });
+    expect(
+      truenasProtection([{ kind: 'replication', name: 'to-backup', result: null, at: null }]),
+    ).toMatchObject({ state: 'none', planned: true });
+    expect(
+      truenasProtection([
+        { kind: 'replication', name: 'to-backup', result: 'failed', at: d('2026-11-27T02:00:00Z') },
+        { kind: 'snapshot', name: 'tank', result: 'ok', at: d('2026-11-27T01:00:00Z') },
+      ]),
+    ).toMatchObject({ state: 'local', lastAt: '2026-11-27T01:00:00.000Z' });
+  });
+  it('a fact kept from before the rule says copied only with a backup that worked', () => {
+    expect(provenProtection({ state: 'copied', lastAt: null, where: 'To B2' })).toMatchObject({
+      state: 'none',
+      planned: true,
+      where: null,
+    });
+    const ok = { state: 'copied' as const, lastAt: '2026-11-27T00:00:00Z', where: 'To B2' };
+    expect(provenProtection(ok)).toBe(ok);
+    expect(provenProtection(null)).toBeNull();
   });
   it('TrueNAS replication is copied, snapshots alone stay on it', () => {
     expect(
@@ -138,17 +168,40 @@ describe('the off-site copy of this Whombat’s backups', () => {
 });
 
 describe('a Proxmox machine’s backups', () => {
-  const read = { hasBackup: true, planned: false, listsRead: true, placeRead: true };
-  it('are on another machine or the same one by their storage', () => {
-    expect(pveState({ ...read, storage: { type: 'pbs', shared: false } })).toBe('copied');
-    expect(pveState({ ...read, storage: { type: 'dir', shared: false } })).toBe('local');
+  const ok = { result: 'ok', at: '2026-11-27T02:00:00Z' };
+  const onPbs = { storageId: 'pbs-01', storage: { type: 'pbs', shared: false }, at: '2026-11-27T02:00:00Z' };
+  const read = { last: ok, planned: true, newest: onPbs, listsRead: true };
+  it('are on another machine or the same one by the storage the backup is on', () => {
+    expect(pveProtection(read)).toMatchObject({ state: 'copied', where: 'pbs-01', lastAt: ok.at });
+    expect(
+      pveProtection({
+        ...read,
+        newest: { ...onPbs, storageId: 'local', storage: { type: 'dir', shared: false } },
+      }).state,
+    ).toBe('local');
   });
-  it('are unseen when their place wasn’t read, never guessed to be on the same machine', () => {
-    expect(pveState({ ...read, storage: null, placeRead: false })).toBe('unseen');
-    expect(pveState({ ...read, storage: null, listsRead: false })).toBe('unseen');
+  it('are none while a plan never made a backup that worked, never copied', () => {
+    expect(pveProtection({ ...read, last: null, newest: null })).toMatchObject({
+      state: 'none',
+      planned: true,
+    });
+    expect(pveProtection({ ...read, last: null, planned: false, newest: null }).planned).toBeUndefined();
+    const failed = { result: 'error', at: '2026-11-28T02:00:00Z' };
+    expect(pveProtection({ ...read, last: failed, newest: null })).toMatchObject({
+      state: 'none',
+      failedAt: failed.at,
+    });
+    // After a failure, the backup still on its list is the one that worked before.
+    expect(pveProtection({ ...read, last: failed })).toMatchObject({
+      state: 'copied',
+      lastAt: onPbs.at,
+      failedAt: failed.at,
+    });
   });
-  it('are none only when nothing backs the machine up', () => {
-    expect(pveState({ ...read, hasBackup: false, storage: null })).toBe('none');
-    expect(pveState({ ...read, hasBackup: false, planned: true, storage: null })).not.toBe('none');
+  it('are unseen when their list or the storages weren’t read, never guessed', () => {
+    expect(pveProtection({ ...read, newest: undefined }).state).toBe('unseen');
+    expect(pveProtection({ ...read, listsRead: false }).state).toBe('unseen');
+    expect(pveProtection({ ...read, newest: { ...onPbs, storage: undefined } }).state).toBe('unseen');
+    expect(pveProtection({ ...read, newest: null }).state).toBe('unseen');
   });
 });

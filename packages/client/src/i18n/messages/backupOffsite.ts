@@ -12,6 +12,7 @@ export const BACKUP_OFFSITE_WORDS = treeCatalogs(
     line: {
       ok: 'Copy at {place} · copied {when}',
       first: 'Copy at {place} · the first copy is on its way',
+      empty: 'Copy at {place} · nothing to copy yet',
       copying: 'Copy at {place} · copying now',
       behind: 'Copy at {place} · copied {when}, the newest backups follow',
       failing: 'The copy at {place} isn’t working',
@@ -95,6 +96,7 @@ export const BACKUP_OFFSITE_WORDS = treeCatalogs(
     line: {
       ok: 'Kopie bij {place} · gekopieerd {when}',
       first: 'Kopie bij {place} · de eerste kopie is onderweg',
+      empty: 'Kopie bij {place} · nog niets om te kopiëren',
       copying: 'Kopie bij {place} · nu aan het kopiëren',
       behind: 'Kopie bij {place} · gekopieerd {when}, de nieuwste back-ups volgen',
       failing: 'De kopie bij {place} werkt niet',

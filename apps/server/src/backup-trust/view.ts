@@ -36,10 +36,10 @@ import { boxBackupStatus } from '../managed/box-backup';
 import type { Services } from '../services';
 import { guestLabel, machineHref } from '../things/runs-on';
 import { eligibleGuests, nextTestAt } from './plan';
-import { betterProtection } from './protection';
+import { betterProtection, provenProtection } from './protection';
 
 const VIEW_MS = 60_000;
-/** Guests whose backups are read one by one (no job names them) in one build; the rest wait for the next. */
+/** Machines whose own backup lists are read in one build (each kept until its newest backup changes); the rest wait. */
 const BACKUP_READS_MAX = 20;
 
 /** Connected services that keep data of their own (photos, documents, files, a smart home's history, backups). */
@@ -132,23 +132,100 @@ function storageState(s: StorageInfo | undefined): 'copied' | 'local' | null {
   return AWAY_TYPES.has(s.type) || s.shared ? 'copied' : 'local';
 }
 
+/** The newest backup on a machine's backup list: the storage it is on (its id and kind, when known) and when. */
+export interface NewestOnList {
+  storageId: string;
+  storage: StorageInfo | undefined;
+  at: string | null;
+}
+
+/** What a Proxmox machine's row says about its backups. */
+export interface PveProtection {
+  state: ProtectedState;
+  lastAt: string | null;
+  where: string | null;
+  failedAt?: string;
+  planned?: true;
+}
+
 /**
- * Where a Proxmox machine's backups are, from what was read: none only when nothing backs it up, the storage's kind
- * when its place is known, and “can't see” when the server's lists or the backup's own place weren't read.
+ * Where a Proxmox machine's backups are, from what was read. Copied or local only for a backup that worked, by the
+ * storage its own backup list shows it on (a plan's storage says where backups should go, not where one is); none when
+ * no backup of it has worked (planned when a plan covers it); “can't see” when its backup list or the server's storages
+ * weren't read, or a backup worked that its list doesn't show.
  */
-export function pveState(f: {
-  hasBackup: boolean;
+export function pveProtection(f: {
+  /** The newest backup the server reported for it (worked or failed); null: none ever. */
+  last: { result: string; at: string } | null;
   planned: boolean;
-  storage: StorageInfo | undefined | null;
-  /** The server's backup plans and storages were read. */
+  /** The newest backup on its backup list; null: the list has none; undefined: not read. */
+  newest: NewestOnList | null | undefined;
+  /** The server's storages were read. */
   listsRead: boolean;
-  /** Where the newest backup is was looked for (not skipped past the reads of one build). */
-  placeRead: boolean;
-}): ProtectedState {
-  if (!f.hasBackup && !f.planned) return 'none';
-  const at = storageState(f.storage ?? undefined);
-  if (at !== null) return at;
-  return f.listsRead && f.placeRead ? 'local' : 'unseen';
+}): PveProtection {
+  const plan = f.planned ? { planned: true as const } : {};
+  if (!f.last) return { state: 'none', lastAt: null, where: null, ...plan };
+  const failed = f.last.result === 'error';
+  const fail = failed ? { failedAt: f.last.at } : {};
+  // The newest that worked: the reported one, or after a failure the newest still on its list.
+  const lastAt = failed ? (f.newest?.at ?? null) : f.last.at;
+  if (f.newest === undefined || !f.listsRead) return { state: 'unseen', lastAt, where: null, ...fail };
+  if (f.newest === null)
+    return failed
+      ? { state: 'none', lastAt: null, where: null, ...fail, ...plan }
+      : { state: 'unseen', lastAt, where: null };
+  const at = storageState(f.newest.storage);
+  if (at === null || !lastAt) return { state: 'unseen', lastAt, where: null, ...fail };
+  return { state: at, lastAt, where: f.newest.storageId, ...fail };
+}
+
+type ListPlace = Omit<NewestOnList, 'storage'> | null;
+
+/** Machines' newest backups read from their lists, kept while each one's newest reported backup stays the same. */
+const listPlaces = new WeakMap<Services, Map<string, { mark: string; place: ListPlace }>>();
+const LIST_PLACES_MAX = 5_000;
+
+/**
+ * The newest backup on a machine's own backup list (one read through its server). A read is kept until the machine's
+ * newest backup changes, so each build reads only machines not read yet, at most `budget.reads` of them; undefined
+ * when it wasn't read this time (past the budget, or the server didn't answer).
+ */
+async function newestOnList(
+  services: Services,
+  serverId: string,
+  guestId: string,
+  last: { result: string; at: string },
+  budget: { reads: number },
+): Promise<ListPlace | undefined> {
+  let byGuest = listPlaces.get(services);
+  if (!byGuest) {
+    byGuest = new Map();
+    listPlaces.set(services, byGuest);
+  }
+  const key = `${serverId}\n${guestId}`;
+  const mark = `${last.result}@${last.at}`;
+  const kept = byGuest.get(key);
+  if (kept?.mark === mark) return kept.place;
+  if (budget.reads <= 0) return undefined;
+  budget.reads--;
+  try {
+    const volumes = toHostBackupVolumes(
+      await hostsFor(services).call<unknown>({
+        path: `${G(serverId, guestId)}/backups`,
+        actor: { ...WHOMBAT_ACTOR, role: 'operator' },
+      }),
+    );
+    const time = (v: { created?: string | null }) => Date.parse(v.created ?? '') || 0;
+    const newest = [...volumes].filter((v) => v.storage).sort((a, b) => time(b) - time(a))[0];
+    const place: ListPlace = newest
+      ? { storageId: newest.storage, at: time(newest) ? new Date(time(newest)).toISOString() : null }
+      : null;
+    if (byGuest.size >= LIST_PLACES_MAX) byGuest.clear();
+    byGuest.set(key, { mark, place });
+    return place;
+  } catch {
+    return undefined;
+  }
 }
 
 interface MachineFacts {
@@ -218,9 +295,10 @@ async function serverMachines(
     };
     const last = g.lastBackup ?? null;
     const failed = last?.result === 'error';
-    const lastAt = last && !failed ? last.at : null;
     let state: ProtectedState;
+    let lastAt = last && !failed ? last.at : null;
     let where: string | null = null;
+    let planned = false;
     if (g.platform === 'pve') {
       const enabled = (jobs ?? []).filter((j) => j.enabled);
       const covering = enabled.find(
@@ -231,31 +309,17 @@ async function serverMachines(
           (j.selection === 'guests' &&
             ((j.guests ?? []).includes(g.id) || (j.guests ?? []).includes(String(g.vmid)))),
       );
-      let storage = covering?.storage ?? null;
-      // Past the reads of one build a backup's place stays unread: the row says Whombat can't see it, never a guess.
-      const unreadPlace = !storage && !!last && budget.reads <= 0;
-      if (!storage && last && budget.reads > 0) {
-        // A backup without a plan that names it (made by hand, or a pool's plan): its newest volume says where.
-        budget.reads--;
-        const volumes = await hosts
-          .call<unknown>({
-            path: `${G(server.id, g.id)}/backups`,
-            actor: { ...WHOMBAT_ACTOR, role: 'operator' },
-          })
-          .then(toHostBackupVolumes)
-          .catch(() => []);
-        storage =
-          [...volumes].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0]
-            ?.storage ?? null;
-      }
-      state = pveState({
-        hasBackup: !!last,
+      const newest = last ? await newestOnList(services, server.id, g.id, last, budget) : null;
+      const p = pveProtection({
+        last,
         planned: !!covering || g.backupJob === true,
-        storage: storage ? storages?.get(storage) : null,
-        listsRead: !!storages && !!jobs,
-        placeRead: !unreadPlace,
+        newest: newest && { ...newest, storage: storages?.get(newest.storageId) },
+        listsRead: !!storages,
       });
-      if (state !== 'none') where = storage;
+      state = p.state;
+      lastAt = p.lastAt;
+      where = p.where;
+      planned = !!p.planned;
     } else if (g.platform === 'incus') {
       // Snapshots stay in the same storage pool as the instance.
       state = (g.snapshots ?? 0) > 0 ? 'local' : 'none';
@@ -268,13 +332,20 @@ async function serverMachines(
       lastAt,
       where: where ? where.slice(0, 160) : null,
       ...(failed && last ? { failedAt: last.at } : {}),
+      ...(planned ? { planned: true } : {}),
     };
     out.push({
       row,
       fact:
         state === 'unseen'
           ? null
-          : { state, lastAt, where: row.where, ...(failed && last ? { failedAt: last.at } : {}) },
+          : {
+              state,
+              lastAt,
+              where: row.where,
+              ...(failed && last ? { failedAt: last.at } : {}),
+              ...(planned ? { planned: true } : {}),
+            },
     });
   }
   return out;
@@ -455,7 +526,8 @@ export async function buildProtectedView(services: Services, burrowId: string): 
     const at = (c.glance as { machine?: { serverId: string; guestId: string | null; name: string } } | null)
       ?.machine;
     const machine = at ? machines.get(`${at.serverId}\n${at.guestId ?? ''}`) : undefined;
-    const ownFact = (c.protection as StoredProtection | null) ?? null;
+    // A kept fact may be from before the rule that copied needs a backup that worked; the machines' are read now.
+    const ownFact = provenProtection(c.protection as StoredProtection | null);
     const best = betterProtection(ownFact, machine ?? null);
     const via = best && best === machine && best !== ownFact ? (at?.name ?? null) : null;
     rows.push({
@@ -469,6 +541,7 @@ export async function buildProtectedView(services: Services, burrowId: string): 
       lastAt: best?.lastAt ?? null,
       where: best?.where ?? null,
       ...(best?.failedAt ? { failedAt: best.failedAt } : {}),
+      ...(best?.planned ? { planned: true } : {}),
       via: via ? via.slice(0, 160) : null,
     });
   }

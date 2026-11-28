@@ -108,4 +108,6 @@ export interface StoredProtection {
   lastAt: string | null;
   where: string | null;
   failedAt?: string | null;
+  /** `none` though a plan or task covers it: none of its backups has worked yet. */
+  planned?: boolean;
 }

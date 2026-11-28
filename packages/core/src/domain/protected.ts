@@ -159,6 +159,11 @@ export const ProtectedRow = z.object({
   where: z.string().max(160).nullable(),
   /** The last attempt failed (when); `lastAt` is then the newest that worked. */
   failedAt: Timestamp.nullable().optional(),
+  /**
+   * A backup plan or task covers it, but no backup of it has worked yet (state `none`): copied and local are said only
+   * of a backup that worked.
+   */
+  planned: z.boolean().optional(),
   /** Its facts are the machine's it runs on (“pve-02 · CT 131”): a service without backup facts of its own. */
   via: z.string().max(160).nullable().optional(),
   /**
@@ -316,11 +321,11 @@ export function restoreTestProblem(
 
 /**
  * A row's line: “Last copy 3 hours ago · on pbs-01”, “Last backup 2 days ago · on its own disks”, “Last backup failed
- * 1 day ago · the one before is from 3 days ago”, “Nothing backs it up”, “Whombat can’t see its backups”; with the
- * machine it runs on first for a service (“With pve-02 · CT 131 · …”).
+ * 1 day ago · the one before is from 3 days ago”, “In a backup plan, but no backup has worked yet”, “Nothing backs it
+ * up”, “Whombat can’t see its backups”; with the machine it runs on first for a service (“With pve-02 · CT 131 · …”).
  */
 export function protectedRowLine(
-  row: Pick<ProtectedRow, 'state' | 'lastAt' | 'where' | 'failedAt' | 'via' | 'kind'>,
+  row: Pick<ProtectedRow, 'state' | 'lastAt' | 'where' | 'failedAt' | 'via' | 'kind' | 'planned'>,
   now: Date,
   timeZone: string,
   locale?: string | null,
@@ -332,6 +337,8 @@ export function protectedRowLine(
   if (row.failedAt) {
     parts.push(tr.t('protected.line.failed', { ago: ago(row.failedAt) }));
     if (row.lastAt) parts.push(tr.t('protected.line.before', { ago: ago(row.lastAt) }));
+    // Whether an earlier one worked is said only when Whombat could see.
+    else if (row.state === 'unseen') parts.push(tr.t('protected.line.unseen'));
     else parts.push(tr.t('protected.line.noneWorked'));
     return parts.join(' · ');
   }
@@ -345,7 +352,7 @@ export function protectedRowLine(
       break;
     }
     case 'none':
-      parts.push(tr.t('protected.line.nothing'));
+      parts.push(tr.t(row.planned ? 'protected.line.planned' : 'protected.line.nothing'));
       break;
     case 'unseen':
       parts.push(tr.t(row.kind === 'server' ? 'protected.line.unseenServer' : 'protected.line.unseen'));

@@ -4,19 +4,21 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
+	"strings"
 )
 
 // ErrCopyCredentials: the two repositories of a copy need different credentials of the same kind. restic gives both
 // the same environment (restic 0.18: `AWS_*` and `RESTIC_REST_*` apply to the source and the target alike, and `-o
 // sftp.command` is one option for both), so two buckets with different keys, two REST servers with different users or
-// two SFTP servers can't be one copy.
+// two SFTP servers can't be one copy; nor can an S3 source over https whose certificate authority isn't the target's
+// (restic's --cacert is one setting for both).
 var ErrCopyCredentials = errors.New("the two places need different credentials of the same kind, which one restic copy can't hold")
 
-// Paired is r as the target of a copy from src: the environment and options carry both repositories' credentials,
-// and a private CA of either is added to the system's roots (restic's --cacert replaces them, and the other place
-// most likely needs them). done removes what Paired wrote; call it when the copy ended.
+// Paired is r as the target of a copy from src: the environment and options carry both repositories' credentials.
+// Each place's certificate authority stays on its own connection: restic's --cacert is one setting for both
+// repositories, so a REST source over https is reached through a relay on a socket of its own (relay.go) that trusts
+// only the source's authority (its private CA, else the system's roots), and --cacert keeps the target's. done stops
+// the relay and removes what Paired wrote; call it when the copy ended.
 func (r Repo) Paired(src Repo, tmpDir string) (paired Repo, done func(), err error) {
 	done = func() {}
 	s := src
@@ -32,54 +34,31 @@ func (r Repo) Paired(src Repo, tmpDir string) (paired Repo, done func(), err err
 	}
 	p := r
 	p.From = &s
-	if s.CACert == "" && r.CACert == "" {
+	switch {
+	case s.CACert == r.CACert || !s.overTLS():
+		// The same authority for both, or a source restic reaches without TLS (a disk, SFTP, plain http on the home
+		// network): --cacert, when set, is the target's alone.
+		s.CACert = ""
 		return p, done, nil
-	}
-	dir, err := os.MkdirTemp(tmpDir, ".copy-ca-")
-	if err != nil {
-		return r, done, err
-	}
-	done = func() { _ = os.RemoveAll(dir) }
-	var bundle []byte
-	if sys := systemRoots(); sys != nil {
-		bundle = append(bundle, sys...)
-		bundle = append(bundle, '\n')
-	}
-	for _, f := range []string{s.CACert, r.CACert} {
-		if f == "" {
-			continue
-		}
-		b, err := os.ReadFile(f)
+	case strings.HasPrefix(s.Repository, "rest:"):
+		repository, stop, err := startRelay(s, tmpDir)
 		if err != nil {
-			done()
-			return r, func() {}, err
+			return r, done, err
 		}
-		bundle = append(bundle, b...)
-		bundle = append(bundle, '\n')
+		s.Repository, s.CACert = repository, ""
+		return p, stop, nil
 	}
-	p.CACert = filepath.Join(dir, "ca.pem")
-	if err := os.WriteFile(p.CACert, bundle, 0o600); err != nil {
-		done()
-		return r, func() {}, err
-	}
-	return p, done, nil
+	// An S3 source over https whose authority differs from the target's: restic would trust one for both, and its
+	// signatures name the host, so no relay can stand in for it.
+	return r, done, ErrCopyCredentials
+}
+
+// overTLS: restic reaches the repository over https.
+func (r Repo) overTLS() bool {
+	return strings.HasPrefix(r.Repository, "rest:https://") || strings.HasPrefix(r.Repository, "s3:https://")
 }
 
 func (r Repo) hasS3() bool { return r.S3AccessKeyID != "" || r.S3SecretAccessKey != "" }
-
-// systemRoots reads the system's CA bundle (nil when there is none to read).
-func systemRoots() []byte {
-	for _, p := range []string{os.Getenv("SSL_CERT_FILE"), "/etc/ssl/certs/ca-certificates.crt", "/etc/ssl/certs/ca-bundle.crt",
-		"/etc/pki/tls/certs/ca-bundle.crt"} {
-		if p == "" {
-			continue
-		}
-		if b, err := os.ReadFile(p); err == nil && len(b) > 0 {
-			return b
-		}
-	}
-	return nil
-}
 
 // fromArgs are the source's flags of a copy or a chunker-parameter init.
 func (r Repo) fromArgs() []string {

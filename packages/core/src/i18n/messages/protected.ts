@@ -55,8 +55,8 @@ export const PROTECTED_MESSAGES = splitPairs({
   'protected.line.copy': ['Last copy {ago}', 'Laatste kopie {ago}'],
   'protected.line.backup': ['Last backup {ago}', 'Laatste back-up {ago}'],
   'protected.line.planned': [
-    'In a backup plan, no copy seen yet',
-    'In een back-upplan, nog geen kopie gezien',
+    'In a backup plan, but no backup has worked yet',
+    'In een back-upplan, maar er is nog geen back-up gelukt',
   ],
   'protected.line.where': ['on {where}', 'op {where}'],
   'protected.line.ownDisks': ['on its own disks', 'op de eigen schijven'],

@@ -78,6 +78,20 @@ describe('the page’s groups and lines', () => {
     expect(
       protectedRowLine(row({ key: 'x', name: 'x', state: 'none', via: 'pve-02 · CT 131' }), now, tz),
     ).toContain('pve-02 · CT 131');
+    // A plan whose backups never worked is in no group but “not backed up”, and says so.
+    const planned = protectedRowLine(row({ key: 'x', name: 'x', state: 'none', planned: true }), now, tz);
+    expect(planned).not.toBe(protectedRowLine(row({ key: 'x', name: 'x', state: 'none' }), now, tz));
+    expect(
+      protectedRowLine(row({ key: 'x', name: 'x', state: 'none', planned: true }), now, tz, 'nl'),
+    ).toContain('back-upplan');
+    // A failure without a backup Whombat could see doesn't claim none ever worked.
+    const unseenFailed = protectedRowLine(
+      row({ key: 'x', name: 'x', state: 'unseen', failedAt: '2026-11-28T09:00:00Z' }),
+      now,
+      tz,
+    );
+    expect(unseenFailed).toContain('failed');
+    expect(unseenFailed).toContain('can’t see');
     expect(protectedRowOld({ state: 'copied', lastAt: '2026-11-10T00:00:00Z' }, now)).toBe(true);
     expect(protectedRowOld({ state: 'copied', lastAt: '2026-11-27T00:00:00Z' }, now)).toBe(false);
   });

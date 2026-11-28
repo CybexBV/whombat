@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/CybexBV/whombat/appliance/backup/internal/listing"
 	"github.com/CybexBV/whombat/appliance/backup/internal/quarantine"
 	"github.com/CybexBV/whombat/appliance/backup/internal/state"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/kit"
@@ -255,7 +256,30 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 	}
 	defer done()
 	// The main place first: a failure to read it is said as the main place's.
-	snaps, err := source.Snapshots(ctx, manifest.TagProduct)
+	mainCfg, err := source.Config(ctx)
+	if err != nil {
+		return nil, stepErr(StepMain, err)
+	}
+	copyCfg, err := target.Config(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The copy is never the main place under another address: its backups would count as copied, and clearing the
+	// copy would clear the backups themselves.
+	if copyCfg.ID == mainCfg.ID || copyCfg.ID == main.RepositoryID {
+		return nil, stepErr(StepSame, errors.New("the second place is the main place's repository"))
+	}
+	all, err := source.Snapshots(ctx, manifest.TagProduct)
+	if err != nil {
+		return nil, stepErr(StepMain, err)
+	}
+	// Only this box's backups and those of the Whombats it was brought back from, as its backup list trusts them (their
+	// signed manifests): another Whombat's backups in the same place are never copied, counted or cleared by this one.
+	keys, err := listing.LoadKeys(c)
+	if err != nil {
+		return nil, err
+	}
+	snaps, err := listing.Trusted(ctx, c, source, all, keys)
 	if err != nil {
 		return nil, stepErr(StepMain, err)
 	}
@@ -267,6 +291,13 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 		return nil, err
 	}
 	inCopy := checkpointIDs(there)
+	st.Head = headOf(c, inCopy)
+	if len(snaps) == 0 {
+		// Nothing of this box's at the main place yet: nothing to copy, so no copy is said to have worked, and the copy,
+		// maybe the only one left, isn't cleared.
+		st.Copied, st.Cleared, st.LastCopy = nil, nil, nil
+		return &Result{}, nil
+	}
 	st.Cleared = stillAtMain(st.Cleared, snaps)
 	pick := missing(snaps, inCopy, st.Cleared)
 	res := &Result{}
@@ -384,8 +415,8 @@ func stillAtMain(ids []string, main []restic.Snapshot) []string {
 }
 
 // forgetHosts are the machines whose snapshots clearing may touch in the copy: this box and the boxes it was brought
-// back from (their checkpoints are in its main place). A bucket folder that another Whombat copies into too keeps
-// that Whombat's backups.
+// back from, read from main, the main place's backups this box trusts. A bucket folder that another Whombat copies
+// into too keeps that Whombat's backups.
 func forgetHosts(c *state.Config, main []restic.Snapshot) []string {
 	var hosts []string
 	if c.ApplianceID != "" {

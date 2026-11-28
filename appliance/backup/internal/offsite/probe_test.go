@@ -71,6 +71,11 @@ type fakeS3 struct {
 	noDelete bool
 	noRead   bool
 	seen     []string
+	// redirect answers a request signed for another region with this status and a Location at redirectTo (naming
+	// the bucket's region in the header when regionHeader), as S3 does, instead of an error document.
+	redirect     int
+	redirectTo   string
+	regionHeader bool
 }
 
 func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -89,6 +94,14 @@ func (f *fakeS3) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	f.seen = append(f.seen, r.Method+" "+r.URL.Path+" "+auth)
 	if !strings.Contains(auth, "Credential="+f.keyID+"/") {
 		fail(http.StatusForbidden, "InvalidAccessKeyId", "")
+		return
+	}
+	if !strings.Contains(auth, "/"+f.region+"/s3/") && f.redirect != 0 {
+		w.Header().Set("Location", f.redirectTo+r.URL.Path)
+		if f.regionHeader {
+			w.Header().Set("X-Amz-Bucket-Region", f.region)
+		}
+		w.WriteHeader(f.redirect)
 		return
 	}
 	if !strings.Contains(auth, "/"+f.region+"/s3/") {
@@ -184,5 +197,34 @@ func TestProbeSteps(t *testing.T) {
 	var oe *Error
 	if !errors.As(err, &oe) || oe.Step != StepReach {
 		t.Fatalf("nobody there: %v", err)
+	}
+}
+
+// A redirect is never followed: the region it names is asked for again at the same address, and one that names none
+// fails the check. Nothing reaches the address it points to (plain http on this machine here).
+func TestProbeNeverFollowsRedirects(t *testing.T) {
+	var elsewhere []string
+	var mu sync.Mutex
+	other := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		elsewhere = append(elsewhere, r.Method+" "+r.URL.Path)
+	}))
+	defer other.Close()
+	for _, code := range []int{http.StatusMovedPermanently, http.StatusTemporaryRedirect} {
+		f := &fakeS3{objects: map[string][]byte{}, bucket: "my-backups", keyID: "KEY1", region: "eu-west-2",
+			redirect: code, redirectTo: other.URL, regionHeader: true}
+		if region, err := probeAt(t, f, "my-backups", "KEY1"); err != nil || region != "eu-west-2" {
+			t.Fatalf("%d naming the region: %s %v", code, region, err)
+		}
+		f.regionHeader = false
+		_, err := probeAt(t, f, "my-backups", "KEY1")
+		var oe *Error
+		if !errors.As(err, &oe) || oe.Step != StepRegion {
+			t.Fatalf("%d naming no region: %v", code, err)
+		}
+	}
+	if len(elsewhere) > 0 {
+		t.Fatalf("a redirect was followed: %v", elsewhere)
 	}
 }

@@ -543,6 +543,33 @@ func verify(ctx context.Context, c *state.Config, repo restic.Repo, s restic.Sna
 	return nil, nil, err
 }
 
+// Trusted keeps the snapshots of snaps whose signed manifest one of keys verifies (each earlier Whombat's within its
+// bound), as List counts them: this box's own backups and those of the Whombats it was brought back from, never another
+// box's in the same place. A manifest that can't be read now (it may verify on the next try) fails the call, so one of
+// this box's own is never taken for someone else's.
+func Trusted(ctx context.Context, c *state.Config, repo restic.Repo, snaps []restic.Snapshot, keys Keys) ([]restic.Snapshot, error) {
+	bad, fp, badChanged := loadUnauthentic(c), keys.fingerprint(), false
+	var out []restic.Snapshot
+	for _, s := range snaps {
+		if bad[s.ID] == fp {
+			continue
+		}
+		if _, _, err := authenticate(ctx, c, repo, s, keys); err != nil {
+			if !errors.Is(err, restore.ErrUnauthentic) || errors.Is(err, restore.ErrUnreadable) {
+				return nil, err
+			}
+			bad[s.ID], badChanged = fp, true
+			continue
+		}
+		out = append(out, s)
+	}
+	if badChanged && !state.InRootMode() {
+		_ = os.MkdirAll(cacheDir(c), 0o700)
+		_ = state.WriteJSON(unauthenticPath(c), bad, 0o600)
+	}
+	return out, nil
+}
+
 // List lists the backups in repo, newest first.
 func List(ctx context.Context, c *state.Config, repo restic.Repo, keys Keys) (*Result, error) {
 	snaps, err := repo.Snapshots(ctx, manifest.TagProduct)

@@ -318,10 +318,13 @@ func (p *Probe) do(ctx context.Context, region, method, key string, body []byte,
 		now = p.Now
 	}
 	signV4(req, hex.EncodeToString(sum[:]), p.KeyID, p.Secret, region, "s3", now())
-	hc := p.Client
-	if hc == nil {
-		hc = &http.Client{Timeout: 30 * time.Second}
+	hc := http.Client{Timeout: 30 * time.Second}
+	if p.Client != nil {
+		hc = *p.Client
 	}
+	// A redirect is the storage's answer, never followed: S3 names the bucket's region with one, and following one
+	// could take the key's signed requests to another address, over plain http too.
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	resp, err := hc.Do(req)
 	if err != nil {
 		return stepErr(StepReach, err)
@@ -337,19 +340,25 @@ func (p *Probe) do(ctx context.Context, region, method, key string, body []byte,
 	var e s3Error
 	_ = xml.Unmarshal(b, &e)
 	detail := fmt.Errorf("HTTP %d %s: %s", resp.StatusCode, e.Code, strings.TrimSpace(e.Message))
+	// The region an answer names: in its body, else in the header S3 sets on a redirect.
+	named := e.Region
+	if named == "" {
+		named = resp.Header.Get("X-Amz-Bucket-Region")
+	}
 	switch e.Code {
 	case "NoSuchBucket":
 		return stepErr(StepBucket, detail)
 	case "InvalidAccessKeyId", "SignatureDoesNotMatch", "InvalidToken", "ExpiredToken", "InvalidSecurity":
 		return stepErr(StepKeys, detail)
 	case "AuthorizationHeaderMalformed", "IllegalLocationConstraintException", "InvalidRegion":
-		return &probeRegion{region: e.Region, msg: detail.Error()}
-	case "PermanentRedirect", "IncorrectEndpoint":
-		return &probeRegion{region: e.Region, msg: detail.Error()}
+		return &probeRegion{region: named, msg: detail.Error()}
+	case "PermanentRedirect", "IncorrectEndpoint", "TemporaryRedirect":
+		return &probeRegion{region: named, msg: detail.Error()}
 	}
 	switch {
-	case resp.StatusCode == http.StatusMovedPermanently || resp.StatusCode == http.StatusTemporaryRedirect:
-		return &probeRegion{region: resp.Header.Get("X-Amz-Bucket-Region"), msg: detail.Error()}
+	case resp.StatusCode >= 300 && resp.StatusCode < 400:
+		// Any other redirect: the bucket is reached at another address, maybe in another region.
+		return &probeRegion{region: named, msg: detail.Error()}
 	case resp.StatusCode == http.StatusNotFound && method != http.MethodGet:
 		return stepErr(StepBucket, detail)
 	case resp.StatusCode == http.StatusUnauthorized:
