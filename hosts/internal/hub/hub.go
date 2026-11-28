@@ -221,7 +221,10 @@ func New(cfg Config, log *slog.Logger, setupOut io.Writer) (*Hub, error) {
 	// previous address (HS-172).
 	h.currentAgentURL(ctx)
 	h.agentTLS = &tls.Config{
-		MinVersion:     tls.VersionTLS13,
+		// TLS 1.2 for Windows 10, whose PowerShell downloads install.ps1
+		// and the agent here and has no TLS 1.3; agents themselves use 1.3.
+		MinVersion:     tls.VersionTLS12,
+		CipherSuites:   agentTLS12Suites,
 		GetCertificate: lc.get,
 		ClientAuth:     tls.VerifyClientCertIfGiven,
 		ClientCAs:      authority.Pool(),
@@ -753,6 +756,7 @@ func sanitizeReport(r *proto.Report) {
 			m.Screen.Width, m.Screen.Height = 0, 0
 		}
 	}
+	sanitizeWindows(r.Windows)
 	finite(&r.CPU.StealPct)
 	if len(r.Host.Addresses) > 16 {
 		r.Host.Addresses = r.Host.Addresses[:16]

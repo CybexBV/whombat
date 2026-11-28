@@ -88,6 +88,17 @@ func TestKeyAndManifest(t *testing.T) {
 	if f := mm.Files["rackoon-agent-linux-amd64"]; f.OS != "" || f.Arch != "amd64" {
 		t.Errorf("linux entry %+v", f)
 	}
+	os.WriteFile(filepath.Join(dist, "whombat-agent-windows-arm64.exe"), []byte("windows binary"), 0o755)
+	wm, err := buildManifest(key, "v1", dist, []string{"whombat-agent-windows-arm64.exe"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f := wm.Files["whombat-agent-windows-arm64.exe"]; f.OS != "windows" || f.Arch != "arm64" {
+		t.Errorf("windows entry %+v", f)
+	}
+	if _, err := buildManifest(key, "v1", dist, []string{"whombat-agent-windows-arm64"}); err == nil {
+		t.Fatal("a Windows build without .exe accepted")
+	}
 
 	// Bad key files.
 	os.Chmod(keyFile, 0o644)

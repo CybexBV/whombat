@@ -117,7 +117,7 @@ type FleetServer struct {
 	Workloads         FleetWorkloads `json:"workloads"`
 	Hypervisor        *Hypervisor    `json:"hypervisor"`
 	DetailView        string         `json:"detail_view"`
-	OSFamily          string         `json:"os_family,omitempty"` // linux | macos; absent before the first report
+	OSFamily          string         `json:"os_family,omitempty"` // linux | macos | windows; absent before the first report
 	AgentConnected    bool           `json:"agent_connected"`
 	// Via is the hub's address the agent's connection arrived at
 	// ("10.100.1.97"); absent when not connected or not known.
@@ -322,6 +322,8 @@ type Detail struct {
 	Libvirt *LibvirtDetail `json:"libvirt,omitempty"`
 	// MacOS (macos.go): a Mac's own facts, its screen and its helper.
 	MacOS *MacOSDetail `json:"macos,omitempty"`
+	// Windows (windows.go): a Windows PC's own facts and its protection.
+	Windows *WindowsDetail `json:"windows,omitempty"`
 	// DiskUsage (diskusage.go): recent on-request breakdowns of what fills a mount.
 	DiskUsage []DiskUsage `json:"disk_usage,omitempty"`
 	// Host health (health.go), both views.
@@ -375,7 +377,7 @@ type DetailServer struct {
 	Location      *string       `json:"location"`
 	Agent         AgentInfo     `json:"agent"`
 	DetailView    string        `json:"detail_view"`
-	OSFamily      string        `json:"os_family,omitempty"` // linux | macos; absent before the first report
+	OSFamily      string        `json:"os_family,omitempty"` // linux | macos | windows; absent before the first report
 	PVEVersion    *string       `json:"pve_version"`
 	RemoteControl RemoteControl `json:"remote_control"`
 	Collectors    []Collector   `json:"collectors"`
