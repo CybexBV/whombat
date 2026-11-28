@@ -33,5 +33,5 @@ Settings → This Whombat → Backups on the web (`apps/web/src/features/setting
 
 ## Open
 
-- A second place on SFTP, and a copy with its own key next to a main bucket, need a restic that takes separate
-  settings per repository.
+- A second place on SFTP, a copy with its own key next to a main bucket, and a main bucket with a private certificate
+  authority, need a restic that takes separate settings per repository.
