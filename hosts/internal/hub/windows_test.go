@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"rackoon/internal/hub/model"
 	"rackoon/internal/proto"
@@ -155,4 +156,65 @@ func TestWindowsLineQuotes(t *testing.T) {
 	if !strings.Contains(line, "-Token 'to''ken'") || strings.Contains(line, "-Control") {
 		t.Errorf("line %s", line)
 	}
+}
+
+// Windows PowerShell can switch its certificate check off only for the whole
+// session: the line and install.ps1 switch it off around one download each,
+// keep the check that was there and put it back in a finally, and the line
+// compares the download only after that.
+func TestWindowsInstallRestoresCertificateCheck(t *testing.T) {
+	line := windowsLine("https://pc.example.com:8443", "wss://pc.example.com:8443", "ab", "token", "watch")
+	end := certCheckRestored(t, "the line", line)
+	if compact := strings.Join(strings.Fields(line), ""); end < 0 || strings.Index(compact, "-ne$s") < end {
+		t.Errorf("the line compares the download before the check is back:\n%s", line)
+	}
+	var b strings.Builder
+	if err := installPS1Tmpl.Execute(&b, map[string]string{"Pin": "ab", "SumAMD64": "cd", "SumARM64": ""}); err != nil {
+		t.Fatal(err)
+	}
+	certCheckRestored(t, "install.ps1", b.String())
+}
+
+// certCheckRestored checks every assignment of Windows PowerShell's
+// certificate check in text (spaces aside): off, one download, a finally,
+// back to the saved one; it returns where the last one ends, -1 when none.
+func certCheckRestored(t *testing.T, name, text string) int {
+	t.Helper()
+	const cb = "[Net.ServicePointManager]::ServerCertificateValidationCallback"
+	s := strings.Join(strings.Fields(text), "")
+	off, end := -1, -1
+	for i := 0; ; {
+		j := strings.Index(s[i:], cb+"=")
+		if j < 0 {
+			break
+		}
+		at := i + j
+		v := s[at+len(cb)+1:]
+		i = at + len(cb) + 1
+		switch {
+		case strings.HasPrefix(v, "{$true}"):
+			if off >= 0 {
+				t.Errorf("%s switches the check off twice without putting it back", name)
+			}
+			off = at
+		case strings.HasPrefix(v, "$") && !strings.HasPrefix(v, "$null") && !strings.HasPrefix(v, "$true"):
+			saved := v[:strings.IndexFunc(v[1:], func(r rune) bool { return !unicode.IsLetter(r) })+1]
+			between := s[max(off, 0):at]
+			switch {
+			case off < 0:
+				t.Errorf("%s sets the check to %s without switching it off first", name, saved)
+			case !strings.Contains(s[:off], saved+"="+cb):
+				t.Errorf("%s puts back %s, which isn't the check it had", name, saved)
+			case strings.Count(between, "Invoke-WebRequest") != 1 || !strings.Contains(between[strings.Index(between, "Invoke-WebRequest"):], "finally{"):
+				t.Errorf("%s doesn't put the check back in a finally around one download", name)
+			}
+			off, end = -1, at
+		default:
+			t.Errorf("%s sets the check to %.10s", name, v)
+		}
+	}
+	if off >= 0 {
+		t.Errorf("%s leaves the check off", name)
+	}
+	return end
 }

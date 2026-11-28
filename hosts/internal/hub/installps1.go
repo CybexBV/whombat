@@ -76,15 +76,23 @@ func (h *Hub) installCommandWindows(r *http.Request, token, control string) (str
 // PowerShell 7). Every value in it is one the hub made or checked: an
 // origin and a URL of safe hosts, a hex digest, a base64url token, a
 // control level.
+//
+// Windows PowerShell can switch the certificate check off only for the
+// whole session, so the line keeps the session's own check and protocols,
+// switches them for the one download and puts them back in a finally,
+// before it looks at what came. On a mismatch it says so and runs nothing;
+// it doesn't exit, which would close the window before the message is read.
 func windowsLine(origin, hubURL, sum, token, control string) string {
 	run := "-Origin $u -Hub " + psString(hubURL) + " -Token " + psString(token)
 	if control != "" {
 		run += " -Control " + psString(control)
 	}
-	return "$u=" + psString(origin) + ";$s=" + psString(sum) + ";" +
-		"if($PSVersionTable.PSEdition -eq 'Core'){$o=@{SkipCertificateCheck=$true}}" +
-		"else{$o=@{};[Net.ServicePointManager]::SecurityProtocol=3072;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}};" +
-		"$b=(Invoke-WebRequest -UseBasicParsing @o \"$u/install.ps1\").RawContentStream.ToArray();" +
+	const spm = "[Net.ServicePointManager]::"
+	return "$u=" + psString(origin) + ";$s=" + psString(sum) + ";$o=@{};$d=$PSVersionTable.PSEdition -ne 'Core';" +
+		"if($d){$p=" + spm + "SecurityProtocol;$c=" + spm + "ServerCertificateValidationCallback;" +
+		spm + "SecurityProtocol=3072;" + spm + "ServerCertificateValidationCallback={$true}}else{$o.SkipCertificateCheck=$true};" +
+		"try{$b=(Invoke-WebRequest -UseBasicParsing -DisableKeepAlive @o \"$u/install.ps1\").RawContentStream.ToArray()}" +
+		"finally{if($d){" + spm + "SecurityProtocol=$p;" + spm + "ServerCertificateValidationCallback=$c}};" +
 		"if((-join([Security.Cryptography.SHA256]::Create().ComputeHash($b)|%{$_.ToString('x2')})) -ne $s)" +
 		"{'whombat-agent: the installer did not match. Copy the line from Whombat again.'}" +
 		"else{&([scriptblock]::Create([Text.Encoding]::UTF8.GetString($b))) " + run + "}"
@@ -122,15 +130,24 @@ $ConfigDir = Join-Path $env:ProgramData 'Whombat\agent'
 
 # Downloads from the hub. Windows doesn't know Whombat's own certificate
 # authority, so the connection isn't checked; the file is, by its SHA-256.
+# Windows PowerShell can switch the check off only for the whole session:
+# it is off for this one download and goes back to what it was after it.
 function Get-WhombatFile([string]$Url, [string]$OutFile) {
-	$o = @{ UseBasicParsing = $true; Uri = $Url; OutFile = $OutFile; ErrorAction = 'Stop' }
+	$o = @{ UseBasicParsing = $true; DisableKeepAlive = $true; Uri = $Url; OutFile = $OutFile; ErrorAction = 'Stop' }
 	if ($PSVersionTable.PSEdition -eq 'Core') {
-		$o.SkipCertificateCheck = $true
-	} else {
+		Invoke-WebRequest @o -SkipCertificateCheck
+		return
+	}
+	$protocols = [Net.ServicePointManager]::SecurityProtocol
+	$check = [Net.ServicePointManager]::ServerCertificateValidationCallback
+	try {
 		[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 		[Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+		Invoke-WebRequest @o
+	} finally {
+		[Net.ServicePointManager]::SecurityProtocol = $protocols
+		[Net.ServicePointManager]::ServerCertificateValidationCallback = $check
 	}
-	Invoke-WebRequest @o
 }
 
 # What the agent prints, without its errors.
@@ -231,10 +248,6 @@ try {
 	$result = Install-WhombatAgent
 } catch {
 	$result = "Something went wrong: $($_.Exception.Message)"
-} finally {
-	if ($PSVersionTable.PSEdition -ne 'Core') {
-		[Net.ServicePointManager]::ServerCertificateValidationCallback = $null
-	}
 }
 Write-Host $result
 `))

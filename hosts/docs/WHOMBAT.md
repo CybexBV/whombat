@@ -886,8 +886,9 @@ Two ways in (Whombat SI-01), the same installer:
   so the script cannot come from anyone else.
 - **Windows PC**: Whombat shows `install_command_windows` of the same
   enrollment; the person pastes it into PowerShell opened as
-  administrator. It fetches `install.ps1` (without a certificate check:
-  Windows PowerShell can't be given the hub's CA for one download), checks
+  administrator. It fetches `install.ps1` (without a certificate check for
+  that one download, put back right after it: Windows PowerShell can't be
+  given the hub's CA for one download), checks
   its SHA-256 against the one in the line and runs it; the script checks
   the agent's `.exe` against the SHA-256 it carries for the PC's
   architecture, installs it as `%ProgramFiles%\Whombat\whombat-agent.exe`,

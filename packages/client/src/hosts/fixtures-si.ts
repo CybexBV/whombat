@@ -38,9 +38,11 @@ const WHOMBAT_AGENTS = '10.100.1.5:8443';
 function windowsLine(token: string, control: string): string {
   return (
     `$u='https://${WHOMBAT_AGENTS}';$s='3f9a1c27d84e6b05a2c9e7f1d3b8a6045e2c7d9f1a3b5c8e0d2f4a6b8c0e1f3a';` +
-    "if($PSVersionTable.PSEdition -eq 'Core'){$o=@{SkipCertificateCheck=$true}}" +
-    'else{$o=@{};[Net.ServicePointManager]::SecurityProtocol=3072;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}};' +
-    '$b=(Invoke-WebRequest -UseBasicParsing @o "$u/install.ps1").RawContentStream.ToArray();' +
+    "$o=@{};$d=$PSVersionTable.PSEdition -ne 'Core';" +
+    'if($d){$p=[Net.ServicePointManager]::SecurityProtocol;$c=[Net.ServicePointManager]::ServerCertificateValidationCallback;' +
+    '[Net.ServicePointManager]::SecurityProtocol=3072;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}}else{$o.SkipCertificateCheck=$true};' +
+    'try{$b=(Invoke-WebRequest -UseBasicParsing -DisableKeepAlive @o "$u/install.ps1").RawContentStream.ToArray()}' +
+    'finally{if($d){[Net.ServicePointManager]::SecurityProtocol=$p;[Net.ServicePointManager]::ServerCertificateValidationCallback=$c}};' +
     "if((-join([Security.Cryptography.SHA256]::Create().ComputeHash($b)|%{$_.ToString('x2')})) -ne $s)" +
     "{'whombat-agent: the installer did not match. Copy the line from Whombat again.'}" +
     `else{&([scriptblock]::Create([Text.Encoding]::UTF8.GetString($b))) -Origin $u -Hub 'https://${WHOMBAT_AGENTS}' -Token '${token}' -Control '${control}'}`
