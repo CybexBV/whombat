@@ -181,23 +181,7 @@ export async function tufrepo(ctx: ShipContext, rev: string, repo = ctx.repo): P
   return join(await nixBuild(`${flakeAt(repo, rev)}#whombat-release-tools`, repo), 'bin', 'tufrepo');
 }
 
-/* An operator API reached directly --------------------------------------------------------------------- */
-
-/** A control's operator API on an address this machine reaches, with its operator token. */
-export interface DevControl {
-  adminUrl: string;
-  token: string;
-  /** The public control origin (what boxes and clients use). */
-  publicUrl: string;
-}
-
-/**
- * Production control is the only one. whombat-ops' `support` tool imports this for its `--dev` option, so it is kept as a
- * refusal until that option goes from there.
- */
-export function devControl(_ctx: ShipContext): DevControl {
-  throw new Error('DEV is gone: production control is the only one (leave out --dev)');
-}
+/* Control's operator API ------------------------------------------------------------------------------- */
 
 export class OperatorError extends Error {
   readonly status: number;
@@ -210,27 +194,6 @@ export class OperatorError extends Error {
     this.status = status;
     this.body = body;
   }
-}
-
-export async function devOp<T>(c: DevControl, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${c.adminUrl}/v1/operator${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${c.token}`,
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const text = await res.text();
-  let parsed: unknown = text;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    // keep the text
-  }
-  if (!res.ok) throw new OperatorError(res.status, parsed, `${method} /v1/operator${path}`);
-  return parsed as T;
 }
 
 /* Production's operator API through deploy.sh (on the host, over SSH) ------------------------------------- */
