@@ -1166,6 +1166,7 @@ export async function sabSeen(
       activity: sabActivity(q),
     },
     points: { [SAB_MBPS_KEY]: q.paused ? 0 : Math.round((q.speedBps / 1e6) * 100) / 100 },
+    tracked: { version: q.version ?? null },
     ...linesSeen(view, sabSkipped(snapshot)),
   };
 }

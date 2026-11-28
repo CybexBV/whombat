@@ -327,4 +327,6 @@ export const PHRASES = splitPairs({
   'phrase.untilNewerVersion': ['Until a newer version is out.', 'Tot er een nieuwere versie is.'],
   'phrase.untilMoreTools': ['Until more new tools come.', 'Tot er meer nieuwe tools komen.'],
   'phrase.untilChanges': ['Until it changes.', 'Tot er iets verandert.'],
+  // What Whombat watches: a settings copy that keeps failing (outside-changes.md).
+  'phrase.settingsCopyFailing': ['Settings copy failing', 'Kopie van instellingen mislukt'],
 });

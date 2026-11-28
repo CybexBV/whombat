@@ -15,11 +15,16 @@
  *   (`incidents/watch.ts`).
  * - **Causes** and **the way out**, every minute: what each thing is down because of
  *   (`things/causes.ts`), and whether Whombat reaches its router, name lookups and the internet (`managed/way-out.ts`).
+ * - **What changed on the servers**, every 10 minutes: restarts, kernels, updates installed and containers' images
+ *   (`changes/servers.ts`; the connections' changes come with their health). **Settings copies**, every 15 minutes:
+ *   a nightly copy of a few services' settings (`changes/copies/run.ts`).
  *
  * Kept out of the `Services` interface (`homeJobsFor`), like the connection pool.
  */
 import { and, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { CareWatcher } from '../care/watch';
+import { SETTINGS_COPIES_MS, settingsCopyPass } from '../changes/copies/run';
+import { CHANGES_SERVERS_MS, changesServerPass } from '../changes/servers';
 import { approvals } from '../db/schema/index';
 import { INCIDENTS_WATCH_MS, IncidentWatcher } from '../incidents/watch';
 import { LookWatcher, WATCH_MS } from '../looks/watch';
@@ -103,6 +108,8 @@ class HomeJobs {
       // The box's own way out, then what each thing is down because of.
       job('home.way-out', WAY_OUT_CHECK_MS, () => this.#wayOut.pass()),
       job('home.causes', CAUSES_MS, () => passCauses(this.services)),
+      job('home.changes-servers', CHANGES_SERVERS_MS, () => changesServerPass(this.services)),
+      job('home.settings-copies', SETTINGS_COPIES_MS, () => settingsCopyPass(this.services)),
     );
   }
 

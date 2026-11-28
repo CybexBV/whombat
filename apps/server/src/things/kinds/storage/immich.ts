@@ -1254,6 +1254,7 @@ export const IMMICH_KIND: KindModule = {
         immichSkipped(s),
       ),
       points: immichPoints(s),
+      tracked: { version: s.version ?? null },
     };
   },
   asksFirst: 'deleting and settings ask first',

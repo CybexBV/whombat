@@ -1295,6 +1295,7 @@ export async function dnsSeen(
       { figures: 2, ...(s.version ? { line: `${NAMES[s.service]} ${s.version}` } : {}) },
     ),
     points: { [DNS_Q_KEY]: s.queries, [DNS_BLOCKED_KEY]: s.blockedPct },
+    tracked: { version: s.version ?? null },
     notices,
     skipped: dnsSkipped(s),
   };

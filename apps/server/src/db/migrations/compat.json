@@ -273,6 +273,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The language a search answer is written in: one nullable text column on search_answers. The release before it reads and writes past it; an answer it writes has none and counts as English, as every answer did before."
+    },
+    "0044_outside_changes": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "What changed before it broke (docs/decisions/outside-changes.md): four new tables, thing_changes (the changes Whombat saw on a thing, 90 days), change_baselines (what it read last of a thing, to compare the next read), settings_copies (sealed copies of a few services' settings) and settings_copy_states (how their last tries went). The release before it never reads or writes them."
     }
   }
 }

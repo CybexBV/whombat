@@ -1180,6 +1180,7 @@ export const OPNSENSE_KIND: KindModule = {
     return {
       glance: cardOf(view, ['internet', 'cpu'], 'Firewall and router'),
       points: opnsensePoints(s),
+      tracked: { version: s.firmware?.version ?? null },
       ...linesSeen(view, opnsenseSkipped(s)),
     };
   },

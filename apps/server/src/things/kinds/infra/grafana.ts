@@ -831,6 +831,7 @@ export const GRAFANA_KIND: KindModule = {
         { figures: 1, ...(s.version ? { line: `Grafana ${s.version}` } : {}) },
       ),
       points: {},
+      tracked: { version: s.version ?? null },
       ...linesSeen(view, grafanaSkipped(s)),
     };
   },

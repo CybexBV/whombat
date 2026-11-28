@@ -1306,6 +1306,7 @@ export const SYNOLOGY_KIND: KindModule = {
         synologySkipped(s),
       ),
       points: usedPoint(synologySpace(s)?.used),
+      tracked: { version: s.version ?? null },
     };
   },
   checks: SYNOLOGY_CHECKS,

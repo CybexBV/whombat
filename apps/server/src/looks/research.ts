@@ -30,6 +30,7 @@ import {
   DESK_WORDS,
   deskText,
   fillDeskWords,
+  LOOK_CHANGES_MAX,
   LOOK_FIX_LABEL_MAX,
   LOOK_FIX_STEP_MAX,
   LOOK_LINES_MAX,
@@ -49,6 +50,8 @@ import {
 import { and, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, notLike, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { turnOnCareAutomations } from '../care/automations';
+import { changesSince } from '../changes/store';
+import { changeWords } from '../changes/words';
 import { settleResolvedThreads } from '../chats/settle';
 import type { ApplyContext } from '../commit/types';
 import { defineCommand } from '../commit/types';
@@ -1081,17 +1084,23 @@ export async function lookContextOf(
   // A server's care plan is about the server (care-plan.md).
   const thing = parseThingId(careThingKey(r.lookKey) ?? r.lookKey);
   let connection: { handle: string; access: 'read' | 'manage' } | null = null;
+  let runsOn: string | null = null;
   if (r.kind === 'connection' && thing) {
     const [c] = await db
       .select({
         handle: catalogConnections.handle,
         access: catalogConnections.access,
         burrowId: catalogConnections.burrowId,
+        glance: catalogConnections.glance,
       })
       .from(catalogConnections)
       .where(eq(catalogConnections.id, thing.id));
-    if (c?.burrowId === r.burrowId) connection = { handle: c.handle, access: c.access };
+    if (c?.burrowId === r.burrowId) {
+      connection = { handle: c.handle, access: c.access };
+      runsOn = c.glance?.machine?.serverId ?? null;
+    }
   }
+  const changes = thing ? await lookChanges(db, r.burrowId, thing, r.name, runsOn, r.since) : [];
   const acting = row.trigger === 'look_fix' || reply;
   const step = acting && r.fixLabel && r.fixStep ? { label: r.fixLabel, step: r.fixStep } : null;
   const plan = acting && r.plan?.length ? r.plan : null;
@@ -1140,5 +1149,35 @@ export async function lookContextOf(
       : {}),
     ...(reply ? { waiting: true } : {}),
     ...(care ? { care } : {}),
+    ...(changes.length ? { changes } : {}),
   };
+}
+
+/** How far before it went wrong a look reads what changed. */
+const LOOK_CHANGES_BEFORE_MS = 48 * 60 * 60_000;
+
+/**
+ * What changed on the thing a look is about, and on the server it runs on, in the 48 hours before it went wrong (or
+ * before now), newest first: the look may say what “changed just before”, never that it caused it.
+ */
+async function lookChanges(
+  db: Db,
+  burrowId: string,
+  thing: { kind: string; id: string },
+  name: string,
+  runsOn: string | null,
+  since: Date | null,
+): Promise<NonNullable<LookDispatchContext['changes']>> {
+  const own = `${thing.kind}:${thing.id}`;
+  const server = runsOn ? `server:${runsOn}` : null;
+  const from = new Date((since ?? new Date()).getTime() - LOOK_CHANGES_BEFORE_MS);
+  const rows = await changesSince(db, burrowId, from, server ? [own, server] : [own], LOOK_CHANGES_MAX).catch(
+    () => [],
+  );
+  return rows.map((c) => ({
+    at: c.seenAt.toISOString(),
+    words: changeWords(c.fact),
+    on: (c.thingId === own ? name : (runsOn ?? name)).slice(0, 120),
+    by: c.by,
+  }));
 }

@@ -1629,7 +1629,7 @@ export const PBS_KIND: KindModule = {
     const input = { snapshot: s, now, timeZone, url: serviceUrl(row), names, buttons: { row } };
     const view = pbsView(input);
     // The card keeps its figures: the page has none of its own in slots.
-    return seenOf(
+    const seen = seenOf(
       cardOf(
         { kpis: figures(input), notices: view.notices },
         ['oldest', 'failed'],
@@ -1638,6 +1638,7 @@ export const PBS_KIND: KindModule = {
       view.notices as KindNotice[],
       pbsSkipped(s),
     );
+    return { ...seen, tracked: { version: s.version ?? null } };
   },
   actions: { verify: runVerify, cleanup: runCleanup },
   checks: PBS_CHECKS,

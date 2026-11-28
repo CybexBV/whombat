@@ -5,6 +5,7 @@
  * these same handlers.
  */
 import { api, parseThingId } from '@whombat/core';
+import { settingsCopyFile } from '../changes/copies/download';
 import { viewerOf } from '../connections/routes';
 import { setServerWatchLimit } from '../hosts/quiet';
 import { thingHistory } from '../incidents/history';
@@ -82,6 +83,11 @@ export const thingRoutes: RouteDef[] = [
       ctx.query.days ?? 30,
       ctx.access.burrow.timeZone,
     );
+  }),
+  // A service's settings copy for Download (outside-changes.md).
+  route(api.things.settingsCopy, async (ctx) => {
+    if (ctx.access.principal.kind !== 'person') throw forbidden('Only you can download a settings copy.');
+    return settingsCopyFile(ctx.services, await viewerOf(ctx), thingParam(ctx.params.thing), ctx.query.copy);
   }),
   route(api.things.setWatch, async (ctx) =>
     setThingWatch(

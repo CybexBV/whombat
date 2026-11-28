@@ -22,6 +22,7 @@ import {
   markDegraded,
   parseCertificatePacks,
   parseConnections,
+  parseIngress,
   parseTraffic,
   parseTunnels,
   parseZones,
@@ -453,5 +454,40 @@ describe('cloudflare page', () => {
     expect(io.rdapCalls.length).toBeGreaterThan(0);
     expect(seen?.notices?.some((n) => n.check === 'cloudflare.domain_expiring')).toBe(true);
     io.rdapHandler = null;
+  });
+});
+
+describe('tunnel routes for the change log (outside-changes.md)', () => {
+  it('reads each hostname and path to its service, not the catch-all', () => {
+    const routes = parseIngress({
+      result: {
+        config: {
+          ingress: [
+            { hostname: 'photos.example.com', service: 'http://10.100.0.12:2283' },
+            { hostname: 'app.example.com', path: 'api', service: 'http://10.100.0.13:8080' },
+            { service: 'http_status:404' },
+          ],
+        },
+      },
+    });
+    expect(routes).toEqual({
+      'photos.example.com': 'http://10.100.0.12:2283',
+      'app.example.com/api': 'http://10.100.0.13:8080',
+    });
+    expect(parseIngress({ result: { config: null } })).toEqual({});
+  });
+
+  it('marks the tunnels whose routes Cloudflare keeps', () => {
+    const [remote, local] = parseTunnels(
+      {
+        result: [
+          { id: 't1', name: 'home', status: 'healthy', remote_config: true },
+          { id: 't2', name: 'old' },
+        ],
+      },
+      'acc',
+    );
+    expect(remote?.remote).toBe(true);
+    expect(local?.remote).toBeUndefined();
   });
 });

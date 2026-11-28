@@ -733,6 +733,7 @@ export const NEXTCLOUD_KIND: KindModule = {
         nextcloudSkipped(s),
       ),
       points: freePoint(s),
+      tracked: { version: version ?? null },
     };
   },
   checks: NEXTCLOUD_CHECKS,

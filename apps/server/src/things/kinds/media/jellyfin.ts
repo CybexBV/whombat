@@ -1161,6 +1161,7 @@ export async function jellyfinSeen(
       ...(activity ? { activity } : {}),
     },
     points: live ? { [JELLYFIN_STREAMS_KEY]: live.sessions.length } : {},
+    tracked: { version: rest.version ?? null },
     ...linesSeen({ notices }, jellyfinSkipped(rest, live)),
   };
 }

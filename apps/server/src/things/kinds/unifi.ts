@@ -15,6 +15,7 @@ import type {
   ThingPageRow,
   ThingPageTab,
 } from '@whombat/core';
+import type { TrackedFacts } from '../../changes/diff';
 import type { CatalogConnectionRow } from '../../connections/types';
 import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
@@ -478,7 +479,18 @@ export async function unifiSeen(services: Services, row: CatalogConnectionRow, n
     points: unifiSeenPoints(s),
     notices,
     skipped: unifiSkipped(s, cpuPoints !== null),
+    tracked: unifiTracked(s),
   };
+}
+
+/**
+ * What the change log compares (docs/decisions/outside-changes.md): UniFi Network's version and each device's firmware
+ * by its name; the firmware is left as it was when this read couldn't see it.
+ */
+export function unifiTracked(s: UnifiSnapshot): TrackedFacts {
+  const firmware: Record<string, string> = {};
+  for (const d of s.devices) if (d.firmware) firmware[d.name] = d.firmware;
+  return { version: s.version ?? null, firmware: s.firmwareUnread ? null : firmware };
 }
 
 const STATE_WORDS: Record<string, string> = {
