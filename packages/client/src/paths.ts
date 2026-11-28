@@ -67,6 +67,8 @@ export const BURROW_ROUTES = [
   '/things/$thing',
   '/skills',
   '/done',
+  // What's protected (backup-trust.md): every thing that holds data and where its copy is.
+  '/protected',
   // Reports to the Whombat Team (Whombat team-reports.md): the person's list, a new report (`?draft=` the assistant's
   // draft), and one report, which the box's Inbox item and push open.
   '/reports',

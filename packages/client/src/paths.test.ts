@@ -129,6 +129,8 @@ describe('burrow-less paths (AP-360…)', () => {
       'things',
       'skills',
       'done',
+      // What's protected (backup-trust.md).
+      'protected',
       // Reports to the Whombat Team (Whombat team-reports.md).
       'reports',
     ]);
