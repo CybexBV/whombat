@@ -122,7 +122,9 @@ export const RestoreTestServer = z.object({
   /** The machines chosen; empty is every machine that can be tested. */
   guests: z.array(Id).max(200),
   /** The machines that can be tested (Proxmox VMs and containers, no templates or temporary machines). */
-  eligible: z.array(z.object({ id: Id, name: z.string().max(160), kind: z.enum(['vm', 'container']) })).max(200),
+  eligible: z
+    .array(z.object({ id: Id, name: z.string().max(160), kind: z.enum(['vm', 'container']) }))
+    .max(200),
   /** Why tests can't run now; absent when they can. */
   blocked: RestoreTestBlock.optional(),
   last: RestoreTestResult.nullable(),
@@ -156,7 +158,10 @@ export const ProtectedRow = z.object({
   /** Its facts are the machine's it runs on (“pve-02 · CT 131”): a service without backup facts of its own. */
   via: z.string().max(160).nullable().optional(),
   /** A second copy somewhere else (this Whombat's off-site copy). */
-  offsite: z.object({ name: z.string().max(160), lastAt: Timestamp.nullable() }).nullable().optional(),
+  offsite: z
+    .object({ name: z.string().max(160), lastAt: Timestamp.nullable() })
+    .nullable()
+    .optional(),
   /** The newest restore test of this machine. */
   restoreTest: RestoreTestResult.nullable().optional(),
   /** The server and machine, for a machine's row (restore tests, asking about it). */
@@ -211,7 +216,10 @@ export function isRestoreTestCopy(g: { id: string; name: string; tags?: readonly
 const DAY_MS = 86_400_000;
 
 /** A group's title and what it means. */
-export function protectedGroupWords(group: ProtectedGroup, locale?: string | null): { title: string; note: string } {
+export function protectedGroupWords(
+  group: ProtectedGroup,
+  locale?: string | null,
+): { title: string; note: string } {
   const tr = coreTranslator(locale);
   return {
     title: tr.t(`protected.group.${group}`),
@@ -219,13 +227,14 @@ export function protectedGroupWords(group: ProtectedGroup, locale?: string | nul
   };
 }
 
-/** “today”, “yesterday”, “on Sunday” (this week), else “on 3 Nov”. */
+/** “today”, “yesterday” or “tomorrow”, “on Sunday” (within a week either way), else “on 3 Nov”. */
 export function restoreTestWhen(at: string, now: Date, timeZone: string, locale?: string | null): string {
   const tr = coreTranslator(locale);
   const diff = daysAgo(at, now, timeZone);
-  if (diff <= 0) return tr.t('time.todayLower');
+  if (diff === 0) return tr.t('time.todayLower');
   if (diff === 1) return tr.t('time.yesterdayLower');
-  if (diff < 7) return tr.t('protected.when.on', { day: formatWeekday(at, timeZone, locale) });
+  if (diff === -1) return tr.t('time.tomorrowLower');
+  if (Math.abs(diff) < 7) return tr.t('protected.when.on', { day: formatWeekday(at, timeZone, locale) });
   return tr.t('protected.when.on', { day: formatDate(at, timeZone, { now }, locale) });
 }
 
@@ -234,11 +243,8 @@ export function restoreTestReasonWords(reason: RestoreTestReason, locale?: strin
   return coreTranslator(locale).t(`protected.reason.${reason}`);
 }
 
-/**
- * A restore test as one line: “Restore test: worked on Sunday (took 4 min)”, “Restore test: didn’t start on
- * Sunday”, “Restore test: couldn’t run on Sunday: there wasn’t enough free space”.
- */
-export function restoreTestLine(
+/** A restore test's verdict: “worked on Sunday (took 4 min)”, “didn’t work on Sunday: the copy didn’t start”. */
+export function restoreTestVerdict(
   result: Pick<RestoreTestResult, 'at' | 'outcome' | 'reason' | 'durationS' | 'booted'>,
   now: Date,
   timeZone: string,
@@ -248,7 +254,9 @@ export function restoreTestLine(
   const when = restoreTestWhen(result.at, now, timeZone, locale);
   if (result.outcome === 'worked') {
     const minutes = Math.max(1, Math.round((result.durationS ?? 60) / 60));
-    return tr.tp(result.booted === false ? 'protected.test.started' : 'protected.test.worked', minutes, { when });
+    return tr.tp(result.booted === false ? 'protected.test.started' : 'protected.test.worked', minutes, {
+      when,
+    });
   }
   if (result.outcome === 'failed')
     return tr.t('protected.test.failed', {
@@ -258,6 +266,26 @@ export function restoreTestLine(
   return tr.t('protected.test.skipped', {
     when,
     why: restoreTestReasonWords(result.reason ?? 'refused', locale),
+  });
+}
+
+/** “Restore test”, a fact's name on a machine's page. */
+export function restoreTestLabel(locale?: string | null): string {
+  return coreTranslator(locale).t('protected.test.label');
+}
+
+/**
+ * A restore test as one line: “Restore test: worked on Sunday (took 4 min)”, “Restore test: didn’t work on Sunday: the
+ * copy didn’t start”, “Restore test: couldn’t run on Sunday: there wasn’t enough free space”.
+ */
+export function restoreTestLine(
+  result: Pick<RestoreTestResult, 'at' | 'outcome' | 'reason' | 'durationS' | 'booted'>,
+  now: Date,
+  timeZone: string,
+  locale?: string | null,
+): string {
+  return coreTranslator(locale).t('protected.test.line', {
+    verdict: restoreTestVerdict(result, now, timeZone, locale),
   });
 }
 
@@ -273,7 +301,9 @@ export function restoreTestProblem(
       reason === 'restore_failed' ? 'protected.problem.restoreTitle' : 'protected.problem.startTitle',
       { name: guestName },
     ),
-    detail: tr.t('protected.problem.detail', { why: restoreTestReasonWords(reason ?? 'start_failed', locale) }),
+    detail: tr.t('protected.problem.detail', {
+      why: restoreTestReasonWords(reason ?? 'start_failed', locale),
+    }),
   };
 }
 
@@ -335,7 +365,10 @@ export function protectedOffsiteLine(
 ): string {
   const tr = coreTranslator(locale);
   return offsite.lastAt
-    ? tr.t('protected.line.offsite', { name: offsite.name, ago: formatAgo(offsite.lastAt, now, timeZone, locale) })
+    ? tr.t('protected.line.offsite', {
+        name: offsite.name,
+        ago: formatAgo(offsite.lastAt, now, timeZone, locale),
+      })
     : tr.t('protected.line.offsiteNone', { name: offsite.name });
 }
 
@@ -360,6 +393,8 @@ export function protectedPageWords(locale?: string | null) {
     intro: tr.t('protected.intro'),
     ask: (assistant: string) => tr.t('protected.askButton', { assistant }),
     empty: tr.t('protected.empty'),
+    loadFailed: tr.t('protected.loadFailed'),
+    failed: tr.t('protected.failed'),
     unread: (names: string) => tr.t('protected.unread', { names }),
     tests: tr.t('protected.tests.title'),
     testsIntro: tr.t('protected.tests.intro'),
@@ -391,4 +426,23 @@ export function protectedRowsOf(rows: readonly ProtectedRow[], group: ProtectedG
   return rows
     .filter((r) => protectedGroupOf(r.state) === group)
     .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
+/**
+ * The thread *Ask {assistant} to set up backups* goes into: the server's (for a server or one of its machines) or the
+ * connection's, so the question lands where that thing is talked about; null for this Whombat (the person's chat).
+ */
+export function protectedAskSubject(
+  row: Pick<ProtectedRow, 'key' | 'kind' | 'name' | 'serverId' | 'on'>,
+): { kind: 'server' | 'connection'; id: string; name: string } | null {
+  if (row.kind === 'service') {
+    const id = row.key.startsWith('connection:') ? row.key.slice('connection:'.length) : '';
+    return id ? { kind: 'connection', id, name: row.name.slice(0, 120) } : null;
+  }
+  if (row.kind === 'whombat' || !row.serverId) return null;
+  return {
+    kind: 'server',
+    id: row.serverId,
+    name: (row.kind === 'server' ? row.name : (row.on ?? row.serverId)).slice(0, 120),
+  };
 }

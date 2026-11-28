@@ -13,6 +13,11 @@ export const PROTECTED_MESSAGES = splitPairs({
     'Als een machine kapotgaat, wat raak je dan kwijt?',
   ],
   'protected.empty': ['Nothing to show yet.', 'Nog niets te zien.'],
+  'protected.loadFailed': [
+    'This page couldn’t load. Try again.',
+    'Deze pagina kon niet laden. Probeer het opnieuw.',
+  ],
+  'protected.failed': ['That didn’t work. Try again.', 'Dat lukte niet. Probeer het opnieuw.'],
   'protected.unread': ['Whombat couldn’t read {names} just now.', 'Whombat kon {names} nu niet lezen.'],
   'protected.askButton': ['Ask {assistant} to set up backups', 'Vraag {assistant} om back-ups in te stellen'],
 
@@ -48,7 +53,10 @@ export const PROTECTED_MESSAGES = splitPairs({
   'protected.line.via': ['With {machine}', 'Met {machine}'],
   'protected.line.copy': ['Last copy {ago}', 'Laatste kopie {ago}'],
   'protected.line.backup': ['Last backup {ago}', 'Laatste back-up {ago}'],
-  'protected.line.planned': ['In a backup plan, no copy seen yet', 'In een back-upplan, nog geen kopie gezien'],
+  'protected.line.planned': [
+    'In a backup plan, no copy seen yet',
+    'In een back-upplan, nog geen kopie gezien',
+  ],
   'protected.line.where': ['on {where}', 'op {where}'],
   'protected.line.ownDisks': ['on its own disks', 'op de eigen schijven'],
   'protected.line.failed': ['Last backup failed {ago}', 'Laatste back-up mislukt {ago}'],
@@ -64,19 +72,18 @@ export const PROTECTED_MESSAGES = splitPairs({
   'protected.line.offsiteNone': ['Off-site ({name}) · no copy yet', 'Elders ({name}) · nog geen kopie'],
 
   'protected.when.on': ['on {day}', 'op {day}'],
+  'protected.test.label': ['Restore test', 'Hersteltest'],
+  'protected.test.line': ['Restore test: {verdict}', 'Hersteltest: {verdict}'],
   'protected.test.worked': [
-    { one: 'Restore test: worked {when} (took {count} min)', other: 'Restore test: worked {when} (took {count} min)' },
-    { one: 'Hersteltest: gelukt {when} (duurde {count} min)', other: 'Hersteltest: gelukt {when} (duurde {count} min)' },
+    { one: 'worked {when} (took {count} min)', other: 'worked {when} (took {count} min)' },
+    { one: 'gelukt {when} (duurde {count} min)', other: 'gelukt {when} (duurde {count} min)' },
   ],
   'protected.test.started': [
-    {
-      one: 'Restore test: started {when} (took {count} min)',
-      other: 'Restore test: started {when} (took {count} min)',
-    },
-    { one: 'Hersteltest: gestart {when} (duurde {count} min)', other: 'Hersteltest: gestart {when} (duurde {count} min)' },
+    { one: 'started {when} (took {count} min)', other: 'started {when} (took {count} min)' },
+    { one: 'gestart {when} (duurde {count} min)', other: 'gestart {when} (duurde {count} min)' },
   ],
-  'protected.test.failed': ['Restore test: didn’t work {when}: {why}', 'Hersteltest: werkte niet {when}: {why}'],
-  'protected.test.skipped': ['Restore test: couldn’t run {when}: {why}', 'Hersteltest: kon niet {when}: {why}'],
+  'protected.test.failed': ['didn’t work {when}: {why}', 'werkte niet {when}: {why}'],
+  'protected.test.skipped': ['couldn’t run {when}: {why}', 'kon niet {when}: {why}'],
 
   'protected.reason.restore_failed': [
     'Proxmox couldn’t restore the backup',
@@ -91,7 +98,10 @@ export const PROTECTED_MESSAGES = splitPairs({
   'protected.reason.too_long': ['it took over an hour', 'het duurde meer dan een uur'],
   'protected.reason.no_backup': ['there’s no backup of it to test', 'er is geen back-up om te testen'],
   'protected.reason.no_space': ['there wasn’t enough free space', 'er was niet genoeg vrije ruimte'],
-  'protected.reason.no_memory': ['the server didn’t have enough free memory', 'de server had niet genoeg vrij geheugen'],
+  'protected.reason.no_memory': [
+    'the server didn’t have enough free memory',
+    'de server had niet genoeg vrij geheugen',
+  ],
   'protected.reason.host_parts': [
     'it uses parts of the server itself, so testing it could touch the real machine',
     'hij gebruikt onderdelen van de server zelf, dus testen kan de echte machine raken',
@@ -101,7 +111,10 @@ export const PROTECTED_MESSAGES = splitPairs({
     'Proxmox wilde het netwerk van de kopie niet loskoppelen',
   ],
   'protected.reason.manage_off': ['Manage is off for this server', 'Beheren staat uit voor deze server'],
-  'protected.reason.unreachable': ['Whombat couldn’t reach the server', 'Whombat kon de server niet bereiken'],
+  'protected.reason.unreachable': [
+    'Whombat couldn’t reach the server',
+    'Whombat kon de server niet bereiken',
+  ],
   'protected.reason.other_node': [
     'it runs on another server of the cluster',
     'hij draait op een andere server van het cluster',

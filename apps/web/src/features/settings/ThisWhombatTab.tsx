@@ -10,9 +10,9 @@ import {
   whombatPartLabel,
   whombatParts,
 } from '@whombat/client/managed';
-import { useBootstrap, useTheAgent, useVaultNetworks } from '@whombat/client/react';
+import { useBootstrap, useProtectedSupported, useTheAgent, useVaultNetworks } from '@whombat/client/react';
 import { type ApplianceStatus, sessionOps } from '@whombat/client/session';
-import { agentsReachLanOn, deskWords } from '@whombat/core';
+import { agentsReachLanOn, deskWords, protectedPageWords } from '@whombat/core';
 import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useAppServices, useCommunity } from '../../app/providers';
@@ -33,6 +33,7 @@ import { ScreenTab } from '../desk/ScreenTab';
 import { type ScreenPart, screenTabShown } from '../desk/screenTab';
 import { useDeskHere, useDeskUnlockHere } from '../desk/useDeskHere';
 import { useDeskNameSync } from '../desk/useDeskNameSync';
+import { AppLink } from '../files/AppLink';
 import { HostStatusSection } from '../host';
 import { BluetoothSection, HardwareSection, MailSection, NetworkSection, TailscaleSection } from '../machine';
 import { OwnAddressSection } from '../machine/OwnAddressSection';
@@ -184,6 +185,7 @@ export function ThisWhombatTab({
               burrow={burrow}
             />
           ) : null}
+          <ProtectedLinkSection />
           <BackupFileSection burrow={burrow} />
         </PartBody>
       ) : part === 'screen' ? (
@@ -493,6 +495,32 @@ function OverviewPart({
         </section>
       ) : null}
     </PartBody>
+  );
+}
+
+/** Under this Whombat's backups: What's protected, for everything else that holds data (backup-trust.md). */
+function ProtectedLinkSection() {
+  const supported = useProtectedSupported();
+  if (!supported) return null;
+  const words = protectedPageWords(currentLocale());
+  return (
+    <section className={styles.section} aria-label={words.link}>
+      <div className={styles.card}>
+        <AppLink
+          href="/protected"
+          className={cx(styles.row, tw.glanceRow, tw.linkRow)}
+          data-protected-link=""
+        >
+          <span className={styles.rowMain}>
+            <span className={styles.rowTitle}>{words.link}</span>
+            <span className={styles.rowMeta}>{words.linkHint}</span>
+          </span>
+          <span className={tw.chevron} aria-hidden="true">
+            <Icon icon={ChevronRight} size={16} />
+          </span>
+        </AppLink>
+      </div>
+    </section>
   );
 }
 

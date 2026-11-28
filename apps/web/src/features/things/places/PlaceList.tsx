@@ -4,7 +4,7 @@
  * row's sans face as the mock draws it), a server's processor at the end, and under the name how it is, with its status mark when it isn't fine.
  * A row is a link to its page (read while the pointer rests on it, page-speed.md); right-click offers Open and
  * Rename, F2 renames the row in focus (server-names.md). Under Servers' rows, a server that ran the install command and
- * waits to be added, with Review (Add a server's waiting list).
+ * waits to be added, with Review (Add a server's waiting list), and What's protected (backup-trust.md).
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
@@ -14,7 +14,9 @@ import {
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
-import { Plus } from 'lucide-react';
+import { useProtectedSupported } from '@whombat/client/react';
+import { protectedPageWords } from '@whombat/core';
+import { ChevronRight, Plus } from 'lucide-react';
 import { Fragment, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
 import { useRowMenu } from '../../../app/shell/ContextMenu';
@@ -139,9 +141,27 @@ export function PlaceList({
             </AppLink>
           </div>
         ) : null}
+        {place === 'servers' && rows.length ? <ProtectedLink /> : null}
       </nav>
       {menu.element}
     </div>
+  );
+}
+
+/** Under the servers: what holds data and where its copies are, on a Whombat that has the page. */
+function ProtectedLink() {
+  const i18n = useWebI18n();
+  const supported = useProtectedSupported();
+  if (!supported) return null;
+  const words = protectedPageWords(i18n.tag);
+  return (
+    <AppLink href="/protected" className={styles.protected} data-protected-link="">
+      <span className={styles.waitingText}>
+        <span className={styles.waitingName}>{words.link}</span>
+        <span className={styles.waitingHint}>{words.linkHint}</span>
+      </span>
+      <Icon icon={ChevronRight} size={16} className={styles.protectedChevron} />
+    </AppLink>
   );
 }
 

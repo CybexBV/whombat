@@ -84,6 +84,8 @@ interface ImportMetaEnv {
   readonly VITE_FIXTURE_MONITORING?: string;
   /** Reports to the Whombat Team: `seeded`, `empty`, `stale` or `off` (`teamReportFixtures.ts`). */
   readonly VITE_FIXTURE_TEAM_REPORTS?: string;
+  /** `tested`: pve-02's restore tests on, with three results (`protectedFixtures.ts`, backup-trust.md). */
+  readonly VITE_FIXTURE_PROTECTED?: string;
   /** `good`: nothing open and every thing fine, for the status sentence (`statusFixtures.ts`, status-line.md). */
   readonly VITE_FIXTURE_STATUS?: string;
   /** `0`: Neo finished nothing today, so nothing was fixed today (`statusFixtures.ts`). */
