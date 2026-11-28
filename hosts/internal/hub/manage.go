@@ -484,22 +484,19 @@ func invalidFields(fe map[string]string) *apiError {
 // key and value against its own allowlist (docs/MANAGE.md 2.4); these only
 // refuse what can never be valid.
 var (
-	manageKeyRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
-	manageNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$`)
-	// restoreMarkerRe and pveTagRe: an isolated restore's marker and tag.
-	restoreMarkerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
-	pveTagRe        = regexp.MustCompile(`^[a-z0-9_][a-z0-9_.+-]{0,63}$`)
-	manageIDRe      = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`) // storages, nodes, profiles, disks, devices
-	manageVolumeRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[!-~]{1,400}$`)
-	manageSizeRe    = regexp.MustCompile(`^\+?[0-9]{1,9}(\.[0-9]{1,3})?[KMGT]?$`)
-	manageTaskRe    = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16}|app:[0-9a-f]{16})$`)
-	manageFileRe    = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,199}$`)
-	manageTmplRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,254}$`)
-	manageWordRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+-]{0,63}$`) // firewall actions, macros, protocols
-	manageJobRe     = regexp.MustCompile(`^[0-9]{1,9}-[0-9]{1,4}$`)
-	manageRateRe    = regexp.MustCompile(`^[0-9]{1,6}(\.[0-9]{1,2})?$`)
-	manageHexRe     = regexp.MustCompile(`^[0-9A-Fa-f]{32,128}$`)
-	unusedKeyRe     = regexp.MustCompile(`^unused[0-9]+$`)
+	manageKeyRe    = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+	manageNameRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$`)
+	manageIDRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`) // storages, nodes, profiles, disks, devices
+	manageVolumeRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[!-~]{1,400}$`)
+	manageSizeRe   = regexp.MustCompile(`^\+?[0-9]{1,9}(\.[0-9]{1,3})?[KMGT]?$`)
+	manageTaskRe   = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16}|app:[0-9a-f]{16})$`)
+	manageFileRe   = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,199}$`)
+	manageTmplRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,254}$`)
+	manageWordRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+-]{0,63}$`) // firewall actions, macros, protocols
+	manageJobRe    = regexp.MustCompile(`^[0-9]{1,9}-[0-9]{1,4}$`)
+	manageRateRe   = regexp.MustCompile(`^[0-9]{1,6}(\.[0-9]{1,2})?$`)
+	manageHexRe    = regexp.MustCompile(`^[0-9A-Fa-f]{32,128}$`)
+	unusedKeyRe    = regexp.MustCompile(`^unused[0-9]+$`)
 
 	firewallOptionKeys = []string{"enable", "dhcp", "ndp", "radv", "macfilter", "ipfilter", "policy_in", "policy_out",
 		"log_level_in", "log_level_out"}
@@ -508,6 +505,12 @@ var (
 		"vztmpl": {".tar.gz", ".tar.xz", ".tar.zst"},
 		"import": {".ova", ".qcow2", ".vmdk", ".raw", ".img"},
 	}
+)
+
+// restoreMarkerRe and pveTagRe: an isolated restore's marker and tag.
+var (
+	restoreMarkerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	pveTagRe        = regexp.MustCompile(`^[a-z0-9_][a-z0-9_.+-]{0,63}$`)
 )
 
 // manageText reports whether s is valid UTF-8 of at most max bytes without
