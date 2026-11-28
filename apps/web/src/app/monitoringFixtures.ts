@@ -562,9 +562,11 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
 
   function settingsCopyOf(thing: string): SettingsCopyView | null {
     if (!opts.seeded || thing !== PIHOLE) return null;
+    // As the server words it: “Settings copy · {when}”.
+    const when = 'last night';
     return {
       service: 'Pi-hole',
-      title: 'Settings copy · last night',
+      title: `Settings copy · ${when}`,
       detail: 'Whombat keeps a copy of Pi-hole’s settings every night. Restore one in Pi-hole itself.',
       copyId: 'scp_fx_pihole',
       fileName: 'pihole-teleporter-2026-11-24.zip',

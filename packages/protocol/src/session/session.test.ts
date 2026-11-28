@@ -31,6 +31,7 @@ import {
   negotiateCapabilities,
   negotiateVersion,
   ONEPASSWORD_SYNC_MINOR,
+  OUTSIDE_CHANGES_MINOR,
   protocolAtLeast,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
@@ -99,9 +100,10 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: LOCALE_MINOR });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: OUTSIDE_CHANGES_MINOR });
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
+    expect(OUTSIDE_CHANGES_MINOR).toBe(22);
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });

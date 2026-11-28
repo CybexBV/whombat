@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
   container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says
