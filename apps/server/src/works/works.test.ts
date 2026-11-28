@@ -22,10 +22,15 @@ import {
 const NOW = new Date('2026-11-28T10:00:00Z');
 const row = { baseUrl: 'https://cloud.example.com', fields: { username: 'mara' } };
 
-function answer(status: number, body: unknown = ''): TestAnswer {
+/** A service's answer: JSON (with its type) for anything but text, the given type for text. */
+function answer(status: number, body: unknown = '', type?: string): TestAnswer {
   const text = typeof body === 'string' ? body : JSON.stringify(body);
-  return { status, body: Buffer.from(text), headers: {} };
+  const contentType = type ?? (typeof body === 'string' ? undefined : 'application/json; charset=utf-8');
+  return { status, body: Buffer.from(text), headers: contentType ? { 'content-type': contentType } : {} };
 }
+
+const LOGIN_PAGE =
+  '<!DOCTYPE html><html><head><title>Sign in</title></head><body><form></form></body></html>';
 
 /** A fake service: the first route whose test matches answers; the requests it saw are kept. */
 function service(
@@ -41,11 +46,11 @@ function service(
   return { fetch, seen };
 }
 
-const dav = (...entries: [string, boolean][]) =>
+const dav = (...entries: ([string, boolean] | [string, boolean, number, string])[]) =>
   `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:">${entries
     .map(
-      ([href, folder]) =>
-        `<d:response><d:href>${href}</d:href><d:propstat><d:prop><d:resourcetype>${folder ? '<d:collection/>' : ''}</d:resourcetype></d:prop></d:propstat></d:response>`,
+      ([href, folder, size, type]) =>
+        `<d:response><d:href>${href}</d:href><d:propstat><d:prop><d:resourcetype>${folder ? '<d:collection/>' : ''}</d:resourcetype>${size !== undefined ? `<d:getcontentlength>${size}</d:getcontentlength><d:getcontenttype>${type}</d:getcontenttype>` : ''}</d:prop></d:propstat></d:response>`,
     )
     .join('')}</d:multistatus>`;
 
@@ -206,6 +211,20 @@ describe('the tests only read', () => {
     });
   });
 
+  it('Home Assistant’s readings are aged by its own clock, not the box’s', async () => {
+    // Its clock is two hours behind the box's: its newest reading came 30 s ago by its own time.
+    const haNow = new Date(NOW.getTime() - 2 * 3_600_000);
+    const behind = new Date(haNow.getTime() - 30_000).toISOString();
+    const skewed = service([
+      [(r) => r.path === '/api/template', () => answer(200, `12|${behind}|${haNow.toISOString()}`)],
+    ]);
+    expect(await testOnce('homeassistant', skewed.fetch, row, NOW)).toMatchObject({
+      outcome: 'ok',
+      facts: { ageS: 30 },
+    });
+    expect(skewed.seen[0]?.body).toContain('now()');
+  });
+
   it('an older Home Assistant is asked again with the attribute it knows', async () => {
     const { fetch, seen } = service([
       [(r) => r.path === '/api/template' && (r.body ?? '').includes('last_reported'), () => answer(400)],
@@ -213,6 +232,116 @@ describe('the tests only read', () => {
     ]);
     expect((await testOnce('homeassistant', fetch, row, NOW)).outcome).toBe('ok');
     expect(seen).toHaveLength(2);
+  });
+});
+
+describe('a web page or another answer where the service’s data should be', () => {
+  const photo = { assets: { items: [{ id: 'aa11bb22-cc33' }] } };
+
+  it('a sign-in page in front of the service is never “it works”', async () => {
+    const page = service([[() => true, () => answer(200, LOGIN_PAGE, 'text/html; charset=utf-8')]]);
+    expect(await testOnce('immich', page.fetch, row, NOW)).toMatchObject({
+      outcome: 'broken',
+      step: 'find',
+      reason: 'page',
+    });
+    // A page without a type is still a page.
+    const untyped = service([[() => true, () => answer(200, LOGIN_PAGE)]]);
+    expect(await testOnce('homeassistant', untyped.fetch, row, NOW)).toMatchObject({ reason: 'page' });
+    // A redirect sends Whombat to another page (no redirect is followed).
+    const moved = service([[() => true, () => answer(302)]]);
+    expect(await testOnce('paperless', moved.fetch, row, NOW)).toMatchObject({
+      outcome: 'broken',
+      reason: 'page',
+      status: 302,
+    });
+    // The photo's own picture answered by a page.
+    const thumb = service([
+      [(r) => r.path === '/api/search/metadata', () => answer(200, photo)],
+      [(r) => r.path.endsWith('/thumbnail'), () => answer(200, LOGIN_PAGE, 'text/html')],
+    ]);
+    expect(await testOnce('immich', thumb.fetch, row, NOW)).toMatchObject({ step: 'open', reason: 'page' });
+  });
+
+  it('an answer that isn’t the service’s JSON is unreadable, never empty', async () => {
+    const cases: [Parameters<typeof testOnce>[0], string, TestAnswer][] = [
+      ['immich', 'find', answer(200, {})],
+      ['immich', 'find', answer(200, JSON.stringify(photo), 'text/plain')],
+      ['paperless', 'find', answer(200, { detail: 'Not found.' })],
+      ['jellyfin', 'library', answer(200, { Items: [] })],
+      ['plex', 'library', answer(200, { Directory: [] })],
+    ];
+    for (const [kind, step, said] of cases) {
+      const { fetch } = service([[() => true, () => said]]);
+      expect(await testOnce(kind, fetch, row, NOW)).toMatchObject({
+        outcome: 'broken',
+        step,
+        reason: 'unreadable',
+      });
+    }
+    const jellyfinItems = service([
+      [
+        (r) => r.path === '/Library/VirtualFolders',
+        () => answer(200, [{ ItemId: 'm1', CollectionType: 'movies' }]),
+      ],
+      [(r) => r.path === '/Items', () => answer(200, {})],
+    ]);
+    expect(await testOnce('jellyfin', jellyfinItems.fetch, row, NOW)).toMatchObject({
+      step: 'item',
+      reason: 'unreadable',
+    });
+  });
+
+  it('a file that opens with nothing in it didn’t open', async () => {
+    const { fetch } = service([
+      [(r) => r.path === '/api/documents/', () => answer(200, { results: [{ id: 42 }] })],
+      [(r) => r.path === '/api/documents/42/download/', () => answer(200, '')],
+    ]);
+    expect(await testOnce('paperless', fetch, row, NOW)).toMatchObject({
+      outcome: 'broken',
+      step: 'open',
+      reason: 'unreadable',
+    });
+  });
+
+  it('Nextcloud lists files only with a WebDAV listing, and opens a file with bytes that isn’t a page', async () => {
+    const page = service([[() => true, () => answer(200, LOGIN_PAGE, 'text/html')]]);
+    expect(await testOnce('nextcloud', page.fetch, row, NOW)).toMatchObject({ step: 'list', reason: 'page' });
+    const notDav = service([[() => true, () => answer(200, '<ok/>', 'application/xml')]]);
+    expect(await testOnce('nextcloud', notDav.fetch, row, NOW)).toMatchObject({
+      outcome: 'broken',
+      step: 'list',
+      reason: 'unreadable',
+    });
+    const { fetch, seen } = service([
+      [
+        (r) => r.method === 'PROPFIND',
+        () =>
+          answer(
+            207,
+            dav(
+              [TOP, true],
+              [`${TOP}a-empty.txt`, false, 0, 'text/plain'],
+              [`${TOP}b-site.html`, false, 900, 'text/html'],
+              [`${TOP}c.pdf`, false, 900, 'application/pdf'],
+            ),
+            'application/xml; charset=utf-8',
+          ),
+      ],
+      [(r) => r.path === `${TOP}c.pdf`, () => answer(206, '%PDF', 'application/pdf')],
+    ]);
+    expect((await testOnce('nextcloud', fetch, row, NOW)).outcome).toBe('ok');
+    expect(seen.at(-1)?.path).toBe(`${TOP}c.pdf`);
+  });
+
+  it('says a page plainly, in English and Dutch', () => {
+    const en = runWords('immich', 'Immich', run(0, 'broken', { step: 'find', reason: 'page', status: 200 }));
+    expect(en).toContain('web page');
+    expect(en).toContain('find your newest photo');
+    const nl = localizePhrase(en, 'nl');
+    expect(nl).not.toBe(en);
+    expect(nl).toContain('Immich');
+    expect(nl).not.toContain('find your newest photo');
   });
 });
 
@@ -241,7 +370,7 @@ describe('reading the services’ answers', () => {
         MediaContainer: { Metadata: [{ ratingKey: '5', Media: [{ Part: [{ key: '/etc/x' }] }] }] },
       }),
     ).toEqual({ key: '5', part: null });
-    expect(haSensors('0|')).toEqual({ count: 0, newest: null });
+    expect(haSensors('0|')).toEqual({ count: 0, newest: null, now: null });
     expect(haSensors('<html>')).toBeNull();
   });
 });

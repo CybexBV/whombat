@@ -95,6 +95,8 @@ export function runWords(kind: ServiceTestKind, name: string, run: RunLike): str
         return `${name} stopped answering when Whombat tried to ${what}.`;
       case 'broken':
         if (run.reason === 'stale') return `${name} opens, but none of its sensors changed in the last hour.`;
+        if (run.reason === 'page')
+          return `${name} answered with a web page instead of its data when Whombat tried to ${what}.`;
         if (run.reason === 'timeout')
           return `${name} opens, but it can’t ${what} (it didn’t answer in time).`;
         if (run.reason === 'status' && run.status)

@@ -8,8 +8,9 @@
  * stopped at, the service's answer code and a few facts for its words.
  *
  * A step that fails says how: refused (401, 403: the sign-in expired or lost access, `access`), an error code or an
- * answer that doesn't hold what it should (`broken`), no answer in time (`broken`, a service that hangs), or no answer
- * at all (`down`).
+ * answer that doesn't hold what it should (`broken`), a web page where the service's data should be (`broken`: a
+ * sign-in page in front of it or a wrong address, never “it works”), no answer in time (`broken`, a service that
+ * hangs), or no answer at all (`down`).
  */
 import type { ServiceTestKind, ServiceTestOutcome, ThingNoticeIcon } from '@whombat/core';
 import type { CatalogConnectionRow } from '../connections/types';
@@ -114,18 +115,54 @@ export function failureOf(step: string, err: unknown): StepFailed {
 export function answerFailure(step: string, status: number): StepFailed | null {
   if (status === 401 || status === 403) return new StepFailed(step, 'access', 'status', status);
   if (status >= 400) return new StepFailed(step, 'broken', 'status', status);
+  // No redirect is followed: one sends Whombat to another page (a sign-in page in front of the service), not its data.
+  if (status >= 300) return new StepFailed(step, 'broken', 'page', status);
   return null;
 }
+
+/** An answer's media type, lowercase and without its parameters (`text/html`), or '' when it has none. */
+export function mediaType(answer: Pick<TestAnswer, 'headers'>): string {
+  for (const [name, value] of Object.entries(answer.headers)) {
+    if (name.toLowerCase() !== 'content-type') continue;
+    const first = Array.isArray(value) ? value[0] : value;
+    return (first ?? '').split(';')[0]?.trim().toLowerCase() ?? '';
+  }
+  return '';
+}
+
+const HTML_TYPES: ReadonlySet<string> = new Set(['text/html', 'application/xhtml+xml']);
+
+/**
+ * Whether an answer is a web page: no step of a test asks for one, so it is a sign-in page in front of the service or
+ * the wrong address, never the service's data. Without a type, a page still starts like one.
+ */
+export function isWebPage(answer: TestAnswer): boolean {
+  const type = mediaType(answer);
+  if (type) return HTML_TYPES.has(type);
+  return /^\s*<(?:!doctype\s+html|html)\b/i.test(answer.body.subarray(0, 512).toString('utf8'));
+}
+
+/** A JSON answer's type: `application/json` and its kinds (`application/problem+json`). */
+const isJsonType = (type: string) => /^application\/(?:[\w.-]+\+)?json$/.test(type);
+
+/** Stops the test when an answer doesn't hold what the service always sends: it isn't the service's answer. */
+const holds = (step: string, ok: boolean): void => {
+  if (!ok) throw new StepFailed(step, 'broken', 'unreadable');
+};
 
 /* Nextcloud: list the person's files over WebDAV, open the first bytes of one --------------------------------------- */
 
 export const PROPFIND_BODY =
-  '<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/></d:prop></d:propfind>';
+  '<?xml version="1.0" encoding="UTF-8"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/><d:getcontenttype/></d:prop></d:propfind>';
 
 export interface DavEntry {
   /** The path from `/remote.php/` on, as Nextcloud named it. */
   path: string;
   folder: boolean;
+  /** A file's size in bytes, when the listing says it. */
+  size?: number;
+  /** A file's media type, lowercase, when the listing says it. */
+  type?: string;
 }
 
 /**
@@ -143,13 +180,35 @@ export function parseDav(xml: string, self: string): DavEntry[] {
     if (at < 0) continue;
     const path = href.slice(at).replace(/&amp;/g, '&');
     if (path.replace(/\/+$/, '') === self.replace(/\/+$/, '')) continue;
-    out.push({ path, folder: /<(?:[A-Za-z0-9_-]+:)?collection\s*\/>/.test(r) });
+    const size = /<(?:[A-Za-z0-9_-]+:)?getcontentlength>\s*(\d+)\s*</.exec(r)?.[1];
+    const type = /<(?:[A-Za-z0-9_-]+:)?getcontenttype>([^<]*)</
+      .exec(r)?.[1]
+      ?.split(';')[0]
+      ?.trim()
+      .toLowerCase();
+    out.push({
+      path,
+      folder: /<(?:[A-Za-z0-9_-]+:)?collection\s*\/>/.test(r),
+      ...(size !== undefined ? { size: Number(size) } : {}),
+      ...(type ? { type } : {}),
+    });
   }
   return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
 /** How many folders the test looks into when the top one holds no file. */
 const DAV_FOLDERS_MAX = 3;
+
+/**
+ * A file the test can open: one with bytes in it, and not a web page the person keeps (its answer would read as a
+ * sign-in page in front of Nextcloud).
+ */
+export const openableFile = (e: DavEntry): boolean =>
+  !e.folder && e.size !== 0 && !(e.type && HTML_TYPES.has(e.type));
+
+/** A WebDAV listing is a `207 Multi-Status` with its `multistatus`: anything else isn't Nextcloud's answer. */
+export const isDavListing = (status: number, xml: string): boolean =>
+  status === 207 && /<(?:[A-Za-z0-9_-]+:)?multistatus\b/.test(xml);
 
 const nextcloud: ServiceTest = {
   name: 'Open one of your files',
@@ -170,13 +229,15 @@ const nextcloud: ServiceTest = {
         body: PROPFIND_BODY,
         maxBytes: LIST_MAX_BYTES,
       });
-      return parseDav(answer.body.toString('utf8'), path);
+      const xml = answer.body.toString('utf8');
+      holds('list', isDavListing(answer.status, xml));
+      return parseDav(xml, path);
     };
     const first = await listing(top);
-    let file = first.find((e) => !e.folder);
+    let file = first.find(openableFile);
     for (const folder of first.filter((e) => e.folder).slice(0, DAV_FOLDERS_MAX)) {
       if (file) break;
-      file = (await listing(folder.path)).find((e) => !e.folder);
+      file = (await listing(folder.path)).find(openableFile);
     }
     if (!file) return EMPTY;
     await t.call('open', {
@@ -189,6 +250,9 @@ const nextcloud: ServiceTest = {
 };
 
 /* Immich: find the newest photo and load its picture ----------------------------------------------------------------- */
+
+/** Whether an answer is Immich's search result: its `assets.items` list, empty or not. */
+export const isAssetSearch = (body: unknown): boolean => Array.isArray(rec(rec(body).assets).items);
 
 /** The newest photo's id from `POST /api/search/metadata`, or null when there is none. */
 export function newestAsset(body: unknown): string | null {
@@ -214,7 +278,9 @@ const immich: ServiceTest = {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ order: 'desc', size: 1, type: 'IMAGE' }),
     });
-    const id = newestAsset(t.json('find', found));
+    const body = t.json('find', found);
+    holds('find', isAssetSearch(body));
+    const id = newestAsset(body);
     if (!id) return EMPTY;
     // The preview is a file Immich made from the photo, kept beside it: it loads only while its storage is there.
     await t.call('open', {
@@ -228,6 +294,10 @@ const immich: ServiceTest = {
 };
 
 /* Paperless-ngx: find the newest document and open its first bytes --------------------------------------------------- */
+
+/** Whether an answer is Paperless's document list: its `results` (or, from an older one, the list itself). */
+export const isDocumentList = (body: unknown): boolean =>
+  Array.isArray(body) || Array.isArray(rec(body).results);
 
 /** The newest document's id from `GET /api/documents/`, or null when there is none. */
 export function newestDocument(body: unknown): number | null {
@@ -252,7 +322,9 @@ const paperless: ServiceTest = {
       query: { ordering: '-added', page_size: '1', fields: 'id' },
       headers: { Accept: 'application/json' },
     });
-    const id = newestDocument(t.json('find', found));
+    const body = t.json('find', found);
+    holds('find', isDocumentList(body));
+    const id = newestDocument(body);
     if (id === null) return EMPTY;
     await t.call('open', {
       path: `/api/documents/${id}/download/`,
@@ -310,9 +382,9 @@ const jellyfin: ServiceTest = {
   badge: 'Library doesn’t open',
   question: (name) => `Why can’t ${name} open what’s in my libraries?`,
   async run(t) {
-    const libraries = jellyfinLibraries(
-      t.json('library', await t.call('library', { path: '/Library/VirtualFolders' })),
-    );
+    const folders = t.json('library', await t.call('library', { path: '/Library/VirtualFolders' }));
+    holds('library', Array.isArray(folders));
+    const libraries = jellyfinLibraries(folders);
     if (!libraries.length) return missing('library');
     for (const lib of libraries.slice(0, LIBRARIES_MAX)) {
       const found = await t.call('item', {
@@ -326,7 +398,9 @@ const jellyfin: ServiceTest = {
           Limit: '1',
         },
       });
-      const item = jellyfinItem(t.json('item', found));
+      const items = t.json('item', found);
+      holds('item', Array.isArray(rec(items).Items));
+      const item = jellyfinItem(items);
       if (!item) continue;
       // The file itself, as a player would start it: no conversion, only its first bytes.
       await t.call('open', {
@@ -347,6 +421,12 @@ const jellyfin: ServiceTest = {
 const PLEX_ITEM_TYPE: Readonly<Record<string, string>> = { movie: '1', show: '4', artist: '10' };
 
 const container = (body: unknown) => rec(rec(body).MediaContainer);
+
+/** Whether an answer is Plex's: every answer of its API is a `MediaContainer`. */
+export const isPlexAnswer = (body: unknown): boolean => {
+  const c = rec(body).MediaContainer;
+  return !!c && typeof c === 'object' && !Array.isArray(c);
+};
 
 /** `GET /library/sections`: the libraries with something to play. */
 export function plexLibraries(body: unknown): MediaLibrary[] {
@@ -382,8 +462,14 @@ const plex: ServiceTest = {
   question: jellyfin.question,
   async run(t) {
     const json = { Accept: 'application/json' };
+    /** A step's answer, which must be Plex's. */
+    const plexJson = (step: string, answer: TestAnswer) => {
+      const body = t.json(step, answer);
+      holds(step, isPlexAnswer(body));
+      return body;
+    };
     const libraries = plexLibraries(
-      t.json('library', await t.call('library', { path: '/library/sections', headers: json })),
+      plexJson('library', await t.call('library', { path: '/library/sections', headers: json })),
     );
     if (!libraries.length) return missing('library');
     for (const lib of libraries.slice(0, LIBRARIES_MAX)) {
@@ -397,10 +483,10 @@ const plex: ServiceTest = {
         },
         headers: json,
       });
-      const item = plexItem(t.json('item', found));
+      const item = plexItem(plexJson('item', found));
       if (!item) continue;
       const details = plexItem(
-        t.json(
+        plexJson(
           'details',
           await t.call('details', {
             path: `/library/metadata/${encodeURIComponent(item.key)}`,
@@ -424,18 +510,26 @@ const plex: ServiceTest = {
 /* Home Assistant: see its sensors change ---------------------------------------------------------------------------- */
 
 /**
- * How many sensors there are and when the newest reading came. `last_reported` (2024.3 and later) moves with every
- * reading, also one that says the same as before; an older Home Assistant has only `last_updated`.
+ * How many sensors there are, when the newest reading came and Home Assistant's own time now: the reading's age is told
+ * by its clock, so a Home Assistant whose clock is off from the box's doesn't read as stuck. `last_reported` (2024.3 and
+ * later) moves with every reading, also one that says the same as before; an older Home Assistant has only
+ * `last_updated`.
  */
 export const HA_SENSORS_TEMPLATE = (attribute: 'last_reported' | 'last_updated') =>
-  `{% set s = states.sensor | list %}{{ s | count }}|{{ (s | map(attribute='${attribute}') | max).isoformat() if s else '' }}`;
+  `{% set s = states.sensor | list %}{{ s | count }}|{{ (s | map(attribute='${attribute}') | max).isoformat() if s else '' }}|{{ now().isoformat() }}`;
 
-/** A template's answer (“214|2026-11-28T10:41:53.123+00:00”): the count and the newest reading's time. */
-export function haSensors(text: string): { count: number; newest: Date | null } | null {
-  const m = /^\s*(\d+)\|(.*?)\s*$/s.exec(text);
+/**
+ * A template's answer (“214|2026-11-28T10:41:53.123+00:00|2026-11-28T10:42:00.004+00:00”): the count, the newest
+ * reading's time and Home Assistant's time now (absent from an answer without it).
+ */
+export function haSensors(text: string): { count: number; newest: Date | null; now: Date | null } | null {
+  const m = /^\s*(\d+)\|([^|]*?)(?:\|([^|]*?))?\s*$/s.exec(text);
   if (!m) return null;
-  const at = m[2] ? Date.parse(m[2]) : Number.NaN;
-  return { count: Number(m[1]), newest: Number.isFinite(at) ? new Date(at) : null };
+  const date = (raw: string | undefined) => {
+    const at = raw ? Date.parse(raw) : Number.NaN;
+    return Number.isFinite(at) ? new Date(at) : null;
+  };
+  return { count: Number(m[1]), newest: date(m[2]), now: date(m[3]) };
 }
 
 /** No sensor changed for this long: Home Assistant answers, but isn't getting readings. */
@@ -467,7 +561,7 @@ const homeassistant: ServiceTest = {
     const read = haSensors(answer.body.toString('utf8'));
     if (!read) throw new StepFailed('read', 'broken', 'unreadable');
     if (read.count === 0 || !read.newest) return EMPTY;
-    const age = Math.max(0, t.now.getTime() - read.newest.getTime());
+    const age = Math.max(0, (read.now ?? t.now).getTime() - read.newest.getTime());
     if (age > HA_STALE_MS) throw new StepFailed('fresh', 'broken', 'stale');
     return ok({ ageS: Math.round(age / 1000) });
   },
@@ -503,9 +597,14 @@ export function testTools(
       }
       const failed = answerFailure(step, answer.status);
       if (failed) throw failed;
+      if (isWebPage(answer)) throw new StepFailed(step, 'broken', 'page', answer.status);
+      // A file's first bytes: an answer without any didn't open it.
+      if (req.firstBytes !== undefined && answer.body.length === 0)
+        throw new StepFailed(step, 'broken', 'unreadable', answer.status);
       return answer;
     },
     json(step, answer) {
+      if (!isJsonType(mediaType(answer))) throw new StepFailed(step, 'broken', 'unreadable');
       try {
         return JSON.parse(answer.body.toString('utf8'));
       } catch {

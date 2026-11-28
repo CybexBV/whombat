@@ -2052,8 +2052,10 @@ Setup and operation: `docs/github.md`.
   Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant each have one read-only test (`tests.ts`) that does what a
   person would through the connection's own sign-in (`signedConnectionFetch`): list files and read a file's first
   bytes, load the newest photo's preview, find the newest library item and read its first bytes, see a sensor's recent
-  reading. A step's failure is `access` (401, 403, a sign-in that can't be renewed), `broken` (another code, an
-  unreadable answer, nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
+  reading (aged by Home Assistant's own clock). A step's failure is `access` (401, 403, a sign-in that can't be
+  renewed), `broken` (another code, an unreadable answer — one without the service's JSON type and fields, a WebDAV
+  listing that isn't a `207 multistatus`, a file with no bytes —, a web page or redirect where its data should be,
+  nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
   (`service_test_runs`, 30 days). The page's card “Does it really work?” (`page.ts`) has Run now and Watch it, which
   go through `things.action` without a change (`actions.ts`). Watch it is the check `works.test` (starts off): the
   connection's health pass runs a watched test when due (every 15 minutes, a confirming run after a first failure, a
