@@ -48,7 +48,7 @@ describe('a Windows PC’s page', () => {
     const facts = serverDashboardView({ detail: d, range: '24h', now: NOW }).details.find(
       (p) => p.id === 'kind_facts',
     );
-    expect(facts?.title).toBe('This PC');
+    expect(facts && 'title' in facts ? facts.title : null).toBe('This PC');
     const text = JSON.stringify(facts);
     expect(text).toContain('Microsoft Defender Antivirus');
     expect(text).toContain('C: on · D: off');
