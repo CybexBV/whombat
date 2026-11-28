@@ -29,6 +29,8 @@ export interface TestRequest {
   body?: string;
   /** Read only this many bytes of the answer (a file's first bytes) and stop. */
   firstBytes?: number;
+  /** The answer is a file's first bytes: what the file must be (`fileFits`). */
+  file?: FileExpect;
   /** The most a whole answer may be (a folder's list). */
   maxBytes?: number;
 }
@@ -145,6 +147,70 @@ export function isWebPage(answer: TestAnswer): boolean {
 /** A JSON answer's type: `application/json` and its kinds (`application/problem+json`). */
 const isJsonType = (type: string) => /^application\/(?:[\w.-]+\+)?json$/.test(type);
 
+/**
+ * What a file must be: a picture (a photo's preview), a film or song, or any file. A JSON answer is never the file
+ * (an error some services send with 200) unless the file itself is JSON (`json`).
+ */
+export interface FileExpect {
+  kind: 'image' | 'media' | 'any';
+  json?: boolean;
+}
+
+const at = (b: Buffer, offset: number, text: string) =>
+  b.subarray(offset, offset + text.length).toString('latin1') === text;
+
+/** What a file's first bytes say it is, by the signature its format starts with; null when Whombat doesn't know it. */
+export function fileSignature(b: Buffer): 'image' | 'media' | 'document' | null {
+  if (b.length < 4) return null;
+  const [b0, b1, b2, b3] = [b[0] ?? 0, b[1] ?? 0, b[2] ?? 0, b[3] ?? 0];
+  if (b0 === 0xff && b1 === 0xd8 && b2 === 0xff) return 'image';
+  if (at(b, 0, '\x89PNG') || at(b, 0, 'GIF8') || at(b, 0, 'II*\0') || at(b, 0, 'MM\0*')) return 'image';
+  if (at(b, 0, 'RIFF') && at(b, 8, 'WEBP')) return 'image';
+  // ISO media (MP4, MOV, M4A, HEIC, AVIF): its brand says whether it is a picture.
+  if (at(b, 4, 'ftyp'))
+    return /^(avif|avis|heic|heix|hevc|hevx|mif1|msf1)$/.test(b.subarray(8, 12).toString('latin1'))
+      ? 'image'
+      : 'media';
+  if (b0 === 0x1a && b1 === 0x45 && b2 === 0xdf && b3 === 0xa3) return 'media';
+  if (at(b, 0, 'OggS') || at(b, 0, 'fLaC') || at(b, 0, 'ID3') || at(b, 0, 'FLV')) return 'media';
+  if (at(b, 0, 'RIFF') && (at(b, 8, 'AVI ') || at(b, 8, 'WAVE'))) return 'media';
+  if (b0 === 0x30 && b1 === 0x26 && b2 === 0xb2 && b3 === 0x75) return 'media';
+  if (b0 === 0 && b1 === 0 && b2 === 1 && (b3 === 0xba || b3 === 0xb3)) return 'media';
+  if (b0 === 0x47 && b.length > 188 && b[188] === 0x47) return 'media';
+  if (b0 === 0xff && (b1 & 0xe0) === 0xe0) return 'media';
+  if (at(b, 0, '%PDF')) return 'document';
+  return null;
+}
+
+/** Types that say nothing of what a file is. */
+const GENERIC_TYPES: ReadonlySet<string> = new Set(['', 'application/octet-stream', 'binary/octet-stream']);
+/** Films and songs some servers give a type outside `video/` and `audio/`. */
+const MEDIA_TYPES: ReadonlySet<string> = new Set([
+  'application/mp4',
+  'application/ogg',
+  'application/x-matroska',
+  'application/vnd.rn-realmedia',
+]);
+
+/** Whether an answer is the file a step opens: not JSON where a file should be, and what the service says it is. */
+export function fileFits(answer: TestAnswer, expect: FileExpect): boolean {
+  const type = mediaType(answer);
+  const head = answer.body.subarray(0, 64).toString('utf8').trimStart();
+  const generic = GENERIC_TYPES.has(type);
+  if (!expect.json && (isJsonType(type) || (generic && /^[{[]/.test(head)))) return false;
+  const signature = fileSignature(answer.body);
+  if (expect.kind === 'image') return type.startsWith('image/') || signature === 'image';
+  if (expect.kind === 'media')
+    return (
+      /^(video|audio)\//.test(type) ||
+      MEDIA_TYPES.has(type) ||
+      signature === 'media' ||
+      // A container Whombat doesn't know by its first bytes, sent without a type: binary, not a text answer.
+      (generic && signature === null && !/^[{[<]/.test(head))
+    );
+  return true;
+}
+
 /** Stops the test when an answer doesn't hold what the service always sends: it isn't the service's answer. */
 const holds = (step: string, ok: boolean): void => {
   if (!ok) throw new StepFailed(step, 'broken', 'unreadable');
@@ -244,6 +310,8 @@ const nextcloud: ServiceTest = {
       path: file.path,
       headers: { Range: `bytes=0-${FIRST_BYTES - 1}`, Accept: '*/*' },
       firstBytes: FIRST_BYTES,
+      // A file the listing doesn't say the type of may be JSON itself.
+      file: { kind: 'any', json: !file.type || isJsonType(file.type) },
     });
     return ok();
   },
@@ -288,6 +356,7 @@ const immich: ServiceTest = {
       query: { size: 'preview' },
       headers: { Accept: 'image/*' },
       firstBytes: FIRST_BYTES,
+      file: { kind: 'image' },
     });
     return ok();
   },
@@ -330,6 +399,7 @@ const paperless: ServiceTest = {
       path: `/api/documents/${id}/download/`,
       headers: { Range: `bytes=0-${FIRST_BYTES - 1}`, Accept: '*/*' },
       firstBytes: FIRST_BYTES,
+      file: { kind: 'any' },
     });
     return ok();
   },
@@ -408,6 +478,7 @@ const jellyfin: ServiceTest = {
         query: { static: 'true' },
         headers: { Range: `bytes=0-${FIRST_BYTES - 1}`, Accept: '*/*' },
         firstBytes: FIRST_BYTES,
+        file: { kind: 'media' },
       });
       return ok({ library: lib.name });
     }
@@ -500,6 +571,7 @@ const plex: ServiceTest = {
         path: part,
         headers: { Range: `bytes=0-${FIRST_BYTES - 1}`, Accept: '*/*' },
         firstBytes: FIRST_BYTES,
+        file: { kind: 'media' },
       });
       return ok({ library: lib.name });
     }
@@ -600,6 +672,8 @@ export function testTools(
       if (isWebPage(answer)) throw new StepFailed(step, 'broken', 'page', answer.status);
       // A file's first bytes: an answer without any didn't open it.
       if (req.firstBytes !== undefined && answer.body.length === 0)
+        throw new StepFailed(step, 'broken', 'unreadable', answer.status);
+      if (req.file && !fileFits(answer, req.file))
         throw new StepFailed(step, 'broken', 'unreadable', answer.status);
       return answer;
     },
