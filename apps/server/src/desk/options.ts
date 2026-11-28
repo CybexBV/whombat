@@ -31,6 +31,7 @@ const PLATFORM_NAMES: Partial<Record<HostServer['platform'], string>> = {
   incus: 'Incus',
   libvirt: 'QEMU',
   macos: 'Mac',
+  windows: 'Windows',
 };
 
 /**

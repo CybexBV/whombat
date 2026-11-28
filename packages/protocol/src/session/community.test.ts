@@ -52,6 +52,7 @@ import {
   OUTSIDE_CHANGES_MINOR,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
+  WINDOWS_MINOR,
 } from './version.js';
 
 const BOX = '12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH';
@@ -92,6 +93,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
     expect(EXPOSURE_MINOR).toBe(22);
     expect(APP_UPDATES_MINOR).toBe(22);
     expect(OUTSIDE_CHANGES_MINOR).toBe(22);
+    expect(WINDOWS_MINOR).toBe(22);
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

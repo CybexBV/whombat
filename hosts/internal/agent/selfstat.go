@@ -1,14 +1,12 @@
 package agent
 
 import (
-	"bufio"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -42,42 +40,6 @@ func (s *selfStats) sample() (rss uint64, cpuPct float64) {
 	return rss, cpuPct
 }
 
-// CPUTimeWithChildren returns the user+system CPU time of this process
-// (all threads) plus that of its terminated, waited-for children.
-func CPUTimeWithChildren() (time.Duration, bool) {
-	var self, children syscall.Rusage
-	if syscall.Getrusage(syscall.RUSAGE_SELF, &self) != nil || syscall.Getrusage(syscall.RUSAGE_CHILDREN, &children) != nil {
-		return 0, false
-	}
-	tv := func(t syscall.Timeval) time.Duration {
-		return time.Duration(t.Sec)*time.Second + time.Duration(t.Usec)*time.Microsecond
-	}
-	return tv(self.Utime) + tv(self.Stime) + tv(children.Utime) + tv(children.Stime), true
-}
-
-// readRSS returns VmRSS from /proc/self/status in bytes.
-func readRSS() uint64 {
-	f, err := os.Open("/proc/self/status")
-	if err != nil {
-		return 0
-	}
-	defer f.Close()
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := sc.Text()
-		if v, ok := strings.CutPrefix(line, "VmRSS:"); ok {
-			fields := strings.Fields(v)
-			if len(fields) >= 1 {
-				n, err := strconv.ParseUint(fields[0], 10, 64)
-				if err == nil {
-					return n * 1024 // kB
-				}
-			}
-		}
-	}
-	return 0
-}
-
 // Install methods reported in AgentInfo.Install.
 const (
 	InstallSystemd = "systemd"
@@ -86,6 +48,9 @@ const (
 	InstallUnraid  = "unraid"
 	InstallManual  = "manual"
 	InstallLaunchd = "launchd"
+	// InstallWindows: a Windows PC whose agent the service manager started
+	// as the whombat-agent service.
+	InstallWindows = "windows"
 )
 
 // LaunchdLabel is the agent's LaunchDaemon on a Mac
@@ -167,6 +132,10 @@ var (
 // cannot change while the agent runs).
 func installMethod(configDir string) string {
 	installOnce.Do(func() {
+		if v, ok := platformInstall(); ok {
+			installValue = v
+			return
+		}
 		dir := configDir
 		if abs, err := filepath.Abs(dir); err == nil {
 			dir = abs

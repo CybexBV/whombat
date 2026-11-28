@@ -114,6 +114,13 @@ import {
 import { unraidFacts } from './unraid-mobile';
 import { isRebootHint, isUpdatesHint, updatesWords } from './updates';
 import { type RunningCounts, serverVerdict, type Verdict } from './verdict';
+import {
+  isWindowsServer,
+  WINDOWS_SERVER_TABS,
+  windowsFacts,
+  windowsFactsTitle,
+  windowsSystemLine,
+} from './windows';
 
 export { type PlacedChart, type PlacedPanels, placePanels, thingSeriesToken } from '../home/thingPage';
 export {
@@ -184,18 +191,28 @@ export function parseDashboardRange(
 /* Kinds, tabs and links ------------------------------------------------------------------------------------- */
 
 /** Which Summary a server gets: the hub's page kind, a Docker host, or a plain Linux one. */
-export type ServerDashboardKind = 'proxmox' | 'unraid' | 'incus' | 'libvirt' | 'docker' | 'linux' | 'macos';
+export type ServerDashboardKind =
+  | 'proxmox'
+  | 'unraid'
+  | 'incus'
+  | 'libvirt'
+  | 'docker'
+  | 'linux'
+  | 'macos'
+  | 'windows';
 
 type KindDetail = Pick<
   HostServerDetail,
   'server' | 'proxmox' | 'unraid' | 'incus' | 'libvirt' | 'workloads'
 > &
-  Partial<Pick<HostServerDetail, 'macos'>>;
+  Partial<Pick<HostServerDetail, 'macos' | 'windows'>>;
 
 export function serverDashboardKind(d: KindDetail): ServerDashboardKind {
   const p: string = d.server.platform;
   // A Mac (macos-servers.md): its own tabs, whatever runs on it.
   if (isMacServer(d)) return 'macos';
+  // A Windows PC (windows-servers.md): no machines, backups or sensors of its own.
+  if (isWindowsServer(d)) return 'windows';
   if (p === 'unraid' || d.unraid) return 'unraid';
   if (p === 'proxmox' || d.proxmox) return 'proxmox';
   if (p === 'incus') return 'incus';
@@ -214,7 +231,9 @@ export function serverDashboardTabs(kind: ServerDashboardKind): readonly string[
         ? LIBVIRT_SERVER_TABS
         : kind === 'macos'
           ? MAC_SERVER_TABS
-          : SERVER_TABS;
+          : kind === 'windows'
+            ? WINDOWS_SERVER_TABS
+            : SERVER_TABS;
 }
 
 /**
@@ -405,6 +424,7 @@ export function serverDashboardHead(
   };
   if (kind === 'unraid' && u) row(w.system, `Unraid ${u.version}`);
   else if (kind === 'macos' && detail.macos?.version) row(w.system, macSystemLine(detail.macos));
+  else if (kind === 'windows' && detail.windows) row(w.system, windowsSystemLine(detail.windows));
   else if (s.os) row(w.system, `${s.os.name.replace(/^Debian GNU\/Linux/, 'Debian')} ${s.os.version}`);
   if (kind === 'incus' && detail.incus) row(w.platform, `Incus ${detail.incus.version}`);
   if (kind === 'libvirt') row(w.platform, LIBVIRT_KIND_WORD);
@@ -1519,6 +1539,8 @@ function hintLink(c: Ctx, h: HostHint): ThingPageLink | undefined {
   // lines (Screen Sharing, its password, Whombat Helper) on its Screen tab.
   if (c.kind === 'macos' && h.kind === 'macos.agent_folder') return tabLink(c, 'system');
   if (c.kind === 'macos' && h.kind.startsWith('macos.')) return tabLink(c, 'screen');
+  // A PC's virus protection is changed on the PC; its page says how it stands in Technical details.
+  if (c.kind === 'windows' && h.kind.startsWith('windows.')) return undefined;
   // A hint about one guest (its id or name as the entity): that guest, on the tab that fixes it.
   const g = c.guests.find((x) => x.id === h.entity || x.name === h.entity);
   if (g) {
@@ -2157,6 +2179,9 @@ function kindFactsPanel(c: Ctx): Panel | null {
   } else if (c.kind === 'macos' && c.d.macos) {
     title = c.w.thisMac;
     facts = macFacts(c.d.macos, c.locale);
+  } else if (c.kind === 'windows' && c.d.windows) {
+    title = windowsFactsTitle(c.locale);
+    facts = windowsFacts(c.d.windows, c.now, c.locale);
   } else return null;
   return {
     kind: 'facts',

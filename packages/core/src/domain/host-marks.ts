@@ -1,6 +1,7 @@
 /**
  * A server's mark (CT-399; Whombat marks.md MK-01): what it runs, drawn as its maker's logo in the sidebar, on Home and
- * in a server's page head; a Mac as Whombat's own screen glyph (`mac`, no maker's logo). Proxmox VE and Unraid are known
+ * in a server's page head; a Mac as Whombat's own screen glyph (`mac`, no maker's logo), a Windows PC as its own
+ * computer glyph (`pc`). Proxmox VE and Unraid are known
  * by the server's platform (a Proxmox host's os-release says
  * Debian); any other server by its operating system's name (os-release `PRETTY_NAME`: “Debian GNU/Linux 13 (trixie)”,
  * “Ubuntu 24.04.1 LTS”), Tux for a Linux nobody has a mark for. The names are the clients' brand marks
@@ -12,6 +13,8 @@ import type { HostServerPlatform } from './hosts.js';
 const OS_PATTERNS: readonly (readonly [RegExp, string])[] = [
   // A Mac is Whombat's own screen glyph, never Apple's logo (a trademark; Whombat macos-servers.md).
   [/\bmacos\b|\bmac os\b|\bos x\b/i, 'mac'],
+  // A Windows PC is Whombat's own computer glyph, never Microsoft's logo (a trademark; Whombat windows-servers.md).
+  [/\bwindows\b/i, 'pc'],
   [/\bproxmox\b/i, 'proxmox'],
   [/\bunraid\b/i, 'unraid'],
   [/\btruenas\b/i, 'truenas'],
@@ -76,9 +79,9 @@ export function osMark(os: string | null | undefined): string | null {
 }
 
 /**
- * A server's mark: Proxmox VE, Unraid or a Mac by its platform, else its operating system's (`osMark`); an Incus or a
- * libvirt server whose system isn't known shows Linux Containers' or QEMU's mark, any other one null (the clients draw
- * a server).
+ * A server's mark: Proxmox VE, Unraid, a Mac or a Windows PC by its platform, else its operating system's (`osMark`);
+ * an Incus or a libvirt server whose system isn't known shows Linux Containers' or QEMU's mark, any other one null (the
+ * clients draw a server).
  */
 export function hostOsMark(server: {
   platform: HostServerPlatform;
@@ -87,6 +90,7 @@ export function hostOsMark(server: {
   if (server.platform === 'proxmox') return 'proxmox';
   if (server.platform === 'unraid') return 'unraid';
   if (server.platform === 'macos') return 'mac';
+  if (server.platform === 'windows') return 'pc';
   const mark = osMark(server.os);
   if (mark) return mark;
   if (server.platform === 'incus') return 'linuxcontainers';

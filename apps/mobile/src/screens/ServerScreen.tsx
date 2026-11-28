@@ -42,6 +42,7 @@ import {
   isIncusServer,
   isMacServer,
   isUnraidServer,
+  isWindowsServer,
   MAC_PHONE_TABS,
   MAC_PHONE_TABS_WITH_FIND_MY,
   SERVER_DASHBOARD_DEFAULT_RANGE,
@@ -211,6 +212,8 @@ export function ServerScreen({
   // A Mac (macos-servers.md): its Summary and its Screen, nothing running on it to list; its Summary links to the Find
   // My connection that reads it (findmy-connection.md §1.5).
   const mac = !!d && isMacServer(d);
+  // A Windows PC (windows-servers.md): its Summary alone, nothing running on it Whombat reaches.
+  const windows = !!d && isWindowsServer(d);
   const findMy = useFindMyConnectionOf(slug, mac ? serverId : null);
   // An older Whombat has no Find My connection: its Mac keeps its own Find My segment until it is updated.
   const findMyHere = useFindMyOnMac(mac);
@@ -257,11 +260,13 @@ export function ServerScreen({
   const proxmox = !!d?.proxmox || d?.server.platform === 'proxmox';
   const tabs: ServerTab[] = mac
     ? [...(findMyHere ? MAC_PHONE_TABS_WITH_FIND_MY : MAC_PHONE_TABS)]
-    : unraid
-      ? ['summary', 'array', 'guests', 'plugins']
-      : proxmox || incus || libvirt
-        ? ['summary', 'guests', 'backups']
-        : ['summary', 'guests'];
+    : windows
+      ? ['summary']
+      : unraid
+        ? ['summary', 'array', 'guests', 'plugins']
+        : proxmox || incus || libvirt
+          ? ['summary', 'guests', 'backups']
+          : ['summary', 'guests'];
   const phoneTabs = serverPhoneTabs(tabs, rawLocale);
   const shownTab: ServerTab = tabs.includes(tab) ? tab : 'summary';
   const canChange = true;
@@ -461,24 +466,27 @@ export function ServerScreen({
                 error={dash.error}
               />
             ) : null}
-            <View
-              onLayout={(e) => {
-                tabsAt.current = e.nativeEvent.layout.y;
-              }}
-            >
-              <UnderlineTabs<ServerTab>
-                label={tMobile('screens2.common.whatToShow', { name: shown })}
-                value={shownTab}
-                onChange={setTab}
-                tabs={tabs.map((t) => ({
-                  key: t,
-                  // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
-                  label:
-                    t === 'guests' && d ? guestsWord(serverDashboardKind(d), rawLocale) : serverCopyHere[t],
-                }))}
-                bleed={INSET}
-              />
-            </View>
+            {/* One tab (a Windows PC's Summary) needs no row to pick it. */}
+            {tabs.length > 1 ? (
+              <View
+                onLayout={(e) => {
+                  tabsAt.current = e.nativeEvent.layout.y;
+                }}
+              >
+                <UnderlineTabs<ServerTab>
+                  label={tMobile('screens2.common.whatToShow', { name: shown })}
+                  value={shownTab}
+                  onChange={setTab}
+                  tabs={tabs.map((t) => ({
+                    key: t,
+                    // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
+                    label:
+                      t === 'guests' && d ? guestsWord(serverDashboardKind(d), rawLocale) : serverCopyHere[t],
+                  }))}
+                  bleed={INSET}
+                />
+              </View>
+            ) : null}
             {shownTab === 'screen' && mac && d ? (
               <MacScreenPart serverId={serverId} serverName={shown} detail={d} now={now} />
             ) : shownTab === 'findmy' && mac ? (

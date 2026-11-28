@@ -32,6 +32,7 @@ import { clientBelowFloor } from '@whombat/release';
 import { and, eq, inArray } from 'drizzle-orm';
 import { eventFor } from '../../automations/older-apps';
 import { principals } from '../../db/schema/index';
+import { hostsEventFor } from '../../hosts/older-apps';
 import { presenceFor } from '../../realtime/presence-tracker';
 import type { SessionScope } from '../claim';
 import type { SessionTransport } from '../direct/transport';
@@ -790,7 +791,7 @@ export class SessionConnection {
               ephemeral: true,
               sub: e.subscription,
               topic: e.topic,
-              event: eventFor(e.event, this.minor),
+              event: hostsEventFor(eventFor(e.event, this.minor), this.minor),
             });
             return;
           }
@@ -800,8 +801,8 @@ export class SessionConnection {
             sub: e.subscription,
             cursor: e.cursor,
             topic: e.topic,
-            // An older app gets what its contracts read (`automations/older-apps.ts`).
-            event: eventFor(e.event, this.minor),
+            // An older app gets what its contracts read (`automations/older-apps.ts`, `hosts/older-apps.ts`).
+            event: hostsEventFor(eventFor(e.event, this.minor), this.minor),
           });
           if (!sent) tooLarge(e.cursor);
         },

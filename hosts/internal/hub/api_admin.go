@@ -155,6 +155,10 @@ func (h *Hub) apiCreateEnrollment(w http.ResponseWriter, r *http.Request, p *pri
 	if err != nil {
 		return apiErr(http.StatusServiceUnavailable, "no_agent_url", "The hub does not know the address agents reach it at: "+err.Error()+".")
 	}
+	winCmd, err := h.installCommandWindows(r, token, set.Control)
+	if err != nil {
+		return apiErr(http.StatusServiceUnavailable, "no_agent_url", "The hub does not know the address agents reach it at: "+err.Error()+".")
+	}
 	id := newID("en_")
 	now := h.now()
 	exp := now.Add(h.cfg.EnrollmentTTL)
@@ -178,6 +182,11 @@ func (h *Hub) apiCreateEnrollment(w http.ResponseWriter, r *http.Request, p *pri
 	out := map[string]any{
 		"id": id, "token": token, "expires_at": exp.UTC().Format(time.RFC3339), "install_command": cmd,
 		"ca_sha256": h.ca.Pin, "approve": set.Approve, "control": sp(set.Control), "name": sp(set.Name),
+	}
+	if winCmd != "" {
+		// A Windows PC's line, and how to remove its agent again; absent
+		// while the hub has no Windows build.
+		out["install_command_windows"], out["uninstall_command_windows"] = winCmd, WindowsUninstallLine
 	}
 	if au, err := h.agentURL(r); err == nil && au != "" {
 		out["agent_url"] = au

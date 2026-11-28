@@ -16,14 +16,17 @@ const (
 	OSFamilyMacOS = "macos"
 )
 
-// OSFamily is the server's system: "macos" for a Mac's agent, "linux"
-// for every other report, "" before the first one.
+// OSFamily is the server's system: "macos" for a Mac's agent, "windows"
+// for a Windows PC's, "linux" for every other report, "" before the first
+// one.
 func OSFamily(r *proto.Report) string {
 	switch {
 	case r == nil:
 		return ""
 	case r.MacOS != nil || r.Agent.OS == "darwin":
 		return OSFamilyMacOS
+	case r.Windows != nil || r.Agent.OS == "windows":
+		return OSFamilyWindows
 	}
 	return OSFamilyLinux
 }

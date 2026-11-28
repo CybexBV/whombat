@@ -64,6 +64,7 @@ import {
   type HostUnraidDetail,
   type HostUnraidDisk,
   type HostUnraidParityRun,
+  type HostWindowsDetail,
   hostWatchLimit,
 } from '@whombat/core';
 import { toAgentUpdate, withAgentUpdateHints } from './agent-updates';
@@ -236,7 +237,7 @@ function remoteControlFromCard(card: J): HostRemoteControl {
 
 /* Fleet -------------------------------------------------------------------------------------------------------------- */
 
-const SERVER_KINDS = new Set(['proxmox', 'incus', 'unraid', 'libvirt', 'macos']);
+const SERVER_KINDS = new Set(['proxmox', 'incus', 'unraid', 'libvirt', 'macos', 'windows']);
 
 /** The hub's `detail_view` as the server's kind of page (IU-03): an unknown one is a standard page. */
 export function serverPlatform(detailView: unknown): HostServerPlatform {
@@ -245,11 +246,12 @@ export function serverPlatform(detailView: unknown): HostServerPlatform {
 }
 
 /**
- * The hub's `os_family` (macos-servers.md): `macos` for a Mac; anything else is left out (Linux, as before Macs),
- * but a Mac's page is a Mac whatever the hub said.
+ * The hub's `os_family` (macos-servers.md, windows-servers.md): `macos` for a Mac, `windows` for a Windows PC; anything
+ * else is left out (Linux, as before Macs), but a Mac's or a PC's page is one whatever the hub said.
  */
 export function osFamily(raw: unknown, detailView?: unknown): HostOsFamily | undefined {
   if (raw === 'macos' || detailView === 'macos') return 'macos';
+  if (raw === 'windows' || detailView === 'windows') return 'windows';
   return raw === 'linux' ? 'linux' : undefined;
 }
 
@@ -860,6 +862,7 @@ export function toHostServerDetail(
   if (d.unraid && typeof d.unraid === 'object') out.unraid = toHostUnraidDetail(d.unraid);
   if (d.libvirt && typeof d.libvirt === 'object') out.libvirt = toHostLibvirtDetail(d.libvirt);
   if (d.macos && typeof d.macos === 'object') out.macos = toHostMacosDetail(d.macos);
+  if (d.windows && typeof d.windows === 'object') out.windows = toHostWindowsDetail(d.windows);
   if (!proxmox) {
     const w = obj(d.workloads);
     const workloads: Record<string, HostPlatformWorkload> = {};
@@ -1240,6 +1243,56 @@ export function toHostMacosDetail(raw: unknown): HostMacosDetail {
   };
 }
 
+/* Windows (windows-servers.md) ------------------------------------------------------------------------- */
+
+const onOffUnknown = (v: unknown): 'on' | 'off' | 'unknown' => (v === 'on' || v === 'off' ? v : 'unknown');
+
+/** The `windows` part of a Windows PC's detail: its version, its protection and BitLocker. */
+export function toHostWindowsDetail(raw: unknown): HostWindowsDetail {
+  const w = obj(raw);
+  const p = obj(w.protection);
+  const d = p.defender && typeof p.defender === 'object' ? obj(p.defender) : null;
+  return {
+    product: text(w.product, 'Windows').slice(0, 200),
+    displayVersion: named(w.display_version, 60),
+    build: named(w.build, 60),
+    edition: named(w.edition, 60),
+    server: bool(w.server),
+    manufacturer: named(w.manufacturer),
+    model: named(w.model),
+    updatesCheckedAt: goTime(w.updates_checked_at),
+    updatesInstalledAt: goTime(w.updates_installed_at),
+    protection: {
+      state: onOffUnknown(p.state),
+      product: named(p.product),
+      defender: d
+        ? {
+            running: bool(d.running),
+            mode: text(d.mode).slice(0, 20),
+            realTime: bool(d.real_time),
+            tamper: known(d.tamper),
+            signaturesAt: goTime(d.signatures_at),
+            quickScanAt: goTime(d.quick_scan_at),
+          }
+        : null,
+      antivirus: (Array.isArray(p.antivirus) ? p.antivirus : []).slice(0, 8).map((a) => {
+        const x = obj(a);
+        return { name: text(x.name).slice(0, 200), on: bool(x.on), upToDate: bool(x.up_to_date) };
+      }),
+    },
+    bitlocker: Array.isArray(w.bitlocker)
+      ? w.bitlocker.slice(0, 26).map((v) => {
+          const x = obj(v);
+          return {
+            drive: text(x.drive).slice(0, 3),
+            protection: onOffUnknown(x.protection),
+            system: bool(x.system),
+          };
+        })
+      : null,
+  };
+}
+
 const SCREEN_CODES: ReadonlySet<string> = new Set(HOST_SCREEN_CODES);
 /** Values the helper cuts to 200 characters; Whombat keeps a little more room. */
 const uiText = (v: unknown, max = 400): string | null => {
@@ -1576,6 +1629,10 @@ export function toHostEnrollment(raw: unknown): HostEnrollment {
     expiresAt: ts(e.expires_at) ?? new Date(Date.now() + 3600_000).toISOString(),
     // The hub starts the command with a space (kept out of shell history); the copy button copies it as it is.
     installCommand: text(e.install_command).slice(0, 4000),
+    // A Windows PC's line, while the box has a Windows agent (windows-servers.md).
+    ...(text(e.install_command_windows)
+      ? { installCommandWindows: text(e.install_command_windows).slice(0, 4000) }
+      : {}),
     ...(control ? { control } : {}),
     // Every enrollment Whombat makes is pre-approved (SI-07); an older hub doesn't say.
     ...(typeof e.approve === 'boolean' ? { preApproved: e.approve } : {}),

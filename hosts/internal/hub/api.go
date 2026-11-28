@@ -68,6 +68,7 @@ func (h *Hub) UIHandler() http.Handler {
 	// credential for one alert).
 	mux.HandleFunc("POST /api/v1/alerts/{id}/ack-link", h.serveAckLink)
 	mux.HandleFunc("GET /install.sh", h.installScript(false))
+	mux.HandleFunc("GET /install.ps1", h.serveInstallPS1)
 	mux.HandleFunc("GET /download/{name}", h.serveDownload)
 	mux.Handle("/", h.staticHandler())
 	return h.securityHeaders(h.logRequests(mux))

@@ -110,12 +110,22 @@ const noUIPage = `<!doctype html>
 </body></html>
 `
 
-// agentArchs are the downloadable agent builds' architectures, for Linux
-// and macOS.
+// agentArchs are the downloadable agent builds' architectures, for Linux,
+// macOS and Windows.
 var agentArchs = []string{"amd64", "arm64"}
 
-// agentFileName is an agent build's file name ("whombat-agent-darwin-arm64").
-func agentFileName(goos, arch string) string { return "whombat-agent-" + goos + "-" + arch }
+// agentOSes are the systems the hub serves agent builds for.
+var agentOSes = []string{"linux", "darwin", "windows"}
+
+// agentFileName is an agent build's file name ("whombat-agent-darwin-arm64",
+// "whombat-agent-windows-amd64.exe").
+func agentFileName(goos, arch string) string {
+	name := "whombat-agent-" + goos + "-" + arch
+	if goos == "windows" {
+		name += ".exe"
+	}
+	return name
+}
 
 func agentBinaryName(arch string) string { return agentFileName("linux", arch) }
 
@@ -128,9 +138,11 @@ const (
 
 // downloadable lists the files /download/ serves from --agent-dist.
 func downloadable(name string) bool {
-	for _, a := range agentArchs {
-		if name == agentFileName("linux", a) || name == agentFileName("darwin", a) {
-			return true
+	for _, o := range agentOSes {
+		for _, a := range agentArchs {
+			if name == agentFileName(o, a) {
+				return true
+			}
 		}
 	}
 	return name == helperZip || name == helperJSON

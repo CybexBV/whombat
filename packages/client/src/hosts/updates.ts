@@ -19,6 +19,7 @@ import { interpolate } from '@whombat/core/i18n';
 import { clientTree } from '../i18n/catalog';
 import { HOSTS_UPDATES_WORDS } from '../i18n/messages/connectionsHosts/hostsBasics';
 import { formatAgoIso } from './format';
+import { windowsUpdatesNote } from './windows';
 
 /* The report (contracts 0.98.0, CT-500…CT-502) ------------------------------------------------------------------ */
 
@@ -197,6 +198,11 @@ export interface ServerUpdatesInput {
   remoteControl: Pick<HostRemoteControl, 'manage' | 'hostPower'>;
   /** An Unraid server: its plugins and OS have their own updates (SWU-01). */
   unraid: boolean;
+  /**
+   * A Windows PC (windows-servers.md): Whombat reads its updates and can restart it, but the person installs them in
+   * Windows Update.
+   */
+  windows?: boolean;
   /** Its agent is connected (an offline one can't be asked). */
   connected: boolean;
   now: number;
@@ -235,7 +241,8 @@ export function serverUpdatesView(input: ServerUpdatesInput): ServerUpdatesView 
   const locale = input.locale;
   const words = updatesWords(locale);
   const s = input.system ?? null;
-  const available = !!s && !input.unraid && reportsUpdates(s);
+  const windows = input.windows === true;
+  const available = !!s && !input.unraid && !windows && reportsUpdates(s);
   const manage = input.remoteControl.manage === true;
   const may = available && manage && input.connected;
   const task = available ? (s?.packageTask ?? null) : null;
@@ -271,12 +278,20 @@ export function serverUpdatesView(input: ServerUpdatesInput): ServerUpdatesView 
     may,
     install: may && !task && count > 0,
     check: may && !task,
-    note: available && !manage && count > 0 ? words.needsFullControl(input.server) : null,
+    note:
+      windows && count > 0
+        ? windowsUpdatesNote(locale)
+        : available && !manage && count > 0
+          ? words.needsFullControl(input.server)
+          : null,
     restart: {
       text: s ? restartLineText(s, locale) : words.restartNotNeeded,
       tone: s?.rebootRequired ? 'warn' : 'ok',
       button:
-        available && input.connected && s?.rebootRequired === true && input.remoteControl.hostPower !== false,
+        (available || (windows && !!s)) &&
+        input.connected &&
+        s?.rebootRequired === true &&
+        input.remoteControl.hostPower !== false,
     },
   };
 }

@@ -438,7 +438,7 @@ describe('servers (CT-1066)', () => {
     const rules = HOST_WATCH_CHECKS.filter((c) => c.rule);
     const hints = HOST_WATCH_CHECKS.filter((c) => c.hint);
     expect(rules).toHaveLength(30);
-    expect(hints).toHaveLength(49);
+    expect(hints).toHaveLength(51);
     expect(new Set(HOST_WATCH_CHECKS.map((c) => c.check)).size).toBe(HOST_WATCH_CHECKS.length);
     for (const c of HOST_WATCH_CHECKS) {
       expect(c.rule === undefined, c.check).not.toBe(c.hint === undefined);
@@ -458,15 +458,15 @@ describe('servers (CT-1066)', () => {
     }
   });
 
-  it('has the catalogue’s kinds: alerts 20 · 8 · 2, the hub’s hints 7 · 12 · 26 and Whombat’s four', () => {
+  it('has the catalogue’s kinds: alerts 20 · 8 · 2, the hub’s hints 7 · 13 · 27 and Whombat’s four', () => {
     const count = (cs: readonly (typeof HOST_WATCH_CHECKS)[number][]) =>
       Object.fromEntries(NOTICE_NATURES.map((n) => [n, cs.filter((c) => c.nature === n).length]));
     expect(count(HOST_WATCH_CHECKS.filter((c) => c.rule))).toEqual({ problem: 20, you: 8, fyi: 2 });
     const own = ['agent.update_failed', 'agent.needs_install', 'backup_place.cleanup', 'backup_place.space'];
     expect(count(HOST_WATCH_CHECKS.filter((c) => c.hint && !own.includes(c.hint)))).toEqual({
       problem: 7,
-      you: 12,
-      fyi: 26,
+      you: 13,
+      fyi: 27,
     });
     expect(own.map((k) => hostHintCheck(k).nature)).toEqual(['you', 'you', 'you', 'fyi']);
     // What a backup place's lines say starts off (backup-places.md BPL-11).

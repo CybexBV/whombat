@@ -52,18 +52,28 @@ export type HostConsoleProtocol = z.infer<typeof HostConsoleProtocol>;
  * (CT-363, Whombat incus-unraid.md IU-03) `incus` (Incus without Proxmox VE or unRAID: projects, pools, images,
  * profiles, networks) and `unraid` (array, parity, pools, shares, plugins); since 0.84 (CT-369, IU-13) `libvirt`
  * (“QEMU/KVM”: libvirt without Proxmox VE, unRAID or Incus; pools, networks, ISO images); `macos` a Mac (Whombat
- * macos-servers.md: its own facts, the screen and the helper, `HostServerDetail.macos`). The hub picks Proxmox
- * VE > unRAID > Incus > libvirt > standard on Linux, and `macos` for every Mac. A client maps a value it doesn't know to
+ * macos-servers.md: its own facts, the screen and the helper, `HostServerDetail.macos`); `windows` a Windows PC (Whombat
+ * windows-servers.md: its version, protection and BitLocker, `HostServerDetail.windows`; sent only to a session at
+ * `WINDOWS_MINOR` or later, an older one sees `standard`). The hub picks Proxmox VE > unRAID > Incus > libvirt >
+ * standard on Linux, `macos` for every Mac and `windows` for every Windows PC. A client maps a value it doesn't know to
  * `standard`.
  */
-export const HostServerPlatform = z.enum(['proxmox', 'standard', 'incus', 'unraid', 'libvirt', 'macos']);
+export const HostServerPlatform = z.enum([
+  'proxmox',
+  'standard',
+  'incus',
+  'unraid',
+  'libvirt',
+  'macos',
+  'windows',
+]);
 export type HostServerPlatform = z.infer<typeof HostServerPlatform>;
 
 /**
- * The family of a server's operating system (Whombat macos-servers.md): what its agent runs on. Absent is
- * `linux` (every agent before Macs).
+ * The family of a server's operating system (Whombat macos-servers.md, windows-servers.md): what its agent runs on.
+ * Absent is `linux` (every agent before Macs). `windows` only to a session at `WINDOWS_MINOR` or later.
  */
-export const HostOsFamily = z.enum(['linux', 'macos']);
+export const HostOsFamily = z.enum(['linux', 'macos', 'windows']);
 export type HostOsFamily = z.infer<typeof HostOsFamily>;
 
 /* Remote control ---------------------------------------------------------------------------------- */
@@ -1284,6 +1294,68 @@ export type HostMacosDetail = z.infer<typeof HostMacosDetail>;
 /** The oldest macOS Whombat's helper runs on. */
 export const HOST_MACOS_MIN_MAJOR = 13;
 
+/* Windows (Whombat windows-servers.md) ----------------------------------------------------------------- */
+
+/**
+ * A Windows PC's antivirus: `on` (Microsoft Defender with real-time protection, or another product Windows Security
+ * lists as on), `off`, or `unknown` (a Windows Server whose own antivirus Windows doesn't name). `product` names the one
+ * that is on.
+ */
+export const HostWindowsProtection = z.object({
+  state: z.enum(['on', 'off', 'unknown']),
+  product: z.string().nullable(),
+  defender: z
+    .object({
+      running: z.boolean(),
+      /** `normal` (Defender protects the PC), `passive` or `edr_block` (another antivirus does), `off`. */
+      mode: z.string(),
+      realTime: z.boolean(),
+      tamper: z.boolean().nullable(),
+      signaturesAt: Timestamp.nullable(),
+      quickScanAt: Timestamp.nullable(),
+    })
+    .nullable(),
+  antivirus: z.array(z.object({ name: z.string(), on: z.boolean(), upToDate: z.boolean() })),
+});
+export type HostWindowsProtection = z.infer<typeof HostWindowsProtection>;
+
+/** One drive's BitLocker: `on`, `off` or `unknown` (locked, or BitLocker can't say); `system` the Windows drive. */
+export const HostWindowsVolume = z.object({
+  drive: z.string(),
+  protection: z.enum(['on', 'off', 'unknown']),
+  system: z.boolean(),
+});
+export type HostWindowsVolume = z.infer<typeof HostWindowsVolume>;
+
+/**
+ * `HostServerDetail.windows`: a Windows PC's own facts from its agent's report. Windows Update's counts and restart are
+ * in the detail's `health.system` as on Linux; here when it last looked and last installed. `bitlocker` null: the PC
+ * doesn't say (no BitLocker there).
+ */
+export const HostWindowsDetail = z.object({
+  /** `Windows 11 Pro`. */
+  product: z.string(),
+  /** `24H2`. */
+  displayVersion: z.string().nullable(),
+  /** `26100.2605`. */
+  build: z.string().nullable(),
+  edition: z.string().nullable(),
+  server: z.boolean(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  updatesCheckedAt: Timestamp.nullable(),
+  updatesInstalledAt: Timestamp.nullable(),
+  protection: HostWindowsProtection,
+  bitlocker: z.array(HostWindowsVolume).nullable(),
+});
+export type HostWindowsDetail = z.infer<typeof HostWindowsDetail>;
+
+/**
+ * Removes the agent from a Windows PC, in PowerShell opened as administrator; its identity stays (as `install.sh
+ * --uninstall` does on Linux), and the person deletes the PC in Whombat to revoke it.
+ */
+export const HOST_WINDOWS_UNINSTALL_COMMAND = '& "$env:ProgramFiles\\Whombat\\whombat-agent.exe" uninstall';
+
 /* On-request disk usage breakdown ------------------------------------------------------------------- */
 
 /** One recognised bucket in an on-request disk usage breakdown (container images, journal, caches, VM disks…). */
@@ -1371,6 +1443,8 @@ export const HostServerDetail = z.object({
   libvirt: HostLibvirtDetail.optional(),
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
+  /** A Windows PC's own facts and protection: on a Windows PC (a session at `WINDOWS_MINOR` or later). */
+  windows: HostWindowsDetail.optional(),
   /**
    * Its week in one line (session minor 9), from its offline alerts and Whombat's
    * incidents: “Up 99.6 % this week · down 3 times, 41 min”. Absent: Whombat has nothing to tell.
@@ -1699,12 +1773,14 @@ export type HostCreateEnrollmentBody = z.infer<typeof HostCreateEnrollmentBody>;
 /**
  * A new enrollment: the one-line install command that dials the box's LAN address with its CA pinned (CT-374):
  * `control`, the level the command sets (it ends with `--control <level>`), and `preApproved` (SI-07), as far as the
- * hosts service says them.
+ * hosts service says them. `installCommandWindows` is the same for a Windows PC, one line for PowerShell opened as
+ * administrator (Whombat windows-servers.md); absent while the box has no Windows agent.
  */
 export const HostEnrollment = z.object({
   id: Id,
   expiresAt: Timestamp,
   installCommand: z.string().min(1).max(4000),
+  installCommandWindows: z.string().min(1).max(4000).optional(),
   control: HostControlLevel.optional(),
   preApproved: z.boolean().optional(),
 });

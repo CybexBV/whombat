@@ -1,9 +1,9 @@
 /**
  * Add a server (ONE-15; Whombat `server-signin.md` SI-01…SI-12; app `server-signin-web.md` AP-1677…): what Whombat may
  * do on it, chosen once above two ways in — **Sign in once** (address, user name and the password or a key from the
- * Vault; Whombat installs its agent over SSH and says how it goes step by step) and **Run a command** (the
- * pre-approved command for the chosen level) — and the servers an older command left waiting for you, each added
- * or turned away. Opened from Servers (`?add=1`), Home and the assistant's card (`&address=&user=&control=`).
+ * Vault; Whombat installs its agent over SSH and says how it goes step by step), **Run a command** (the
+ * pre-approved command for the chosen level) and **Windows PC** (the same as one PowerShell line, windows-servers.md)
+ * — and the servers an older command left waiting for you, each added or turned away. Opened from Servers (`?add=1`), Home and the assistant's card (`&address=&user=&control=`).
  */
 import { useRouterState } from '@tanstack/react-router';
 import {
@@ -34,6 +34,7 @@ import {
   signInFormErrors,
   signInFormForRetry,
   sshKeyChoices,
+  WINDOWS_COPY,
   withKeyDefaults,
 } from '@whombat/client/hosts';
 import {
@@ -47,6 +48,7 @@ import { useVault, useVaultWrite } from '@whombat/client/react';
 import { api } from '@whombat/core/contracts';
 import {
   HOST_CONTROL_LEVELS,
+  HOST_WINDOWS_UNINSTALL_COMMAND,
   type HostControlLevel,
   type HostEnrollment,
   type HostInstall,
@@ -103,7 +105,7 @@ export function AddServerDialog({ burrow, onClose }: { burrow: string; onClose: 
 
 /* Sign in once and Run a command (SI-01) -------------------------------------------------------------------------- */
 
-type Way = 'signin' | 'command';
+type Way = 'signin' | 'command' | 'windows';
 
 function AddServer({ burrow, onClose }: { burrow: string; onClose: () => void }) {
   const HOST_CONTROL_LEVEL_WORDS = useLocaleWords(hostControlLevelWords);
@@ -183,6 +185,7 @@ function AddServer({ burrow, onClose }: { burrow: string; onClose: () => void })
         tabs={[
           { key: 'signin', label: SIGN_IN_COPY.tab },
           { key: 'command', label: COMMAND_COPY.tab },
+          { key: 'windows', label: WINDOWS_COPY.tab },
         ]}
         value={way}
         onChange={setWay}
@@ -210,6 +213,7 @@ function AddServer({ burrow, onClose }: { burrow: string; onClose: () => void })
           <RunCommand
             burrow={burrow}
             control={control}
+            windows={way === 'windows'}
             commands={commands}
             onMade={(level, e) => setCommands((m) => ({ ...m, [level]: e }))}
             onClose={onClose}
@@ -595,12 +599,15 @@ function MoreDetail({ detail }: { detail: string }) {
 function RunCommand({
   burrow,
   control,
+  windows,
   commands,
   onMade,
   onClose,
 }: {
   burrow: string;
   control: HostControlLevel;
+  /** The Windows PC's PowerShell line of the same enrollment, with how to remove the agent again. */
+  windows: boolean;
   /** The commands made so far in this dialog, per level: back to a level shows its command again. */
   commands: Partial<Record<HostControlLevel, HostEnrollment>>;
   onMade: (level: HostControlLevel, e: HostEnrollment) => void;
@@ -635,20 +642,53 @@ function RunCommand({
     refetchInterval: 10_000,
   });
   const done = commandOutcome(enrollment?.id ?? null, all.data?.items ?? []);
+  // A Whombat from before Windows PCs, or one without a Windows agent yet, makes no PowerShell line.
+  const line = windows ? enrollment?.installCommandWindows : enrollment?.installCommand;
   return (
     <>
       <div className={s.command}>
-        <p className={s.lead}>{COMMAND_COPY.lead}</p>
-        {enrollment ? (
+        <p className={s.lead}>
+          {windows ? (
+            <>
+              {WINDOWS_COPY.lead} {WINDOWS_COPY.how}
+            </>
+          ) : (
+            COMMAND_COPY.lead
+          )}
+        </p>
+        {enrollment && line ? (
           <>
-            <code className={styles.code}>{enrollment.installCommand}</code>
+            <code className={styles.code}>{line}</code>
             <div className={s.copyRow}>
-              <CopyButton text={enrollment.installCommand} copied={COMMAND_COPY.copied} className={s.copy}>
+              <CopyButton text={line} copied={COMMAND_COPY.copied} className={s.copy}>
                 {COMMAND_COPY.copy}
               </CopyButton>
-              <span className={s.valid}>{COMMAND_COPY.valid}</span>
+              <span className={s.valid}>{windows ? WINDOWS_COPY.valid : COMMAND_COPY.valid}</span>
             </div>
+            {windows ? (
+              <details className={s.detail}>
+                <summary>
+                  <Icon icon={ChevronRight} size={14} />
+                  {WINDOWS_COPY.removeTitle}
+                </summary>
+                <div className={s.remove}>
+                  <span className={s.valid}>{WINDOWS_COPY.remove}</span>
+                  <code className={styles.code}>{HOST_WINDOWS_UNINSTALL_COMMAND}</code>
+                  <div className={s.copyRow}>
+                    <CopyButton
+                      text={HOST_WINDOWS_UNINSTALL_COMMAND}
+                      copied={COMMAND_COPY.copied}
+                      className={s.copy}
+                    >
+                      {WINDOWS_COPY.copyRemove}
+                    </CopyButton>
+                  </div>
+                </div>
+              </details>
+            ) : null}
           </>
+        ) : enrollment ? (
+          <p className={s.lead}>{WINDOWS_COPY.none}</p>
         ) : error ? (
           <p className={styles.error} role="alert">
             {error}

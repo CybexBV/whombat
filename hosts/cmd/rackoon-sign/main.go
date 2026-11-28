@@ -17,13 +17,15 @@
 //	 "files": {"whombat-agent-linux-amd64": {"arch": "amd64", "size": N,
 //	           "sha256": "<hex>", "sig": "<base64 Ed25519 signature of the raw 32-byte digest>"},
 //	           "whombat-agent-darwin-arm64": {"os": "darwin", "arch": "arm64", …},
+//	           "whombat-agent-windows-amd64.exe": {"os": "windows", "arch": "amd64", …},
 //	           "whombat-helper-macos.zip": {"os": "darwin", "arch": "universal",
 //	           "version": "1.0.0", "size": N, "sha256": …, "sig": …}}}
 //
 // Whombat Helper's zip (macos/helper/build.sh) is signed like the agents;
 // its version comes from whombat-helper-macos.json beside it (not signed
 // itself), whose sha256 and size must be the zip's. Only the helper's entry
-// has a version. Any other name must end in -linux-<arch> or -darwin-<arch>.
+// has a version. Any other name must end in -linux-<arch>, -darwin-<arch> or
+// -windows-<arch>.exe.
 //
 // The fingerprint is the first 16 hex digits of SHA-256(public key), as
 // agents report it in AgentInfo.UpdateKey.
@@ -214,20 +216,28 @@ func loadKey() (ed25519.PrivateKey, error) {
 }
 
 // osArchOf takes the system and the architecture from
-// "whombat-agent-<os>-<arch>" (any "<name>-linux-<arch>" or
-// "<name>-darwin-<arch>"). The system is "" for linux (the manifest's
-// default) and "darwin" for macOS.
+// "whombat-agent-<os>-<arch>" (any "<name>-linux-<arch>",
+// "<name>-darwin-<arch>" or "<name>-windows-<arch>.exe"). The system is ""
+// for linux (the manifest's default), "darwin" for macOS and "windows" for
+// Windows.
 func osArchOf(name string) (goos, arch string, err error) {
-	for _, o := range []string{"linux", "darwin"} {
+	for _, o := range []string{"linux", "darwin", "windows"} {
 		sep := "-" + o + "-"
-		if i := strings.LastIndex(name, sep); i >= 0 && i+len(sep) < len(name) {
+		rest := name
+		if o == "windows" {
+			var ok bool
+			if rest, ok = strings.CutSuffix(name, ".exe"); !ok {
+				continue
+			}
+		}
+		if i := strings.LastIndex(rest, sep); i >= 0 && i+len(sep) < len(rest) {
 			if o == "linux" {
 				o = ""
 			}
-			return o, name[i+len(sep):], nil
+			return o, rest[i+len(sep):], nil
 		}
 	}
-	return "", "", fmt.Errorf("%s: name must end in -linux-<arch> or -darwin-<arch>", name)
+	return "", "", fmt.Errorf("%s: name must end in -linux-<arch>, -darwin-<arch> or -windows-<arch>.exe", name)
 }
 
 func hashFile(path string) ([]byte, int64, error) {

@@ -614,4 +614,21 @@ export const HOSTS = splitPairs({
   ],
   'hosts.hint.macos.helper_off.title': ['Whombat Helper isn’t running', 'Whombat Helper draait niet'],
   'hosts.hint.macos.helper_off.detail': ['{user} needs to open it', '{user} moet hem openen'],
+  'hosts.hint.windows.protection_off.title': ['Virus protection is off', 'Virusbescherming staat uit'],
+  'hosts.hint.windows.protection_off.detail': [
+    'No antivirus is on; turn on Microsoft Defender in Windows Security',
+    'Er staat geen antivirus aan; zet Microsoft Defender aan in Windows-beveiliging',
+  ],
+  'hosts.hint.windows.protection_off.realtime.detail': [
+    'Turn on real-time protection in Windows Security → Virus & threat protection',
+    'Zet realtimebeveiliging aan in Windows-beveiliging → Virus- en bedreigingsbeveiliging',
+  ],
+  'hosts.hint.windows.signatures_old.title': [
+    'Virus definitions are {days} days old',
+    'Virusdefinities zijn {days} dagen oud',
+  ],
+  'hosts.hint.windows.signatures_old.detail': [
+    'Windows updates them by itself; check Windows Update',
+    'Windows werkt ze zelf bij; kijk in Windows Update',
+  ],
 });

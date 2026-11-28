@@ -39,16 +39,16 @@ const mac = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('the platform and the OS family', () => {
-  it('appends macos to the server kinds, after the Linux ones', () => {
-    expect(HostServerPlatform.options.at(-1)).toBe('macos');
-    expect(HostServerPlatform.options.slice(0, 5)).toEqual([
+  it('appends macos to the server kinds, after the Linux ones (Windows after it)', () => {
+    expect(HostServerPlatform.options.slice(0, 6)).toEqual([
       'proxmox',
       'standard',
       'incus',
       'unraid',
       'libvirt',
+      'macos',
     ]);
-    expect(HostOsFamily.options).toEqual(['linux', 'macos']);
+    expect(HostOsFamily.options.slice(0, 2)).toEqual(['linux', 'macos']);
   });
 });
 

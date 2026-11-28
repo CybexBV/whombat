@@ -45,6 +45,7 @@ func (h *Hub) AgentHandler() http.Handler {
 	// (the command from POST /enrollments), and heartbeat pings from the
 	// hosts' network.
 	mux.HandleFunc("GET /install.sh", h.installScript(true))
+	mux.HandleFunc("GET /install.ps1", h.serveInstallPS1)
 	mux.HandleFunc("GET /download/{name}", h.serveDownload)
 	mux.HandleFunc("/ping/{token}", h.servePing)
 	mux.HandleFunc("/ping/{token}/{what}", h.servePing)

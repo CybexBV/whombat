@@ -98,7 +98,10 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * its history (`ThingHistory.changes`) and settings copies (`ThingPage.settingsCopy`, `things.settingsCopy`; Whombat
  * outside-changes.md); automations that act without AI: the `run_action` step, the
  * `home_state` and `protect` triggers and run triggers, `limits.cooldownMinutes` and the `act` tag, which a box sends
- * as they are only to a session at minor 22 or later (Whombat direct-automations.md).
+ * as they are only to a session at minor 22 or later (Whombat direct-automations.md); Windows PCs as
+ * servers: a server's `windows` platform and os family and its `windows` block, which a box sends only to a session at
+ * minor 22 or later (an older one sees a standard server), and an enrollment's `installCommandWindows` (Whombat
+ * windows-servers.md).
  */
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
 
@@ -120,6 +123,12 @@ export const OUTSIDE_CHANGES_MINOR = 22;
  * session, says their runs' triggers as a message and drops the tag.
  */
 export const AUTOMATIONS_WITHOUT_AI_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with Windows PCs as servers. Older apps parse a server's platform and os family
+ * strictly, so the box shows them a Windows PC as a standard server without its os family.
+ */
+export const WINDOWS_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

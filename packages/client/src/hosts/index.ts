@@ -35,3 +35,4 @@ export * from './tiles';
 export * from './unraid';
 export * from './updates';
 export * from './verdict';
+export * from './windows';
