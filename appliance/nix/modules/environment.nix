@@ -1,10 +1,10 @@
-# The environments a box can be in (Whombat LNK-01, LNK-01a; NX-520): production, or the maintainers' development
-# stack. One image carries every environment it knows, with each one's public trust documents; a root-owned file on the
+# The environments a box can be in (Whombat LNK-01, LNK-01a; NX-520): the Whombat image has one, production. One image
+# carries every environment it knows, with each one's public trust documents; a root-owned file on the
 # box picks one, absent meaning the image's default (internal/environment):
 #
 #   /etc/whombat/environments.json        {v, default, environments: {<name>: {deviceEnv, controlUrl, appUrl, …}}}
 #   /etc/whombat/environments/<name>/…     each environment's trust documents (support CA, clients and licence keys)
-#   /persist/whombat/environment.json      0644 root, {v: 1, env: "dev"}: written only by root (`whombat-manager
+#   /persist/whombat/environment.json      0644 root, {v: 1, env: "prod"}: written only by root (`whombat-manager
 #                                          environment set`, which moves a box, ONE-06; the bridge release below)
 #   /run/whombat/environment/              resolved at every boot by whombat-environment.service, before the manager,
 #                                          the runtime, the support service and provisioning: environment.json,
@@ -107,7 +107,7 @@ let
     ) envs;
   };
   on = envs != { };
-  devCa = ../../manifest/dev-instance/support-ca.pub;
+  refusedCa = ./refused-support-ca.pub;
   # The key lines of a CA file (`ssh-ed25519 <base64> …`), by their key (as support.nix reads them).
   keysOf =
     f:
@@ -134,7 +134,7 @@ in
       type = types.attrsOf envType;
       default = { };
       description = ''
-        Every environment this image can be in (LNK-01a), by name (`prod`, `dev`). The box file picks one; absent, the
+        Every environment this image can be in (LNK-01a), by name (`prod`). The box file picks one; absent, the
         default. Empty: no environment file is read (the image's own settings, as before NX-520).
       '';
     };
@@ -176,17 +176,16 @@ in
         message = "whombat.environmentBridge names an environment this image doesn't have";
       }
       {
-        # DEV keys never open a box in production (RH-05, NX-416): the production environment's CA is never the
-        # development stack's file nor holds any of its keys. (The image carries the development CA too, for a box
-        # whose root chose that environment.)
+        # A refused CA never opens a box in production (RH-05, NX-416): the production environment's CA is never the
+        # refused file nor holds any of its keys.
         assertion =
           !(envs ? prod)
           || envs.prod.supportCaKeys == null
           || !(
-            envs.prod.supportCaKeys == devCa
-            || lib.any (k: lib.elem k (keysOf devCa)) (keysOf envs.prod.supportCaKeys)
+            envs.prod.supportCaKeys == refusedCa
+            || lib.any (k: lib.elem k (keysOf refusedCa)) (keysOf envs.prod.supportCaKeys)
           );
-        message = "whombat.environments.prod.supportCaKeys: production never pins the DEV support CA (manifest/dev-instance/support-ca.pub)";
+        message = "whombat.environments.prod.supportCaKeys: production never pins a refused support CA (nix/modules/refused-support-ca.pub)";
       }
       {
         # The box's identity says which control it belongs to: a production environment is a prod one.

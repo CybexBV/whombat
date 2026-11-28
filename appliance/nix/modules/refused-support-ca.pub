@@ -1,0 +1,3 @@
+# Support CA keys no Whombat image may trust: the retired development stack's CA. Its signing key is kept in that
+# stack's archive, so production refuses it for good (support.nix and environment.nix assertions).
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL61pV43B6KmDZHqALbNo3CR+9Z2zJoTvBfKHzxJtINa whombat-support-ca-local-2026-10-21
