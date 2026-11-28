@@ -238,7 +238,9 @@ func (p Project) Args() []string {
 
 // Pinned reports whether an image reference names one digest
 // ("app@sha256:…"): nothing newer can come for it.
-func Pinned(ref string) bool { return strings.Contains(ref, "@sha256:") || strings.HasPrefix(ref, "sha256:") }
+func Pinned(ref string) bool {
+	return strings.Contains(ref, "@sha256:") || strings.HasPrefix(ref, "sha256:")
+}
 
 // ---- versions ---------------------------------------------------------------------
 
