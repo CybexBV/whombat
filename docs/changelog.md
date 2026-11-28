@@ -3,6 +3,16 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## Unreleased
+
+- Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
+  container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says
+  whether Whombat did it or it was changed outside Whombat.
+- When your assistant looks into a problem, it sees what changed just before and tells you, without guessing a cause.
+  You can also ask it what changed on something.
+- Whombat keeps a copy of the settings of OPNsense, Pi-hole and Nginx Proxy Manager every night. Download the newest
+  from the service’s page; History tells you what changed in them.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,
