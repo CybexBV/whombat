@@ -253,4 +253,8 @@ func TestScriptCommandQuotes(t *testing.T) {
 	if got != want {
 		t.Errorf("scriptCommand = %s", got)
 	}
+	// PowerShell ends a single-quoted string at a typographic quote too.
+	if got := psQuote("D:\\John’s ‘state’"); got != "'D:\\John’’s ‘‘state’’'" {
+		t.Errorf("psQuote = %s", got)
+	}
 }

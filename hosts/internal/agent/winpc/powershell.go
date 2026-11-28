@@ -42,8 +42,22 @@ func PowerShellPath() string {
 	return filepath.Join(SystemRoot(), "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
 }
 
-// psQuote quotes s for a single-quoted PowerShell string.
-func psQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+// psQuote quotes s for a single-quoted PowerShell string. PowerShell also
+// takes the typographic single quotes (‘ ’ ‚ ‛) as quotes, so each is
+// doubled like the plain one.
+func psQuote(s string) string {
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range s {
+		switch r {
+		case '\'', '\u2018', '\u2019', '\u201a', '\u201b':
+			b.WriteRune(r)
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
 
 // scriptCommand is the -Command that runs a script file without the
 // execution policy: its text as a script block.
