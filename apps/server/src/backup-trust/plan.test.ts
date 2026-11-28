@@ -2,21 +2,19 @@ import { CHANGE_WINDOW_DEFAULT, RESTORE_TEST_TAG } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
   bootVerdict,
-  CLAIM_WINDOW_MS,
   carriesMarker,
   copyMarker,
   copyOwnsDisks,
   copyProblem,
-  copySettings,
   copyTags,
   eligibleGuests,
   freeCopyId,
+  isolationSteps,
   linkDown,
   markedTestId,
   networkDown,
   nextGuest,
   nextTestAt,
-  restoreProves,
   storageFor,
   storagesOf,
   testDue,
@@ -78,7 +76,10 @@ describe('when a test runs', () => {
   it('starts inside the quiet hours with time left, a week after the last one', () => {
     expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, null)).toBe(true);
     expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-26T02:10:00Z'))).toBe(false);
-    expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-22T02:30:00Z'))).toBe(true);
+    expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-22T02:10:00Z'))).toBe(true);
+    // Never sooner than seven days, though the last one started later in the night.
+    expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-22T02:30:00Z'))).toBe(false);
+    expect(testDue(inWindow, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-23T02:00:00Z'))).toBe(false);
     // 04:40: less than half an hour left.
     expect(testDue(new Date('2026-11-29T03:40:00Z'), CHANGE_WINDOW_DEFAULT, TZ, null)).toBe(false);
     // Midday.
@@ -89,7 +90,7 @@ describe('when a test runs', () => {
     expect(nextTestAt(noon, CHANGE_WINDOW_DEFAULT, TZ, null)?.toISOString()).toBe('2026-11-29T02:00:00.000Z');
     expect(nextTestAt(inWindow, CHANGE_WINDOW_DEFAULT, TZ, null)?.toISOString()).toBe(inWindow.toISOString());
     expect(nextTestAt(noon, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-28T02:05:00Z'))?.toISOString()).toBe(
-      '2026-12-04T02:05:00.000Z',
+      '2026-12-05T02:05:00.000Z',
     );
   });
 });
@@ -100,33 +101,41 @@ describe('the copy', () => {
     expect(freeCopyId([101], 990004)).toBe(990005);
   });
 
-  it('marks, pulls every network cable, names and keeps the copy from starting at boot', () => {
-    const marker = copyMarker('rst_0a1b2c');
-    const set = copySettings(
+  it('repairs what of the isolation didn’t take, each part on its own, start at boot first', () => {
+    const steps = isolationSteps(
       'vm',
       {
         name: 'plex',
-        description: 'Media server',
+        description: copyMarker('rst_0a1b2c'),
         net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0',
-        net1: 'virtio=BC:24:11:00:00:02,bridge=vmbr1,link_down=0',
+        net1: 'ne2k_pci=BC:24:11:00:00:02,bridge=vmbr9,link_down=0',
         onboot: '1',
+        protection: '1',
         tags: 'media',
         scsi0: 'local-lvm:vm-990001-disk-0,size=32G',
       },
       'whombat-test-of-plex',
-      marker,
     );
-    expect(set.net0).toContain('link_down=1');
-    expect(set.net1).not.toContain('link_down=0');
-    expect(set).toMatchObject({ name: 'whombat-test-of-plex', onboot: '0', description: marker });
-    expect(set.scsi0).toBeUndefined();
-    expect(set.tags).toBeUndefined();
+    expect(steps.map((s) => Object.keys(s).sort())).toEqual([
+      ['onboot', 'protection'],
+      ['net0', 'net1'],
+      ['name'],
+    ]);
+    expect(steps[0]).toEqual({ onboot: '0', protection: '0' });
+    // The card stays as it is, whatever its model or bridge: only the cable is pulled.
+    expect(steps[1]?.net1).toBe('ne2k_pci=BC:24:11:00:00:02,bridge=vmbr9,link_down=1');
+    expect(steps[1]?.net0).toBe('virtio=BC:24:11:00:00:01,bridge=vmbr0,link_down=1');
+    // A copy the restore cut off needs nothing more.
+    expect(
+      isolationSteps(
+        'container',
+        { hostname: 'x', onboot: '0', net0: 'name=eth0,bridge=vmbr0,link_down=1' },
+        'x',
+      ),
+    ).toEqual([]);
+    expect(isolationSteps('container', { hostname: 'pihole' }, 'x')).toEqual([{ hostname: 'x' }]);
     expect(copyTags({ tags: 'media' })).toBe(`media;${RESTORE_TEST_TAG}`);
     expect(copyTags({ tags: `media;${RESTORE_TEST_TAG}` })).toBeNull();
-    expect(
-      copySettings('container', { hostname: 'pihole', net0: 'name=eth0,bridge=vmbr0' }, 'x', marker).hostname,
-    ).toBe('x');
-    expect(copySettings('vm', { name: 'x', description: marker }, 'x', marker)).toEqual({});
     expect(networkDown({ net0: linkDown('name=eth0,bridge=vmbr0'), memory: '512' })).toBe(true);
     expect(networkDown({ net0: 'name=eth0,bridge=vmbr0' })).toBe(false);
   });
@@ -139,6 +148,13 @@ describe('the copy', () => {
     expect(usesHostParts({ values: { mp0: '/srv/media,mp=/media' } })).toBe(true);
     expect(usesHostParts({ values: { ide2: 'cdrom,media=cdrom' } })).toBe(true);
     expect(usesHostParts({ values: {}, restricted: ['lxc.cgroup2.devices.allow'] })).toBe(true);
+    expect(usesHostParts({ values: {}, restricted: ['lxc.mount.entry'] })).toBe(true);
+    expect(usesHostParts({ values: { ivshmem: 'size=32,name=looking-glass' } })).toBe(true);
+    expect(usesHostParts({ values: { virtiofs0: 'media-share' } })).toBe(true);
+    expect(usesHostParts({ values: { dev0: '/dev/dri/renderD128' } })).toBe(true);
+    expect(usesHostParts({ values: { mp1: 'volume=/mnt/data,mp=/data' } })).toBe(true);
+    expect(usesHostParts({ values: { rng0: 'source=/dev/hwrng' } })).toBe(true);
+    expect(usesHostParts({ values: { rng0: 'source=/dev/urandom' } })).toBe(false);
     expect(
       usesHostParts({
         values: {
@@ -211,32 +227,9 @@ describe('the copy', () => {
     expect(
       copyProblem({ values: ready, pending: { net1: 'virtio,bridge=vmbr1' } }, 990001, 'rst_0a1b2c'),
     ).toBe('network_kept');
-  });
-
-  it('takes the copy only on the proof of the test’s own restore, moments after it finished', () => {
-    const began = new Date('2026-11-29T02:00:00Z');
-    const after = (min: number) => new Date(began.getTime() + min * 60_000);
-    // The server's clock is a day behind: only the restore's length counts.
-    const task = {
-      type: 'qmrestore',
-      guestId: 'pve:990001',
-      status: 'ok',
-      started: '2026-11-28T02:01:00Z',
-      ended: '2026-11-28T02:09:00Z',
-    };
-    expect(restoreProves(task, 990001, began, after(10))).toBe('yes');
-    expect(restoreProves({ ...task, guestId: '990001' }, 990001, began, after(10))).toBe('yes');
-    expect(restoreProves({ ...task, status: 'warning' }, 990001, began, after(10))).toBe('yes');
-    expect(restoreProves(task, 990001, began, after(8 + CLAIM_WINDOW_MS / 60_000 + 1))).toBe('no');
-    expect(restoreProves({ ...task, status: 'running', ended: null }, 990001, began, after(10))).toBe(
-      'running',
-    );
-    // Refused or failed (“already exists”), another number, or not a restore: no proof.
-    expect(restoreProves({ ...task, status: 'error' }, 990001, began, after(10))).toBe('no');
-    expect(restoreProves(task, 990002, began, after(10))).toBe('no');
-    expect(restoreProves({ ...task, type: 'qmstart' }, 990001, began, after(10))).toBe('no');
-    expect(restoreProves({ ...task, guestId: null }, 990001, began, after(10))).toBe('no');
-    expect(restoreProves({ ...task, ended: null }, 990001, began, after(10))).toBe('no');
+    // Still starting with the server.
+    expect(copyProblem({ values: { ...ready, onboot: '1' } }, 990001, 'rst_0a1b2c')).toBe('refused');
+    expect(copyProblem({ values: { ...ready, onboot: '0' } }, 990001, 'rst_0a1b2c')).toBeNull();
   });
 
   it('goes where there is room, the machine’s own storage first', () => {

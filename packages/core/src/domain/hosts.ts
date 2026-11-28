@@ -2807,6 +2807,8 @@ export const HostChoices = z.object({
   /** Other cluster nodes (replication and migration targets). */
   nodes: z.array(z.string()).optional(),
   download: z.boolean().optional(),
+  /** A Proxmox restore can be asked to make the copy cut off from the start (the server's helper can do it). */
+  restoreIsolate: z.boolean().optional(),
   profiles: z.array(z.string()).optional(),
   images: z.array(JsonObject).optional(),
   /** Incus: the projects (0.83, CT-364); `choices` with `project` answers that project's pools, networks, profiles. */

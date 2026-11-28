@@ -130,6 +130,10 @@ export const PROTECTED_MESSAGES = splitPairs({
     'Whombat couldn’t be sure the copy was its own, so it left it alone',
     'Whombat wist niet zeker of de kopie echt van Whombat was en heeft hem met rust gelaten',
   ],
+  'protected.reason.old_helper': [
+    'the server needs Whombat’s newer helper first, which it gets by itself',
+    'de server heeft eerst de nieuwere helper van Whombat nodig, die hij vanzelf krijgt',
+  ],
 
   'protected.problem.startTitle': [
     'The backup of {name} didn’t start when Whombat tried it',

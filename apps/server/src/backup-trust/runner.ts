@@ -2,12 +2,13 @@
  * The restore test job (docs/decisions/backup-trust.md), every minute on the home jobs' tick:
  *
  * 1. moves every test that isn't finished one step on (`restore_tests.step`): choose the newest backup, a storage with
- *    room and a free number for the copy; restore it as a new machine; once the test's own restore has finished, put
- *    the test's marker on the copy while pulling its network cables, renaming and tagging it; check the copy's own
- *    settings; start it; wait until it runs (and, when the real machine has a guest agent, until that answers inside
- *    the copy); then stop and delete the copy. Each step is written down before Proxmox is asked, so a restart carries
- *    on. The real machine is only read, never changed, and a machine at the copy's number without the test's marker
- *    is never changed, started, stopped or deleted: a person's machine can take that number at any time.
+ *    room and a free number for the copy; restore it as a new machine cut off from the start (the restore itself pulls
+ *    its network cables, keeps it from starting with the server, names and tags it and writes the test's marker in its
+ *    notes); check the copy's own settings again, putting on what didn't take; start it; wait until it runs (and, when
+ *    the real machine has a guest agent, until that answers inside the copy); then stop and delete the copy. Each step
+ *    is written down before Proxmox is asked, so a restart carries on. The real machine is only read, never changed,
+ *    and a machine at the copy's number without the test's marker is never changed, started, stopped or deleted: a
+ *    person's machine can take that number at any time.
  * 2. starts the weekly test of each server whose tests are on, in the quiet hours, a week after the last one: the
  *    machine whose turn it is.
  * 3. deletes copies an interrupted test left behind: a machine in the copies' range carrying the marker of a test of
@@ -22,6 +23,7 @@ import {
   isRestoreTestId,
   RESTORE_TEST_FAILED_HINT,
   RESTORE_TEST_FAILURES,
+  RESTORE_TEST_TAG,
   type RestoreTestReason,
   restoreTestName,
   restoreTestProblem,
@@ -50,14 +52,13 @@ import {
   chosenGuests,
   copyMarker,
   copyProblem,
-  copySettings,
   copyTags,
   eligibleGuests,
   freeCopyId,
   guestNumbers,
+  isolationSteps,
   markedTestId,
   nextGuest,
-  restoreProves,
   roomNeeded,
   storageFor,
   storagesOf,
@@ -69,8 +70,8 @@ import {
 type TestRow = typeof restoreTests.$inferSelect;
 type Step = Parameters<typeof stepRestoreTest.apply>[2];
 /**
- * The copy, proven to be the test's own (with its settings as just read); `gone` when nothing is at its number, `wait`
- * while Proxmox holds it or the test's restore still runs, `not_ours` when nothing proves it is the copy.
+ * The copy, proven to be the test's own by its marker (with its settings as just read); `gone` when nothing is at its
+ * number, `wait` while Proxmox holds it (the restore still writing it), `not_ours` without the test's marker.
  */
 type Claim = { copy: GuestFacts; config: HostGuestConfig } | 'gone' | 'wait' | 'not_ours';
 
@@ -383,59 +384,72 @@ export class RestoreTests {
   }
 
   /**
-   * The machine at the copy's number, when it is provably this test's copy: its settings carry the test's marker, or
-   * (with `mark`) the test's own restore made it moments ago, and then the marker goes on first, together with the
-   * copy's other settings, under the digest just read. Asked right before every change, start, stop and delete.
+   * The machine at the copy's number, when it is this test's copy: its settings, read now, carry the test's marker,
+   * which the test's own restore wrote. Asked right before every change, start, stop and delete. Proxmox takes the
+   * settings' digest only on a change: a start, stop or delete goes out a moment after this read, and a machine put at
+   * the number in that moment, by deleting the copy and making another, would be the one acted on.
    */
-  async #claim(t: TestRow, mark: boolean): Promise<Claim> {
+  async #claim(t: TestRow): Promise<Claim> {
     const copy = await this.#copy(t);
     if (!copy || t.copyId === null) return 'gone';
     if (copy.self || !isRestoreTestId(copy.id)) return 'not_ours';
     if (copy.lock) return 'wait';
-    const hosts = hostsFor(this.services);
-    const path = `${G(t.serverId, copy.id)}/config`;
-    const config = toHostGuestConfig(await hosts.call<unknown>({ path, actor: ADMIN }));
-    if (config.lock) return 'wait';
-    if (carriesMarker(config.values, t.id)) return { copy, config };
-    if (!mark || !t.task) return 'not_ours';
-    let proof: ReturnType<typeof restoreProves>;
-    try {
-      const task = toHostTask(
-        await hosts.call<unknown>({
-          path: `${S(t.serverId)}/tasks/${encodeURIComponent(t.task)}`,
-          query: { platform: 'pve' },
-          actor: ADMIN,
-        }),
-      );
-      proof = restoreProves(task, t.copyId, t.startedAt, this.services.clock());
-    } catch (err) {
-      if (transient(err)) throw err;
-      return 'not_ours';
-    }
-    if (proof !== 'yes') return proof === 'running' ? 'wait' : 'not_ours';
-    const set = copySettings(
-      t.kind,
-      config.values,
-      t.copyName ?? restoreTestName(t.guestName),
-      copyMarker(t.id),
+    const config = await this.#markedConfig(t, copy.id);
+    return typeof config === 'string' ? config : { copy, config };
+  }
+
+  /** A copy's settings as they are now, when they carry the test's marker. */
+  async #markedConfig(t: TestRow, guestId: string): Promise<HostGuestConfig | 'wait' | 'not_ours'> {
+    const config = toHostGuestConfig(
+      await hostsFor(this.services).call<unknown>({ path: `${G(t.serverId, guestId)}/config`, actor: ADMIN }),
     );
-    await hosts.call<unknown>({
-      method: 'PUT',
-      path,
-      body: { digest: config.digest, set, confirm: true },
-      actor: ADMIN,
-    });
-    const after = toHostGuestConfig(await hosts.call<unknown>({ path, actor: ADMIN }));
-    if (!carriesMarker(after.values, t.id)) return 'not_ours';
+    if (config.lock) return 'wait';
+    return carriesMarker(config.values, t.id) ? config : 'not_ours';
+  }
+
+  /**
+   * The second check of the copy's isolation, which its restore set: what didn't take is put on now, each part in a
+   * change of its own under the digest just read (start with the server off first, then the cables, then the name), the
+   * marker read again after each. Returns the copy with its settings as they are after.
+   */
+  async #isolate(t: TestRow, claim: Exclude<Claim, string>): Promise<Claim> {
+    const hosts = hostsFor(this.services);
+    const path = `${G(t.serverId, claim.copy.id)}/config`;
+    let config = claim.config;
+    const steps = isolationSteps(
+      t.kind,
+      { ...config.values, ...(config.pending ?? {}) },
+      t.copyName ?? restoreTestName(t.guestName),
+    );
+    for (const set of steps) {
+      try {
+        await hosts.call<unknown>({
+          method: 'PUT',
+          path,
+          body: { digest: config.digest, set, confirm: true },
+          actor: ADMIN,
+        });
+      } catch (err) {
+        if (transient(err)) throw err;
+        // The check after says whether the copy may still start.
+        this.services.log.info(
+          { err: String(err), test: t.id, keys: Object.keys(set) },
+          'restore tests: a part of the copy’s isolation was refused',
+        );
+      }
+      const after = await this.#markedConfig(t, claim.copy.id);
+      if (typeof after === 'string') return after;
+      config = after;
+    }
     // The restore tests' tag only helps a person spot the copy in Proxmox; a cluster that keeps tags to a list refuses it.
-    const tags = copyTags(after.values);
+    const tags = copyTags(config.values);
     if (tags !== null)
       await hosts
-        .call<unknown>({ method: 'PUT', path, body: { digest: after.digest, set: { tags } }, actor: ADMIN })
+        .call<unknown>({ method: 'PUT', path, body: { digest: config.digest, set: { tags } }, actor: ADMIN })
         .catch((err) =>
           this.services.log.info({ err: String(err), test: t.id }, 'restore tests: the copy wasn’t tagged'),
         );
-    return { copy, config: after };
+    return { copy: claim.copy, config };
   }
 
   async #pick(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
@@ -499,6 +513,8 @@ export class RestoreTests {
         roomNeeded(diskBytes, newest.sizeBytes ?? null),
       );
       if (!storage) return this.#end(as, t, 'skipped', 'no_space');
+      // A helper that can't restore the copy cut off from the start would leave it on the network until it is changed.
+      if (!choices.restoreIsolate) return this.#end(as, t, 'skipped', 'old_helper');
       const copyId = freeCopyId(guestNumbers(guests));
       if (copyId === null) return this.#end(as, t, 'skipped', 'no_id');
       await this.#step(as, t, {
@@ -518,7 +534,11 @@ export class RestoreTests {
     }
   }
 
-  /** Asks Proxmox to restore the backup as the copy; a number taken meanwhile moves on to the next free one. */
+  /**
+   * Asks Proxmox to restore the backup as the copy, cut off from the start: the restore itself writes the copy's
+   * settings with every network cable pulled, no start with the server, its name and the test's marker. A number taken
+   * meanwhile moves on to the next free one.
+   */
   async #restore(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
     const hosts = hostsFor(this.services);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -527,7 +547,18 @@ export class RestoreTests {
           await hosts.call<unknown>({
             method: 'POST',
             path: `${S(t.serverId)}/backups/restore`,
-            body: { platform: 'pve', volume: t.volume, new_id: t.copyId, storage: t.storage, unique: true },
+            body: {
+              platform: 'pve',
+              volume: t.volume,
+              new_id: t.copyId,
+              storage: t.storage,
+              unique: true,
+              isolate: {
+                name: t.copyName ?? restoreTestName(t.guestName),
+                marker: copyMarker(t.id),
+                tag: RESTORE_TEST_TAG,
+              },
+            },
             actor: ADMIN,
             timeoutMs: 60_000,
           }),
@@ -542,6 +573,7 @@ export class RestoreTests {
           await this.#step(as, t, { copyId: next });
           continue;
         }
+        if (codeOf(err) === 'agent_outdated') return this.#end(as, t, 'skipped', 'old_helper');
         // Not answered: it may have started. The restoring step looks for the copy before giving up.
         if (transient(err)) return;
         this.services.log.warn({ err: String(err), test: t.id }, 'restore tests: the restore was refused');
@@ -585,10 +617,13 @@ export class RestoreTests {
   async #configuring(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
     if (t.copyId === null) return;
     try {
-      const claim = await this.#claim(t, true);
+      const found = await this.#claim(t);
       // The report hasn't caught up with the restore yet, or Proxmox still holds the copy.
-      if (claim === 'gone' || claim === 'wait') return;
-      if (claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
+      if (found === 'gone' || found === 'wait') return;
+      if (found === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
+      const claim = await this.#isolate(t, found);
+      if (claim === 'wait') return;
+      if (claim === 'gone' || claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
       // The copy's own settings are the backup's: a hook script or a passed-through device the machine had then.
       const problem = copyProblem(claim.config, t.copyId, t.id);
       if (problem) return this.#end(as, t, 'skipped', problem);
@@ -609,7 +644,7 @@ export class RestoreTests {
 
   async #starting(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
     const hosts = hostsFor(this.services);
-    const claim = await this.#claim(t, false);
+    const claim = await this.#claim(t);
     if (claim === 'gone' || t.copyId === null) return this.#end(as, t, 'failed', 'start_failed');
     if (claim === 'wait') return;
     if (claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
@@ -637,7 +672,11 @@ export class RestoreTests {
   }
 
   async #booting(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
-    const copy = await this.#copy(t);
+    // Only the copy's own state counts: a machine that took its number after it went says nothing about the backup.
+    const claim = await this.#claim(t);
+    if (claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
+    if (claim === 'wait') return;
+    const copy = claim === 'gone' ? null : claim.copy;
     const v = bootVerdict({
       kind: t.kind,
       agentExpected: t.agentExpected,
@@ -659,9 +698,7 @@ export class RestoreTests {
     if (t.copyId === null) return this.#step(as, t, { finished: true });
     let claim: Claim;
     try {
-      // A test that ended before its marker went on (a refusal, or an hour gone while restoring) puts it on now when its
-      // own restore proves the copy.
-      claim = await this.#claim(t, true);
+      claim = await this.#claim(t);
     } catch {
       if (t.tries + 1 >= CLEANUP_TRIES) return this.#step(as, t, { finished: true });
       await this.#step(as, t, { tries: t.tries + 1 });
