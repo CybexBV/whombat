@@ -615,7 +615,12 @@ function StepItem({
         {story ? (
           <ConditionStory story={story} rule={rule} />
         ) : (
-          outcome && <span className={styles.rowMeta}>{outcome}</span>
+          outcome && (
+            // An action's line is the whole of what happened: it wraps rather than being cut off on a phone.
+            <span className={step.kind === 'run_action' ? styles.rowMetaWrap : styles.rowMeta}>
+              {outcome}
+            </span>
+          )
         )}
         {assessment && (
           <div className={styles.assessment} data-step-assessment="">
