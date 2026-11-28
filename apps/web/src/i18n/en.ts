@@ -40,18 +40,12 @@ export const EN = {
   'account.phoneApp': 'Get the phone app',
   'account.signOut': 'Sign out',
   'account.versionCopied': 'Version copied.',
-  'overview.nothingConnected': 'Nothing connected yet.',
-  'overview.servers.waiting': {
+  'servers.waiting': {
     one: 'A server is waiting to be added',
     other: '{n} servers are waiting to be added',
   },
-  'overview.servers.waitingHint': 'It ran the install command. Add it, or turn it away if you don’t know it.',
-  'overview.servers.review': 'Review',
-  'overview.servers.unreachable': 'Servers aren’t reachable right now.',
-  'overview.servers.empty': 'No servers yet.',
-  'overview.empty.title': 'Nothing connected yet',
-  'overview.empty.body':
-    'Connect Home Assistant, your router, a NAS or a server, and {assistant} keeps an eye on it. It starts with what it found on your network.',
+  'servers.waitingHint': 'It ran the install command. Add it, or turn it away if you don’t know it.',
+  'servers.review': 'Review',
   'teamReports.conversation': 'Conversation',
   'teamReports.withdrawTitle': 'Withdraw this report?',
   // Language
@@ -227,8 +221,6 @@ export const EN = {
   'place.chat.line': 'You and {agent}',
   'place.inbox.label': 'Inbox',
   'place.inbox.line': 'What needs you',
-  'place.overview.label': 'Overview',
-  'place.overview.line': 'Servers and connections',
   'place.servers.line': 'Your servers and how they are',
   'place.connections.line': 'What’s connected and how it is',
   'place.automations.label': 'Automations',

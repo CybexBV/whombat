@@ -4,10 +4,12 @@
  * crumb back to Connections. The servers list that lived here is part of Connections now: `/things/servers` without
  * the view goes there (the router), with Add a server and its fields.
  */
+
+import { placeWords } from '@whombat/client';
 import { fleetLine, isHostsUnavailable } from '@whombat/client/hosts';
 import { useHostsFleet, useHostsLive, useHostsStatus } from '@whombat/client/hosts/react';
-import { CONNECTIONS_HREF } from '@whombat/core';
-import { useWebI18n } from '../../i18n/provider';
+import { PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
+import { currentLocale, useWebI18n } from '../../i18n/provider';
 import { useBurrowContext } from '../messaging/useRoom';
 import { Crumb } from './dashboard/PageHead';
 import { FleetGuests } from './FleetGuests';
@@ -43,7 +45,7 @@ export function ServersPage({ burrow }: { burrow: string }) {
     <div className={styles.screen} data-screen="servers">
       <div className={styles.scroll}>
         <main className={styles.page} aria-label={t('servers.page.title')}>
-          <Crumb href={CONNECTIONS_HREF} label={t('sidebar.connections')} />
+          <Crumb href={PLACE_HREFS.servers} label={placeWords(currentLocale()).servers.title} />
           <div className={styles.head}>
             <h1 className={styles.titleSans}>{t('servers.page.title')}</h1>
           </div>

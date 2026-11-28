@@ -189,7 +189,7 @@ export function SearchScreen({ navigation, route }: Props) {
       <BackBar
         label={route.params?.back ?? placeWords(rawLocale).chat}
         onPress={goBack}
-        right={<PlacesButton current="search" here={searchCopyHere.title} />}
+        right={<PlacesButton current={null} here={searchCopyHere.title} />}
       />
       <ScrollView
         style={{ flex: 1, borderTopWidth: 1, borderTopColor: theme.colors.line }}

@@ -50,7 +50,7 @@ import {
   useHostsStatus,
   useRefreshHosts,
 } from '@whombat/client/hosts/react';
-import { CONNECTIONS_HREF, thingId } from '@whombat/core';
+import { thingId } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import {
   HOST_ASKS_FIRST,
@@ -64,6 +64,7 @@ import {
 import { ChevronRight } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
+import { PLACE_HREFS } from '../../../app/shell/assistantSidebarModel';
 import { Button } from '../../../components/Button';
 import { CopyButton } from '../../../components/CopyButton';
 import { cx } from '../../../components/cx';
@@ -818,8 +819,8 @@ function AgentCard({
                 inline: true,
               },
             );
-            // Back to Connections, where the servers are (connections-page.md CN-09, AP-2523).
-            if (out.ok) navigate(CONNECTIONS_HREF, { replace: true });
+            // Back to the Servers list.
+            if (out.ok) navigate(PLACE_HREFS.servers, { replace: true });
             else if (out.error) setError(out.message);
             else setRemoving(false);
           })()

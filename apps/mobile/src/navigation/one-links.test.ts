@@ -27,31 +27,40 @@ describe('the shell’s addresses (AP-1351)', () => {
     ['/needs-you?item=hosts.alert%3Aal_1', 'whombat://needs-you/hosts.alert%3Aal_1'],
     ['/watch', 'whombat://needs-you'],
     ['/burrow-hq/watch', 'whombat://needs-you'],
-    // Connections (AP-2550; the Dashboard and Home before it), Chat and Feedback; a thread in a room opens the thread.
-    ['/connections', 'whombat://connections'],
-    ['/burrow-hq/connections', 'whombat://connections'],
+    // The Overview's addresses (the Dashboard and Home before it) open Connections; Chat and Feedback; a thread in a
+    // room opens the thread.
+    ['/connections', 'whombat://connected'],
+    ['/burrow-hq/connections', 'whombat://connected'],
     // A burrow called “whats-new” keeps its old links (What's new is under Settings).
-    ['/whats-new/connections', 'whombat://connections'],
+    ['/whats-new/connections', 'whombat://connected'],
     ['/whats-new/things/connection%3Acon_ha', 'whombat://things/connection%3Acon_ha'],
     ['/connections/extra', 'whombat://inbox'],
-    ['/home', 'whombat://connections'],
-    ['/dashboard', 'whombat://connections'],
-    ['/burrow-hq/dashboard', 'whombat://connections'],
+    ['/home', 'whombat://connected'],
+    ['/dashboard', 'whombat://connected'],
+    ['/burrow-hq/dashboard', 'whombat://connected'],
     ['/chat', 'whombat://chat'],
     ['/feedback', 'whombat://feedback'],
     ['/burrow-hq/feedback', 'whombat://feedback'],
     ['/chat?thread=msg_root1', 'whombat://threads/msg_root1'],
     ['/feedback?thread=msg_rep1#msg_r2', 'whombat://threads/msg_rep1?anchor=msg_r2'],
     ['/dashboard/extra', 'whombat://inbox'],
-    // Things and the servers' list are folded into Connections (CN-07, CN-09).
-    ['/things', 'whombat://connections'],
-    // The servers' old list scrolls Overview to its Servers section; an old `?tab=` to its section (OVP-01).
-    ['/things/servers', 'whombat://connections?tab=servers'],
-    ['/things/servers?view=guests', 'whombat://connections?tab=servers'],
-    ['/connections?tab=pinned', 'whombat://connections?tab=pinned'],
-    ['/home?tab=connections', 'whombat://connections?tab=services'],
-    ['/connections?tab=nothing', 'whombat://connections'],
-    ['/things?add=server', 'whombat://connections'],
+    // Things opens Connections; the servers' old list and the Overview's Servers section open Servers.
+    ['/things', 'whombat://connected'],
+    ['/things/servers', 'whombat://servers'],
+    ['/things/servers?view=guests', 'whombat://servers'],
+    ['/connections?tab=servers', 'whombat://servers'],
+    ['/dashboard?tab=servers', 'whombat://servers'],
+    ['/connections?tab=pinned', 'whombat://connected'],
+    ['/home?tab=connections', 'whombat://connected'],
+    ['/connections?tab=nothing', 'whombat://connected'],
+    // Add a server from the Overview's old addresses, as the web opened it there.
+    ['/things?add=server', 'whombat://servers/add?user=root&control=full'],
+    [
+      '/connections?add=1&address=10.100.0.40',
+      'whombat://servers/add?address=10.100.0.40&user=root&control=full',
+    ],
+    ['/servers?add=1', 'whombat://servers/add?user=root&control=full'],
+    ['/servers?repoint=1', 'whombat://servers/repoint'],
     ['/things/server%3Apve-02', 'whombat://things/server%3Apve-02'],
     ['/things/server:pve-02', 'whombat://things/server%3Apve-02'],
     ['/burrow-hq/things/connection%3Acon_ha', 'whombat://things/connection%3Acon_ha'],
@@ -99,12 +108,12 @@ describe('the shell’s addresses (AP-1351)', () => {
       '/burrow-hq/things/servers?add=1&address=pve-03.home',
       'whombat://servers/add?address=pve-03.home&user=root&control=full',
     ],
-    ['/things/servers?add=0', 'whombat://connections?tab=servers'],
+    ['/things/servers?add=0', 'whombat://servers'],
     // Point them here (backup-file.md AP-4421): BF-16's Needs you item, and Connections with it open on the web.
     ['/things/servers?repoint=1', 'whombat://servers/repoint'],
     ['/burrow-hq/things/servers?repoint=1', 'whombat://servers/repoint'],
     ['/connections?repoint=1', 'whombat://servers/repoint'],
-    ['/connections?repoint=0', 'whombat://connections'],
+    ['/connections?repoint=0', 'whombat://connected'],
   ])('%s opens %s', (path, url) => {
     expect(appUrlForPath(path)).toBe(url);
   });
@@ -124,10 +133,13 @@ describe('the shell’s addresses (AP-1351)', () => {
       ChatRoom: { path: 'chat', alias: ['chats', 'code'] },
       // Needs you takes Watch's address and the inbox's (NYL-05, NYL-09).
       NeedsYou: { path: 'needs-you', alias: ['watch', 'inbox'] },
-      // `dashboard`, `home` and `things` are Connections' old names (AP-2550).
-      Dashboard: { path: 'connections', alias: ['dashboard', 'home', 'things'] },
       Automations: 'automations',
       Settings: 'settings',
+    });
+    // The Overview's addresses (and `dashboard`, `home` and `things` before it) open the Connections place.
+    expect(LINKING_SCREENS.ConnectionsPlace).toEqual({
+      path: 'connected',
+      alias: ['connections', 'dashboard', 'home', 'things'],
     });
     expect('Automations' in LINKING_SCREENS || 'Settings' in LINKING_SCREENS).toBe(false);
     expect(LINKING_SCREENS.NeedsYouItem).toBe('needs-you/:itemId');
@@ -234,6 +246,12 @@ describe('where the person was (AP-1374, AP-2645)', () => {
       { name: 'Tabs' },
       { name: 'Settled', params: { room: 'chat' } },
       thread,
+    ]);
+    // What the Overview opened comes back as Chat's too: the tabs open on Chat.
+    const thing = { name: 'Thing', params: { thingId: 'server:pve-02', back: 'Overview' } };
+    expect(restore(saved('Dashboard', [thing]))?.routes).toEqual([
+      { name: 'Tabs' },
+      { name: 'Thing', params: { thingId: 'server:pve-02', back: 'Chat' } },
     ]);
     // Settings saved as a page over the tabs is a tab again: it isn't restored, as no tab is.
     expect(restorableRoute({ name: 'Settings' }, world)).toBe(false);

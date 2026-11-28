@@ -35,6 +35,7 @@ import { startedChatRoute } from '../data/chatRoom';
 import { whereOf } from '../data/people';
 import { useAgentWords } from '../data/useAgent';
 import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import { navigateTo } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { Text } from '../theme/Text';
@@ -62,7 +63,7 @@ export function ApprovalScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { slug, bootstrap } = useBurrow();
   const ctx = useViewContext();
-  const { number, back = tMobile('places.overview') } = route.params;
+  const { number, back = backWordUnder(navigation.getState(), route.key, rawLocale) } = route.params;
   const query = useApproval({ params: { burrow: slug, number } });
   const feedback = useDecisionFeedback();
   const words = useAgentWords();

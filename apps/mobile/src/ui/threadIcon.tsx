@@ -162,7 +162,7 @@ function RepoTile({
   );
 }
 
-/** The thing a thread is about, with the mark the app gives it elsewhere (Places, Overview), on a quiet tile. */
+/** The thing a thread is about, with the mark the app gives it elsewhere (Places, Servers, Connections), on a quiet tile. */
 function SubjectTile({
   kind,
   id,

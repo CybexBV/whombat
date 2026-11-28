@@ -496,7 +496,19 @@ describe('a chat and a widget about a server', () => {
       .limit(1);
     expect(point?.values.cpu_pct).toEqual(expect.any(Number));
     expect(point?.values.mem_pct).toEqual(expect.any(Number));
-    const gone = await pin('no-such-server');
+    // Not one of the servers and no page named: no page to put it on.
+    await expect(pin('no-such-server')).rejects.toMatchObject({ code: 'not_found' });
+    // One reading a server that is gone, kept on another's page, says so when it is read.
+    const gone = await t.commit(
+      whombat.agentId,
+      pinWidget,
+      {
+        title: 'Gone',
+        source: { kind: 'server_metric', serverId: 'no-such-server', series: ['cpu_pct'] },
+        thingId: 'server:basalt',
+      },
+      forMara,
+    );
     if (gone.status !== 'ok') throw new Error(gone.status);
     await t.services.background.settle();
     expect(await refreshWidget(t.services, gone.result.widgetId)).toBe(false);

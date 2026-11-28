@@ -1,7 +1,7 @@
 /**
  * Search on the phone (docs/decisions/phone-shell-final.md): one page that finds a chat, a thing, a setting or a place by
  * its words, grouped as Chats, Things, Settings and Places. It looks through what the app already read — Chat's and
- * Feedback's threads and Overview's servers and connections — and the app's own list of settings and places; nothing is
+ * Feedback's threads and the servers and connections — and the app's own list of settings and places; nothing is
  * asked of an AI. Pure: the screen is `screens/SearchScreen.tsx`.
  */
 
@@ -88,7 +88,7 @@ export type SearchOpen =
   /** `href`: the address to follow instead of its page (an account a box gives no page), as the sidebar does. */
   | { kind: 'thing'; thingId: string; title: string; href?: string | null }
   | { kind: 'setting'; target: SettingTarget }
-  | { kind: 'place'; place: Exclude<PlaceId, 'search'> };
+  | { kind: 'place'; place: PlaceId };
 
 export interface SearchEntry {
   key: string;
@@ -152,7 +152,7 @@ export function searchEntries(input: {
   for (const row of [...servers, ...connections]) {
     const thing = byId.get(row.id);
     const server = facts.get(row.id);
-    // A server as Overview says it (“Proxmox VE 9.0 · Running warm”), a connection by how it is and its own line.
+    // A server as Servers says it (“Proxmox VE 9.0 · Running warm”), a connection by how it is and its own line.
     const line = server
       ? [server.osLine.split(' · ')[0], server.status]
       : [row.reason ?? statusLabels[row.status], thing?.line];
@@ -178,10 +178,8 @@ export function searchEntries(input: {
       open: { kind: 'setting', target: s.target },
     });
   for (const place of PLACES) {
-    if (place === 'search') continue;
-    // Servers and Connections once they hold something, as the Places sheet shows them.
+    // Servers once there is one; Connections always, as the Places sheet shows them.
     if (place === 'servers' && !servers.length) continue;
-    if (place === 'connections' && !connections.length) continue;
     out.push({
       key: `place:${place}`,
       group: 'places',
@@ -263,8 +261,8 @@ export function searchSuggestions(entries: readonly SearchEntry[], locale?: stri
 
 /**
  * The settings Search finds, as the Settings tab lists them: You (and its notifications), the theme, the assistant by
- * its name, Connections, This Whombat, the box's screen where it has one, Advanced and each of Advanced's pages. Usage is
- * a place of its own, so its Advanced row isn't listed twice.
+ * its name, Connections, This Whombat, the box's screen where it has one, Advanced and each of Advanced's pages (Usage
+ * among them).
  */
 export function searchSettings(input: {
   assistant: string;
@@ -388,7 +386,6 @@ export function searchSettings(input: {
     },
   ];
   for (const row of input.advanced) {
-    if (row.key === 'spend') continue;
     rows.push({
       key: `advanced:${row.key}`,
       title: row.title,

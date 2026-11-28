@@ -32,7 +32,7 @@ async function twoPolls() {
 
 // The page's screens are loaded before the first test's waits start: imported cold on a busy machine, their modules can
 // take most of `findBy`'s five seconds before anything renders.
-beforeAll(() => Promise.all([import('../home/HomeScreen'), import('../settings/ConnectionsPages')]), 30_000);
+beforeAll(() => import('../settings/ConnectionsPages'), 30_000);
 
 describe('signing in on the service’s own page (SG-01…SG-05)', () => {
   beforeEach(() => {

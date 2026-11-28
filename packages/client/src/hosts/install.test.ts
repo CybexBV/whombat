@@ -61,8 +61,8 @@ describe('the address Add a server opens with (SI-10)', () => {
 
   it('builds and reads the card’s link (the phone maps it to its screen)', () => {
     const href = addServerHref({ address: '10.100.0.40', username: 'root', control: 'full' });
-    // On Connections now (CN-09, AP-2523); the servers' cards' old address still reads.
-    expect(href).toBe('/connections?add=1&address=10.100.0.40&user=root&control=full');
+    // Over the Servers list; the servers' cards' and older messages' addresses still read.
+    expect(href).toBe('/servers?add=1&address=10.100.0.40&user=root&control=full');
     expect(addServerPrefillFromHref(href)).toEqual(
       addServerPrefill({ address: '10.100.0.40', control: 'full' }),
     );
@@ -73,6 +73,9 @@ describe('the address Add a server opens with (SI-10)', () => {
     });
     expect(addServerPrefillFromHref('/things/servers?add=1&address=10.100.0.9')).toMatchObject({
       address: '10.100.0.9',
+    });
+    expect(addServerPrefillFromHref('/connections?add=1&address=10.100.0.8')).toMatchObject({
+      address: '10.100.0.8',
     });
     expect(addServerPrefillFromHref('/things/servers')).toBeNull();
     expect(addServerPrefillFromHref('/connections')).toBeNull();

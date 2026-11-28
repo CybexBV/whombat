@@ -1,5 +1,5 @@
 /**
- * The last-seen burrow, kept between launches (AP-717): the app opens at once with Chat's threads, the Overview, the
+ * The last-seen burrow, kept between launches (AP-717): the app opens at once with Chat's threads, Home's overview, the
  * tab bar's badges, the conversations and the agent it showed last time while the connection comes up, and refreshes
  * them when it is. Only an allowlist of reads is kept (`PERSISTED_ENDPOINTS`): nothing from the Vault, sign-ins, tokens,
  * devices or settings — no secret ever reaches the disk — a conversation keeps its newest page of messages, Chat its
@@ -22,7 +22,7 @@ import { shortAge } from './syncLog';
 
 /**
  * The reads the app opens with: the tabs' (Chat's threads and what is new in them, the rooms behind the tab bar's
- * badges, the Overview and Needs you) and the conversations'. None carries a secret: titles, the start of messages,
+ * badges, Home's overview and Needs you) and the conversations'. None carries a secret: titles, the start of messages,
  * counts, what needs the person and the pinned widgets' readings.
  */
 export const PERSISTED_ENDPOINTS: ReadonlySet<string> = new Set([
@@ -104,8 +104,8 @@ function thinned<T>(points: readonly T[], most: number): readonly T[] {
 }
 
 /**
- * The Overview with its pinned widgets' lines thinned (`KEPT_WIDGET_POINTS`): a day of readings every minute is
- * thousands of points a widget, while the copy only bridges the moment until the Overview is read again.
+ * Home's overview with its pinned widgets' lines thinned (`KEPT_WIDGET_POINTS`): a day of readings every minute is
+ * thousands of points a widget, while the copy only bridges the moment until Home's overview is read again.
  */
 function slimOverview(data: unknown): unknown {
   const d = data as { widgets?: { points?: unknown[] }[] } | undefined;
@@ -247,7 +247,7 @@ function snapshot(
   const tail = ']}}';
   let size = parts.reduce((n, p) => n + p.json.length + 1, head.length + tail.length);
   let keep = parts;
-  // Too large: the tabs' reads go first, the Overview first of them (the copy then holds what it held before they were
+  // Too large: the tabs' reads go first, Home's overview first of them (the copy then holds what it held before they were
   // kept), then the least important conversation, one at a time.
   const leaving = [
     ...parts.filter((p) => p.tab >= 0).sort((a, b) => a.tab - b.tab),
@@ -402,7 +402,7 @@ export function createQueryPersister(input: {
         if (saved.has(q.queryHash) && saved.get(q.queryHash) === q.state.data) return;
         if (isMessages(q.queryKey)) opened.set(q.queryHash, now());
         dirty = true;
-        // The Overview changes every minute (its time, the widgets' readings): it goes with the next other change, or
+        // Home's overview changes every minute (its time, the widgets' readings): it goes with the next other change, or
         // when the app goes to the background, rather than sealing the whole copy again each time.
         if (!isOverview(q.queryKey)) later();
       });

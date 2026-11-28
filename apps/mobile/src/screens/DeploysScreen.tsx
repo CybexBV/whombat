@@ -7,8 +7,8 @@
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RefreshControl, ScrollView, View } from 'react-native';
-import { overviewTitle } from '../data/shell';
 import { useI18n, useMobileT } from '../i18n';
+import { backWordUnder } from '../navigation/backWord';
 import type { RootStackParamList } from '../navigation/routes';
 import { useTheme } from '../theme/theme';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
@@ -22,7 +22,7 @@ export function DeploysScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
   const bottomRoom = useBottomRoom();
   const theme = useTheme();
-  const back = route.params?.back ?? overviewTitle(rawLocale);
+  const back = route.params?.back ?? backWordUnder(navigation.getState(), route.key, rawLocale);
   const deploys = useDeploys();
   const goBack = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 

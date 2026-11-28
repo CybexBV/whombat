@@ -62,7 +62,6 @@ const PLACES: readonly AppPlace[] = [
   'search',
   'chat',
   'inbox',
-  'overview',
   'automations',
   'files',
   'vault',

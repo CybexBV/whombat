@@ -7,9 +7,10 @@
  */
 
 import { useRouterState } from '@tanstack/react-router';
-import { CONNECTIONS_HREF, parseThingId } from '@whombat/core';
+import { parseThingId } from '@whombat/core';
 import { useEffect } from 'react';
 import { useNavigateHref } from '../../app/routing/navigation';
+import { PLACE_HREFS } from '../../app/shell/assistantSidebarModel';
 import { ThingPageScreen } from './page/ThingPageScreen';
 import { ThingInPlace } from './places/ThingPlace';
 import { ServerPage } from './ServerPage';
@@ -47,7 +48,7 @@ export function ThingScreen({ burrow, thing }: ThingScreenProps) {
   );
 }
 
-/** `/things/servers`: every guest with `?view=guests`, else Connections with the query (AP-2523; the router does it first). */
+/** `/things/servers`: every guest with `?view=guests`, else the Servers list with the query (the router does it first). */
 function ServersAddress({ burrow }: { burrow: string }) {
   const guests = useRouterState({
     select: (s) => (s.location.search as Record<string, unknown>).view === 'guests',
@@ -55,7 +56,7 @@ function ServersAddress({ burrow }: { burrow: string }) {
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
   const navigate = useNavigateHref();
   useEffect(() => {
-    if (!guests) navigate(`${CONNECTIONS_HREF}${searchStr}`, { replace: true });
+    if (!guests) navigate(`${PLACE_HREFS.servers}${searchStr}`, { replace: true });
   }, [guests, navigate, searchStr]);
   return guests ? <ServersPage burrow={burrow} /> : null;
 }

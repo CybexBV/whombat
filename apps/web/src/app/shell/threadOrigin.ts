@@ -26,8 +26,6 @@ export function originLabel(
       return CHAT_WORDS[location.room];
     case 'needsYou':
       return 'Inbox';
-    case 'dashboard':
-      return CHAT_WORDS.dashboard;
     case 'place':
       return placeWords(currentLocale())[location.place].title;
     case 'automations':

@@ -3,8 +3,8 @@
  * without the tab bar, as in the mock. On a wide window (the iPhone Duo open) the same stack shows as two pages, the
  * tabs on the left and what they opened on the right, and the tabs go down the side where the system keeps its own
  * bar (`SplitStack`, docs/app/decisions/iphone-duo.md). Along the bottom of an iPhone the bar is iOS's own (`GlassTabs`,
- * native-feel.md). The bar is Chat, Inbox, Overview, Automations and Settings on every Whombat (one-layout-android.md),
- * and the app opens on Chat at every cold start.
+ * native-feel.md). The bar is Chat, Inbox, Automations and Settings on every Whombat (one-layout-android.md), and the
+ * app opens on Chat at every cold start.
  *
  * Only Chat, where the app opens, is imported up front (AP-2644); every other screen's module is required the first
  * time it shows (`getComponent`, AP-932), so the navigator's first render doesn't load ~40 screens. `typeof import(…)`
@@ -37,7 +37,7 @@ import {
 import { Linking, Platform, View } from 'react-native';
 import { useBurrowBase } from '../data/BurrowProvider';
 import { isShareUrl } from '../data/shareInbox';
-import { HOME_TAB, INBOX_TAB, overviewTitle, TABS, type Tab as TabName } from '../data/shell';
+import { INBOX_TAB, knownTab, TABS, type Tab as TabName, tabWords } from '../data/shell';
 import { ChatSettledBridge } from '../data/useThreadSettle';
 import { noteRoute } from '../errors/nativeErrorNotes';
 import { useI18n } from '../i18n';
@@ -126,19 +126,10 @@ const pageLayout = ({
   </ScreenFocusLayout>
 );
 
-/** Every tab's screen, by name. `Dashboard` is Connections (`HomeScreen`, AP-2553): Things is folded into it. */
+/** Every tab's screen, by name. */
 function tabScreens(): Record<TabName, ReactElement> {
   return {
     ChatRoom: <Tab.Screen key="ChatRoom" name="ChatRoom" component={ChatRoomScreen} />,
-    Dashboard: (
-      <Tab.Screen
-        key="Dashboard"
-        name="Dashboard"
-        getComponent={() =>
-          (require('../screens/HomeScreen') as typeof import('../screens/HomeScreen')).HomeScreen
-        }
-      />
-    ),
     NeedsYou: (
       <Tab.Screen
         key="NeedsYou"
@@ -173,7 +164,7 @@ function tabScreens(): Record<TabName, ReactElement> {
 
 /**
  * Holds the burrow's `hosts` topic while the tabs show (Whombat ONE-DW30): an alert, a server asking to be added or the
- * service starting over read Needs you and Connections again. Those frames, `home.changed`, `widget.updated` and a task
+ * service starting over read Needs you, Servers and Connections again. Those frames, `home.changed`, `widget.updated` and a task
  * chat's messages reach the cache through the shared appliers.
  */
 function AssistantLive() {
@@ -187,9 +178,7 @@ function Tabs() {
   const screens = tabScreens();
   const lastTab = useLastTab();
   // Drawn anew when the window goes from one page to two or back, or to the other bar: on the tab it showed.
-  const initialRouteName = (TABS as readonly string[]).includes(lastTab ?? '')
-    ? (lastTab as TabName)
-    : HOME_TAB;
+  const initialRouteName = knownTab(lastTab);
   // On an iPhone the tabs are iOS's own tab bar (native-feel.md); down the side and on Android, ours.
   const system = tabBarKind(useScreenShape().tabs, Platform.OS) === 'system';
   return (
@@ -271,6 +260,13 @@ function useLinking(onOpened: (opened: OpenedNotification) => void): LinkingOpti
   }, []);
 }
 
+/** The tab under the stack, named for the “‹ …” of a screen a push opens over it (Chat before the tabs are drawn). */
+function shownTabWord(locale: string | null | undefined): string {
+  const tabs = navigationRef.isReady() ? navigationRef.getRootState()?.routes[0] : undefined;
+  const state = tabs?.state as { index?: number; routes: { name: string }[] } | undefined;
+  return tabWords(locale ?? undefined)[knownTab(state?.routes[state.index ?? 0]?.name)];
+}
+
 /**
  * A managed push names only a kind and an opaque ref: once the app is open, the appliance resolves the ref
  * (`push.resolve`, CT-49) and its link opens; `not_found` (gone, or no longer visible) opens the inbox with a quiet
@@ -303,7 +299,7 @@ function usePushTaps(navRef: typeof navigationRef) {
       const route = routeForLink(
         target.item.link as LinkRef,
         currentBootstrap().sidebar,
-        overviewTitle(rawLocale),
+        shownTabWord(rawLocale),
         {
           deployments: true,
         },
@@ -336,7 +332,7 @@ function usePushTaps(navRef: typeof navigationRef) {
       // This app shows one burrow; a link of another opens the inbox (Connections).
       const route =
         open.to === 'link' && open.burrow === slug
-          ? routeForLink(open.link, currentBootstrap().sidebar, overviewTitle(rawLocale), {
+          ? routeForLink(open.link, currentBootstrap().sidebar, shownTabWord(rawLocale), {
               deployments: true,
             })
           : null;

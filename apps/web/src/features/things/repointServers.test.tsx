@@ -1,6 +1,6 @@
 /**
  * Point them here (Whombat backup-file.md BF-15, BF-16; app backup-file.md AP-4417): BF-16's Needs you item opens the
- * dialog on Connections (`/things/servers?repoint=1`); it lists the servers still looking for the old address, Point
+ * dialog over the Servers list (`/things/servers?repoint=1`, which goes to `/servers?repoint=1`); it lists the servers still looking for the old address, Point
  * them here follows the job server by server, and a server without a Vault key opens Add a server filled in. Against
  * the fixture world with the hosts layer (`fixtures-rp.ts`).
  */
@@ -14,10 +14,8 @@ const withServers = () => fixtureServices({ hosts: true });
 describe('Point them here (AP-4417)', () => {
   it('opens from Needs you’s address, points the servers here one by one and fills in Add a server for the rest', async () => {
     const user = userEvent.setup();
-    const app = renderApp('/connections', withServers());
-    // The page is there once its server rows are.
-    await waitFor(() => expect(document.querySelector('[data-server="pve-02"]')).toBeTruthy());
-    app.history.push('/things/servers?repoint=1');
+    const app = renderApp('/things/servers?repoint=1', withServers());
+    await waitFor(() => expect(app.location()).toBe('/servers?repoint=1'));
     const dialog = await screen.findByRole('dialog', { name: 'Point them here' });
     expect(await within(dialog).findByText(/10\.100\.1\.160 to 10\.100\.1\.158, and 3 servers/)).toBeTruthy();
     const list = within(dialog).getByRole('list', { name: 'Point them here' });
@@ -36,10 +34,10 @@ describe('Point them here (AP-4417)', () => {
 
   it('Leave them closes it and changes nothing', async () => {
     const user = userEvent.setup();
-    const app = renderApp('/connections?repoint=1', withServers());
+    const app = renderApp('/servers?repoint=1', withServers());
     const dialog = await screen.findByRole('dialog', { name: 'Point them here' }, { timeout: 8_000 });
     await user.click(await within(dialog).findByRole('button', { name: 'Leave them' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(app.location()).toBe('/connections');
+    expect(app.location()).toBe('/servers');
   }, 15_000);
 });

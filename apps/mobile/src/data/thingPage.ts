@@ -53,12 +53,12 @@ import {
 } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
 import type { AccountPage } from '../navigation/connectionLinks';
-import { overviewTitle } from './shell';
 
 export function thingPageCopy(locale?: string) {
   const { t } = mobileTranslator(locale);
   return {
-    back: overviewTitle(locale),
+    /** The page's title while its name isn't known yet: the place it is in. */
+    unnamed: t('places.connections'),
     loading: t('thingPage.thingPageCopy.loading'),
     failed: t('thingPage.thingPageCopy.failed'),
     notFound: t('thingPage.thingPageCopy.notFound'),

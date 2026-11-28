@@ -15,9 +15,9 @@ const require = createRequire(import.meta.url);
 
 describe('phone languages', () => {
   it('shows English, Dutch and pseudo copy with the same interpolation', () => {
-    expect(tabWords('en-GB').Dashboard).toBe('Overview');
-    expect(tabWords('nl-NL').Dashboard).toBe('Overzicht');
-    expect(tabWords('pseudo').Dashboard).toMatch(/^\[.+\]$/);
+    expect(tabWords('en-GB').Automations).toBe('Automations');
+    expect(tabWords('nl-NL').Automations).toBe('Automatiseringen');
+    expect(tabWords('pseudo').Automations).toMatch(/^\[.+\]$/);
     expect(mobileTranslator('pseudo').t('places.line.chat', { assistant: 'Neo' })).toContain('Neo');
     expect(placeLabel('chat', 1, false, 'nl')).toContain('1 ongelezen reactie');
     expect(placeLabel('chat', 2, false, 'nl')).toContain('2 ongelezen reacties');

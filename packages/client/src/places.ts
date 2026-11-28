@@ -1,27 +1,18 @@
 /**
  * The app's places, in one order everywhere (docs/decisions/final-shell-web.md): Search, Chat, Inbox,
- * Overview, Automations, Files, Vault, Usage, Settings. The web's sidebar and its phone-width Places drawer list Chat to
+ * Automations, Files, Vault, Usage, Settings, with Servers and Connections after the Inbox (their own words,
+ * servers-connections-places.md). The web's sidebar and its phone-width Places drawer list Chat to
  * Vault (Search is ⌘K, Settings is in the account menu, Usage opens at its address); Search lists them all as Places.
  * Each name has one home: Usage is the spend page under Advanced's address, shown as Usage. Pure words and addresses.
  */
 import { agentWords } from './agentName';
 
-export type AppPlace =
-  | 'search'
-  | 'chat'
-  | 'inbox'
-  | 'overview'
-  | 'automations'
-  | 'files'
-  | 'vault'
-  | 'usage'
-  | 'settings';
+export type AppPlace = 'search' | 'chat' | 'inbox' | 'automations' | 'files' | 'vault' | 'usage' | 'settings';
 
 export const APP_PLACES: readonly AppPlace[] = [
   'search',
   'chat',
   'inbox',
-  'overview',
   'automations',
   'files',
   'vault',
@@ -45,7 +36,6 @@ export function appPlaceWords(agent: string): Record<AppPlace, AppPlaceWords> {
     search: { label: 'Search', line: 'Chats, things, settings and places' },
     chat: { label: 'Chat', line: `You and ${N}` },
     inbox: { label: 'Inbox', line: 'What needs you' },
-    overview: { label: 'Overview', line: 'Servers and connections' },
     automations: { label: 'Automations', line: 'Plans and schedules' },
     files: { label: 'Files', line: 'Files shared in your conversations' },
     vault: { label: 'Vault', line: 'Sign-ins and secrets' },

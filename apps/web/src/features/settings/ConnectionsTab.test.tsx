@@ -445,8 +445,8 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
     await waitFor(() => expect(app.location()).toBe('/connections?connection=google'));
     expect(await screen.findByText('Set up for this Whombat')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Google' })).toBeTruthy();
-    await user.click(screen.getByRole('link', { name: '← Overview' }));
-    await waitFor(() => expect(app.location()).toBe('/connections'));
+    await user.click(screen.getByRole('link', { name: '← Connections' }));
+    await waitFor(() => expect(app.location()).toBe('/connected'));
   });
 
   it('puts a connection that needs connecting again under NEEDS YOU, with Connect again', async () => {
@@ -567,14 +567,14 @@ describe('Settings → Connections, the overview (AP-673; connections-redesign.m
     const { app } = await openOverview(baseStatus(), { path: '/connections?connection=add' });
     expect(document.querySelector('[data-connections-page="add"]')).toBeTruthy();
     expect(screen.queryByRole('tablist', { name: 'Settings' })).toBeNull();
-    expect(screen.getByRole('link', { name: '← Overview' }).getAttribute('href')).toBe('/connections');
+    expect(screen.getByRole('link', { name: '← Connections' }).getAttribute('href')).toBe('/connected');
     expect(app.location()).toBe('/connections?connection=add');
   });
 
   it('sends the old Settings → Connections pages to the Connections page, in place of the old entry', async () => {
     const { app } = await openOverview(baseStatus(), { path: '/settings?tab=connections&connection=add' });
     await waitFor(() => expect(app.location()).toBe('/connections?connection=add'));
-    expect(screen.getByRole('link', { name: '← Overview' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Connections' })).toBeTruthy();
     expect(app.history.length).toBe(1);
     cleanup();
 

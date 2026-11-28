@@ -1825,11 +1825,11 @@ function SuggestionChip({ label, onPress }: { label: string; onPress: () => void
 const plainNumber = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
 
 /**
- * A widget kept here, or pinned on Overview (home-redesign-mobile.md AP-2263): its title, the latest values (a finger
+ * A widget kept here (home-redesign-mobile.md AP-2263): its title, the latest values (a finger
  * picks a moment), its lines with the last point's own time under it (“5 min ago · 14:00”, never “Now”), where it came
  * from.
  */
-export function WidgetBlock({ widget, first }: { widget: Widget; first: boolean }) {
+function WidgetBlock({ widget, first }: { widget: Widget; first: boolean }) {
   const { rawLocale } = useI18n();
 
   const theme = useTheme();

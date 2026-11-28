@@ -128,7 +128,7 @@ export function ConnectPage({
                   <RouterButtonLink
                     variant="secondary"
                     size="sm"
-                    to="/connections"
+                    to="/servers"
                     search={{ add: 1 } as never}
                     data-testid="connect-address-action"
                   >
@@ -150,7 +150,7 @@ export function ConnectPage({
                   <RouterButtonLink
                     variant="primary"
                     size="sm"
-                    to="/connections"
+                    to="/servers"
                     search={foundServerSearch(server.address) as never}
                   >
                     {server.label}

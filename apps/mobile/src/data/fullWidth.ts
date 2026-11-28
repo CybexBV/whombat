@@ -6,7 +6,7 @@
  */
 import { HOME_TAB, TABS, type Tab } from './shell';
 
-/** The tabs other than Chat whose list the person hid, as the phone keeps them (`Dashboard,Automations`). */
+/** The tabs other than Chat whose list the person hid, as the phone keeps them (`NeedsYou,Automations`). */
 export function parseFullWidthTabs(raw: string | null): ReadonlySet<Tab> {
   const known = new Set<string>(TABS);
   return new Set((raw ?? '').split(',').filter((t): t is Tab => known.has(t) && t !== HOME_TAB));

@@ -1,18 +1,10 @@
-/** Connections on the phone (connections-page.md AP-2553…; mock 4, one-whombat-mobile.md AP-1350…) and the bar's tabs. */
+/** The bar's tabs, the Inbox on the phone (mock 4, one-whombat-mobile.md AP-1350…) and where a connection's row goes. */
 
-import {
-  homeSection,
-  homeSections,
-  homeStatusLine,
-  needsYouListRow,
-  needsYouListView,
-  overviewSections,
-  statusText,
-} from '@whombat/client';
+import { needsYouListRow, needsYouListView } from '@whombat/client';
 import { type NeedsYouItem, type ThingSummary, thingHref } from '@whombat/core';
 import { at } from '@whombat/fixtures';
 import { describe, expect, it } from 'vitest';
-import { CONNECTIONS_COPY, JUMP_MARGIN, jumpOffset, overviewChips, serviceRowOpens } from './home';
+import { serviceRowOpens } from './home';
 import {
   groupHeading,
   needsYouTabBadge,
@@ -23,7 +15,7 @@ import {
   phoneSheet,
   swipeEdgeLabel,
 } from './needsYou';
-import { HOME_TAB, INBOX_TAB, TAB_WORDS, TABS } from './shell';
+import { HOME_TAB, INBOX_TAB, knownTab, TAB_WORDS, TABS } from './shell';
 
 const restart: NeedsYouItem = {
   id: 'approval:31',
@@ -69,40 +61,21 @@ const heat: NeedsYouItem = {
   actions: [{ id: 'open', label: 'Choose', style: 'primary', kind: 'open', href: '/chats/cnv_heat' }],
 };
 
-function server(id: string, status: ThingSummary['status'], running: number, total: number): ThingSummary {
-  return {
-    id: `server:${id}`,
-    kind: 'server',
-    name: id,
-    icon: 'server',
-    status,
-    facts: [{ label: 'Guests', value: String(running), note: `of ${total} running` }],
-    href: thingHref('server', id),
-  };
-}
-
 describe('the phone’s one layout (one-layout-android.md AP-2640)', () => {
-  it('has Chat, Inbox, Overview, Automations and Settings, and opens on Chat', () => {
-    // Needs you replaces Watch and Connections' Needs you (needs-you-list.md NYL-05); Automations follows Connections as
-    // in the web's sidebar (automations-tab.md AP-6310); Settings ends the bar (settings-tab-android.md AP-2620).
-    expect(TABS).toEqual(['ChatRoom', 'NeedsYou', 'Dashboard', 'Automations', 'Settings']);
-    expect(TABS.map((t) => TAB_WORDS[t])).toEqual(['Chat', 'Inbox', 'Overview', 'Automations', 'Settings']);
+  it('has Chat, Inbox, Automations and Settings, and opens on Chat', () => {
+    // Needs you replaces Watch (needs-you-list.md NYL-05); Settings ends the bar (settings-tab-android.md AP-2620).
+    // Servers and Connections are places, not tabs.
+    expect(TABS).toEqual(['ChatRoom', 'NeedsYou', 'Automations', 'Settings']);
+    expect(TABS.map((t) => TAB_WORDS[t])).toEqual(['Chat', 'Inbox', 'Automations', 'Settings']);
     expect(HOME_TAB).toBe('ChatRoom');
     // “The inbox” of a link or a push that names no item is the Inbox (NYL-09).
     expect(INBOX_TAB).toBe('NeedsYou');
   });
-});
 
-describe('Overview’s title and sentence (AP-2553; sidebar-tabs.md)', () => {
-  it('is called Overview, its connections Connections, with the shared status sentence under it (AP-2501)', () => {
-    expect(CONNECTIONS_COPY.title).toBe('Overview');
-    expect(CONNECTIONS_COPY.services).toBe('Connections');
-    expect(CONNECTIONS_COPY.failed).toContain('Overview');
-    const parts = homeStatusLine({ summary: { needsYou: 3, working: 1, problems: 0 } });
-    expect(parts.find((p) => p.strong)?.text).toBe('3 things need you');
-    expect(statusText(homeStatusLine({ summary: { needsYou: 0, working: 0, problems: 0 } }))).toContain(
-      'All good',
-    );
+  it('restores Chat for a tab that is gone, such as the Overview', () => {
+    expect(knownTab('Dashboard')).toBe('ChatRoom');
+    expect(knownTab(null)).toBe('ChatRoom');
+    expect(knownTab('Automations')).toBe('Automations');
   });
 });
 
@@ -251,123 +224,6 @@ describe('the Inbox tab (inbox.md; needs-you-list.md NYL-01…NYL-09)', () => {
         needsYouList: [restart],
       }),
     ).toEqual({ count: 1, tone: 'warn' });
-  });
-});
-
-describe('Home’s sections on the phone (home-redesign-mobile.md AP-2264)', () => {
-  const ha: ThingSummary = {
-    id: 'connection:con_ha',
-    kind: 'connection',
-    catalogId: 'homeassistant',
-    name: 'Home Assistant',
-    icon: 'home',
-    status: 'ok',
-    facts: [
-      { label: 'Inside', value: '21.0', unit: '°C' },
-      { label: 'Alarm', value: 'armed' },
-    ],
-    href: thingHref('connection', 'con_ha'),
-  };
-  const mail: ThingSummary = {
-    ...ha,
-    id: 'connection:con_mail',
-    catalogId: 'google_mail',
-    name: 'Mail',
-    facts: [],
-  };
-  const proxmox: ThingSummary = {
-    ...ha,
-    id: 'connection:con_pve',
-    catalogId: 'proxmox',
-    name: 'Proxmox VE API',
-    partOf: 'server:pve-02',
-  };
-  const change = (n: number) => ({
-    id: `chg_${n}` as never,
-    title: `Change ${n}`,
-    at: at('13:00'),
-    actor: { kind: 'whombat' as const, id: 'prn_neo' as never, name: 'Neo' },
-    undo: { state: 'none' as const },
-  });
-  const overview = {
-    summary: { needsYou: 1, working: 1, problems: 0 },
-    needsYou: [restart],
-    working: null,
-    things: [server('pve-02', 'warn', 23, 40), ha, proxmox, mail],
-    automationsToday: [],
-    widgets: [],
-    doneRecently: [1, 2, 3, 4, 5].map(change),
-    chats: ['a', 'b', 'c', 'd'].map((id, i) => ({
-      conversationId: `cnv_${id}`,
-      title: `Chat ${id}`,
-      state: i === 0 ? ('working' as const) : ('recent' as const),
-      at: at('13:00'),
-    })),
-  };
-
-  it('draws Needs you, Servers and Services in that order: no chats or changes (CN-03, AP-2269)', () => {
-    const sections = homeSections(overview, {
-      now: Date.parse(at('14:05')),
-      timeZone: 'Europe/Amsterdam',
-      servers: true,
-      canAddConnection: true,
-    });
-    expect(sections.map((s) => s.kind)).toEqual(['needsYou', 'servers', 'things']);
-    // Servers have their own card; a server's own connection stays on its page; a quiet one says it's connected.
-    expect(
-      homeSection(sections, 'things')?.rows.map((r) => [r.name, r.line, r.figures[0]?.value ?? null]),
-    ).toEqual([
-      ['Home Assistant', '', '21.0 °C'],
-      ['Mail', 'Connected', null],
-    ]);
-  });
-});
-
-describe('Overview’s sections and jump chips on the phone (overview-one-page.md OVP-01, OVP-11)', () => {
-  const opts = {
-    now: Date.parse(at('14:05')),
-    timeZone: 'Europe/Amsterdam',
-    servers: true,
-    canAddConnection: false,
-  };
-  const lamp: ThingSummary = {
-    id: 'connection:con_ha',
-    kind: 'connection',
-    catalogId: 'homeassistant',
-    name: 'Home Assistant',
-    icon: 'home',
-    status: 'warn',
-    facts: [],
-    href: thingHref('connection', 'con_ha'),
-  };
-  const overview = {
-    summary: { needsYou: 1, working: 0, problems: 1 },
-    needsYou: [restart],
-    working: null,
-    things: [server('pve-02', 'ok', 19, 22), server('nas-old', 'offline', 0, 4), lamp],
-    automationsToday: [],
-    widgets: [],
-    doneRecently: [],
-    chats: [],
-  };
-
-  it('has a chip per section, with its count and dot, each scrolling to its own place', () => {
-    const chips = overviewChips(overviewSections(homeSections(overview, opts)));
-    expect(chips.map((c) => [c.key, c.count, c.tone, c.anchor])).toEqual([
-      ['servers', 2, 'bad', 'overview-servers'],
-      ['services', 1, 'warn', 'overview-connections'],
-    ]);
-  });
-
-  it('has no chips with one section alone', () => {
-    const one = overviewSections(homeSections({ ...overview, needsYou: [] }, { ...opts, servers: false }));
-    expect(one.map((s) => s.key)).toEqual(['services']);
-    expect(overviewChips(one)).toEqual([]);
-  });
-
-  it('stops a jump just above the section’s heading, never above the list', () => {
-    expect(jumpOffset(400)).toBe(400 - JUMP_MARGIN);
-    expect(jumpOffset(2)).toBe(0);
   });
 });
 

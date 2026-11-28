@@ -1,7 +1,7 @@
 /**
  * Places (docs/decisions/phone-shell-final.md, servers-connections-places.md): the button that opens it and the sheet —
- * the platform's own sheet, with Close first, the places in the web sidebar's order (`data/places.ts`) with Chat's and
- * the Inbox's counts; Servers and Connections, right after Overview, only when they hold something, each with the
+ * the platform's own sheet, with Close first, the places in their order (`data/places.ts`) with Chat's and the Inbox's
+ * counts; Servers (once there is a server or the hosts service) and Connections right after the Inbox, each with the
  * worst status mark of what it holds (the red ring for something not working, the amber dot for a look) and its name
  * saying so. It scrolls at large text rather than shrinking a row. Choosing a place closes the sheet and, once it is
  * down, opens the place; closing it puts a screen reader back on the button that opened it.
@@ -23,7 +23,7 @@ import {
   type ServerFacts,
   sheetPlaces,
 } from '../data/places';
-import { overviewTitle, type Tab, tabWords } from '../data/shell';
+import { type Tab, tabWords } from '../data/shell';
 import { usePlaceLists } from '../data/usePlaceLists';
 import { useI18n } from '../i18n';
 import { useAppNavigation } from '../navigation/hooks';
@@ -33,16 +33,13 @@ import { useBadges } from '../navigation/TabBar';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import {
-  ChartNoAxesColumn,
   Folder,
   Inbox,
-  LayoutGrid,
   Lock,
   type LucideIcon,
   Menu,
   MessageCircle,
   Plug,
-  Search,
   Server,
   Settings as SettingsIcon,
   X,
@@ -58,22 +55,19 @@ export const SHELL_TARGET = Platform.OS === 'ios' ? 44 : 48;
 
 /** Each place's icon: the tab bar's for the tabs. */
 export const PLACE_ICONS: Record<PlaceId, LucideIcon> = {
-  search: Search,
   chat: MessageCircle,
   inbox: Inbox,
-  overview: LayoutGrid,
   servers: Server,
   connections: Plug,
   automations: Zap,
   files: Folder,
   vault: Lock,
-  usage: ChartNoAxesColumn,
   settings: SettingsIcon,
 };
 
 /**
- * The servers as Overview's Servers shows them (their logos, systems and how they are) for Search, from the same reads,
- * so nothing is asked again; none where the Whombat runs no hosts service.
+ * The servers as Servers shows them (their logos, systems and how they are) for Search, from the same reads, so
+ * nothing is asked again; none where the Whombat runs no hosts service.
  */
 export function useServerFacts(): ServerFacts[] {
   const { slug } = useBurrowBase();
@@ -185,7 +179,7 @@ function PlacesSheet({
   const lastTab = useLastTab();
   // A place that is the left page gives way to the tabs: what opens next goes back to them, by their name.
   const fromList = role === 'list' && (current === 'servers' || current === 'connections');
-  const backWord = fromList ? (tabWords(rawLocale)[lastTab as Tab] ?? overviewTitle(rawLocale)) : here;
+  const backWord = fromList ? (tabWords(rawLocale)[lastTab as Tab] ?? tabWords(rawLocale).ChatRoom) : here;
   const go = () => {
     after.onDismissed();
     setMounted(false);

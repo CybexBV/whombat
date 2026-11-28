@@ -1,5 +1,7 @@
 # Overview on one page (OVP)
 
+**Superseded by `servers-connections-places.md` SCP-18** (2026-11-28): there is no Overview; OVP-01…OVP-58 are history.
+
 John asked for a redesign of Overview (2026-11-12): the page should give an overview of the servers and connections,
 useful and beautiful. He accepted the mockup `docs/design-handoff/overview-one-page/overview.html` (switch State,
 Theme and Width at its top; the mock wins on look, copy and layout) and said “build this”. The same on the web

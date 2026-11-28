@@ -10,14 +10,16 @@
  *   /chat  /feedback                Chat and the Feedback room (AP-2401) ?thread=<msgId> (beside it) ?settled=1 (the
  *                                   settled threads, AP-6252)
  *   /code                           → /chat, the query kept: the old address of software work, which is Chat's now
- *   /connections                    Connections (the Dashboard before, connections-page.md AP-2501): Needs you, Servers,
- *                                   Services, Pinned; ?add=1 Add a server (and its sign-in fields, AP-2523)
- *   /dashboard                      → /connections, the query kept (AP-2501)
+ *   /servers  /connected            Servers and Connections, a list beside the page picked (servers-connections-places.md);
+ *                                   /servers?add=1 Add a server (and its sign-in fields), ?repoint=1 Point them here
+ *   /connections                    ?connection=… a connection's page or Add a connection (`add`); without one, the
+ *                                   Overview's old address → /connected, or /servers for ?add= ?repoint= ?tab=servers
+ *   /dashboard                      the same as /connections without a page
  *   /watch                          Watch (AP-1259)
  *   /chats  /chats/:id  /chats/new  old chat addresses → /chat or /feedback (AP-2403)
  *   /things/:thing                  a server, connection or device (`server:pve-02`; the things screens, AP-1258);
  *                                   /things/servers?view=guests every guest of every server, /things/servers otherwise
- *                                   → /connections with its query (CN-09, AP-2523)
+ *                                   → /servers with its query
  *   /skills                         → /settings?tab=skills (AP-2305, hermes-skills.md AP-5530)
  *   /done                           Everything Whombat did, with Undo (AP-1263)
  *   /pr/:number                     ?repo=owner/name (several repos can have a PR #1; AP-496)  ?tab=files
@@ -89,7 +91,6 @@ import {
   splitBurrowPath,
   workPath,
 } from '@whombat/client';
-import { CONNECTIONS_HREF } from '@whombat/core';
 import type { ReactNode } from 'react';
 import { validateAgentKey, validateAgentPart } from '../features/agent/parts';
 import { validateScreenPart } from '../features/desk/screenTab';
@@ -108,6 +109,7 @@ import { useOpenBurrow } from './routing/openBurrow';
 import {
   currentSettingsTab,
   currentWhombatPart,
+  overviewGoneHref,
   settingsHome,
   settingsRedirect,
   validateAutomationsSearch,
@@ -198,7 +200,6 @@ const AutomationRunScreen = lazyRouteComponent(
   () => import('../features/automations/AutomationRunScreen'),
   'AutomationRunScreen',
 );
-const HomeScreen = lazyRouteComponent(() => import('../features/home/HomeScreen'), 'HomeScreen');
 const TeamReportsScreen = lazyRouteComponent(
   () => import('../features/teamReports/TeamReportsScreen'),
   'TeamReportsScreen',
@@ -475,26 +476,35 @@ const burrowIndexRoute = createRoute({
   component: () => null,
 });
 
-/** Connections (Whombat connections-page.md CN-01, CN-03; AP-2501): Needs you, Servers, Services and what was pinned. */
+/** Whether an address of `/connections` is one of the connections' pages (Add a connection, a sign-in's answer). */
+function connectionPageOf(raw: Record<string, unknown>): boolean {
+  return !!(raw.connection || raw.connected || raw.connect_error);
+}
+
+/**
+ * The connections' own pages (settings-groups.md): Add a connection and each connection's page. Without one it is the
+ * Overview's old address, which opens Connections (or Servers, for Add a server) (servers-connections-places.md).
+ */
 const connectionsRoute = createRoute({
   getParentRoute: () => burrowRoute,
   path: 'connections',
-  component: withScreens([HomeScreen, ConnectionsPages], function ConnectionsRoute() {
+  beforeLoad: ({ location }) => {
+    const raw = location.search as Record<string, unknown>;
+    if (!connectionPageOf(raw)) throw redirect({ href: overviewGoneHref(raw), replace: true });
+  },
+  component: withScreens([ConnectionsPages], function ConnectionsRoute() {
     const burrow = useOpenBurrow();
-    // Add a connection and a connection's own pages are the Connections page's (settings-groups.md).
     const raw = useLocation({ select: (l) => l.search as Record<string, unknown> });
-    const pages = raw.connection || raw.connected || raw.connect_error;
-    if (pages)
-      return (
-        <ConnectionsPages burrow={burrow} search={validateSettingsSearch({ ...raw, tab: 'connections' })} />
-      );
-    return <HomeScreen burrow={burrow} />;
+    return (
+      <ConnectionsPages burrow={burrow} search={validateSettingsSearch({ ...raw, tab: 'connections' })} />
+    );
   }),
 });
 
 /**
  * Servers and Connections, places of their own (servers-connections-places.md): `/servers` and `/connected`
- * (`/connections` stays Overview's). A wide window opens the page looked at last there; a narrow one shows the list.
+ * (`/connections` holds the connections' own pages). A wide window opens the page looked at last there; a narrow one
+ * shows the list.
  */
 const serversRoute = createRoute({
   getParentRoute: () => burrowRoute,
@@ -514,15 +524,12 @@ const connectedRoute = createRoute({
   }),
 });
 
-/** The Dashboard's address, in older messages and bookmarks: Connections, the query and the anchor kept (AP-2501). */
+/** The Dashboard's address, in older messages and bookmarks: where the Overview's goes. */
 const dashboardRoute = createRoute({
   getParentRoute: () => burrowRoute,
   path: 'dashboard',
   beforeLoad: ({ location }) => {
-    throw redirect({
-      href: `${CONNECTIONS_HREF}${location.searchStr}${location.hash ? `#${location.hash}` : ''}`,
-      replace: true,
-    });
+    throw redirect({ href: overviewGoneHref(location.search as Record<string, unknown>), replace: true });
   },
   component: () => null,
 });
@@ -660,9 +667,9 @@ const chatRoute = createRoute({
 });
 
 /**
- * A server, connection or device (AP-1258); the things screens are stream WT's (`features/things`). The servers list
- * is part of Connections (CN-09; AP-2523): `/things/servers` goes there with its query (Add a server and its fields),
- * except the view of every guest (`?view=guests`).
+ * A server, connection or device (AP-1258); the things screens are stream WT's (`features/things`). `/things/servers`
+ * is the Servers list's old address: it goes there with its query (Add a server and its fields), except the view of
+ * every guest (`?view=guests`).
  */
 const thingRoute = createRoute({
   getParentRoute: () => burrowRoute,
@@ -670,7 +677,7 @@ const thingRoute = createRoute({
   beforeLoad: ({ params, location }) => {
     const search = location.search as Record<string, unknown>;
     if (params.thing === 'servers' && search.view !== 'guests')
-      throw redirect({ href: `${CONNECTIONS_HREF}${location.searchStr}`, replace: true });
+      throw redirect({ href: overviewGoneHref({ ...search, tab: 'servers' }), replace: true });
   },
   component: withScreens([ThingScreen], function ThingRoute() {
     const burrow = useOpenBurrow();

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { type AssistantNavRow, navMenu } from './assistantSidebarModel';
 
 const row = (id: AssistantNavRow['id'], href: string) => ({ id, href });
-const owner = { servers: { addHref: '/connections?tab=servers&add=1', rows: [] } };
+const owner = { servers: { addHref: '/servers?add=1', rows: [] } };
 const member = { servers: { addHref: null, rows: [] } };
 const ids = (entries: ReturnType<typeof navMenu>) => entries.map((e) => e.id);
 
@@ -26,20 +26,15 @@ describe('navMenu', () => {
     expect(both[3]?.separated).toBe(true);
   });
 
-  it('adds a server only for those who may, and a connection on its own page', () => {
-    expect(ids(navMenu(row('dashboard', '/connections'), owner))).toEqual(['add-server', 'add-connection']);
-    expect(navMenu(row('dashboard', '/connections'), member)).toEqual([
-      { id: 'add-connection', label: 'Add a connection', href: '/connections?connection=add' },
-    ]);
-    expect(ids(navMenu(row('home', '/'), { servers: null }))).toEqual(['add-connection']);
-  });
-
   it('adds a server from Servers and a connection from Connections (servers-connections-places.md)', () => {
     expect(navMenu(row('servers', '/servers'), owner)).toEqual([
-      { id: 'add-server', label: 'Add a server', href: '/connections?tab=servers&add=1' },
+      { id: 'add-server', label: 'Add a server', href: '/servers?add=1' },
     ]);
     expect(navMenu(row('servers', '/servers'), member)).toEqual([]);
     expect(ids(navMenu(row('connections', '/connected'), member))).toEqual(['add-connection']);
+    expect(navMenu(row('connections', '/connected'), member)).toEqual([
+      { id: 'add-connection', label: 'Add a connection', href: '/connections?connection=add' },
+    ]);
   });
 
   it('starts an automation, adds to the Vault, and has nothing for the other places', () => {

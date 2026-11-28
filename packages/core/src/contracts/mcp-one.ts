@@ -3,8 +3,8 @@
  * CT-337, CT-340, CT-343). Spread into `MCP_TOOLS`; only in a turn for a person (OA-10).
  *
  * - `set_chat_title`: once per task chat, a better title than its first line.
- * - `pin_widget`: a panel on the person's Overview page that the server refreshes without the AI (a read-only tool call, or a
- *   server metric).
+ * - `pin_widget`: a panel on a server's, connection's or device's page that the server refreshes without the AI (a
+ *   read-only tool call, or a server metric).
  * - `device_probe`: read a device on the network with the built-in drivers, read-only (it refuses writes).
  * - `propose_device_skill`: the device's profile, tested, as a `device_skill` card for the owner to switch on.
  * - `watch_checks`: what Whombat watches on a connection, server or device, and switching a check off or on when the
@@ -103,15 +103,15 @@ export const ONE_MCP_TOOLS = {
   }),
   pin_widget: oneTool({
     name: 'pin_widget',
-    title: 'Pin a widget to Overview or a page',
+    title: 'Pin a widget to a page',
     description:
-      'Pin a chart that keeps itself up to date without you to the person’s Overview page, or with `thingId` to that connection’s, device’s or server’s page: either a read-only connection tool with fixed arguments and the numbers to plot (JSON pointers into its answer, up to 3), or a server’s metrics. Offer it when someone wants to keep an eye on something; when they ask from a thing’s page to keep something there, pass its `thingId`. Test the tool call first so the pointers are right.',
+      'Pin a chart that keeps itself up to date without you to a connection’s, device’s or server’s page: either a read-only connection tool with fixed arguments and the numbers to plot (JSON pointers into its answer, up to 3), or a server’s metrics. It goes on the page of what it reads unless `thingId` names another page. Offer it when someone wants to keep an eye on something; when they ask from a thing’s page to keep something there, pass its `thingId`. Test the tool call first so the pointers are right.',
     input: z.object({
       title: z.string().trim().min(1).max(80),
       subtitle: z.string().trim().max(120).optional(),
       source: WidgetSource,
       refreshSec: z.number().int().min(WIDGET_REFRESH_MIN_S).max(WIDGET_REFRESH_MAX_S).optional(),
-      /** Keep it on this thing's page instead of the Overview page (0.88, CT-392): `connection:con_…`, `device:…`, `server:<id>`. */
+      /** Keep it on this thing's page rather than the page of what it reads (0.88, CT-392): `connection:con_…`, `device:…`, `server:<id>`. */
       thingId: z.string().trim().min(3).max(220).optional(),
     }),
     output: commitOutcome({ widgetId: WidgetId }),

@@ -233,18 +233,22 @@ export function restorableNavigation(
   return stripLinkedActionParams({ index: routes.length - 1, routes });
 }
 
-/** What the Code tab, which is gone, used to name: its pages go back to Chat, where its threads are. */
-const CODE_TAB_WORD = 'Code';
+/**
+ * What the tabs that are gone used to be called (Code, and the Overview in English and Dutch): a page opened from one
+ * goes back to the tabs, which open on Chat.
+ */
+const GONE_TAB_WORDS: readonly unknown[] = ['Code', 'Overview', 'Overzicht'];
 
 /**
- * A saved screen's params as they read now that the Code tab is gone: a page opened from it says “‹ Chat” and goes back
- * there, and Code's Settled is Chat's.
+ * A saved screen's params as they read now that the Code and Overview tabs are gone: a page opened from one says
+ * “‹ Chat” and goes back there, and Code's Settled is Chat's.
  */
 function chatParams(route: SavedRoute, locale?: string): Record<string, unknown> | undefined {
   const p = route.params;
-  if (!p || (p.back !== CODE_TAB_WORD && !(route.name === 'Settled' && 'place' in p))) return p;
+  const gone = !!p && GONE_TAB_WORDS.includes(p.back);
+  if (!p || (!gone && !(route.name === 'Settled' && 'place' in p))) return p;
   const out = { ...p };
-  if (out.back === CODE_TAB_WORD) out.back = tabWords(locale).ChatRoom;
+  if (gone) out.back = tabWords(locale).ChatRoom;
   if (route.name === 'Settled') delete out.place;
   return out;
 }

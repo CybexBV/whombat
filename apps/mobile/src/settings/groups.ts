@@ -139,7 +139,7 @@ export function advancedRowsOnPhone(
     locale,
   ).flatMap((row) => {
     const route = advancedRoute(row.key, here);
-    // Spend is shown as Usage, the one name of that page on the phone (Places, Search, its title).
+    // Spend is shown as Usage, the one name of that page on the phone (Settings, Search, its title).
     const named = row.key === 'spend' ? { ...row, title: usage } : row;
     return route ? [{ ...named, route, label: `${named.title}. ${named.line}` }] : [];
   });

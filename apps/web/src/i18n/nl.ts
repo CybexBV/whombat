@@ -40,19 +40,13 @@ export const NL = {
   'account.phoneApp': 'Telefoon-app installeren',
   'account.signOut': 'Uitloggen',
   'account.versionCopied': 'Versie gekopieerd.',
-  'overview.nothingConnected': 'Er is nog niets gekoppeld.',
-  'overview.servers.waiting': {
+  'servers.waiting': {
     one: 'Een server wacht om toegevoegd te worden',
     other: '{n} servers wachten om toegevoegd te worden',
   },
-  'overview.servers.waitingHint':
+  'servers.waitingHint':
     'De server heeft de installatieopdracht uitgevoerd. Voeg de server toe of weiger die als je hem niet kent.',
-  'overview.servers.review': 'Bekijken',
-  'overview.servers.unreachable': 'De servers zijn nu niet bereikbaar.',
-  'overview.servers.empty': 'Nog geen servers.',
-  'overview.empty.title': 'Nog niets gekoppeld',
-  'overview.empty.body':
-    'Koppel Home Assistant, je router, een NAS of een server. {assistant} houdt die in de gaten en begint met wat er op je netwerk is gevonden.',
+  'servers.review': 'Bekijken',
   'teamReports.conversation': 'Gesprek',
   'teamReports.withdrawTitle': 'Deze melding intrekken?',
   // Language
@@ -231,8 +225,6 @@ export const NL = {
   'place.chat.line': 'Jij en {agent}',
   'place.inbox.label': 'Inbox',
   'place.inbox.line': 'Wat actie van je vraagt',
-  'place.overview.label': 'Overzicht',
-  'place.overview.line': 'Servers en koppelingen',
   'place.servers.line': 'Je servers en hoe ze erbij staan',
   'place.connections.line': 'Wat er gekoppeld is en hoe het ervoor staat',
   'place.automations.label': 'Automatiseringen',

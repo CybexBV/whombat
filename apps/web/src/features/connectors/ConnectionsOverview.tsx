@@ -706,7 +706,7 @@ function PickTile({ tile }: { tile: Tile }) {
       <Link
         // Find My without a Mac opens Add a server (findmy-connection.md §1.2); every other tile its page.
         {...(tile.addServer && !tile.connected
-          ? { to: '/connections' as const, search: { add: 1 } as never }
+          ? { to: '/servers' as const, search: { add: 1 } as never }
           : { to: '/settings' as const, search: tile.search })}
         className={c.pickTile}
         data-provider={tile.catalogId}
