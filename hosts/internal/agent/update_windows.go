@@ -20,10 +20,11 @@ const asideSuffix = ".old"
 
 // InstallExecutable replaces dst with a copy of src. Windows can't
 // overwrite or delete an executable while it runs, but it can rename it:
-// dst moves aside (to backup when set, else dst.old) and dst.new takes its
-// name; when that fails, dst moves back. src may be dst.new itself.
+// dst moves aside (to backup when set, else dst.old) and dst.new.exe takes
+// its name; when that fails, dst moves back. src may be dst.new.exe itself
+// (the updater's staged file).
 func InstallExecutable(src, dst, backup string) error {
-	tmp := dst + ".new"
+	tmp := dst + stagedSuffix
 	if filepath.Clean(src) != filepath.Clean(tmp) {
 		if err := copyFile(src, tmp, 0o755); err != nil {
 			os.Remove(tmp)

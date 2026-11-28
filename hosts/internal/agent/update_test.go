@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -338,5 +339,44 @@ func TestUpdateKeyFingerprint(t *testing.T) {
 	}
 	if reportedVersion("whombat-agent v1.2.3\n") != "v1.2.3" || reportedVersion("rackoon-agent v1.2.2\n") != "v1.2.2" || reportedVersion("other v1") != "" {
 		t.Fatal("reportedVersion")
+	}
+}
+
+// On Windows the staged executable ends in .exe, so Windows runs it, and the
+// install's own temporary name is that same file; elsewhere nothing changes.
+func TestStagedSuffix(t *testing.T) {
+	if s := stagedSuffixFor("windows"); !strings.HasSuffix(s, ".exe") || !strings.HasPrefix(s, ".new") {
+		t.Errorf("windows: %q", s)
+	}
+	for _, goos := range []string{"linux", "darwin", "freebsd"} {
+		if s := stagedSuffixFor(goos); s != ".new" {
+			t.Errorf("%s: %q", goos, s)
+		}
+	}
+}
+
+// The new executable's `version` on Windows gets Windows' own folders, the
+// temporary folders and a Windows folder to start in; elsewhere a bare PATH
+// and /, as before.
+func TestVersionCommandEnv(t *testing.T) {
+	vars := map[string]string{`SystemRoot`: `D:\Win`, `TEMP`: `D:\Win\Temp`, `TMP`: `D:\Win\Temp`, `USERNAME`: `someone`}
+	env, dir := versionCommandEnv("windows", func(k string) string { return vars[k] })
+	got := map[string]string{}
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		got[k] = v
+	}
+	if got["SystemRoot"] != `D:\Win` || got["WINDIR"] != `D:\Win` || got["TEMP"] == "" || got["TMP"] == "" ||
+		!strings.HasPrefix(got["PATH"], `D:\Win\System32`) || dir != `D:\Win` {
+		t.Errorf("windows: %v in %s", env, dir)
+	}
+	if _, ok := got["USERNAME"]; ok {
+		t.Errorf("windows passes on more than it needs: %v", env)
+	}
+	if env, dir := versionCommandEnv("windows", func(string) string { return "" }); dir != `C:\Windows` || !slices.Contains(env, `SystemRoot=C:\Windows`) {
+		t.Errorf("windows without SystemRoot: %v in %s", env, dir)
+	}
+	if env, dir := versionCommandEnv("linux", func(k string) string { return vars[k] }); dir != "/" || len(env) != 1 || !strings.HasPrefix(env[0], "PATH=/") {
+		t.Errorf("linux: %v in %s", env, dir)
 	}
 }
