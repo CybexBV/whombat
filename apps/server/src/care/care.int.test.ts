@@ -20,6 +20,7 @@ import {
   lookResearches,
   messages,
   notifications,
+  restoreTestServers,
   serverCares,
 } from '../db/schema/index';
 import { startHosts } from '../hosts/index';
@@ -148,7 +149,7 @@ describe('a care plan when a server is added (care-plan.md)', () => {
     const row = await careRow('pve-new');
     expect(row).toMatchObject({ id: started, kind: 'server', state: 'looking', personId: IDS.mara });
     expect(row?.care?.new).toBe(true);
-    expect(row?.care?.steps.map((s) => s.care)).toEqual(['backup', 'updates']);
+    expect(row?.care?.steps.map((s) => s.care)).toEqual(['backup', 'restore_test', 'updates']);
     // The Backup Server, keeping a week, an hour before the quiet hours.
     expect(row?.care?.steps[0]?.text).toContain('02:00 to pbs-01');
     const [opening] = await t.services.db
@@ -162,7 +163,7 @@ describe('a care plan when a server is added (care-plan.md)', () => {
     const context = await buildDispatchContext(t.services, turn);
     expect(context.look).toMatchObject({ kind: 'server', server: 'pve-new' });
     expect(context.look?.care?.new).toBe(true);
-    expect(context.look?.care?.steps.map((s) => s.id)).toEqual(['backup', 'updates']);
+    expect(context.look?.care?.steps.map((s) => s.id)).toEqual(['backup', 'restore_test', 'updates']);
     expect(context.changeWindow).toEqual({ start: '03:00', end: '05:00' });
     // Once per server: the next pass starts nothing.
     expect(await pass()).toBeNull();
@@ -180,7 +181,7 @@ describe('a care plan when a server is added (care-plan.md)', () => {
         title: 'pve-new runs 3 machines',
         summary: 'Nothing on it is backed up yet and updates are installed by hand.',
         fixed: false,
-        care: ['updates', 'backup', 'snapshots'],
+        care: ['updates', 'backup', 'snapshots', 'restore_test'],
       },
     });
     expect(res.isError, JSON.stringify(res.content)).toBeFalsy();
@@ -190,7 +191,7 @@ describe('a care plan when a server is added (care-plan.md)', () => {
     const found = await careRow('pve-new');
     expect(found?.state).toBe('found');
     // In the order named, only what was offered, in Whombat's words.
-    expect(found?.plan?.map((p) => p.care)).toEqual(['updates', 'backup']);
+    expect(found?.plan?.map((p) => p.care)).toEqual(['updates', 'backup', 'restore_test']);
     const plan = await card(found?.planMessageId ?? '');
     expect(plan).toMatchObject({ name: 'pve-new', state: 'waiting', care: true });
     expect(plan?.steps[0]).toContain('Sundays at 03:00');
@@ -213,12 +214,19 @@ describe('a care plan when a server is added (care-plan.md)', () => {
     expect(auto).toMatchObject({ status: 'published', currentVersion: 1 });
     const [care] = await t.services.db.select().from(serverCares).where(eq(serverCares.serverId, 'pve-new'));
     expect(care?.automations.updates).toBe(auto?.id);
+    // The weekly restore tests are a switch Whombat turned on with the same press.
+    const [tests] = await t.services.db
+      .select()
+      .from(restoreTestServers)
+      .where(eq(restoreTestServers.serverId, 'pve-new'));
+    expect(tests).toMatchObject({ on: true, guests: [] });
     const fixing = await careRow('pve-new');
     const turn = await dispatchRow(fixing?.dispatchId ?? '');
     expect(turn.trigger).toBe('look_fix');
     const context = await buildDispatchContext(t.services, turn);
     expect(context.look?.plan?.[0]?.step).toContain('Updates on pve-new');
     expect(context.look?.plan?.[1]?.step).toContain('backup_job_set');
+    expect(context.look?.plan?.[2]?.step).toContain('restore tests');
     expect(context.look?.care).toBeUndefined();
 
     const mcp2 = await mcpClient(t.baseUrl, (await issueDispatchToken(t.services, turn.id)).token);

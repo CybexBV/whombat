@@ -21,6 +21,7 @@ import {
   catalogConnections,
   type LookCareRow,
   type LookPlanStepRow,
+  restoreTestServers,
   serverCares,
 } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
@@ -67,7 +68,13 @@ export async function careFactsOf(services: Services, burrowId: string, row: Hos
     actor: WHOMBAT_ACTOR,
   });
   const detail = toHostServerDetail(raw, [], null, services.clock());
-  const has = await careAutomationsOf(services.db, burrowId, row.id);
+  const has: Partial<Record<CareStepId, unknown>> = await careAutomationsOf(services.db, burrowId, row.id);
+  // Restore tests are a switch, not an automation.
+  const [tests] = await services.db
+    .select({ on: restoreTestServers.on })
+    .from(restoreTestServers)
+    .where(and(eq(restoreTestServers.burrowId, burrowId), eq(restoreTestServers.serverId, row.id)));
+  if (tests?.on) has.restore_test = true;
   const known = serverAddress(raw);
   const reported = hubBackupPlace(raw)?.addresses ?? [];
   const addresses = [...new Set([...(known ? [known] : []), ...reported])];
@@ -165,6 +172,7 @@ export function careStepRows(facts: CareFacts, window: ChangeWindow): LookPlanSt
           },
         }
       : {}),
+    ...(s.restoreTests ? { restoreTests: { server: { id: facts.server.id, name: facts.server.name } } } : {}),
   }));
 }
 

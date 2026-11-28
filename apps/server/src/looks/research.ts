@@ -1096,13 +1096,17 @@ export async function lookContextOf(
   const step = acting && r.fixLabel && r.fixStep ? { label: r.fixLabel, step: r.fixStep } : null;
   const plan = acting && r.plan?.length ? r.plan : null;
   // Whombat's care plan steps the turn may name (care-plan.md): while it looks and while the person may change its plan.
-  const offered = (r.care?.steps ?? []).flatMap((c) => (c.care ? [{ ...c, care: c.care }] : []));
+  // A step of a kind this release doesn't know (written by a newer one before a rollback) is left out.
+  const offered = (r.care?.steps ?? []).flatMap((c) => {
+    const id = CareStepId.safeParse(c.care);
+    return id.success ? [{ ...c, care: id.data }] : [];
+  });
   const care =
     offered.length && row.trigger !== 'look_fix'
       ? {
           new: r.care?.new === true,
           steps: offered.slice(0, LOOK_PLAN_STEPS_MAX).map((c) => ({
-            id: CareStepId.parse(c.care),
+            id: c.care,
             text: c.text.slice(0, LOOK_PLAN_STEP_MAX),
             step: c.step.slice(0, LOOK_FIX_STEP_MAX),
           })),
