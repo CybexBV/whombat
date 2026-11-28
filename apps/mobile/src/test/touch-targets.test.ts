@@ -23,8 +23,11 @@ const FILES: Record<string, number> = {
   'src/ui/places.tsx': 3,
   'src/ui/topRow.tsx': 1,
   'src/screens/SearchScreen.tsx': 3,
-  // Servers and Connections (servers-connections-places.md): the `+` and the rows, at the shell's target.
-  'src/screens/PlaceScreen.tsx': 2,
+  // Servers and Connections (servers-connections-places.md): the `+` and the rows, at the shell's target, and Open to
+  // the internet at the end of Servers.
+  'src/screens/PlaceScreen.tsx': 3,
+  // Open to the internet (internet-exposure.md): its links (44 tall) and the places' rows.
+  'src/screens/ExposureScreen.tsx': 2,
   'src/screens/PlanScreen.tsx': 2,
   'src/screens/RunActivity.tsx': 2,
   // The Settings tab (settings-tab-android.md AP-2622): built from the places' rows (ui/place.tsx) since the final

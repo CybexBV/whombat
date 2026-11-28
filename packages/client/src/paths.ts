@@ -64,6 +64,8 @@ export const BURROW_ROUTES = [
   // Overview's, so Connections is `/connected`.
   '/servers',
   '/connected',
+  // What the internet can reach, in the Servers place (Whombat internet-exposure.md).
+  '/internet',
   '/things/$thing',
   '/skills',
   '/done',

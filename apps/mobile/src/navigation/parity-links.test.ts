@@ -133,6 +133,14 @@ describe('the Overview’s addresses (connections-page.md AP-2550)', () => {
   });
 });
 
+describe('Open to the internet (internet-exposure.md)', () => {
+  it('opens /internet, where a new opening’s line leads, on its own screen in either form', () => {
+    expect(appScreenUrlForPath('/internet')).toBe('whombat://internet');
+    expect(appScreenUrlForPath('/burrow-hq/internet')).toBe('whombat://internet');
+    expect(LINKING_SCREENS).toMatchObject({ Internet: 'internet' });
+  });
+});
+
 describe('Servers and Connections as places (servers-connections-places.md)', () => {
   it('opens /servers and /connected on their list screens, in either form, and the Overview’s addresses too', () => {
     expect(appScreenUrlForPath('/servers')).toBe('whombat://servers');

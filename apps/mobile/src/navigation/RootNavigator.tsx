@@ -624,6 +624,13 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
             (require('../screens/PlaceScreen') as typeof import('../screens/PlaceScreen')).PlaceScreen
           }
         />
+        <Stack.Screen
+          name="Internet"
+          getComponent={() =>
+            (require('../screens/ExposureScreen') as typeof import('../screens/ExposureScreen'))
+              .ExposureScreen
+          }
+        />
         {/* Search: chats, things, settings and places (phone-shell-final.md). */}
         <Stack.Screen
           name="Search"
