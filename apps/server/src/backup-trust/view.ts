@@ -16,6 +16,7 @@ import {
   type RestoreTestServer,
   thingHref,
 } from '@whombat/core';
+import { type BackupOffsite, offsitePlaceName } from '@whombat/protocol/session';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import { placesNow } from '../backup-places/places';
 import { changeWindowOf } from '../care/window';
@@ -30,6 +31,7 @@ import { BACKUPS_HREF } from '../home/box-backup';
 import { arr, obj, toHostBackupJob, toHostBackupVolumes, toHostChoices, toHostGuest } from '../hosts/map';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import { G, S } from '../hosts/tools-shared';
+import { offsiteNow } from '../managed/backup-offsite';
 import { boxBackupStatus } from '../managed/box-backup';
 import type { Services } from '../services';
 import { guestLabel, machineHref } from '../things/runs-on';
@@ -105,20 +107,16 @@ export async function latestRestoreTest(
 /* The offsite copy of this Whombat's own backups ------------------------------------------------------------------ */
 
 /**
- * The second place this Whombat's backups are copied to, when the backup service's status has one (`offsite`, added
- * by the off-site copy's own work; read here without depending on its exact shape): its name and the newest copy.
+ * The second place this Whombat's backups are copied to, as its row says it: the storage's name (never its address),
+ * the last copy only once the bucket's own list showed a backup in it, and when copying there failed while it fails.
  */
-export function offsiteOf(status: unknown): { name: string; lastAt: string | null } | null {
-  const o = obj(obj(status).offsite);
-  if (!Object.keys(o).length || o.configured === false || o.enabled === false) return null;
-  const name = [o.name, o.display, o.provider, o.where].find(
-    (v): v is string => typeof v === 'string' && !!v,
-  );
-  const last = obj(o.lastCopy ?? o.lastSuccess);
-  const at = [last.at, o.lastCopyAt, o.lastAt].find((v): v is string => typeof v === 'string' && !!v);
+export function offsiteOf(offsite: BackupOffsite | null | undefined): ProtectedRow['offsite'] {
+  if (!offsite) return null;
+  const confirmed = offsite.newestInCopyAt !== null;
   return {
-    name: (name ?? 'Off-site').slice(0, 160),
-    lastAt: at && Number.isFinite(Date.parse(at)) ? at : null,
+    name: offsitePlaceName(offsite).slice(0, 160),
+    lastAt: confirmed ? offsite.lastCopyAt : null,
+    ...(offsite.state === 'failing' && offsite.lastFailure ? { failedAt: offsite.lastFailure.at } : {}),
   };
 }
 
@@ -132,6 +130,25 @@ interface StorageInfo {
 function storageState(s: StorageInfo | undefined): 'copied' | 'local' | null {
   if (!s) return null;
   return AWAY_TYPES.has(s.type) || s.shared ? 'copied' : 'local';
+}
+
+/**
+ * Where a Proxmox machine's backups are, from what was read: none only when nothing backs it up, the storage's kind
+ * when its place is known, and “can't see” when the server's lists or the backup's own place weren't read.
+ */
+export function pveState(f: {
+  hasBackup: boolean;
+  planned: boolean;
+  storage: StorageInfo | undefined | null;
+  /** The server's backup plans and storages were read. */
+  listsRead: boolean;
+  /** Where the newest backup is was looked for (not skipped past the reads of one build). */
+  placeRead: boolean;
+}): ProtectedState {
+  if (!f.hasBackup && !f.planned) return 'none';
+  const at = storageState(f.storage ?? undefined);
+  if (at !== null) return at;
+  return f.listsRead && f.placeRead ? 'local' : 'unseen';
 }
 
 interface MachineFacts {
@@ -215,6 +232,8 @@ async function serverMachines(
             ((j.guests ?? []).includes(g.id) || (j.guests ?? []).includes(String(g.vmid)))),
       );
       let storage = covering?.storage ?? null;
+      // Past the reads of one build a backup's place stays unread: the row says Whombat can't see it, never a guess.
+      const unreadPlace = !storage && !!last && budget.reads <= 0;
       if (!storage && last && budget.reads > 0) {
         // A backup without a plan that names it (made by hand, or a pool's plan): its newest volume says where.
         budget.reads--;
@@ -229,10 +248,13 @@ async function serverMachines(
           [...volumes].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0]
             ?.storage ?? null;
       }
-      const at = storage ? storageState(storages?.get(storage)) : null;
-      if (!last && !covering && g.backupJob !== true) state = 'none';
-      else if (at === null) state = storages && jobs ? 'local' : 'unseen';
-      else state = at;
+      state = pveState({
+        hasBackup: !!last,
+        planned: !!covering || g.backupJob === true,
+        storage: storage ? storages?.get(storage) : null,
+        listsRead: !!storages && !!jobs,
+        placeRead: !unreadPlace,
+      });
       if (state !== 'none') where = storage;
     } else if (g.platform === 'incus') {
       // Snapshots stay in the same storage pool as the instance.
@@ -348,7 +370,7 @@ async function whombatRow(services: Services, unread: string[], name: string): P
     lastAt: status.lastSuccess?.at ?? null,
     where: state === 'copied' && where ? where.slice(0, 160) : null,
     ...(status.state === 'failing' && status.lastFailure ? { failedAt: status.lastFailure.at } : {}),
-    offsite: offsiteOf(status),
+    offsite: offsiteOf(await offsiteNow(services).catch(() => undefined)),
   };
 }
 

@@ -71,6 +71,10 @@ export const PROTECTED_MESSAGES = splitPairs({
   ],
   'protected.line.offsite': ['Off-site ({name}) · last copy {ago}', 'Elders ({name}) · laatste kopie {ago}'],
   'protected.line.offsiteNone': ['Off-site ({name}) · no copy yet', 'Elders ({name}) · nog geen kopie'],
+  'protected.line.offsiteFailed': [
+    'Off-site ({name}) · copying there failed {ago}',
+    'Elders ({name}) · kopiëren daarheen is mislukt {ago}',
+  ],
 
   'protected.when.on': ['on {day}', 'op {day}'],
   'protected.test.label': ['Restore test', 'Hersteltest'],

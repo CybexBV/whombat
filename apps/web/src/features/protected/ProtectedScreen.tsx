@@ -166,7 +166,10 @@ function Row({ burrow, row, ask }: { burrow: string; row: ProtectedRow; ask: boo
           {line}
         </p>
         {row.offsite ? (
-          <p className={styles.line} data-protected-offsite="">
+          <p
+            className={cx(styles.line, row.offsite.failedAt && styles.warn)}
+            data-protected-offsite={row.offsite.failedAt ? 'failing' : ''}
+          >
             <Icon icon={HardDrive} size={13} className={styles.inlineIcon} />
             {protectedOffsiteLine(row.offsite, now, timeZone, i18n.tag)}
           </p>

@@ -1,3 +1,4 @@
+import type { BackupOffsite } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import {
   betterProtection,
@@ -7,7 +8,7 @@ import {
   truenasProtection,
 } from './protection';
 import { failingTests } from './runner';
-import { offsiteOf } from './view';
+import { offsiteOf, pveState } from './view';
 
 const d = (s: string) => new Date(s);
 
@@ -96,16 +97,58 @@ describe('restore test problems', () => {
 });
 
 describe('the off-site copy of this Whombat’s backups', () => {
-  it('reads it when the status has one', () => {
-    expect(offsiteOf({ offsite: { name: 'Backblaze', lastCopy: { at: '2026-11-28T03:10:00Z' } } })).toEqual({
-      name: 'Backblaze',
-      lastAt: '2026-11-28T03:10:00Z',
+  const offsite: BackupOffsite = {
+    provider: 'b2',
+    display: 's3.example.com/bk/box',
+    endpoint: 's3.example.com',
+    bucket: 'bk',
+    folder: 'box',
+    region: null,
+    state: 'ok',
+    configuredAt: '2026-11-20T10:00:00Z',
+    lastCopyAt: '2026-11-28T03:10:00Z',
+    newestInCopyAt: '2026-11-28T03:00:00Z',
+    newestBackupAt: '2026-11-28T03:00:00Z',
+    backupsInCopy: 4,
+    failedAttempts: 0,
+    lastFailure: null,
+    nextTryAt: null,
+    lastClearedAt: null,
+  };
+  it('names the storage and the last copy the bucket confirmed', () => {
+    expect(offsiteOf(offsite)).toEqual({ name: 'Backblaze B2', lastAt: '2026-11-28T03:10:00Z' });
+    expect(offsiteOf({ ...offsite, provider: 's3' })?.name).toBe('bk');
+  });
+  it('has no last copy until the bucket’s own list showed one', () => {
+    expect(offsiteOf({ ...offsite, newestInCopyAt: null })?.lastAt).toBeNull();
+  });
+  it('says when copying there fails', () => {
+    const failing = offsiteOf({
+      ...offsite,
+      state: 'failing',
+      failedAttempts: 2,
+      lastFailure: { at: '2026-11-28T09:00:00Z', step: 'keys' },
     });
-    expect(offsiteOf({ offsite: { provider: 'S3', lastCopyAt: null } })).toEqual({
-      name: 'S3',
-      lastAt: null,
-    });
-    expect(offsiteOf({})).toBeNull();
-    expect(offsiteOf({ offsite: { configured: false } })).toBeNull();
+    expect(failing).toMatchObject({ failedAt: '2026-11-28T09:00:00Z', lastAt: '2026-11-28T03:10:00Z' });
+  });
+  it('is absent without a second place, or when the box can’t say', () => {
+    expect(offsiteOf(null)).toBeNull();
+    expect(offsiteOf(undefined)).toBeNull();
+  });
+});
+
+describe('a Proxmox machine’s backups', () => {
+  const read = { hasBackup: true, planned: false, listsRead: true, placeRead: true };
+  it('are on another machine or the same one by their storage', () => {
+    expect(pveState({ ...read, storage: { type: 'pbs', shared: false } })).toBe('copied');
+    expect(pveState({ ...read, storage: { type: 'dir', shared: false } })).toBe('local');
+  });
+  it('are unseen when their place wasn’t read, never guessed to be on the same machine', () => {
+    expect(pveState({ ...read, storage: null, placeRead: false })).toBe('unseen');
+    expect(pveState({ ...read, storage: null, listsRead: false })).toBe('unseen');
+  });
+  it('are none only when nothing backs the machine up', () => {
+    expect(pveState({ ...read, hasBackup: false, storage: null })).toBe('none');
+    expect(pveState({ ...read, hasBackup: false, planned: true, storage: null })).not.toBe('none');
   });
 });
