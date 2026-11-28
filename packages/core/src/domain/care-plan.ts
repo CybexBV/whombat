@@ -76,6 +76,14 @@ export function backupTime(w: ChangeWindow): string {
   return minutesClock(clockMinutes(w.start) - 60);
 }
 
+/**
+ * The weekday (cron's, 0 Sunday … 6 Saturday) on which the quiet hours of Sunday night start: Sunday when they start in
+ * the evening (23:00), Monday when they start after midnight (03:00, the night from Sunday to Monday).
+ */
+export function sundayNightDay(w: ChangeWindow): number {
+  return clockMinutes(w.start) >= 12 * 60 ? 0 : 1;
+}
+
 /** A five-field cron line at a wall-clock time: every day, or on one weekday (0 Sunday … 6 Saturday). */
 export function cronAt(time: string, weekday?: number): string {
   const [h, m] = time.split(':');
@@ -125,15 +133,16 @@ export function isTemporaryServer(name: string): boolean {
 /**
  * The kinds of step a care plan has: `backup` a Proxmox backup plan for every machine, `snapshots` an Incus snapshot
  * schedule per machine, `vm_backup` a weekly backup of QEMU/KVM machines (an automation: libvirt has no schedule of
- * its own), `updates` the system updates every week in the quiet hours (an automation), `apps` telling the person
- * about app updates (Whombat's helper does that already).
+ * its own), `updates` the system updates every week in the quiet hours (an automation), `apps` the Docker Compose apps'
+ * updates every Sunday night in the quiet hours (an automation; where no app was started with Compose, telling the
+ * person about app updates, which Whombat's helper does already).
  */
 export const CARE_STEP_IDS = ['backup', 'snapshots', 'vm_backup', 'updates', 'apps'] as const;
 export const CareStepId = z.enum(CARE_STEP_IDS);
 export type CareStepId = z.infer<typeof CareStepId>;
 
 /** The care steps Whombat turns on itself, as an automation, when the person says go ahead. */
-export type CareAutomationKind = 'updates' | 'vm_backup';
+export type CareAutomationKind = 'updates' | 'vm_backup' | 'apps';
 
 /**
  * One step as the plan offers it: `text` the card's line with the defaults chosen, `step` what the assistant does when
@@ -150,7 +159,7 @@ export interface CareStep {
 }
 
 /** A guest as the plan weighs it. */
-export type CareGuest = TemporaryFacts & Partial<Pick<HostGuest, 'kind'>>;
+export type CareGuest = TemporaryFacts & Partial<Pick<HostGuest, 'kind' | 'app'>>;
 
 /** What Whombat knows about a server when it plans its care. */
 export interface CareFacts {
@@ -258,7 +267,9 @@ export function nasShareName(serverId: string): string {
  * - QEMU/KVM machines: a weekly backup on Sundays (an automation);
  * - every Linux server but Unraid: system updates on Sundays at the start of the quiet hours, restarting only inside
  *   them (an automation); the server this Whombat runs on asks first, as it always does; a Mac none;
- * - apps: the person hears when they have updates.
+ * - Docker Compose apps: their updates every Sunday night at the start of the quiet hours (an automation): only the
+ *   apps that are safe to update by themselves, the others asked as one question; containers `docker run` started:
+ *   the person hears when they have updates.
  *
  * Temporary machines are never in it; steps already in place (`has`) are left out.
  */
@@ -327,7 +338,17 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
     });
   }
 
-  if (kept.some((g) => g.platform === 'docker') && !has.apps) {
+  const docker = kept.filter((g) => g.platform === 'docker');
+  // Compose apps (or a helper that will report them once it has updated itself) can be updated by Whombat.
+  const compose = docker.some((g) => g.app || g.project);
+  if (compose && !has.apps) {
+    out.push({
+      id: 'apps',
+      text: `Update your apps on Sunday night at ${window.start}`,
+      step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
+      automation: 'apps',
+    });
+  } else if (docker.length && !has.apps) {
     out.push({
       id: 'apps',
       text: 'Tell you when apps have updates',
