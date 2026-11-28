@@ -1,0 +1,441 @@
+/**
+ * What's protected (docs/decisions/backup-trust.md): one row for everything that holds data — this Whombat, each
+ * server, each machine on a server, each connected service that keeps data — with where its newest copy is kept: on
+ * another machine, only on the same machine, or nowhere Whombat can see. Read from what Whombat already knows (the
+ * backup service's status, the hosts service's guests, backup jobs and storages, what the health pass read about each
+ * service's own backups); nothing is asked of a service just for this page. Kept a minute.
+ */
+import {
+  type HostServer,
+  isTemporaryGuest,
+  isTemporaryServer,
+  type ProtectedRow,
+  type ProtectedState,
+  type ProtectedView,
+  type RestoreTestResult,
+  type RestoreTestServer,
+  thingHref,
+} from '@whombat/core';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { changeWindowOf } from '../care/window';
+import { burrows, catalogConnections, restoreTestServers, restoreTests, type StoredProtection } from '../db/schema/index';
+import { BACKUPS_HREF } from '../home/box-backup';
+import { arr, obj, toHostBackupJob, toHostBackupVolumes, toHostChoices, toHostGuest } from '../hosts/map';
+import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
+import { G, S } from '../hosts/tools-shared';
+import { boxBackupStatus } from '../managed/box-backup';
+import { placesNow } from '../backup-places/places';
+import type { Services } from '../services';
+import { guestLabel, machineHref } from '../things/runs-on';
+import { eligibleGuests, nextTestAt } from './plan';
+import { betterProtection } from './protection';
+
+const VIEW_MS = 60_000;
+/** Guests whose backups are read one by one (no job names them) in one build; the rest wait for the next. */
+const BACKUP_READS_MAX = 20;
+
+/** Connected services that keep data of their own (photos, documents, files, a smart home's history, backups). */
+export const DATA_KINDS: ReadonlySet<string> = new Set([
+  'homeassistant',
+  'immich',
+  'paperless',
+  'nextcloud',
+  'proxmox_backup',
+  'truenas',
+  'synology',
+  'qnap',
+  'frigate',
+  'forgejo',
+  'jellyfin',
+  'plex',
+]);
+
+/** Proxmox storages that live on another machine: a backup there survives the server. */
+const AWAY_TYPES = new Set(['pbs', 'nfs', 'cifs', 'cephfs', 'rbd', 'glusterfs', 'iscsi', 'iscsidirect']);
+
+type TestRow = typeof restoreTests.$inferSelect;
+type Burrow = typeof burrows.$inferSelect;
+
+/** A finished test as people read it. */
+export function testResult(r: TestRow): RestoreTestResult | null {
+  if (!r.outcome) return null;
+  const at = r.finishedAt ?? r.stepAt;
+  return {
+    serverId: r.serverId,
+    guestId: r.guestId,
+    guestName: r.guestName.slice(0, 160),
+    at: at.toISOString(),
+    outcome: r.outcome,
+    ...(r.reason ? { reason: r.reason as RestoreTestResult['reason'] } : {}),
+    ...(r.durationS !== null ? { durationS: Math.min(86_400, r.durationS) } : {}),
+    ...(r.booted !== null ? { booted: r.booted } : {}),
+    backupAt: r.backupAt?.toISOString() ?? null,
+  };
+}
+
+/** The newest test of one machine that came to an outcome, or null. */
+export async function latestRestoreTest(
+  services: Services,
+  burrowId: string,
+  serverId: string,
+  guestId: string,
+): Promise<RestoreTestResult | null> {
+  const rows = await services.db
+    .select()
+    .from(restoreTests)
+    .where(
+      and(
+        eq(restoreTests.burrowId, burrowId),
+        eq(restoreTests.serverId, serverId),
+        eq(restoreTests.guestId, guestId),
+        isNotNull(restoreTests.outcome),
+      ),
+    )
+    .orderBy(desc(restoreTests.startedAt))
+    .limit(1);
+  return rows[0] ? testResult(rows[0]) : null;
+}
+
+/* The offsite copy of this Whombat's own backups ------------------------------------------------------------------ */
+
+/**
+ * The second place this Whombat's backups are copied to, when the backup service's status has one (`offsite`, added
+ * by the off-site copy's own work; read here without depending on its exact shape): its name and the newest copy.
+ */
+export function offsiteOf(status: unknown): { name: string; lastAt: string | null } | null {
+  const o = obj(obj(status).offsite);
+  if (!Object.keys(o).length || o.configured === false || o.enabled === false) return null;
+  const name = [o.name, o.display, o.provider, o.where].find((v): v is string => typeof v === 'string' && !!v);
+  const last = obj(o.lastCopy ?? o.lastSuccess);
+  const at = [last.at, o.lastCopyAt, o.lastAt].find((v): v is string => typeof v === 'string' && !!v);
+  return { name: (name ?? 'Off-site').slice(0, 160), lastAt: at && Number.isFinite(Date.parse(at)) ? at : null };
+}
+
+/* Machines ------------------------------------------------------------------------------------------------------------ */
+
+interface StorageInfo {
+  type: string;
+  shared: boolean;
+}
+
+function storageState(s: StorageInfo | undefined): 'copied' | 'local' | null {
+  if (!s) return null;
+  return AWAY_TYPES.has(s.type) || s.shared ? 'copied' : 'local';
+}
+
+interface MachineFacts {
+  row: ProtectedRow;
+  /** For a service on it: its state as a stored fact. */
+  fact: StoredProtection | null;
+}
+
+/** A server's machines and where their backups go. */
+async function serverMachines(
+  services: Services,
+  server: HostServer,
+  tests: ReadonlyMap<string, RestoreTestResult>,
+  budget: { reads: number },
+  unread: string[],
+): Promise<MachineFacts[]> {
+  const hosts = hostsFor(services);
+  let raw: unknown[];
+  try {
+    raw = await hosts.guestsRaw(server.id);
+  } catch {
+    unread.push(server.name);
+    return [];
+  }
+  const guests = raw
+    .map((g) => ({ raw: obj(g), g: toHostGuest(g, server.id) }))
+    .filter(
+      ({ raw: r, g }) =>
+        (g.platform === 'pve' || g.platform === 'incus' || g.platform === 'libvirt') &&
+        r.template !== true &&
+        !g.self &&
+        !isTemporaryGuest(g),
+    );
+  if (!guests.length) return [];
+  const pve = guests.some(({ g }) => g.platform === 'pve');
+  const [jobs, storages] = pve
+    ? await Promise.all([
+        hosts
+          .call<unknown>({ path: `${S(server.id)}/backup-jobs`, actor: WHOMBAT_ACTOR })
+          .then((r) => arr(obj(r).items).map(toHostBackupJob))
+          .catch(() => null),
+        hosts
+          .call<unknown>({
+            path: `${S(server.id)}/manage/choices`,
+            query: { platform: 'pve' },
+            actor: { ...WHOMBAT_ACTOR, role: 'operator' },
+          })
+          .then((r) => new Map(toHostChoices(r).storages.map((s) => [s.id, { type: s.type, shared: !!s.shared }])))
+          .catch(() => null),
+      ])
+    : [null, null];
+  const out: MachineFacts[] = [];
+  for (const { g } of guests) {
+    const name = guestLabel(g).slice(0, 120);
+    const base = {
+      key: `guest:${server.id}:${g.id}`.slice(0, 300),
+      kind: g.kind === 'vm' ? ('vm' as const) : ('container' as const),
+      name,
+      on: server.name.slice(0, 160),
+      href: machineHref(server.id, g.id).slice(0, 500),
+      serverId: server.id,
+      guestId: g.id,
+      restoreTest: tests.get(`${server.id}\n${g.id}`) ?? null,
+    };
+    const last = g.lastBackup ?? null;
+    const failed = last?.result === 'error';
+    const lastAt = last && !failed ? last.at : null;
+    let state: ProtectedState;
+    let where: string | null = null;
+    if (g.platform === 'pve') {
+      const enabled = (jobs ?? []).filter((j) => j.enabled);
+      const covering = enabled.find(
+        (j) =>
+          (j.selection === 'all' && !(j.exclude ?? []).includes(g.id) && !(j.exclude ?? []).includes(String(g.vmid))) ||
+          (j.selection === 'guests' && ((j.guests ?? []).includes(g.id) || (j.guests ?? []).includes(String(g.vmid)))),
+      );
+      let storage = covering?.storage ?? null;
+      if (!storage && last && budget.reads > 0) {
+        // A backup without a plan that names it (made by hand, or a pool's plan): its newest volume says where.
+        budget.reads--;
+        const volumes = await hosts
+          .call<unknown>({ path: `${G(server.id, g.id)}/backups`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+          .then(toHostBackupVolumes)
+          .catch(() => []);
+        storage = [...volumes].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0]?.storage ?? null;
+      }
+      const at = storage ? storageState(storages?.get(storage)) : null;
+      if (!last && !covering && g.backupJob !== true) state = 'none';
+      else if (at === null) state = storages && jobs ? 'local' : 'unseen';
+      else state = at;
+      if (state !== 'none') where = storage;
+    } else if (g.platform === 'incus') {
+      // Snapshots stay in the same storage pool as the instance.
+      state = (g.snapshots ?? 0) > 0 ? 'local' : 'none';
+    } else {
+      state = last ? 'local' : 'none';
+    }
+    const row: ProtectedRow = {
+      ...base,
+      state,
+      lastAt,
+      where: where ? where.slice(0, 160) : null,
+      ...(failed && last ? { failedAt: last.at } : {}),
+    };
+    out.push({
+      row,
+      fact:
+        state === 'unseen'
+          ? null
+          : { state, lastAt, where: row.where, ...(failed && last ? { failedAt: last.at } : {}) },
+    });
+  }
+  return out;
+}
+
+/* Restore tests per server -------------------------------------------------------------------------------------------- */
+
+export async function restoreTestServerView(
+  services: Services,
+  burrow: Pick<Burrow, 'id' | 'timeZone' | 'changeWindowStart' | 'changeWindowEnd'>,
+  server: Pick<HostServer, 'id' | 'name' | 'status' | 'remoteControl'>,
+  rows?: { setting: typeof restoreTestServers.$inferSelect | null; tests: TestRow[] },
+): Promise<RestoreTestServer> {
+  const db = services.db;
+  const setting =
+    rows?.setting ??
+    (
+      await db
+        .select()
+        .from(restoreTestServers)
+        .where(and(eq(restoreTestServers.burrowId, burrow.id), eq(restoreTestServers.serverId, server.id)))
+    )[0] ??
+    null;
+  const tests =
+    rows?.tests ??
+    (await db
+      .select()
+      .from(restoreTests)
+      .where(and(eq(restoreTests.burrowId, burrow.id), eq(restoreTests.serverId, server.id)))
+      .orderBy(desc(restoreTests.startedAt))
+      .limit(50));
+  const raw = await hostsFor(services)
+    .guestsRaw(server.id)
+    .catch(() => null);
+  const eligible = eligibleGuests(raw ?? []).slice(0, 200);
+  const blocked =
+    server.status === 'offline' || raw === null
+      ? ('offline' as const)
+      : server.remoteControl.manage === false
+        ? ('manage_off' as const)
+        : !eligible.length
+          ? ('no_guests' as const)
+          : undefined;
+  const running = tests.find((t) => !t.finishedAt) ?? null;
+  const last = tests.map(testResult).find((r) => r !== null) ?? null;
+  const weekly = tests.find((t) => !t.manual) ?? null;
+  const on = setting?.on === true;
+  const next = on
+    ? nextTestAt(services.clock(), changeWindowOf(burrow), burrow.timeZone, weekly?.startedAt ?? null)
+    : null;
+  return {
+    serverId: server.id,
+    serverName: server.name.slice(0, 120),
+    on,
+    guests: (setting?.guests ?? []).slice(0, 200),
+    eligible: eligible.map((g) => ({ id: g.id, name: g.name.slice(0, 160), kind: g.kind })),
+    ...(blocked ? { blocked } : {}),
+    last,
+    running: running ? { guestId: running.guestId, guestName: running.guestName.slice(0, 160), startedAt: running.startedAt.toISOString() } : null,
+    next: next?.toISOString() ?? null,
+  };
+}
+
+/* The whole view ---------------------------------------------------------------------------------------------------- */
+
+async function whombatRow(services: Services, unread: string[], name: string): Promise<ProtectedRow | null> {
+  const status = await boxBackupStatus(services).catch(() => null);
+  // A development box has no backup service: nothing to say about it.
+  if (status === undefined) return null;
+  const base = { key: 'whombat', kind: 'whombat' as const, name, href: BACKUPS_HREF };
+  if (!status) {
+    unread.push(name);
+    return { ...base, state: 'unseen', lastAt: null, where: null };
+  }
+  const configured = status.destination.configured;
+  const now = configured ? await placesNow(services).catch(() => null) : null;
+  const place = now?.places.find((p) => p.id === now.currentPlaceId);
+  const where = configured ? (place?.name ?? status.destination.display ?? null) : null;
+  const state: ProtectedState = !configured ? 'none' : status.destination.kind === 'local' ? 'local' : 'copied';
+  return {
+    ...base,
+    state,
+    lastAt: status.lastSuccess?.at ?? null,
+    where: state === 'copied' && where ? where.slice(0, 160) : null,
+    ...(status.state === 'failing' && status.lastFailure ? { failedAt: status.lastFailure.at } : {}),
+    offsite: offsiteOf(status),
+  };
+}
+
+export async function buildProtectedView(services: Services, burrowId: string): Promise<ProtectedView> {
+  const db = services.db;
+  const now = services.clock();
+  const [burrow] = await db.select().from(burrows).where(eq(burrows.id, burrowId));
+  const unread: string[] = [];
+  const rows: ProtectedRow[] = [];
+  const own = await whombatRow(services, unread, 'Whombat');
+  if (own) rows.push(own);
+
+  const hosts = hostsFor(services);
+  const serves = await hosts.serves(burrowId).catch(() => false);
+  const servers = serves
+    ? ((await hosts.fleet().catch(() => null))?.servers ?? null)
+    : [];
+  if (servers === null) unread.push('Servers');
+  const settings = await db.select().from(restoreTestServers).where(eq(restoreTestServers.burrowId, burrowId));
+  const testRows = await db
+    .select()
+    .from(restoreTests)
+    .where(and(eq(restoreTests.burrowId, burrowId), isNotNull(restoreTests.serverId)))
+    .orderBy(desc(restoreTests.startedAt))
+    .limit(1000);
+  const newestTest = new Map<string, RestoreTestResult>();
+  for (const t of testRows) {
+    const r = testResult(t);
+    const key = `${t.serverId}\n${t.guestId}`;
+    if (r && !newestTest.has(key)) newestTest.set(key, r);
+  }
+
+  const machines = new Map<string, StoredProtection | null>();
+  const budget = { reads: BACKUP_READS_MAX };
+  const restore: RestoreTestServer[] = [];
+  for (const server of (servers ?? []).filter((s) => !isTemporaryServer(s.name) && !isTemporaryServer(s.id))) {
+    const found = await serverMachines(services, server, newestTest, budget, unread);
+    // The server itself: Whombat sees its machines' backups, not a backup of the server's own system.
+    rows.push({
+      key: `server:${server.id}`.slice(0, 300),
+      kind: 'server',
+      name: server.name.slice(0, 160),
+      href: machineHref(server.id, null).slice(0, 500),
+      state: 'unseen',
+      lastAt: null,
+      where: null,
+      serverId: server.id,
+    });
+    machines.set(`${server.id}\n`, null);
+    for (const m of found) {
+      rows.push(m.row);
+      machines.set(`${server.id}\n${m.row.guestId}`, m.fact);
+    }
+    if (server.platform === 'proxmox' && burrow)
+      restore.push(
+        await restoreTestServerView(services, burrow, server, {
+          setting: settings.find((s) => s.serverId === server.id) ?? null,
+          tests: testRows.filter((t) => t.serverId === server.id).slice(0, 50),
+        }),
+      );
+  }
+
+  // Connected services that keep data: their own backups' facts, else the machine they run on.
+  const connections = await db
+    .select({
+      id: catalogConnections.id,
+      catalogId: catalogConnections.catalogId,
+      label: catalogConnections.label,
+      status: catalogConnections.status,
+      glance: catalogConnections.glance,
+      protection: catalogConnections.protection,
+    })
+    .from(catalogConnections)
+    .where(and(eq(catalogConnections.burrowId, burrowId), inArray(catalogConnections.catalogId, [...DATA_KINDS])));
+  for (const c of connections) {
+    if (c.status !== 'active') continue;
+    const at = (c.glance as { machine?: { serverId: string; guestId: string | null; name: string } } | null)?.machine;
+    const machine = at ? machines.get(`${at.serverId}\n${at.guestId ?? ''}`) : undefined;
+    const ownFact = (c.protection as StoredProtection | null) ?? null;
+    const best = betterProtection(ownFact, machine ?? null);
+    const via = best && best === machine && best !== ownFact ? (at?.name ?? null) : null;
+    rows.push({
+      key: `connection:${c.id}`.slice(0, 300),
+      kind: 'service',
+      name: c.label.slice(0, 160),
+      catalogId: c.catalogId.slice(0, 80),
+      ...(at ? { on: at.name.slice(0, 160) } : {}),
+      href: thingHref('connection', c.id).slice(0, 500),
+      state: best?.state ?? 'unseen',
+      lastAt: best?.lastAt ?? null,
+      where: best?.where ?? null,
+      ...(best?.failedAt ? { failedAt: best.failedAt } : {}),
+      via: via ? via.slice(0, 160) : null,
+    });
+  }
+  return { rows: rows.slice(0, 1000), restoreTests: restore.slice(0, 100), unread: unread.slice(0, 100), at: now.toISOString() };
+}
+
+const kept = new WeakMap<Services, Map<string, { at: number; view: Promise<ProtectedView> }>>();
+
+/** The view, kept a minute; `fresh` after a change on the page. */
+export function protectedView(services: Services, burrowId: string, fresh = false): Promise<ProtectedView> {
+  let byBurrow = kept.get(services);
+  if (!byBurrow) {
+    byBurrow = new Map();
+    kept.set(services, byBurrow);
+  }
+  const now = Date.now();
+  const hit = byBurrow.get(burrowId);
+  if (hit && !fresh && now - hit.at < VIEW_MS) return hit.view;
+  const view = buildProtectedView(services, burrowId);
+  byBurrow.set(burrowId, { at: now, view });
+  view.catch(() => {
+    if (byBurrow.get(burrowId)?.view === view) byBurrow.delete(burrowId);
+  });
+  return view;
+}
+
+/** Forgets the kept view (a test started, the switch moved). */
+export function forgetProtectedView(services: Services): void {
+  kept.delete(services);
+}

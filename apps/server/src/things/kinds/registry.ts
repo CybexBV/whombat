@@ -5,6 +5,7 @@
  */
 import type { ThingPageTab } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
+import type { StoredProtection } from '../../db/schema/index';
 import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
@@ -31,6 +32,11 @@ export interface KindSeen {
    * when Whombat doesn't watch its machine. Absent: the machine Whombat watches.
    */
   machine?: (m: MachineFigures | null) => MachineNow | null;
+  /**
+   * Where its own backups keep its data (What's protected, backup-trust.md): copied elsewhere, only on its own machine,
+   * or none. Absent: the kind doesn't say, or this read didn't, and what was kept stays.
+   */
+  protection?: StoredProtection;
 }
 
 /** What a button sends (`things.action`, CT-1006): which row or entity, and the value of a switch or stepper. */

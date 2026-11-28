@@ -9,6 +9,7 @@ import { agentServiceRoutes } from '../agent-services/routes';
 import { automationRoutes } from '../automations/routes';
 import { backupRoutes } from '../backups/routes';
 import { keptSiteRoutes } from '../browser/kept-site-routes';
+import { backupTrustRoutes } from '../backup-trust/routes';
 import { careRoutes } from '../care/routes';
 import { clientRoutes } from '../clients/routes';
 import { connectionCatalogRoutes } from '../connections/routes';
@@ -114,6 +115,7 @@ export const ROUTES: RouteDef[] = [
   // One Whombat: task chats, Home, Watch, changes and widgets (one-whombat-assistant.md).
   ...oneWhombatRoutes,
   ...careRoutes,
+  ...backupTrustRoutes,
   ...looksAheadRoutes,
   // Where this Whombat is, and the news sites it reads (docs/decisions/weather-news.md).
   ...placeRoutes,

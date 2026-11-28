@@ -7,6 +7,7 @@
  * `SYNO.Core.Upgrade.Server check` (kept an hour); whatever doesn't answer is left out. Package updates have no read
  * worth trusting: left out (SD-S17). Signed in as the connection's user (its session, `_sid`). Read only.
  */
+import { synologyProtection } from '../../../backup-trust/protection';
 import type {
   ThingGalleryItem,
   ThingLine,
@@ -1306,6 +1307,7 @@ export const SYNOLOGY_KIND: KindModule = {
         synologySkipped(s),
       ),
       points: usedPoint(synologySpace(s)?.used),
+      protection: synologyProtection(s.backups),
     };
   },
   checks: SYNOLOGY_CHECKS,
