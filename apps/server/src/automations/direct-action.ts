@@ -25,8 +25,8 @@ import {
   REQUEST_TOOL_NAME,
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
-import { callTier, executeConnectionCall, needsReauthText } from '../connections/call';
 import { externalEffect } from '../commit/scope';
+import { callTier, executeConnectionCall, needsReauthText } from '../connections/call';
 import { callTarget } from '../connections/call-target';
 import { jsonOf, signedConnectionFetch } from '../connections/http';
 import { limitsProblem } from '../connections/limits';
