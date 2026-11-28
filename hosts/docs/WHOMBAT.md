@@ -899,7 +899,10 @@ Two ways in (Whombat SI-01), the same installer:
   someone else could have written there and refuses links in it),
   registers the service `whombat-agent` (LocalSystem,
   automatic, restarted on failure), enrolls and prints one line. Run again,
-  it updates the agent in place. `& "$env:ProgramFiles\Whombat\whombat-agent.exe"
+  it updates the agent in place. Each agent command it runs as
+  administrator (`whoami` first) takes the folder over before reading it,
+  so an identity someone else left there is set aside and the PC enrolls
+  afresh; a step that fails stops the line with its reason. `& "$env:ProgramFiles\Whombat\whombat-agent.exe"
   uninstall` removes the service and the program and keeps the identity
   (`--purge` removes it too). The agent's commands below work the same on
   the PC, with that path, as administrator; a reload is the service's

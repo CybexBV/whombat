@@ -202,16 +202,28 @@ function Install-WhombatAgent {
 	}
 
 	# An agent of this Whombat (the same authority) keeps its identity; one
-	# of another Whombat is left alone unless -Force.
+	# of another Whombat is left alone unless -Force. whoami makes the
+	# agent's folder its own before it reads anything there: what someone
+	# else could have written moves aside, an identity too (Windows'
+	# Application log says where), and then this PC enrolls afresh.
 	$mode = 'enroll'
 	$forceEnroll = [bool]$Force
-	if ((Test-Path -LiteralPath (Join-Path $ConfigDir 'agent.crt')) -and -not $Force) {
+	$identity = Join-Path $ConfigDir 'agent.crt'
+	if ((Test-Path -LiteralPath $identity) -and -not $Force) {
 		$who = (Read-Agent $Download @('whoami')).Split(' ')
 		if ($who.Count -ge 2 -and $who[1] -eq $CASHA256) {
 			$mode = 'keep'
-		} else {
+		} elseif ($who.Count -ge 2) {
 			Remove-Item -Force -LiteralPath $Download
 			return 'This PC reports to another Whombat. Remove its agent there first, or run this again with -Force to move it here.'
+		} elseif (Test-Path -LiteralPath $identity) {
+			# The identity is still there, but the agent can't use it: this
+			# time its reason goes to the screen.
+			& $Download whoami | Out-Null
+			Remove-Item -Force -LiteralPath $Download
+			return "The Whombat agent can't use this PC's identity (see above)."
+		} else {
+			Write-Host 'Someone else could change files Whombat had on this PC, so they were set aside and this PC enrolls afresh.'
 		}
 	}
 	if ($mode -eq 'enroll' -and -not $Token) {
@@ -246,9 +258,11 @@ function Install-WhombatAgent {
 	} else {
 		Write-Host "Keeping this PC's Whombat identity and settings."
 		& $Agent hub $Hub --no-restart | Out-Null
+		if ($LASTEXITCODE -ne 0) { return 'Pointing the agent at this Whombat failed (see above).' }
 	}
 	if ($Control) {
 		& $Agent policy set $Control --no-reload | Out-Null
+		if ($LASTEXITCODE -ne 0) { return 'Setting what Whombat may do on this PC failed (see above).' }
 	}
 	& $Agent service install | Out-Host
 	if ($LASTEXITCODE -ne 0) { return 'Setting up the agent service failed (see above).' }

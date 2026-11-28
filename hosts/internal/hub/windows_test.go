@@ -222,3 +222,39 @@ func certCheckRestored(t *testing.T, name, text string) int {
 	}
 	return end
 }
+
+// install.ps1 says Done only when each of the agent's steps worked, and its
+// first agent command (whoami) makes the agent's folder its own: an identity
+// that moved aside then has the PC enroll afresh, and only an identity
+// whoami read is refused as another Whombat's.
+func TestWindowsInstallReportsEachStep(t *testing.T) {
+	var b strings.Builder
+	if err := installPS1Tmpl.Execute(&b, map[string]string{"Pin": "ab", "SumAMD64": "cd", "SumARM64": ""}); err != nil {
+		t.Fatal(err)
+	}
+	script := b.String()
+	lines := strings.Split(script, "\n")
+	for i, l := range lines {
+		if !strings.Contains(l, "& $Agent ") {
+			continue
+		}
+		if next := strings.TrimSpace(lines[i+1]); !strings.HasPrefix(next, "if ($LASTEXITCODE -ne 0) { return ") {
+			t.Errorf("install.ps1 goes on whether or not this worked: %s", strings.TrimSpace(l))
+		}
+	}
+	whoami := strings.Index(script, "Read-Agent $Download @('whoami')")
+	enroll := strings.Index(script, "'enroll', '--hub'")
+	if whoami < 0 || enroll < whoami || strings.Contains(script[:whoami], "& $Agent ") {
+		t.Fatal("install.ps1 doesn't ask whoami first")
+	}
+	if !strings.Contains(script[whoami:enroll], "Test-Path -LiteralPath $identity") {
+		t.Error("install.ps1 doesn't look again for the identity whoami's takeover may have moved aside")
+	}
+	// The branch that refuses is one where whoami answered, not whatever
+	// else is left.
+	head := script[whoami : whoami+strings.Index(script[whoami:], "reports to another Whombat")]
+	branch := max(strings.LastIndex(head, "if ("), strings.LastIndex(head, "else {"))
+	if branch < 0 || !strings.HasPrefix(head[branch:], "if ($who.") {
+		t.Error("install.ps1 refuses as another Whombat's an identity whoami didn't read")
+	}
+}
