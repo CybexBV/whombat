@@ -49,6 +49,24 @@ export const AUTOMATIONS = splitPairs({
     'Couldn’t reach {name} at {time}, so nothing was sent to it.',
     'Whombat kon {name} om {time} niet bereiken, dus er is niets naar gestuurd.',
   ],
+  'automations.direct.noEntity': ['{name} has no {target}.', '{name} heeft geen {target}.'],
+  'automations.direct.noMachine': ['{name} has no machine {target}.', '{name} heeft geen machine {target}.'],
+  'automations.direct.offThere': [
+    '{name} is set not to allow this from Whombat.',
+    '{name} staat dit niet toe vanuit Whombat.',
+  ],
+  'automations.direct.noAnswer': [
+    '{name} didn’t say in time whether it worked.',
+    '{name} zei niet op tijd of het lukte.',
+  ],
+  'automations.direct.notConfirmed': [
+    'Sent “{what}” at {time}, but {name} didn’t say in time whether it worked, so it may not have happened.',
+    'Om {time} “{what}” gestuurd, maar {name} zei niet op tijd of het lukte, dus misschien is het niet gebeurd.',
+  ],
+  'automations.direct.changedSinceYes': [
+    '{name} changed since you said yes (its address, account or sign-in), so nothing was sent.',
+    '{name} is veranderd sinds je ja zei (het adres, account of de inlog), dus er is niets gestuurd.',
+  ],
   'automations.direct.maybeDone': [
     'Whombat stopped partway through this, so it may not have happened; check, then say what happened.',
     'Whombat stopte halverwege, dus misschien is het niet gebeurd; kijk het na en zeg wat er gebeurde.',

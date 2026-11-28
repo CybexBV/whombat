@@ -106,7 +106,7 @@ async function recoverExternal(
   // restart, a scene or a script) may have happened already: it isn't done again, and a person checks.
   if (step.kind === 'run_action') {
     if (directActionRepeatable(step)) {
-      await runDirectAction(lease, row, step);
+      await runDirectAction(lease, row, step, { recovering: true });
       return true;
     }
     const locale = await burrowLocale(services, run.burrowId);

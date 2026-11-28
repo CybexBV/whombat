@@ -904,12 +904,12 @@ export const RunActionStep = z
     kind: z.literal('run_action'),
     /** The server or connection it acts on, by its page id. */
     thing: ThingIncidentTarget,
-    /** Its name when the automation was made (“nas-01”), for the words. */
+    /** Its name (“nas-01”), for the words: Whombat keeps the one it knows when it saves the automation and when it runs. */
     thingName: z.string().trim().min(1).max(120),
     action: DirectAction,
     /** A machine on the server (its id) or a Home Assistant entity (`light.porch`); the thing itself when absent. */
     target: z.string().trim().min(1).max(200).optional(),
-    /** The machine's or entity's name (“Porch light”), for the words. */
+    /** The machine's or entity's name (“Porch light”), for the words, as Whombat knows it; absent: its id is said. */
     targetName: z.string().trim().min(1).max(120).optional(),
     /** It can't run (the thing is gone, set to Look only, said no): `skip` the step (the run goes on) or `fail` it. */
     otherwise: z.enum(['skip', 'fail']).default('fail'),

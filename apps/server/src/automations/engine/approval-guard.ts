@@ -7,6 +7,7 @@ import { and, eq } from 'drizzle-orm';
 import { approvalActionHash } from '../../approvals/create';
 import type { ApprovalRow } from '../../approvals/engine';
 import type { ApplyContext } from '../../commit/types';
+import { callTarget } from '../../connections/call-target';
 import type { Db } from '../../db/client';
 import { automationRunSteps } from '../../db/schema/index';
 import { burrowLocale } from '../../i18n/locale';
@@ -15,7 +16,7 @@ import { trackerWords } from '../../trackers/connection';
 import { trackerReplyPlan } from '../../trackers/reply';
 import { trackerWritePlan } from '../../trackers/write';
 import { keyDecision, publisherCheck } from '../authority';
-import { planDirectAction } from '../direct-action';
+import { planDirectAction, withNames } from '../direct-action';
 import { MERGE_WORDS, mergePlan } from '../merge';
 import { isAutomationPrincipal } from '../principal';
 import { planConnectionActions } from '../proposed-actions';
@@ -198,11 +199,13 @@ export async function approvalGuard(ctx: ApplyContext, row: ApprovalRow): Promis
       await mark('blocked');
       return plan.reason;
     }
+    // As the card said it: the names Whombat knows now and the connection's destination now, so a yes given for
+    // another name or another destination needs a new card.
     input = {
       runId: run.id,
       stepId: step.id,
       attempt: stepRow.attempt,
-      proposal: await runActionProposal(ctx.tx, run, step),
+      proposal: await runActionProposal(ctx.tx, run, withNames(step, plan.names), callTarget(plan.conn)),
     };
   }
   if (
