@@ -240,24 +240,31 @@ export function parseAccessDomains(body: unknown): AccessApp[] {
 const WORST: Readonly<Record<AccessVerdict, number>> = { guarded: 0, unknown: 1, open: 2 };
 
 /**
- * What Access does for this name, null when no application covers it: the applications on the same host (any path of
- * it) first, as Cloudflare picks the most specific; else a wildcard over it. Of several, the least guarded.
+ * What Access does for this name, null when no application covers it: the name's own applications first, as Cloudflare
+ * picks the most specific; else a wildcard over it. Of several, the least guarded. An application on one path of the
+ * name comes before the name's own for that path, so when one that isn't plainly guarded applies, Whombat can't tell
+ * what guards the name (`unknown`); one that guards its path doesn't change what guards the rest.
  */
 export function accessGuards(apps: readonly AccessApp[], hostname: string): AccessVerdict | null {
   const host = hostname.toLowerCase();
   const exact: AccessVerdict[] = [];
   const wild: AccessVerdict[] = [];
+  let pathNotGuarded = false;
   for (const { domain, verdict } of apps) {
-    const appHost = domain.split('/')[0] ?? '';
-    // An app on one path guards only that path: it doesn't guard the name.
-    if (domain.includes('/') && domain.split('/').slice(1).join('/').length > 0) continue;
-    if (appHost === host) exact.push(verdict);
-    else if (appHost.startsWith('*.') && host.endsWith(appHost.slice(1)) && host !== appHost.slice(2))
-      wild.push(verdict);
+    const [appHost = '', ...path] = domain.split('/');
+    const own = appHost === host;
+    if (!own && !(appHost.startsWith('*.') && host.endsWith(appHost.slice(1)) && host !== appHost.slice(2)))
+      continue;
+    if (path.join('/').length > 0) {
+      if (verdict !== 'guarded') pathNotGuarded = true;
+      continue;
+    }
+    (own ? exact : wild).push(verdict);
   }
   const found = exact.length ? exact : wild;
   if (!found.length) return null;
-  return found.reduce((a, b) => (WORST[b] > WORST[a] ? b : a));
+  const verdict = found.reduce((a, b) => (WORST[b] > WORST[a] ? b : a));
+  return verdict === 'guarded' && pathNotGuarded ? 'unknown' : verdict;
 }
 
 /** How an opening behind a tunnel is guarded: Access read or not, and what it does for the name. */

@@ -251,6 +251,30 @@ describe('Cloudflare', () => {
     expect(guard('other.wild.example.com')).toBe('none');
     expect(guard('own.wild.example.com')).toBe('cloudflare_access');
   });
+
+  it('can’t tell what guards a name when an app on one of its paths isn’t plainly guarded', () => {
+    const app = (domain: string, policies: unknown[]) => ({ type: 'self_hosted', domain, policies });
+    const bypass = [{ decision: 'bypass', include: [{ everyone: {} }] }];
+    const domains = parseAccessDomains({
+      result: [
+        app('cloud.example.com', signIn),
+        app('cloud.example.com/api', bypass),
+        app('nas.example.com', signIn),
+        app('nas.example.com/admin', signIn),
+        app('*.lab.example.com', signIn),
+        app('*.lab.example.com/public', [{ decision: 'allow', include: [{ everyone: {} }] }]),
+        app('open.example.com/api', bypass),
+      ],
+    });
+    const guard = (name: string) =>
+      tunnelOpenings(tunnel, [{ hostname: name, service: 'http://10.100.0.10:80', path: null }], domains)[0]
+        ?.guard;
+    expect(guard('cloud.example.com')).toBe('unknown');
+    expect(guard('nas.example.com')).toBe('cloudflare_access');
+    expect(guard('pve.lab.example.com')).toBe('unknown');
+    // A path's app alone guards nothing of the name.
+    expect(guard('open.example.com')).toBe('none');
+  });
 });
 
 describe('routers', () => {
