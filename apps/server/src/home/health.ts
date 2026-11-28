@@ -29,6 +29,7 @@ import {
   isAgentConnection,
   isGatewayConnection,
   resolveMcpUrl,
+  SERVICE_TEST_CHECK,
   type SignInKind,
   thingId,
   UPTIME_ID,
@@ -73,6 +74,7 @@ import type { LooseNotice } from '../things/quiet/types';
 import { type ResolvedMachine, readMachine, resolveRunsOn } from '../things/runs-on';
 import { forecastFull } from '../things/series';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
+import { worksPass } from '../works/run';
 import { homeAudience, publishHomeChanged } from './notify';
 import type { ConnectionGlance } from './types';
 
@@ -362,7 +364,7 @@ export async function checkConnectionHealth(
     } else {
       points = { [RTT_KEY]: Date.now() - started };
       // What the answer filled (Nextcloud's user id, connection-signin.md SG-15a), for the next calls.
-      await recordFromCheck(services, row, outcome);
+      const filled = await recordFromCheck(services, row, outcome);
       const quiet = (await kept.catch(() => null))?.[0];
       const seen = await seenOf(services, row, now, quiet).catch(() => undefined);
       lines = genericNotices({ ...row, glance: null }, 0, null);
@@ -417,6 +419,19 @@ export async function checkConnectionHealth(
         const before = skipped;
         skipped = (check) => check === 'machine.backup_old' || isSkipped(before, check);
       }
+      // Whether it really works (service-works.md): a watched test runs when due, whatever its page's read did.
+      const works = await worksPass(services, filled, quiet, now, await zoneOf(services, row)).catch(
+        (err: unknown) => {
+          services.log.warn(
+            { err: err instanceof Error ? err.name : 'error' },
+            'connection health: test failed',
+          );
+          return { lines: [], skipped: true };
+        },
+      );
+      lines.push(...works.lines);
+      const read = skipped;
+      skipped = (check) => (check === SERVICE_TEST_CHECK ? works.skipped : isSkipped(read, check));
     }
   } catch (err) {
     if (err instanceof ConnectionAuthError) {

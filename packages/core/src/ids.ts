@@ -146,6 +146,8 @@ export const ID_PREFIXES = {
   /** One thing Looks ahead keeps an eye on (“Keeping an eye on”, Whombat looks-ahead.md). */
   aheadMatter: 'ahm',
   thingWatch: 'thw',
+  /** One run of a service's “Does it really work?” test, its result only (Whombat service-works.md). */
+  serviceTestRun: 'wtr',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

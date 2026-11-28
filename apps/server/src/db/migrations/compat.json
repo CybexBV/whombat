@@ -273,6 +273,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The language a search answer is written in: one nullable text column on search_answers. The release before it reads and writes past it; an answer it writes has none and counts as English, as every answer did before."
+    },
+    "0044_service_test_runs": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Does it really work? (docs/decisions/service-works.md): a new table service_test_runs cascading with the burrow and the connection, one row per run of a service's read-only test (its result only), kept 30 days. The release before it never reads or writes the table."
     }
   }
 }

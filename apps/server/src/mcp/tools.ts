@@ -104,6 +104,7 @@ import { vaultAddServerTool } from '../vault/add-server';
 import { vaultAskTool } from '../vault/ask';
 import { vaultSaveTool } from '../vault/save';
 import { weatherForecastTool } from '../weather/tool';
+import { serviceTestTool } from '../works/tool';
 
 export interface ToolContext {
   services: Services;
@@ -700,6 +701,7 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   thing_watch: thingWatchTool,
   watch_status: (ctx) => watchStatusTool(ctx),
   watch_history: (ctx, input) => watchHistoryTool(ctx, input),
+  service_test: (ctx, input) => serviceTestTool(ctx, input),
   // Keep a thing quiet for a while, only on the person's word.
   quiet_until: (ctx, input) => quietUntilTool(ctx, input),
   // What the assistant found out about a look (look-research.md LR-05): listed and run only in a look's turns.

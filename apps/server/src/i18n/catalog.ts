@@ -26,6 +26,7 @@ import { PHRASES } from './messages/phrases';
 import { SEARCH } from './messages/search';
 import { SETTINGS } from './messages/settings';
 import { THINGS } from './messages/things';
+import { WORKS } from './messages/works';
 
 export const EN = {
   ...HOME.en,
@@ -35,6 +36,7 @@ export const EN = {
   ...MANAGED.en,
   ...DESK.en,
   ...THINGS.en,
+  ...WORKS.en,
   ...PHRASES.en,
   ...SEARCH.en,
   ...SETTINGS.en,
@@ -51,6 +53,7 @@ export const NL: { [K in ServerMessageKey]: MessageValue } = {
   ...MANAGED.nl,
   ...DESK.nl,
   ...THINGS.nl,
+  ...WORKS.nl,
   ...PHRASES.nl,
   ...SEARCH.nl,
   ...SETTINGS.nl,

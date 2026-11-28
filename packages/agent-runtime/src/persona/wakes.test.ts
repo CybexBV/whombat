@@ -396,6 +396,18 @@ describe('lookTurnLines (Whombat look-research.md LR-05…LR-08)', () => {
     expect(text).not.toContain('con_ha0000000001');
   });
 
+  it('names service_test when Whombat’s own test of the service failed, and only then', () => {
+    expect(lookTurnLines(woken('look', { ...look, check: 'works.test' })).join('\n')).toContain(
+      'service_test',
+    );
+    const among = {
+      ...look,
+      lines: [{ title: 'Disk full' }, { title: 'Photos don’t open', check: 'works.test' }],
+    };
+    expect(lookTurnLines(woken('look', among)).join('\n')).toContain('service_test');
+    expect(lookTurnLines(woken('look')).join('\n')).not.toContain('service_test');
+  });
+
   it('changes nothing and offers no step on Look only', () => {
     const text = lookTurnLines(woken('look', { ...look, access: 'read' })).join('\n');
     expect(text).toContain('Look only');
