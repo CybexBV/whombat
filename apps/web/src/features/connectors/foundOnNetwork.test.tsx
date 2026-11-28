@@ -47,7 +47,7 @@ describe('found on your network: connected ones left out, hide one (Whombat CS-5
       within(found)
         .getByRole('link', { name: 'Add Debian server at 192.168.1.70 as a server' })
         .getAttribute('href'),
-    ).toContain('/connections?add=1&address=192.168.1.70');
+    ).toContain('/servers?add=1&address=192.168.1.70');
     expect(
       within(found).getByRole('link', { name: 'Add Proxmox VE at 192.168.1.10 as a server' }),
     ).toBeTruthy();
@@ -162,7 +162,7 @@ describe('found on your network on the overview and Add a connection (AP-1161, A
     // Only the section: the catalog's tiles wait behind All, and the search box doesn't take the focus.
     expect(screen.queryByRole('link', { name: 'Connect Notion' })).toBeNull();
     expect(document.activeElement).not.toBe(screen.getByRole('searchbox', { name: 'Search connections' }));
-    expect(screen.getByRole('link', { name: '← Overview' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: '← Connections' })).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'All' }));
     expect(screen.getByRole('link', { name: 'Connect Notion' })).toBeTruthy();
   });

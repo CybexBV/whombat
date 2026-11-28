@@ -14,7 +14,7 @@ describe('the connect page of Proxmox VE (connect-in-chat.md)', () => {
     );
     expect(await screen.findByText('Add it as a server instead')).toBeTruthy();
     const add = screen.getByRole('link', { name: 'Add as a server' });
-    expect(add.getAttribute('href')).toContain('/connections?add=1&address=192.168.1.10');
+    expect(add.getAttribute('href')).toContain('/servers?add=1&address=192.168.1.10');
   });
 
   it('says nothing of the kind for Home Assistant', async () => {
