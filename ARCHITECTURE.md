@@ -961,13 +961,21 @@ published automation details read their definition and publisher from one versio
   a `run_action` step does one action from core's short list (`directActionProblem`) through the person's own
   connection with `executeConnectionCall`, as the burrow's assistant, from the box: a server's power through the
   Servers connection (`server_power`, `guest_power`), Home Assistant through its `request` tool. The step checks its
-  plan (`planDirectAction`), asks on the approval card when the person's own rules ask (`callTier` with the plan's
-  yes as the key), when it starts a scene or a script an automation saved before they were refused, and in every test
-  run (`directAsks`; the approval guard renders the same proposal again before the yes runs), and is marked `running`
-  so `runExternal` calls outside any transaction: it reads first whether the thing is already so (a quiet no-op; a
-  server the hosts service can't reach is left alone and the step skipped or failed), calls, and settles with one line
-  (`directDoneLine`). After a crash, or a call that didn't answer in time, only an action that comes out the same done
-  twice runs again (`directActionRepeatable`); a restart, a scene or a script is `uncertain`. A UPS power cut is a critical hub alert after 30 s (`hosts/internal/rules/health.go`), so the thing
+  plan (`planDirectAction`: the connection, the tool, its tier and the person's limits on it, and the names of what it
+  acts on as Whombat reads them now, the server's, the machine's from the hosts service and the entity's friendly name;
+  a machine or entity that isn't there refuses the step), and every card and line uses those names (`withNames`); the
+  plan card's definition and every published version carry them too (`withRealNames`). It asks on the approval card
+  when the person's own rules ask (`callTier` with the plan's yes as the key), when it starts a scene or a script an
+  automation saved before they were refused, and in every test run (`directAsks`; the proposal carries the
+  connection's `callTarget`, the approval guard renders it again before the yes runs, and the target the yes was given
+  for is the one the call is bound to), and is marked `running` so `runExternal` calls outside any transaction: it
+  reads first whether the thing is already so (a quiet no-op; a server the hosts service can't reach is left alone and
+  the step skipped or failed), calls, and settles with one line (`directDoneLine`). A server's or a machine's power
+  settles from the hosts service's `action.finished` for that action, listened for from before the call for up to two
+  minutes (`listenForPowerFinish`, `powerSettle`): the agent's refusal fails it, no word in time may not have happened.
+  After a crash, or a call that didn't answer in time, only an action that comes out the same done twice runs again
+  (`directActionRepeatable`), where a server found off after the shutdown Whombat was sending is done; a restart, a
+  scene or a script is `uncertain`. A UPS power cut is a critical hub alert after 30 s (`hosts/internal/rules/health.go`), so the thing
   trigger on `host.ups.on_battery` starts on it; such an automation with direct steps is claimed through a quiet window
   (`claimIncidentTrigger`'s `safety`), and in any direct run `post_message` is skipped while the trigger's thing is kept
   quiet and nothing ran yet. `automation_read` gives the UPS servers with core's `powerCutDefinition`.
@@ -975,13 +983,15 @@ published automation details read their definition and publisher from one versio
   Home Assistant entities and states and which Protect events live automations name (`listenedHome`), keeps one
   Home Assistant socket per such connection subscribed to those entity ids (`subscribe_entities`, `ha-socket.ts`) and
   signs only changes into or out of a named state as `home.state_changed`, with Home Assistant's `last_changed` (a change
-  first heard in the snapshot after a reconnect only while under two minutes old); Protect's event stream
+  first heard in the snapshot after a reconnect only while under two minutes old by Home Assistant's own clock, from
+  the `Date` of its answer to the socket, `clockAheadMs`); an entity Home Assistant removes (`r`) or leaves out of the
+  first list after subscribing is forgotten and reads as gone; Protect's event stream
   (`things/kinds/home/protect-events.ts`) hands it fresh sightings, signed once each as `protect.detected`. Both are
   signed by the burrow's Smart home system principal (`home.noted`) and read by the trigger scan like any event. A
   `home_state` trigger with `forMinutes` keeps a row in `automation_waits` (one per automation and entity) that any
   later change of the entity ends; at its time the scan asks the socket for the state now and starts a run only when
   it is still the trigger's and its `last_changed` is still the change's (`heldAtItsTime`; each minute for an hour
-  while it can't tell). A cooldown (`cooldownOf`: the definition's
+  while it can't tell; an entity gone ends the wait). A cooldown (`cooldownOf`: the definition's
   `limits.cooldownMinutes`, else 10 minutes for these triggers) makes a start within it start nothing. Until the
   release a box would go back to knows `0047_direct_automations`, such automations aren't made or run and nothing is
   followed (`directReady`); a session below minor 22 gets them as `older-apps.ts` says.
