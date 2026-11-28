@@ -146,6 +146,7 @@ How the split was made: `docs.md`.
 - `quiet-notices.md` — what Whombat watches, and Ignore.
 - `watch-defaults.md` — which checks Whombat watches from the start: only the very important ones it can act on.
 - `monitoring.md` — monitoring servers, networks and services: your own checks, keeping quiet, one push per outage, one cause, uptime and outage history.
+- `internet-exposure.md` — Open to the internet: what the proxies, tunnels and routers let in, what is new, and This is meant.
 - `../app/decisions/monitoring-web.md` — monitoring on the web: Keep quiet… and End now, the hold under a page's head,
   What happened, Change the limit, catalog fields that follow another.
 - `on-purpose.md` — stop watching what is set up so on purpose (the assistant asks and switches it on your word, the
