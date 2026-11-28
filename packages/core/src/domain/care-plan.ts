@@ -11,6 +11,7 @@ import { plural } from '../text/format.js';
 import type { HostGuest, HostServerPlatform } from './hosts.js';
 import { LOOK_FIX_STEP_MAX, LOOK_PLAN_STEP_MAX, LOOK_PLAN_STEPS_MAX } from './look-research.js';
 import { ClockTime } from './notify.js';
+import { isRestoreTestCopy } from './protected.js';
 
 /* The quiet hours for changes ------------------------------------------------------------------------------------- */
 
@@ -99,16 +100,17 @@ function incusProject(guestId: string): string {
 }
 
 export type TemporaryFacts = Pick<HostGuest, 'id' | 'name' | 'platform'> &
-  Partial<Pick<HostGuest, 'project' | 'labels' | 'self'>>;
+  Partial<Pick<HostGuest, 'project' | 'labels' | 'self' | 'tags'>>;
 
 /**
  * Whether a guest is a temporary machine (Whombat server-pages.md): an Incus instance outside the `default` project (CI
  * and sandbox projects keep their throwaway machines apart; their id is `project/name`), a CI job's machine, a leased
- * sandbox, or a container Whombat runs itself. The machine this Whombat runs in never is. Pages hide them; a care plan
- * never includes them.
+ * sandbox, a container Whombat runs itself, or the copy a restore test makes for a few minutes. The machine this Whombat
+ * runs in never is. Pages hide them; a care plan never includes them.
  */
 export function isTemporaryGuest(g: TemporaryFacts): boolean {
   if (g.self) return false;
+  if (g.platform === 'pve' && isRestoreTestCopy(g)) return true;
   if (g.platform === 'incus' && (g.project ?? incusProject(g.id)) !== 'default') return true;
   if (CI_JOB.test(g.name) || LEASED.test(g.name)) return true;
   if (g.platform === 'docker' && g.project && LEASED.test(g.project)) return true;

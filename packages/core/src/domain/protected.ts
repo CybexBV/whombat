@@ -50,7 +50,7 @@ export type RestoreTestOutcome = z.infer<typeof RestoreTestOutcome>;
 /**
  * Why a test failed or couldn't run. Failed: the restore itself failed, the copy didn't start, it stopped by itself,
  * it started but never finished booting (its guest agent never answered), or it took too long. Skipped (nothing is
- * wrong with the backup): no backup to test, not enough free space, it uses parts of the server itself (a passed-through
+ * wrong with the backup): no backup to test, not enough free space or memory, it uses parts of the server itself (a passed-through
  * device, a host folder, a hook script), Proxmox wouldn't disconnect its network, Manage is off, the server isn't
  * reachable, the machine is on another node, a guest id for the copy wasn't free, or Proxmox refused something else.
  */
@@ -62,6 +62,7 @@ export const RESTORE_TEST_REASONS = [
   'too_long',
   'no_backup',
   'no_space',
+  'no_memory',
   'host_parts',
   'network_kept',
   'manage_off',
@@ -188,7 +189,7 @@ export function isRestoreTestId(id: string | number): boolean {
   return Number.isInteger(n) && n >= RESTORE_TEST_FIRST_ID && n <= RESTORE_TEST_LAST_ID;
 }
 
-/** The name a copy gets (`test-of-plex`): plain, a DNS name Proxmox takes, saying what it is. */
+/** The name a copy gets (`whombat-test-of-plex`): plain, a DNS name Proxmox takes, saying what it is. */
 export function restoreTestName(guestName: string): string {
   const plain = guestName
     .toLowerCase()

@@ -91,6 +91,7 @@ export const PROTECTED_MESSAGES = splitPairs({
   'protected.reason.too_long': ['it took over an hour', 'het duurde meer dan een uur'],
   'protected.reason.no_backup': ['there’s no backup of it to test', 'er is geen back-up om te testen'],
   'protected.reason.no_space': ['there wasn’t enough free space', 'er was niet genoeg vrije ruimte'],
+  'protected.reason.no_memory': ['the server didn’t have enough free memory', 'de server had niet genoeg vrij geheugen'],
   'protected.reason.host_parts': [
     'it uses parts of the server itself, so testing it could touch the real machine',
     'hij gebruikt onderdelen van de server zelf, dus testen kan de echte machine raken',

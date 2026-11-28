@@ -74,6 +74,9 @@ describe('temporary machines (server-pages.md) are never in a plan', () => {
     expect(isTemporaryGuest({ id: 'incus:ci/job-1', name: 'job-1', platform: 'incus' })).toBe(true);
     expect(isTemporaryGuest({ id: 'incus:web', name: 'web', platform: 'incus' })).toBe(false);
     expect(isTemporaryGuest({ id: 'pve:120', name: 'ci-job-a8791974', platform: 'pve' })).toBe(true);
+    expect(isTemporaryGuest({ id: 'pve:990004', name: 'whombat-test-of-plex', platform: 'pve' })).toBe(true);
+    expect(isTemporaryGuest({ id: 'pve:990004', name: 'plex', platform: 'pve' })).toBe(false);
+    expect(isTemporaryGuest({ id: 'pve:101', name: 'whombat-test-of-plex', platform: 'pve' })).toBe(false);
     expect(
       isTemporaryGuest({ id: 'docker:x', name: 'x', platform: 'docker', labels: { 'whombat.service': '1' } }),
     ).toBe(true);
