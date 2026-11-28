@@ -153,6 +153,8 @@ How the split was made: `docs.md`.
   What happened, Change the limit, catalog fields that follow another.
 - `on-purpose.md` — stop watching what is set up so on purpose (the assistant asks and switches it on your word, the
   Inbox's More), and an Ignore that outlasts a blip.
+- `outside-changes.md` — what changed before it broke: the change log in History, looks and `what_changed`, and
+  settings copies of OPNsense, Pi-hole and Nginx Proxy Manager with Download.
 - `look-research.md` — the assistant looks into a problem by itself and says what is wrong and what it can do.
 - `looks-ahead.md` — the assistant checks what is on the person's calendar the afternoon before and tells them only a sourced mismatch.
 - `needs-you-list.md` — one Needs you list (Watch merged), split by who has to act, one count, Ask in the thing's own

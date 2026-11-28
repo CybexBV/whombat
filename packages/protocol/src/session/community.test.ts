@@ -48,6 +48,7 @@ import {
   APP_UPDATES_MINOR,
   EXPOSURE_MINOR,
   LOCALE_MINOR,
+  OUTSIDE_CHANGES_MINOR,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
 } from './version.js';
@@ -88,6 +89,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
     expect(LOCALE_MINOR).toBe(21);
     expect(EXPOSURE_MINOR).toBe(22);
     expect(APP_UPDATES_MINOR).toBe(22);
+    expect(OUTSIDE_CHANGES_MINOR).toBe(22);
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

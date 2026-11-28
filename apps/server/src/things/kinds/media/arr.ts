@@ -1479,6 +1479,7 @@ function arrSeen(app: ArrApp) {
         ...(activity ? { activity } : {}),
       },
       points: {},
+      tracked: { version: snapshot.rest?.version ?? null },
       ...linesSeen({ notices }, arrSkipped(snapshot)),
     };
   };

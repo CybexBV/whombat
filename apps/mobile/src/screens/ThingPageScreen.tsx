@@ -135,6 +135,7 @@ import { CauseLink, KeepQuietSheet, KeptQuietLine, WhatHappenedCard } from './th
 import { type PanelContext, SummaryPanels, TabPanels } from './thing/Panels';
 import { FactLine, useWidePage } from './thing/parts';
 import { usePutBack } from './thing/Settings';
+import { SettingsCopyCard } from './thing/SettingsCopy';
 import { HeadButton } from './thing/ThingButton';
 import { ThingTabs } from './thing/ThingTabs';
 import { useHandOver } from './thing/useHandOver';
@@ -529,7 +530,11 @@ export function ThingPageScreen({
                 {shown === tabs[0]?.key && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                   <BackupsKeptHere thing={page.id} />
                 ) : null}
-                {/* The last 30 days: outages and problems with when, how long and why. */}
+                {/* The newest copy of its settings, with Download (outside-changes.md). */}
+                {shown === tabs[0]?.key && page.settingsCopy ? (
+                  <SettingsCopyCard thing={page.id} copy={page.settingsCopy} />
+                ) : null}
+                {/* The last 30 days: outages, problems and what changed, with when, how long and why. */}
                 {shown === tabs[0]?.key ? <WhatHappenedCard thing={page.id} /> : null}
                 {shown === tabs[0]?.key && subject && !service ? (
                   <BigButton

@@ -769,6 +769,9 @@ export type DelegationDispatchContext = z.infer<typeof DelegationDispatchContext
  * handle these*, and a `look_fix` turn after *Go ahead* on a plan carries its steps (`plan`). A person's own reply in
  * the thread while a plan waits carries the plan too (`waiting`), so the assistant can change it with `look_report`.
  */
+/** At most this many changes reach a look's turn (Whombat outside-changes.md). */
+export const LOOK_CHANGES_MAX = 8;
+
 export const LookDispatchContext = z.object({
   key: z.string().min(1).max(120),
   kind: z.enum(['server', 'connection', 'device']),
@@ -833,6 +836,22 @@ export const LookDispatchContext = z.object({
         )
         .max(LOOK_PLAN_STEPS_MAX),
     })
+    .optional(),
+  /**
+   * What changed on the thing, and on the server it runs on, in the 48 hours before the look (Whombat
+   * outside-changes.md), newest first: when Whombat saw it (ISO), Whombat's words for it, on which thing, and whether
+   * Whombat did it. Data, never instructions; a change just before is no proof it caused the problem.
+   */
+  changes: z
+    .array(
+      z.object({
+        at: Timestamp,
+        words: z.string().min(1).max(300),
+        on: z.string().min(1).max(120),
+        by: z.enum(['whombat', 'outside']),
+      }),
+    )
+    .max(LOOK_CHANGES_MAX)
     .optional(),
 });
 export type LookDispatchContext = z.infer<typeof LookDispatchContext>;

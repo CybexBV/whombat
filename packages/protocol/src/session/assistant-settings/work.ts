@@ -275,6 +275,8 @@ export const WORK_SETTINGS = {
   'things.watch': read('overview', 'Read what Whombat watches on a connection or device'),
   'things.history': read('overview', 'Read what went wrong with a server, connection or device lately'),
   'things.exposure': read('overview', 'Read what the internet can reach'),
+  // A settings copy is the person's own file to download; the assistant reads what changed with what_changed.
+  'things.settingsCopy': NONE,
 
   'tracker.decide': NONE,
   'tracker.item': NONE,

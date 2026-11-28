@@ -51,6 +51,8 @@ type Guest struct {
 	UpdateAvailable *bool
 	DiskUsedGB      *float64
 	Processes       *int
+	// ImageID: the id of the image a container runs, when its agent says it.
+	ImageID string
 	// Proxmox management additions (docs/MANAGE.md), written when known.
 	Tags           []string
 	PendingChanges int
@@ -198,6 +200,9 @@ func (g Guest) MarshalJSON() ([]byte, error) {
 	if g.App != nil {
 		f = append(f, kv{"app", g.App})
 	}
+	if g.ImageID != "" {
+		f = append(f, kv{"image_id", g.ImageID})
+	}
 	if g.DiskUsedGB != nil {
 		f = append(f, kv{"disk_used_gb", g.DiskUsedGB})
 	}
@@ -332,6 +337,7 @@ func BuildGuest(pg proto.PlatformGuest, now time.Time) Guest {
 	out.OOMKilled, out.Project, out.UpdateAvailable = g.OOMKilled, g.Project, g.UpdateAvailable
 	if pg.Platform == proto.PlatformDocker {
 		out.App = buildGuestApp(g.App)
+		out.ImageID = g.ImageID
 	}
 	if g.WhombatService {
 		out.Labels = map[string]string{"whombat.service": "1"}

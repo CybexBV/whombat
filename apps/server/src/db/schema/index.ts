@@ -10,6 +10,7 @@ export * from './automations';
 export * from './backup-keys';
 export * from './backup-places';
 export * from './backups';
+export * from './changes';
 export * from './check-servers';
 export * from './code';
 export * from './collab';

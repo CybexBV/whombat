@@ -360,6 +360,8 @@ describe('the assistant’s tools (AG-18)', () => {
       // How everything is and what went wrong, read-only.
       'watch_history',
       'watch_status',
+      // What changed on a thing, read-only (Whombat outside-changes.md).
+      'what_changed',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
       // The person's reports to the Whombat Team, without the team's words.

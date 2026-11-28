@@ -113,7 +113,7 @@ export async function quietWindowsFor(
 }
 
 /** The person the turn is for, its time zone and how the hosts service names the assistant for them. */
-async function turnOf(ctx: ToolContext): Promise<{ person: PrincipalRow; actor: HostsActor }> {
+export async function turnOf(ctx: ToolContext): Promise<{ person: PrincipalRow; actor: HostsActor }> {
   if (outsidersTurn(ctx.dispatch))
     throw forbidden('This work came from outside, so it can’t see how things are here.');
   const person = await turnPerson(ctx.services.db, { burrowId: ctx.burrowId, agentId: ctx.agentId });
@@ -175,7 +175,7 @@ export async function watchStatusTool(ctx: ToolContext): Promise<McpToolOutput<'
 }
 
 /** A thing's page id from what the assistant gave: a page id as it is, a connection's handle as its page id. */
-async function thingOf(ctx: ToolContext, value: string): Promise<string> {
+export async function thingOf(ctx: ToolContext, value: string): Promise<string> {
   const given = value.trim();
   if (parseThingId(given)) return given;
   const found = await connectionByHandle(ctx.services.db, ctx.agentId, ctx.dispatch, given);

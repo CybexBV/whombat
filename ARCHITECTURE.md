@@ -1819,7 +1819,8 @@ Setup and operation: `docs/github.md`.
   for the person pushes once. A server's care plan (above) is a research of its own beside its looks: the watcher keeps
   it while it waits, leaves the server's missing backups to it, and never counts it against the day. A look that goes, gets worse or gains a line it didn't cover ends its research, and its
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
-  back at once, without a message or a turn.
+  back at once, without a message or a turn. A look's turn also gets what changed on the thing and the server it runs
+  on in the 48 hours before (below, What changed), to say “changed just before” without claiming a cause.
 - **Looks ahead** (`apps/server/src/looks-ahead/`, [looks-ahead.md](docs/decisions/looks-ahead.md)): every five minutes
   a home job (`looks-ahead/watch.ts`) reads, while the assistant's keys allow it, the person's calendars that are on (up
   to 7 days ahead, 14 for a mail turn's plans) and, when incoming mail is on, the newest 50 inbox mails of every Google,
@@ -1978,8 +1979,9 @@ Setup and operation: `docs/github.md`.
   Each page with uptime data says its week in one line (`uptime`, also one of a page's facts).
   A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
   Each uptime line counts down stretches and minutes from the start it shows.
-  `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
-  during the period, including alerts that began earlier, or says when its own alerts couldn't be read.
+  `things.history` lists a thing's incidents over 30 or 90 days, and what changed on it (below). A server's history
+  includes alerts that were open during the period, including alerts that began earlier, or says when its own alerts
+  couldn't be read.
   The assistant reads this with `watch_status` and `watch_history` (`incidents/agent.ts`).
   `watch_status` lists quiet windows for whole things.
 - **Does it really work?** (`apps/server/src/works/`, [service-works.md](docs/decisions/service-works.md)): Nextcloud,
@@ -1993,6 +1995,27 @@ Setup and operation: `docs/github.md`.
   connection's health pass runs a watched test when due (every 15 minutes, a confirming run after a first failure, a
   run after a change on the connection; `rules.ts`) and adds its line after two failed runs, so the dot, incidents,
   pushes, holds and causes treat it as any line. The assistant reads or runs it with `service_test` (`tool.ts`).
+- **What changed** (`apps/server/src/changes/`, [outside-changes.md](docs/decisions/outside-changes.md)): Whombat
+  compares what it already reads. The connection health pass hands each kind's `KindSeen.tracked` (its version, its
+  devices' firmware, its proxy hosts or tunnel routes) to `trackConnection`; a 10-minute home job
+  (`home.changes-servers`) reads each online server's detail from the hosts service and compares its boot time, kernel,
+  system version, waiting updates and Docker containers' images (the agent's `image_id`, else the image reference;
+  Whombat's own containers left out). `change_baselines` keeps the last read per thing and source; a first read only
+  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job): more than 3 of a
+  kind in one read are one row, the same item again within 30 minutes merges and one that went back is deleted, and a
+  `changes` row of Whombat's own about the thing or the server it runs on, from 2 hours before the read before, makes it
+  `whombat`, else `outside`. Words are made when read, in the reader's language (`changes/words.ts`). Nothing alerts:
+  the write only tells Home's `things`. The thing's History, a look's turn (up to 8 changes of the thing and its server
+  from the 48 hours before the trouble, `LookDispatchContext.changes`) and the assistant's `what_changed`
+  (`changes/agent.ts`) read them.
+  Settings copies (`changes/copies/`): a 15-minute home job (`home.settings-copies`) takes OPNsense's `config.xml`,
+  Pi-hole's Teleporter zip and Nginx Proxy Manager's hosts as JSON, once a night between 02:00 and 05:00 at the box's
+  clock (a failed try again after an hour, three times), through the connection's own key. Each copy is sealed with the
+  custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same settings
+  replace the newest) beside a summary of hashed items with secrets cleaned out, and two copies' summaries are compared
+  into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
+  and, once a copy worked and none has for 48 hours, the “Settings copy failing” line (`settings.copy`).
+  `things.settingsCopy` gives the newest copy's bytes as base64 to the person, read through an export stream.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

@@ -19,6 +19,13 @@ them once they have been tried on Beta.
   page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back
   by itself when the new one doesn’t start. A database or a new major version always asks, and says why.
 - A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
+- Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
+  container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says
+  whether Whombat did it or it was changed outside Whombat.
+- When your assistant looks into a problem, it sees what changed just before and tells you, without guessing a cause.
+  You can also ask it what changed on something.
+- Whombat keeps a copy of the settings of OPNsense, Pi-hole and Nginx Proxy Manager every night. Download the newest
+  from the service’s page; History tells you what changed in them.
 
 ## 27 November 2026
 

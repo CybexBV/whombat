@@ -1744,5 +1744,6 @@ export async function homeAssistantSeen(
     notices,
     skipped: haSkipped(s),
     machine: (m) => haMachine(m, s.supervisor),
+    tracked: { version: s.version ?? null },
   };
 }

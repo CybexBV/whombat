@@ -470,6 +470,7 @@ export function toHostGuest(raw: unknown, serverId: string, serverOnline?: boole
     platform: (PLATFORMS.has(platform) ? platform : 'docker') as HostGuest['platform'],
     kind: g.kind === 'vm' ? ('vm' as const) : ('container' as const),
     image: text(g.image),
+    imageId: str(g.image_id)?.slice(0, 160) || undefined,
     state: (STATES.has(text(g.state)) ? text(g.state) : 'stopped') as HostGuest['state'],
     vcpu: num(g.vcpu) ?? undefined,
     cpuPct: num(g.cpu_pct),

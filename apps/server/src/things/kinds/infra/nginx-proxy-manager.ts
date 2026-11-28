@@ -16,6 +16,7 @@ import type {
   ThingPageRow,
   ThingPageTab,
 } from '@whombat/core';
+import type { TrackedFacts } from '../../../changes/diff';
 import { externalEffect } from '../../../commit/scope';
 import { connectionPolicy } from '../../../connections/destination';
 import type { CatalogConnectionRow } from '../../../connections/types';
@@ -1057,6 +1058,20 @@ const renew: KindAction = async ({ services, row, now, timeZone }, { target }) =
   };
 };
 
+/**
+ * What the change log compares (docs/decisions/outside-changes.md): the version, and each proxy host by its first
+ * domain with where it goes (`off:` before it while it is switched off).
+ */
+export function npmTracked(s: NpmSnapshot): TrackedFacts {
+  const map: Record<string, string> = {};
+  for (const site of s.sites) {
+    const host = site.domains[0];
+    if (site.kind !== 'proxy' || !host) continue;
+    map[host] = `${site.enabled ? '' : 'off:'}${site.target}`;
+  }
+  return { version: s.version ?? null, routes: { via: 'proxy', map } };
+}
+
 export const NPM_KIND: KindModule = {
   page: npmPage,
   seen: async (services, row, now, timeZone) => {
@@ -1078,6 +1093,7 @@ export const NPM_KIND: KindModule = {
         plural(live(s).length, 'site'),
       ),
       points: {},
+      tracked: npmTracked(s),
       ...linesSeen(view, npmSkipped(s, answers)),
     };
   },

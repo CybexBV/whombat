@@ -42,3 +42,17 @@ describe('what happened in the fixture world', () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 });
+
+describe('what changed in the fixture world', () => {
+  it('lists changes in History and gives Pi-hole’s settings copy for Download', async () => {
+    const fetch = createWebFixtureFetch({ hosts: true, connectors: 'connected', monitoring: true });
+    const thing = encodeURIComponent('connection:con_pihole');
+    const history = await call(fetch, api.things.history, `/things/${thing}/history?days=30`);
+    expect(history.changes?.map((c) => c.kind)).toContain('settings');
+    const page = await call(fetch, api.things.page, `/things/${thing}`);
+    expect(page.settingsCopy).toMatchObject({ service: 'Pi-hole', failing: false });
+    const file = await call(fetch, api.things.settingsCopy, `/things/${thing}/settings-copy`);
+    expect(file.fileName).toBe(page.settingsCopy?.fileName);
+    expect(atob(file.base64).length).toBe(file.size);
+  });
+});

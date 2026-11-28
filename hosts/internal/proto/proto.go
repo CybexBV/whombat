@@ -423,6 +423,9 @@ type Guest struct {
 	// App: the container is a Docker Compose app this agent can update
 	// (apps.go); nil for other containers and from older agents.
 	App *GuestApp `cbor:"app,omitempty"`
+	// ImageID: the id of the image it runs ("sha256:…"), so Whombat tells a
+	// new image pulled under the same tag from the one before.
+	ImageID string `cbor:"image_id,omitempty"`
 
 	// unRAID (unraid.go): Autostart for Docker on unRAID (dockerMan's
 	// autostart list) and libvirt (everywhere); WebUI is a container's web

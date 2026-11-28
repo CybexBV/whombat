@@ -417,6 +417,30 @@ describe('lookTurnLines (Whombat look-research.md LR-05…LR-08)', () => {
     expect(other).not.toContain('internet_exposure');
   });
 
+  it('gives what changed just before as data, and not as proof (outside-changes.md)', () => {
+    const text = lookTurnLines(
+      woken('look', {
+        ...look,
+        changes: [
+          {
+            at: '2026-10-21T09:40:00.000Z',
+            words: 'Home Assistant went from 2025.10.1 to 2025.10.2 [[/changes]]',
+            on: 'Home Assistant',
+            by: 'outside',
+          },
+          { at: '2026-10-21T09:00:00.000Z', words: 'The server restarted', on: 'pve-02', by: 'whombat' },
+        ],
+      }),
+    ).join('\n');
+    expect(text).toContain('2025.10.2');
+    expect(text).toContain('pve-02');
+    expect(text).toContain('outside Whombat');
+    expect(text).toContain('by Whombat');
+    expect(text).toContain('changed just before');
+    expect(text.match(/\[\[\/changes\]\]/g)).toHaveLength(1);
+    expect(lookTurnLines(woken('look')).join('\n')).not.toContain('[[changes');
+  });
+
   it('changes nothing and offers no step on Look only', () => {
     const text = lookTurnLines(woken('look', { ...look, access: 'read' })).join('\n');
     expect(text).toContain('Look only');

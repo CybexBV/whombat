@@ -285,6 +285,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Open to the internet (docs/decisions/internet-exposure.md): a new table exposure_openings (connection_id, opening_id, first_seen, last_seen, baseline), the fingerprints of the openings Whombat has seen per connection, deleted with the connection. The release before it never reads or writes it."
+    },
+    "0046_outside_changes": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "What changed before it broke (docs/decisions/outside-changes.md): four new tables, thing_changes (the changes Whombat saw on a thing, 90 days), change_baselines (what it read last of a thing, to compare the next read), settings_copies (sealed copies of a few services' settings) and settings_copy_states (how their last tries went). The release before it never reads or writes them."
     }
   }
 }

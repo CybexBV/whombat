@@ -36,6 +36,7 @@ import {
   UPTIME_ID,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
+import { settingsCopyOf } from '../changes/copies/view';
 import { logoOf } from '../connections/look';
 import { type ConnectionViewer, isVisibleTo, toolRowsOf } from '../connections/store';
 import type { CatalogConnectionRow } from '../connections/types';
@@ -260,7 +261,7 @@ export async function connectionPage(
     viewer,
     quiet,
   };
-  const [view, tools, changed, partOf, connected, states, works, exposure] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states, works, exposure, copy] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
@@ -270,6 +271,10 @@ export async function connectionPage(
     worksOnPage(services, row, quiet, now, timeZone),
     // What its settings opened to the internet lately (internet-exposure.md); never slows the page down.
     within(exposurePageNotices(services, row), 3_000, [] as KindNotice[]),
+    // A service Whombat keeps a copy of the settings of (outside-changes.md): its card and, when copies fail, a line.
+    burrowLocale(services, viewer.burrowId)
+      .then((locale) => settingsCopyOf(services, row, now, timeZone, locale))
+      .catch(() => null),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
   const misplaced = view?.slots ? slotProblems(view) : [];
@@ -335,6 +340,7 @@ export async function connectionPage(
     ...exposure,
     ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
+    ...(copy?.line ? [copy.line] : []),
     ...genericNotices(
       row,
       newTools.length,
@@ -455,6 +461,7 @@ export async function connectionPage(
     readAt: readAt ? readAt.toISOString() : null,
     ...(problem ? { problem: clip(problem, 200) } : {}),
     ...(partOf ? { partOf } : {}),
+    ...(copy ? { settingsCopy: copy.view } : {}),
     ...rangeFields(range, slotted && !followsRange(tabs[0]?.panels ?? []) ? [range] : kind?.ranges),
     ...(view ? { refreshS: refreshOf(view) } : {}),
     ...held.fields,

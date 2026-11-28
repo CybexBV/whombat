@@ -1,13 +1,14 @@
 /**
  * What happened (Whombat; `things.history`, session minor 9): at the end of a
  * thing's or server's Summary, its outages and problems over the last 30 days (or 90), newest first — what it was, when
- * and how long, and what took it down — under its uptime over the period; for a server its own alerts fold under them,
+ * and how long, and what took it down — and what changed on it (a version, a restart, settings; outside-changes.md),
+ * said once with who made it, under its uptime over the period; for a server its own alerts fold under them,
  * under “From the server”, without the outages the incidents already list. Drawn as Worth a look's rows: one still going
  * in its tone, the past ones grey. Nothing on an older Whombat.
  */
 import { HISTORY_WORDS, type HistoryRow, historyView } from '@whombat/client';
 import { useThingHistory } from '@whombat/client/react';
-import { AlertTriangle, Power } from 'lucide-react';
+import { AlertTriangle, History, Power } from 'lucide-react';
 import { useId, useState } from 'react';
 import { LoadErrorNote } from '../../../app/runtime';
 import { cx } from '../../../components/cx';
@@ -103,13 +104,23 @@ export function WhatHappened({ burrow, thing }: { burrow: string; thing: string 
   );
 }
 
-/** One row: still going in its tone, a past one grey; what it was, then when, how long and its cause. */
+/**
+ * One row: still going in its tone, a past one grey; what it was, then when, how long and its cause. A change is always
+ * grey, with its own mark, and says who made it.
+ */
 function Row({ row, alert = false }: { row: HistoryRow; alert?: boolean }) {
-  const tone = !row.open ? quiet.quietIcon : row.tone === 'bad' ? dash.wiBad : dash.wiWarn;
+  const tone =
+    !row.open || row.tone === 'change' ? quiet.quietIcon : row.tone === 'bad' ? dash.wiBad : dash.wiWarn;
+  const icon = row.tone === 'change' ? History : row.tone === 'bad' && !alert ? Power : AlertTriangle;
   return (
-    <div className={dash.watch} data-history={row.id} data-open={row.open || undefined}>
+    <div
+      className={dash.watch}
+      data-history={row.id}
+      data-open={row.open || undefined}
+      data-change={row.tone === 'change' || undefined}
+    >
       <span className={cx(dash.wi, tone)} aria-hidden="true">
-        <Icon icon={row.tone === 'bad' && !alert ? Power : AlertTriangle} size={15} />
+        <Icon icon={icon} size={15} />
       </span>
       <div className={dash.watchText}>
         <b>

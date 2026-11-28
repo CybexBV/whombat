@@ -11,6 +11,7 @@
  *   person said so (Whombat docs/decisions/on-purpose.md).
  * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period, read-only.
  * - `internet_exposure`: what the internet can reach, from the settings Whombat reads (Whombat internet-exposure.md).
+ * - `what_changed`: what changed on a thing (or everywhere) over a period, read-only (Whombat outside-changes.md).
  * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
  *   (Whombat).
  * - `service_test`: whether a service really works, by Whombat's read-only test of it: the last results, or a run now
@@ -278,6 +279,35 @@ export const ONE_MCP_TOOLS = {
       ),
       places: z.array(z.object({ name: z.string(), state: z.string(), words: z.string() })),
       note: z.string(),
+    }),
+    requiredKey: null,
+    readOnly: true,
+    personal: true,
+  }),
+  what_changed: oneTool({
+    name: 'what_changed',
+    title: 'What changed',
+    description:
+      'What changed on a server, connection or device over a period, newest first: a service’s version, a container’s image, the server’s system updates and restarts, firmware, proxy hosts and tunnel routes, and settings Whombat compared between its nightly settings copies. Each says when Whombat saw it and whether Whombat did it (by Whombat) or someone or something else (outside Whombat). thing: its page id (connection:con_…, server:<id>, device:<id>) or a connection’s handle; leave out for everything. hours: how far back, 1 to 2160 (48 when left out). For a connection it also lists what changed on the server it runs on. Use it when something broke to see what changed just before; a change just before is not proof it caused it.',
+    input: z.object({
+      thing: z.string().trim().min(1).max(220).optional(),
+      hours: z.number().int().min(1).max(2160).optional(),
+    }),
+    output: commitOutcome({
+      from: z.string(),
+      changes: z.array(
+        z.object({
+          thing: z.string(),
+          name: z.string(),
+          kind: z.string(),
+          words: z.string(),
+          seen: z.string(),
+          /** The read before, when it happened at the earliest. */
+          after: z.string().optional(),
+          by: z.enum(['whombat', 'outside']),
+        }),
+      ),
+      note: z.string().optional(),
     }),
     requiredKey: null,
     readOnly: true,

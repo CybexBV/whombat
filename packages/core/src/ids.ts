@@ -148,6 +148,10 @@ export const ID_PREFIXES = {
   thingWatch: 'thw',
   /** One run of a service's “Does it really work?” test, its result only (Whombat service-works.md). */
   serviceTestRun: 'wtr',
+  /** A change Whombat saw on a thing that it didn't make through a tool (Whombat outside-changes.md). */
+  thingChange: 'och',
+  /** A copy of a service's settings kept on the box (Whombat outside-changes.md). */
+  settingsCopy: 'scp',
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

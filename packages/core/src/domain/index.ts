@@ -14,6 +14,7 @@ export * from './burrow.js';
 export * from './canvas.js';
 export * from './cards.js';
 export * from './care-plan.js';
+export * from './changes.js';
 export * from './chat-runtime.js';
 export * from './clients.js';
 export * from './common.js';

@@ -1580,6 +1580,7 @@ export const TRUENAS_KIND: KindModule = {
         truenasSkipped(s),
       ),
       points: usedPoint(truenasSpace(s)?.used),
+      tracked: { version: s.version ?? null },
     };
   },
   actions: { scrub: scrubPool, start: startApp, stop: stopApp, dismiss: dismissAlert },

@@ -24,6 +24,7 @@ import {
   npmRows,
   npmSkipped,
   npmStatus,
+  npmTracked,
   npmVersion,
   npmView,
   parseProxyHosts,
@@ -258,3 +259,15 @@ describe('nginx proxy manager', () => {
 });
 
 type NpmSite = NpmSnapshot['sites'][number];
+
+describe('what the change log keeps of Nginx Proxy Manager (outside-changes.md)', () => {
+  it('keeps its version and where each proxy host points, a switched-off one marked', () => {
+    const tracked = npmTracked(snapshot);
+    expect(tracked.version).toBe('2.16.0');
+    expect(tracked.routes?.via).toBe('proxy');
+    const proxies = snapshot.sites.filter((s) => s.kind === 'proxy');
+    expect(Object.keys(tracked.routes?.map ?? {})).toHaveLength(proxies.length);
+    const off = proxies.find((s) => !s.enabled);
+    if (off?.domains[0]) expect(tracked.routes?.map[off.domains[0]]).toMatch(/^off:/);
+  });
+});

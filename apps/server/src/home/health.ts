@@ -36,6 +36,9 @@ import {
   UPTIME_ID,
 } from '@whombat/core';
 import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { trackConnection } from '../changes/connections';
+import { settingsCopyOf } from '../changes/copies/view';
+import type { TrackedFacts } from '../changes/diff';
 import { outsideCommandScope } from '../commit/scope';
 import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
@@ -44,6 +47,7 @@ import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/t
 import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
 import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
 import { exposureSeen } from '../exposure/lines';
+import { burrowLocale } from '../i18n/locale';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
@@ -303,6 +307,8 @@ export async function checkConnectionHealth(
   // Its lines as its page would show them (QN-S03), and the checks this pass didn't read (QN-S04).
   let lines: LooseNotice[] = [];
   let skipped: Skipped = [];
+  // What the kind's read tells the change log, when it read.
+  let tracked: TrackedFacts | undefined;
   const answered = (outcome: 'offline' | 'error') =>
     genericNotices(
       {
@@ -398,11 +404,23 @@ export async function checkConnectionHealth(
           ...(seen?.glance.activity ? { activity: seen.glance.activity } : {}),
         };
         if (seen) {
+          tracked = seen.tracked;
           if (seen.notices) lines.push(...seen.notices);
           else {
             const older = olderKindLine(seen.glance);
             if (older) lines.push(older);
           }
+          // A settings copy that keeps failing (outside-changes.md); nothing for a service Whombat doesn't copy.
+          const copy = await settingsCopyOf(
+            services,
+            row,
+            now,
+            await zoneOf(services, row),
+            await burrowLocale(services),
+          )
+            .then((c) => c?.line ?? null)
+            .catch(() => null);
+          if (copy) lines.push(copy);
           skipped = seen.skipped ?? [];
         }
         // What its settings opened to the internet since Whombat kept its first list (internet-exposure.md).
@@ -526,6 +544,10 @@ export async function checkConnectionHealth(
     if (!changed) return;
     publishHomeChanged(session, audience ?? (await homeAudience(session, row.burrowId)), ['things', 'watch']);
   });
+  if (tracked)
+    await trackConnection(services, row, tracked, glance.machine?.serverId ?? null, now).catch((err) =>
+      services.log.warn({ err: String(err) }, 'connection health: keeping what changed failed'),
+    );
   return glance;
 }
 

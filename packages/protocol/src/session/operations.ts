@@ -488,6 +488,8 @@ export const EXPORT_READ_OPS: readonly string[] = [
   // A Find My timeline: a week of several people's days, and the Mac's map of one person's day.
   'connections.findMyTimeline',
   'connections.findMyTimelineMap',
+  // A service's settings copy for Download (Whombat outside-changes.md): up to a few megabytes.
+  'things.settingsCopy',
   'skills.library',
   'skills.librarySkill',
   'skills.librarySkillFile',
