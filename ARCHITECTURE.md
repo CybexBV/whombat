@@ -1953,6 +1953,17 @@ Setup and operation: `docs/github.md`.
   during the period, including alerts that began earlier, or says when its own alerts couldn't be read.
   The assistant reads this with `watch_status` and `watch_history` (`incidents/agent.ts`).
   `watch_status` lists quiet windows for whole things.
+- **Does it really work?** (`apps/server/src/works/`, [service-works.md](docs/decisions/service-works.md)): Nextcloud,
+  Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant each have one read-only test (`tests.ts`) that does what a
+  person would through the connection's own sign-in (`signedConnectionFetch`): list files and read a file's first
+  bytes, load the newest photo's preview, find the newest library item and read its first bytes, see a sensor's recent
+  reading. A step's failure is `access` (401, 403, a sign-in that can't be renewed), `broken` (another code, an
+  unreadable answer, nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
+  (`service_test_runs`, 30 days). The page's card “Does it really work?” (`page.ts`) has Run now and Watch it, which
+  go through `things.action` without a change (`actions.ts`). Watch it is the check `works.test` (starts off): the
+  connection's health pass runs a watched test when due (every 15 minutes, a confirming run after a first failure, a
+  run after a change on the connection; `rules.ts`) and adds its line after two failed runs, so the dot, incidents,
+  pushes, holds and causes treat it as any line. The assistant reads or runs it with `service_test` (`tool.ts`).
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the
