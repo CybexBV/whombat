@@ -1152,7 +1152,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'app_update',
     title: 'Update apps',
     description:
-      'Update Docker Compose apps on one server: for each, pull its newer image and restart only that app; one that doesn’t start goes back to its previous version by itself. Whombat says in the chat how it went. A database, or a new major version, always asks the person first: then pass ask true and the reasons app_updates gave. Otherwise it asks unless the server is set not to ask.',
+      'Update Docker Compose apps on one server: for each, pull the newer image Whombat checked and restart only that app (with the other services of its project that run the same image); one that doesn’t start goes back to its previous version by itself. Whombat says in the chat how it went. A database, a new major version, or an app whose versions aren’t known always asks the person first: then pass ask true and the reasons app_updates gave (asksFirst). Otherwise it asks unless the server is set not to ask.',
     access: 'write',
     sensitive: true,
     inputSchema: obj(
@@ -1177,8 +1177,15 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
           'True: first take a snapshot of the Proxmox VM or container the server is, when app_updates offers one',
         ),
         hold_major: bool(
-          'True: leave an app whose update turns out to be a new major version as it is (unattended runs)',
+          'True: leave an app whose update turns out to be a new major version as it is (unattended runs; it does so anyway unless the person’s yes said it may be a new major version)',
         ),
+        expect: {
+          type: 'array',
+          items: { type: 'object' },
+          maxItems: APP_UPDATE_MAX,
+          description:
+            'Leave it out: Whombat fills it in when the call is asked for (what it checked of each app, so the update deploys exactly that)',
+        },
         reason: str('Why, in plain words (optional)'),
       },
       ['server', 'apps'],

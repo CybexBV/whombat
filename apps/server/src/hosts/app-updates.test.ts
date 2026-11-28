@@ -2,7 +2,22 @@ import type { HostGuest, HostGuestApp } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import { appAskRefusal } from './app-ask';
 import { appAskPhrase, appCardNote, appOutcomeLine, appsOutcomeText } from './app-words';
-import { appFacts, askReasons, cardReasons, proxmoxGuestOf, snapshotName } from './tools-apps';
+import type { HostsChange } from './service';
+import {
+  appFacts,
+  askReasons,
+  bindingOf,
+  bindingReasons,
+  cardReasons,
+  parseBindings,
+  proxmoxGuestOf,
+  snapshotFinished,
+  snapshotName,
+  stillBound,
+  withSharedImage,
+  yesAllowsMajor,
+  yesCovers,
+} from './tools-apps';
 import { serversTaskWords } from './words';
 
 const app = (over: Partial<HostGuestApp> = {}): HostGuestApp => ({
@@ -53,7 +68,7 @@ describe('the card for an app update', () => {
     expect(db).toContain('can’t undo');
     expect(db).toContain('snapshot');
     expect(appCardNote({ reasons: ['major'] })).toContain('major version');
-    expect(appCardNote({ reasons: ['version_unknown'] })).toContain('isn’t known');
+    expect(appCardNote({ reasons: ['version_unknown'] })).toContain('major version');
   });
 });
 
@@ -70,6 +85,19 @@ describe('the line when an app update ended', () => {
     expect(
       appOutcomeLine({ app: 'Immich', status: 'failed', reason: 'back_failed', to: '2.4' }, 'nas'),
     ).toContain('needs a look');
+    // Not what the person said yes to any more, or stopped part-way: each says so, not a plain failure.
+    const failed = appOutcomeLine({ app: 'Immich', status: 'failed' }, 'nas');
+    for (const reason of ['changed', 'interrupted']) {
+      const line = appOutcomeLine({ app: 'Immich', status: 'failed', reason }, 'nas');
+      expect(line).toContain('Immich');
+      expect(line).not.toBe(failed);
+    }
+    expect(appOutcomeLine({ app: 'Immich', status: 'failed', reason: 'changed' }, 'nas')).toContain(
+      'said yes',
+    );
+    expect(appOutcomeLine({ app: 'Immich', status: 'failed', reason: 'interrupted' }, 'nas')).toContain(
+      'nas',
+    );
   });
 
   it('keeps to four apps and counts the rest', () => {
@@ -101,6 +129,8 @@ describe('the line when an app update ended', () => {
       { app: 'h', status: 'failed', reason: 'back_failed', to: '2' },
       { app: 'i', status: 'failed', reason: 'timeout' },
       { app: 'j', status: 'failed' },
+      { app: 'k', status: 'failed', reason: 'changed' },
+      { app: 'l', status: 'failed', reason: 'interrupted' },
     ];
     for (const r of lines) {
       const nl = appOutcomeLine(r, 'nas', 'nl-NL');
@@ -147,7 +177,136 @@ describe('what Dusty reads and the card must say', () => {
     const db = guest('db', { image: 'postgres:16', app: app({ version: '16.4', newVersion: null }) });
     expect(cardReasons([web])).toEqual([]);
     expect(cardReasons([web, db])).toEqual(['database', 'version_unknown']);
-    expect(askReasons([web, db])).toEqual(['database']);
+    // A version that isn't known may be a new major one: it asks first, like a database.
+    expect(askReasons([web, db])).toEqual(['database', 'version_unknown']);
+    const latest = guest('web', { image: 'ghcr.io/example/web:latest', app: app({ version: null }) });
+    expect(askReasons([latest])).toEqual(['version_unknown']);
+    expect(appFacts(latest, true).asksFirst).toEqual(['version_unknown']);
+  });
+
+  it('asks first for a database, a new major version or versions that aren’t known', () => {
+    expect(bindingReasons({ image: 'postgres:16', version: '16.4', newVersion: '16.5' })).toEqual([
+      'database',
+    ]);
+    expect(bindingReasons({ image: 'web:1', version: '1.9', newVersion: '2.0' })).toEqual(['major']);
+    expect(bindingReasons({ image: 'web:latest', version: null, newVersion: '2.0' })).toEqual([
+      'version_unknown',
+    ]);
+    expect(bindingReasons({ image: 'web:latest', version: '1.2', newVersion: null })).toEqual([
+      'version_unknown',
+    ]);
+    expect(bindingReasons({ image: 'web:1', version: '1.2', newVersion: '1.3' })).toEqual([]);
+    // A yes that said it may be a new major version covers one whose version isn't known, and lets it through.
+    expect(yesCovers(['major'], 'version_unknown')).toBe(true);
+    expect(yesCovers(['database'], 'version_unknown')).toBe(false);
+    expect(yesAllowsMajor(['version_unknown'])).toBe(true);
+    expect(yesAllowsMajor(['database'])).toBe(false);
+    expect(yesAllowsMajor([])).toBe(false);
+  });
+});
+
+describe('what a yes is bound to', () => {
+  const ID = (c: string) => `sha256:${c.repeat(64)}`;
+  const bound = (name: string, over: Partial<HostGuest> = {}, a: Partial<HostGuestApp> = {}) =>
+    guest(name, {
+      imageId: ID('a'),
+      app: app({ service: name, newDigest: ID('e'), configHash: 'c0ffee', ...a }),
+      ...over,
+    });
+
+  it('reads the service, the image, Compose’s hash and the newer image’s digest', () => {
+    expect(bindingOf(bound('immich_server'))).toEqual({
+      app: 'docker:immich_server',
+      service: 'immich_server',
+      imageId: ID('a'),
+      image: 'ghcr.io/example/immich_server:v2.3.1',
+      digest: ID('e'),
+      configHash: 'c0ffee',
+      version: 'v2.3.1',
+      newVersion: 'v2.4.0',
+    });
+    expect(bindingOf(bound('x', { imageId: 'abc' }))).toBeNull();
+    expect(bindingOf(guest('x', { imageId: ID('a'), app: undefined }))).toBeNull();
+  });
+
+  it('takes along the other services of the project that run the same image', () => {
+    const server = bound('immich_server');
+    const micro = bound('immich_microservices');
+    const other = bound('other', { project: 'elsewhere' });
+    const stopped = bound('stopped', { state: 'stopped' });
+    const redis = bound('redis', { imageId: ID('b') });
+    const all = [server, micro, other, stopped, redis];
+    expect(withSharedImage(all, [server]).map((g) => g.name)).toEqual([
+      'immich_server',
+      'immich_microservices',
+    ]);
+    expect(withSharedImage(all, [redis]).map((g) => g.name)).toEqual(['redis']);
+  });
+
+  it('refuses what changed since', () => {
+    const g = bound('web');
+    const b = bindingOf(g);
+    if (!b) throw new Error('bound');
+    expect(stillBound(g, b)).toBe(true);
+    expect(stillBound(bound('web', { imageId: ID('f') }), b)).toBe(false);
+    expect(stillBound(bound('web', {}, { service: 'api' }), b)).toBe(false);
+    expect(stillBound(bound('web', {}, { configHash: 'beef' }), b)).toBe(false);
+    // A newer image found since isn't a change: the yes keeps its own.
+    expect(stillBound(bound('web', {}, { newDigest: ID('d') }), b)).toBe(true);
+  });
+
+  it('reads back only Whombat’s own shape', () => {
+    const b = bindingOf(bound('web'));
+    expect(parseBindings([b])).toEqual([b]);
+    expect(parseBindings([{ app: 'docker:web' }])).toBeNull();
+    expect(parseBindings('x')).toBeNull();
+    expect(parseBindings([])).toBeNull();
+  });
+});
+
+describe('a snapshot before an update', () => {
+  const hub = () => {
+    const listeners = new Set<(c: HostsChange) => void>();
+    return {
+      onChange(l: (c: HostsChange) => void) {
+        listeners.add(l);
+        return () => listeners.delete(l);
+      },
+      finish(actionId: string, result: string) {
+        for (const l of [...listeners])
+          l({
+            kind: 'task',
+            serverId: 'pve-01',
+            guestId: 'pve:qemu/120',
+            data: { action_id: actionId, result },
+          });
+      },
+    };
+  };
+
+  it('hears a snapshot that finished before its id came back', async () => {
+    const h = hub();
+    const done = await snapshotFinished(
+      h,
+      async () => {
+        h.finish('act_1', 'ok');
+        return 'act_1';
+      },
+      60_000,
+    );
+    expect(done?.result).toBe('ok');
+  });
+
+  it('waits for the snapshot it asked for, and gives up when it doesn’t say', async () => {
+    const h = hub();
+    const later = snapshotFinished(h, async () => 'act_2', 60_000);
+    await Promise.resolve();
+    await Promise.resolve();
+    h.finish('act_other', 'ok');
+    h.finish('act_2', 'error');
+    expect((await later)?.result).toBe('error');
+    expect(await snapshotFinished(hub(), async () => 'act_3', 5)).toBeNull();
+    expect(await snapshotFinished(hub(), async () => null, 5)).toBeNull();
   });
 
   it('finds the Proxmox guest a server is, by a shared address, only when it is one', () => {

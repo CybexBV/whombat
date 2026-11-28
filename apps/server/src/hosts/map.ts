@@ -562,6 +562,9 @@ export function toGuestApp(raw: unknown): HostGuest['app'] {
             at: ts(last.at),
           }
         : null,
+    // What an update carries back (the newer image's digest, Compose's hash of the service), when the agent says them.
+    ...(/^sha256:[0-9a-f]{64}$/.test(str(a.new_digest) ?? '') ? { newDigest: str(a.new_digest) } : {}),
+    ...(/^[0-9a-f]{1,128}$/.test(str(a.config_hash) ?? '') ? { configHash: str(a.config_hash) } : {}),
   };
 }
 

@@ -31,7 +31,7 @@ import { addressIndex } from '../things/runs-on';
 import { HOSTS_API, seg } from './client';
 import { arr, obj, toHostGuest } from './map';
 import { HOSTS_TEXT, hostsFor, WHOMBAT_ACTOR } from './service';
-import { cardReasons, proxmoxGuestOf } from './tools-apps';
+import { bindingOf, cardReasons, proxmoxGuestOf, withSharedImage } from './tools-apps';
 
 /** Why the page's Update can't ask, in the person's words and `locale` (English when none); null when it can. */
 export function appAskRefusal(
@@ -87,8 +87,13 @@ export async function askAppUpdate(
   const guests = arr(obj(page).guests).map((g) => toHostGuest(g, input.serverId));
   const refused = appAskRefusal(guests, apps, locale);
   if (refused) throw new ApiError('conflict', refused);
-  const picked = guests.filter((g) => apps.includes(g.id));
+  // The card names, and the yes is bound to, the apps as they are now and those that share their image.
+  const picked = withSharedImage(
+    guests,
+    guests.filter((g) => apps.includes(g.id)),
+  );
   const reasons = cardReasons(picked);
+  const expect = picked.flatMap((g) => bindingOf(g) ?? []);
   // A snapshot first is offered whenever the server is a Proxmox guest Whombat watches, unless the page said no.
   const snapshot =
     input.snapshot ??
@@ -101,6 +106,7 @@ export async function askAppUpdate(
     ask: true,
     ...(reasons.length ? { reasons } : {}),
     ...(snapshot ? { snapshot: true } : {}),
+    ...(expect.length ? { expect } : {}),
   };
   const callId = newCallId();
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));

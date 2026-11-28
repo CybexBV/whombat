@@ -19,8 +19,8 @@ export const APPS = splitPairs({
     '{app} {to} is een nieuwe hoofdversie, dus ik heb {from} laten draaien zodat jij kunt beslissen.',
   ],
   'hosts.apps.heldUnknown': [
-    '{app}’s update is a new major version, so I left it as it was for you to decide.',
-    'De update van {app} is een nieuwe hoofdversie, dus ik heb het gelaten zoals het was zodat jij kunt beslissen.',
+    '{app}’s update may be a new major version, so I left it as it was for you to decide.',
+    'De update van {app} kan een nieuwe hoofdversie zijn, dus ik heb het gelaten zoals het was zodat jij kunt beslissen.',
   ],
   'hosts.apps.rolledBack': [
     '{app} {to} didn’t start, so I put {from} back.',
@@ -51,6 +51,14 @@ export const APPS = splitPairs({
   'hosts.apps.timeout': [
     'There wasn’t time left to update {app}.',
     'Er was geen tijd meer om {app} bij te werken.',
+  ],
+  'hosts.apps.changed': [
+    '{app} changed after you said yes, so I left it alone. Ask me again to update it.',
+    '{app} is veranderd nadat je ja zei, dus ik heb het zo gelaten. Vraag het me opnieuw om het bij te werken.',
+  ],
+  'hosts.apps.interrupted': [
+    'I didn’t get to {app}: the update was cut short, most likely because {server} restarted.',
+    'Ik ben niet aan {app} toegekomen: de update werd onderbroken, waarschijnlijk doordat {server} opnieuw opstartte.',
   ],
   'hosts.apps.failed': ['I couldn’t update {app}.', 'Ik kon {app} niet bijwerken.'],
   'hosts.apps.more': [
