@@ -207,7 +207,13 @@
       "name": "hosts-agent-windows",
       "inFull": true,
       "about": "The agent's Windows build (GOOS=windows, amd64 and arm64): its Windows-only files are checked nowhere else.",
-      "when": ["hosts/cmd/whombat-agent/**", "hosts/internal/agent/**", "hosts/internal/proto/**", "hosts/go.mod", "hosts/go.sum"],
+      "when": [
+        "hosts/cmd/whombat-agent/**",
+        "hosts/internal/agent/**",
+        "hosts/internal/proto/**",
+        "hosts/go.mod",
+        "hosts/go.sum"
+      ],
       "run": "cd hosts && make agent-windows-check GO=go"
     },
     {
