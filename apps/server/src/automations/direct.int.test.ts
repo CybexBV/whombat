@@ -42,8 +42,9 @@ import { personAccountId } from '../read/principals';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { useVaultNetForTests } from '../vault/net';
-import { runAutomationNow } from './commands';
+import { publishAutomationDraft, runAutomationNow, saveAutomationDraft } from './commands';
 import { noteSmartHome, smartHomePrincipal, smartHomeTriggersFor } from './home-triggers';
+import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 
 type Json = Record<string, unknown>;
 
@@ -61,6 +62,8 @@ const home = {
   ]),
   names: new Map<string, string>([['light.porch', 'Porch light']]),
   calls: [] as { path: string; body: Json }[],
+  /** How often each entity's state was read. */
+  reads: new Map<string, number>(),
   port: 0,
 };
 const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -74,6 +77,7 @@ const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     };
     const state = /^\/api\/states\/(.+)$/.exec(path);
     if (req.method === 'GET' && state?.[1]) {
+      home.reads.set(state[1], (home.reads.get(state[1]) ?? 0) + 1);
       const now = home.states.get(state[1]);
       const name = home.names.get(state[1]);
       return now
@@ -890,6 +894,78 @@ describe('Home Assistant and Protect starts', () => {
     } finally {
       now.mockRestore();
     }
+  });
+
+  it('ends a wait of a version published over before its time, starting nothing', async () => {
+    const leak = (forMinutes: number) =>
+      definition(
+        [tell('{{trigger.text}}')],
+        [
+          {
+            kind: 'home_state',
+            connectionId: haId,
+            entity: 'binary_sensor.basement_leak',
+            entityName: 'Basement leak',
+            to: 'on',
+            forMinutes,
+          },
+        ],
+      );
+    const id = await w.publish(leak(10), { name: 'Basement leak' });
+    const waits = () =>
+      w.services.db.select().from(automationWaits).where(eq(automationWaits.automationId, id));
+    await signSmartHome({
+      connectionId: haId,
+      changes: [{ entity: 'binary_sensor.basement_leak', name: 'Basement leak', from: 'off', to: 'on' }],
+    });
+    await w.settle();
+    expect(await waits()).toHaveLength(1);
+    // Published again a minute later, before the wait's time: its wait was for the version before.
+    w.advance(MINUTE);
+    await w.ok(IDS.mara, saveAutomationDraft, {
+      automationId: id,
+      definition: JSON.parse(JSON.stringify(leak(15))),
+    });
+    await w.ok(IDS.mara, publishAutomationDraft, {
+      automationId: id,
+      enable: true,
+      definitionHash: await w.draftHash(id),
+    });
+    w.advance(20 * MINUTE);
+    await w.settle();
+    expect(await waits()).toHaveLength(0);
+    expect(await w.runs(id)).toHaveLength(0);
+  });
+
+  it('reads Home Assistant once per step when the assistant proposes an automation, and when it is turned on', async () => {
+    home.states.set('light.porch', 'off');
+    const reads = home.reads.get('light.porch') ?? 0;
+    const dispatchId = await w.turn(IDS.dusty, IDS.dmDusty);
+    const out = await w.ok(IDS.dusty, proposeAutomationPlan, {
+      name: 'Porch light on',
+      description: 'Turns the porch light on.',
+      definition: JSON.parse(
+        JSON.stringify({
+          ...definition([
+            {
+              id: 'on',
+              kind: 'run_action',
+              thing: `connection:${haId}`,
+              thingName: 'Home Assistant',
+              target: 'light.porch',
+              action: 'turn_on',
+            },
+          ]),
+          conversationId: IDS.dmDusty,
+        }),
+      ),
+      dispatchId,
+    } as never);
+    expect(out.problems).toEqual([]);
+    expect(out.planId).toBeTruthy();
+    expect(home.reads.get('light.porch')).toBe(reads + 1);
+    await w.ok(IDS.mara, acceptAutomationPlan, { planId: out.planId as string });
+    expect(home.reads.get('light.porch')).toBe(reads + 2);
   });
 
   it('starts once for a doorbell pressed again within the cooldown, and again after it', async () => {
