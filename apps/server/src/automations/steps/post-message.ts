@@ -24,6 +24,17 @@ function triggerThing(run: AutomationRunRow): string | null {
 }
 
 /**
+ * Whether a step of the run did something, or may have: an action that ran, and one that may have happened without
+ * anyone being able to say so (sent but not confirmed, or cut short by a restart). Either is said, quiet or not.
+ */
+export function stepsActed(steps: readonly Pick<AutomationStepRow, 'output'>[]): boolean {
+  return steps.some((s) => {
+    const out = s.output as { ran?: unknown; unconfirmed?: unknown } | null;
+    return out?.ran === true || out?.unconfirmed === true;
+  });
+}
+
+/**
  * Whether a message of an automation that acts without AI stays unsaid (docs/decisions/direct-automations.md): its
  * trigger's thing is kept quiet now, and no step of the run did anything yet. What it did is always said; news alone
  * keeps quiet with the thing.
@@ -40,8 +51,7 @@ async function keptQuiet(
   if (!direct) return false;
   const thing = triggerThing(run);
   if (!thing) return false;
-  const acted = steps.some((s) => (s.output as { ran?: unknown } | null)?.ran === true);
-  if (acted) return false;
+  if (stepsActed(steps)) return false;
   return holdsIncident(ctx.tx, run.burrowId, thing, ctx.now);
 }
 

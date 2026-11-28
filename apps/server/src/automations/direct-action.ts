@@ -643,32 +643,34 @@ export async function runDirectAction(
     .from(burrows)
     .where(eq(burrows.id, run.burrowId));
   const at = () => clock(services.clock(), burrow?.timeZone ?? 'UTC');
+  // `unconfirmed`: it may have happened, but nobody can say it did; it is said, not counted as done.
   const settleLine = (
     state: 'succeeded' | 'skipped' | 'failed' | 'uncertain',
     line: string,
     error?: string,
+    unconfirmed?: true,
   ) =>
     lease.commit({
       op: 'settle',
       idx: row.idx,
       state,
       ...(state === 'succeeded' ? {} : { error: (error ?? line).slice(0, 1000) }),
-      output: { ran: false, text: line.slice(0, 500), summary: line.slice(0, 500) },
+      output: {
+        ran: false,
+        ...(unconfirmed ? { unconfirmed } : {}),
+        text: line.slice(0, 500),
+        summary: line.slice(0, 500),
+      },
       from: ['running'],
     });
 
   const already = await alreadySo(services, plan, step);
   if (already === 'unreachable') {
-    // Whombat stopped while it was shutting this server down: off now is the shutdown it had sent, done.
+    // Whombat stopped while it was shutting this server down. Out of reach now may be that shutdown, or only its network
+    // gone: the line says what is known, the run goes on, and it isn't counted as a shutdown that happened.
     if (opts.recovering && step.action === 'shut_down') {
-      const line = directDoneLine(step, { kind: 'done', result: null }, at(), locale);
-      await lease.commit({
-        op: 'settle',
-        idx: row.idx,
-        state: 'succeeded',
-        output: { ran: true, text: line, summary: line },
-        from: ['running'],
-      });
+      const line = t('automations.direct.offAfterRestart', { name: step.thingName, time: at() });
+      await settleLine('skipped', line, undefined, true);
       return;
     }
     const line = t('automations.direct.unreachable', { name: step.thingName, time: at() });
@@ -768,6 +770,8 @@ export async function runDirectAction(
       await settleLine(
         step.otherwise === 'skip' ? 'skipped' : 'failed',
         t('automations.direct.notConfirmed', { what, name: step.thingName, time: at() }),
+        undefined,
+        true,
       );
       return;
     }

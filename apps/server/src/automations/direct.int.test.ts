@@ -717,16 +717,20 @@ describe('after Whombat stopped mid-action', () => {
     expect(home.calls.slice(calls).map((c) => c.path)).toEqual(['/api/services/light/turn_on']);
   });
 
-  it('counts a shutdown it had sent as done when the server is off after the restart', async () => {
+  it('says a shutdown it was sending may have happened when the server is out of reach after the restart', async () => {
     const id = await w.publish(definition([shutDown('marble', { id: 'act' })]), {
       name: 'Marble off, cut short',
     });
     const run = await w.run(await cutShort(id));
+    // Not a failure of the run, and not counted as a shutdown that happened: what is known is said.
+    expect(run.status).toBe('succeeded');
     const act = step(run, 'act');
-    expect(act.state).toBe('succeeded');
-    expect(act.output).toMatchObject({ ran: true });
-    expect(String((act.output as Json).text)).toContain('marble');
-    expect(String((act.output as Json).text)).not.toMatch(/reach/);
+    expect(act.state).toBe('skipped');
+    expect(act.output).toMatchObject({ ran: false, unconfirmed: true });
+    const text = String((act.output as Json).text);
+    expect(text).toContain('marble');
+    expect(text).toMatch(/restarted/);
+    expect(text).not.toMatch(/switching off/);
     expect(actions('marble')).toHaveLength(0);
   });
 
