@@ -12,6 +12,8 @@
 #   whombat-backup-drill.timer hourly `drill -if-due`: the weekly restore check when it is on, in the person's early
 #                              morning in their time zone (policy.json), and a check the person asked for
 #                              (drill-request.json, also started by its path unit)
+#   whombat-backup-offsite     the copy somewhere else: new checkpoints copied to the person's bucket after each
+#                              backup (offsite-request.json and its path unit; the 15-minute timer retries)
 #   whombat-backup-restore@ID  root oneshot behind the manager: brings this box back from checkpoint ID (BK-39)
 #   whombat-backup-restore-recover  root oneshot before the runtime starts and after a release: undoes a restore a
 #                              crash or a power cut stopped, removes what a released one set aside
@@ -53,6 +55,8 @@ let
     rest-password = "rest-password";
     s3-secret-access-key = "s3-secret";
     ssh-key = "ssh-key";
+    # The second place's key (a copy of the backups in a bucket the person owns, Whombat offsite-copy.md).
+    offsite-s3-secret-access-key = "offsite-s3-secret";
   };
   credentials = lib.mapAttrsToList (file: name: "${name}:${sealedDir}/${file}.cred") sealed;
   diskMount = "${p}/backup/disk";
@@ -407,11 +411,13 @@ in
         "whombat-backup.service"
         "whombat-backup-drill.service"
         "whombat-backup-api.service"
+        "whombat-backup-offsite.service"
       ];
       requiredBy = [
         "whombat-backup.service"
         "whombat-backup-drill.service"
         "whombat-backup-api.service"
+        "whombat-backup-offsite.service"
       ];
       path = [
         pkgs.coreutils
@@ -579,6 +585,48 @@ in
         OnCalendar = cfg.drillSchedule;
         RandomizedDelaySec = "10min";
         Persistent = true;
+      };
+    };
+
+    # The copy somewhere else (Whombat offsite-copy.md): the new checkpoints copied to the person's bucket with
+    # `restic copy`, in a unit of its own that never holds the backup's run lock, so a long first copy never holds a
+    # backup up. A backup that worked asks for it (offsite-request.json, started by its path unit); the timer tries
+    # again after a failure (15 minutes, doubled up to 6 hours) and catches up after a restart.
+    systemd.services.whombat-backup-offsite = {
+      description = "Whombat backup copy to the second place";
+      after = [
+        "whombat-persist.target"
+        "network-online.target"
+      ];
+      wants = [ "network-online.target" ];
+      startLimitIntervalSec = 0;
+      serviceConfig = common // leastPrivilege // {
+        Type = "oneshot";
+        User = "whombat-backup";
+        Group = "whombat-backup";
+        ExecStart = "${cfg.package}/bin/whombat-backup -config ${configFile} offsite copy -if-due";
+        SuccessExitStatus = [ 3 ]; # a copy running already takes the request
+        ReadWritePaths = [ "${p}/backup" ];
+        InaccessiblePaths = leastPrivilege.InaccessiblePaths ++ confined;
+        LoadCredentialEncrypted = credentials;
+        CPUWeight = 10;
+        IOWeight = 10;
+        Nice = 15;
+      };
+    };
+    systemd.timers.whombat-backup-offsite = {
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "*:0/15";
+        RandomizedDelaySec = "2min";
+        Persistent = true;
+      };
+    };
+    systemd.paths.whombat-backup-offsite-request = {
+      wantedBy = [ "paths.target" ];
+      pathConfig = {
+        PathExists = "${p}/backup/offsite-request.json";
+        Unit = "whombat-backup-offsite.service";
       };
     };
 

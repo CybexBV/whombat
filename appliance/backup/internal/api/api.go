@@ -11,6 +11,7 @@
 //	GET  /v1/recovery-material   runtime            the kit's backup section (owner-authorized by the runtime)
 //	GET  /v1/ssh-public-key      runtime            the box's SFTP key {publicKey, fingerprint}, made on the first call (BK-19)
 //	POST/GET/DELETE /v1/peeks    runtime            a backup opened for reading (peeks.go)
+//	GET/PUT/DELETE /v1/offsite   runtime            the second place, a copy of the backups somewhere else (offsite.go)
 //
 // The runtime is responsible for owner authorization of the last three (they come from an owner's
 // session op); the API only guarantees that nothing but the runtime (and the manager for checkpoints) can
@@ -64,6 +65,7 @@ func (s *Server) Serve(l net.Listener) error {
 	mux.HandleFunc("GET /v1/ssh-public-key", s.allow(s.sshPublicKey, "runtime"))
 	s.routesOptions(mux)
 	s.routesPeeks(mux)
+	s.routesOffsite(mux)
 	s.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second,
 		ConnContext: func(ctx context.Context, c net.Conn) context.Context { return context.WithValue(ctx, connKey{}, c) }}
 	return s.srv.Serve(l)

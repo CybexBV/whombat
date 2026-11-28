@@ -33,6 +33,7 @@ import (
 	"github.com/CybexBV/whombat/appliance/backup/internal/dest"
 	"github.com/CybexBV/whombat/appliance/backup/internal/hosts"
 	"github.com/CybexBV/whombat/appliance/backup/internal/listing"
+	"github.com/CybexBV/whombat/appliance/backup/internal/offsite"
 	"github.com/CybexBV/whombat/appliance/backup/internal/runtimeadmin"
 	"github.com/CybexBV/whombat/appliance/backup/internal/snap"
 	"github.com/CybexBV/whombat/appliance/backup/internal/state"
@@ -163,6 +164,9 @@ func (r *Runner) Run(ctx context.Context, opts Options) (*Result, error) {
 	})
 	if res != nil {
 		res.Duration = time.Since(start)
+	}
+	if err == nil {
+		offsite.AfterBackup(c) // the copy somewhere else follows in a unit of its own: this backup doesn't wait for it
 	}
 	return res, err
 }

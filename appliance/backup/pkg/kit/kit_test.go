@@ -175,3 +175,45 @@ func TestMaterialCarriesAdopted(t *testing.T) {
 		}
 	}
 }
+
+// The second place travels in the material (older readers skip it): complete for an S3 place, and the material read
+// from it keeps the password and keys but takes the copy's repository, credentials and newest checkpoint.
+func TestMaterialOffsite(t *testing.T) {
+	m := material()
+	m.Repository, m.RESTUser, m.RESTPassword = "rest:https://nas.example.com/box/", "box", "rest-pw"
+	m.Offsite = &Offsite{Provider: "b2", Repository: "s3:https://s3.eu-central-003.backblazeb2.com/my-backups/box",
+		S3AccessKeyID: "KEYID", S3SecretAccessKey: "secret", RepositoryID: "copy-id",
+		Head: &Head{Seq: 3, ManifestSHA256: strings.Repeat("a", 64)}}
+	if err := m.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	from := m.FromOffsite()
+	if from.Repository != m.Offsite.Repository || from.RESTUser != "" || from.RESTPassword != "" ||
+		from.S3AccessKeyID != "KEYID" || from.RepositoryID != "copy-id" || from.Head.Seq != 3 || from.Offsite != nil ||
+		from.RepositoryPassword != m.RepositoryPassword || from.ManifestKey != m.ManifestKey {
+		t.Fatalf("from the copy: %+v", from)
+	}
+	if err := from.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if material().FromOffsite() != nil {
+		t.Fatal("a material without a second place has one")
+	}
+	for name, edit := range map[string]func(o *Offsite){
+		"no secret":           func(o *Offsite) { o.S3SecretAccessKey = "" },
+		"credentials in URL":  func(o *Offsite) { o.Repository = "s3:https://k:s@host/b" },
+		"another kind":        func(o *Offsite) { o.Repository = "rest:https://host/x/" },
+		"a provider":          func(o *Offsite) { o.Provider = "Backblaze B2" },
+		"a head without hash": func(o *Offsite) { o.Head.ManifestSHA256 = "x" },
+	} {
+		bad := *m
+		o := *m.Offsite
+		h := *o.Head
+		o.Head = &h
+		edit(&o)
+		bad.Offsite = &o
+		if err := bad.Validate(); err == nil {
+			t.Fatalf("%s: accepted", name)
+		}
+	}
+}

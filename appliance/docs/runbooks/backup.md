@@ -232,6 +232,34 @@ prepared.
 whombat-backup destination set -repository disk: -init
 ```
 
+## A copy somewhere else (the second place)
+
+On top of the one destination, the person can keep a second copy in an S3-compatible bucket they own (Backblaze B2,
+Cloudflare R2, Hetzner Object Storage, AWS S3 or any other; Whombat `docs/decisions/offsite-copy.md`). A fire,
+theft or flood that takes the box and the NAS together leaves that copy.
+
+- Setting it (`PUT /v1/offsite`, `whombat-backup offsite set`) checks the place first: a small file is written, read
+  back and deleted with the person's key, each step answered by what the storage said. Then the copy's repository is
+  opened with the box's own repository password, or made with the main repository's chunker parameters
+  (`restic init --copy-chunker-params`), and only then are the place (`offsite.json`) and its sealed secret
+  (`offsite-s3-secret-access-key`, credential `offsite-s3-secret`) kept.
+- After every backup that worked, `whombat-backup-offsite.service` copies the new checkpoints there (`restic copy`,
+  the checkpoints by id). It has a lock of its own and never holds the run lock: a long first copy holds no backup up.
+  A failure waits 15 minutes, doubled each time up to 6 hours (the 15-minute timer tries again); what happened is in
+  `offsite-status.json` (`GET /v1/offsite`, `whombat-backup offsite status`), the step that failed and its sentence,
+  never a secret or a raw error. At most once a day old checkpoints are cleared there by the person's keep windows.
+- restic gives the two places one environment: two buckets with different keys, two REST servers with different
+  users or two SFTP servers can't be one copy, so a second bucket needs the main bucket's key when the backups already
+  go to a bucket.
+- Forgetting the place (`DELETE /v1/offsite`) stops copying; the copies stay in the bucket.
+
+```sh
+whombat-backup offsite set -provider b2 -repository s3:https://s3.eu-central-003.backblazeb2.com/my-bucket/box \
+  -s3-key-id KEYID -s3-secret-file /root/b2-secret
+whombat-backup offsite copy        # now (the unit runs `offsite copy -if-due`)
+whombat-backup offsite status
+```
+
 ## Recovery kit (BK-15)
 
 Your client builds the kit. It generates the recovery key itself and fetches the backup section from the
@@ -256,6 +284,11 @@ For S3 the kit carries `s3AccessKeyId`, `s3SecretAccessKey`, `s3Region`; for SFT
 (the box's key, OpenSSH PEM) and `sftpHostKey` (the pinned host key); for the backup disk nothing more
 (`whombat-recovery … -repo-dir <where the disk is mounted>`). With the kit alone, `whombat-recovery` reaches every
 kind from another machine (BK-14).
+
+`offsite` is the second place when there is one: `provider`, `repository`, its `s3AccessKeyId`, `s3SecretAccessKey`,
+`s3Region`, `repositoryId` and `head` (the newest backup in the copy). Bringing a box back (`POST /v1/adopt`,
+`destination adopt`) tries the main place first and the copy when the main place fails (`from` says which);
+`whombat-recovery … -offsite` opens the copy.
 
 `generation` changes whenever the destination, password or manifest key change: the client must then ask
 you to save a new kit. Password rotation: `restic key add` works append-only, but removing the old key needs
