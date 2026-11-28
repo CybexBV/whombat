@@ -149,7 +149,7 @@ function Opening({
   // Meant is asked only where Whombat points something out: what is new or worth a look.
   const canMean = !o.meant && (o.isNew || !!o.risk);
   return (
-    <li className={cx(styles.row, o.risk && styles.risky)} data-opening={o.id}>
+    <li className={styles.row} data-opening={o.id}>
       <div className={styles.main}>
         <p className={styles.what}>
           <span className={styles.address}>{o.title}</span>

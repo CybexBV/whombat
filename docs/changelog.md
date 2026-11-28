@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Open to the internet, at the end of Servers: everything your proxy, Cloudflare tunnels and router let in from the
   internet, what each leads to and how it’s protected, with what’s worth a look first. It also says what Whombat

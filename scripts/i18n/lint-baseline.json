@@ -13,6 +13,7 @@
   "apps/web/src/app/councilSetupFixtures.ts": 7,
   "apps/web/src/app/delegationFixtures.ts": 5,
   "apps/web/src/app/essentialsFixtures.ts": 1,
+  "apps/web/src/app/exposureFixtures.ts": 5,
   "apps/web/src/app/feedbackChatFixtures.ts": 6,
   "apps/web/src/app/firstDayFixtures.ts": 10,
   "apps/web/src/app/hostsFixtures.ts": 1,
