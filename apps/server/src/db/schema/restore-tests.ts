@@ -4,7 +4,17 @@
  * test survives a restart of the runtime. Written only through the commit pipeline (`backup-trust/commands.ts`).
  */
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, integer, jsonb, pgTable, primaryKey, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { ts } from './common';
 import { burrows } from './tenancy';
 
@@ -30,7 +40,14 @@ export const restoreTestServers = pgTable(
  * Whombat pulls the copy's network cables and names it; `starting` it was asked to start; `booting` it runs and Whombat
  * waits for it to finish starting; `cleaning` the outcome is known and the copy is stopped and deleted; `done`.
  */
-export type RestoreTestStep = 'pick' | 'restoring' | 'configuring' | 'starting' | 'booting' | 'cleaning' | 'done';
+export type RestoreTestStep =
+  | 'pick'
+  | 'restoring'
+  | 'configuring'
+  | 'starting'
+  | 'booting'
+  | 'cleaning'
+  | 'done';
 
 export const restoreTests = pgTable(
   'restore_tests',
@@ -72,15 +89,16 @@ export const restoreTests = pgTable(
   },
   (t) => [
     // One test at a time on a server.
-    uniqueIndex('restore_tests_active')
-      .on(t.burrowId, t.serverId)
-      .where(sql`${t.finishedAt} IS NULL`),
+    uniqueIndex('restore_tests_active').on(t.burrowId, t.serverId).where(sql`${t.finishedAt} IS NULL`),
     index('restore_tests_guest').on(t.burrowId, t.serverId, t.guestId, t.startedAt),
     check(
       'restore_tests_step',
       sql`${t.step} IN ('pick', 'restoring', 'configuring', 'starting', 'booting', 'cleaning', 'done')`,
     ),
-    check('restore_tests_outcome', sql`${t.outcome} IS NULL OR ${t.outcome} IN ('worked', 'failed', 'skipped')`),
+    check(
+      'restore_tests_outcome',
+      sql`${t.outcome} IS NULL OR ${t.outcome} IN ('worked', 'failed', 'skipped')`,
+    ),
   ],
 );
 
@@ -91,4 +109,3 @@ export interface StoredProtection {
   where: string | null;
   failedAt?: string | null;
 }
-

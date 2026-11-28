@@ -12,7 +12,7 @@ import { restoreTests } from '../db/schema/index';
 import { startHosts } from '../hosts/index';
 import { hostsFor } from '../hosts/service';
 import { FakeHostsService, problem } from '../hosts/testing/fake';
-import { TEST_BURROW_ID, IDS } from '../seed/test-world';
+import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { eventually } from '../test/collab';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
@@ -39,7 +39,10 @@ function request(method: 'GET' | 'POST' | 'PUT', url: string, payload?: object) 
 function realMachine(): { id: string; name: string } {
   const g = fake
     .guestsOf('shale')
-    .find((x) => x.platform === 'pve' && x.kind === 'vm' && x.last_backup && x.template !== true && x.self !== true);
+    .find(
+      (x) =>
+        x.platform === 'pve' && x.kind === 'vm' && x.last_backup && x.template !== true && x.self !== true,
+    );
   if (!g) throw new Error('no machine with a backup on shale');
   g.guest_agent = 'running';
   return { id: String(g.id), name: String(g.name) };
@@ -55,7 +58,10 @@ async function testRow() {
 }
 
 async function latest() {
-  const rows = await t.services.db.select().from(restoreTests).where(eq(restoreTests.burrowId, TEST_BURROW_ID));
+  const rows = await t.services.db
+    .select()
+    .from(restoreTests)
+    .where(eq(restoreTests.burrowId, TEST_BURROW_ID));
   return rows.sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
 }
 
@@ -160,7 +166,9 @@ describe('restore tests (backup-trust.md)', () => {
     expect(fake.guest('shale', 'pve:990000')).toBeNull();
     await runner().pass();
     hostsFor(t.services).forget('fleet');
-    const hints = (await hostsFor(t.services).fleet()).hints.filter((h) => h.kind === RESTORE_TEST_FAILED_HINT);
+    const hints = (await hostsFor(t.services).fleet()).hints.filter(
+      (h) => h.kind === RESTORE_TEST_FAILED_HINT,
+    );
     expect(hints).toHaveLength(1);
     expect(hints[0]).toMatchObject({ serverId: 'shale', entity: real.id });
     expect(hints[0]?.title).toContain(real.name);
@@ -169,6 +177,8 @@ describe('restore tests (backup-trust.md)', () => {
     expect((await request('PUT', '/restore-tests/shale', { on: false })).statusCode).toBe(200);
     await runner().pass();
     hostsFor(t.services).forget('fleet');
-    expect((await hostsFor(t.services).fleet()).hints.some((h) => h.kind === RESTORE_TEST_FAILED_HINT)).toBe(false);
+    expect((await hostsFor(t.services).fleet()).hints.some((h) => h.kind === RESTORE_TEST_FAILED_HINT)).toBe(
+      false,
+    );
   });
 });

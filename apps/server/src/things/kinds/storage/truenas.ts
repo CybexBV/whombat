@@ -10,7 +10,7 @@
  * Buttons (SD-07): **Scrub** a pool (`pool.scrub.run` now), **Start** and **Stop** an app, **Dismiss** a non-critical
  * alert (everyday, SD-08). Never `app.upgrade` or `update.run` (SD-02).
  */
-import { truenasProtection } from '../../../backup-trust/protection';
+
 import type {
   JsonValue,
   ThingGalleryItem,
@@ -21,6 +21,7 @@ import type {
   ThingPagePanel,
   ThingPageRow,
 } from '@whombat/core';
+import { truenasProtection } from '../../../backup-trust/protection';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { badRequest } from '../../../lib/errors';
 import type { Services } from '../../../services';

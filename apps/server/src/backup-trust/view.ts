@@ -17,14 +17,20 @@ import {
   thingHref,
 } from '@whombat/core';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import { placesNow } from '../backup-places/places';
 import { changeWindowOf } from '../care/window';
-import { burrows, catalogConnections, restoreTestServers, restoreTests, type StoredProtection } from '../db/schema/index';
+import {
+  burrows,
+  catalogConnections,
+  restoreTestServers,
+  restoreTests,
+  type StoredProtection,
+} from '../db/schema/index';
 import { BACKUPS_HREF } from '../home/box-backup';
 import { arr, obj, toHostBackupJob, toHostBackupVolumes, toHostChoices, toHostGuest } from '../hosts/map';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import { G, S } from '../hosts/tools-shared';
 import { boxBackupStatus } from '../managed/box-backup';
-import { placesNow } from '../backup-places/places';
 import type { Services } from '../services';
 import { guestLabel, machineHref } from '../things/runs-on';
 import { eligibleGuests, nextTestAt } from './plan';
@@ -105,10 +111,15 @@ export async function latestRestoreTest(
 export function offsiteOf(status: unknown): { name: string; lastAt: string | null } | null {
   const o = obj(obj(status).offsite);
   if (!Object.keys(o).length || o.configured === false || o.enabled === false) return null;
-  const name = [o.name, o.display, o.provider, o.where].find((v): v is string => typeof v === 'string' && !!v);
+  const name = [o.name, o.display, o.provider, o.where].find(
+    (v): v is string => typeof v === 'string' && !!v,
+  );
   const last = obj(o.lastCopy ?? o.lastSuccess);
   const at = [last.at, o.lastCopyAt, o.lastAt].find((v): v is string => typeof v === 'string' && !!v);
-  return { name: (name ?? 'Off-site').slice(0, 160), lastAt: at && Number.isFinite(Date.parse(at)) ? at : null };
+  return {
+    name: (name ?? 'Off-site').slice(0, 160),
+    lastAt: at && Number.isFinite(Date.parse(at)) ? at : null,
+  };
 }
 
 /* Machines ------------------------------------------------------------------------------------------------------------ */
@@ -168,7 +179,10 @@ async function serverMachines(
             query: { platform: 'pve' },
             actor: { ...WHOMBAT_ACTOR, role: 'operator' },
           })
-          .then((r) => new Map(toHostChoices(r).storages.map((s) => [s.id, { type: s.type, shared: !!s.shared }])))
+          .then(
+            (r) =>
+              new Map(toHostChoices(r).storages.map((s) => [s.id, { type: s.type, shared: !!s.shared }])),
+          )
           .catch(() => null),
       ])
     : [null, null];
@@ -194,18 +208,26 @@ async function serverMachines(
       const enabled = (jobs ?? []).filter((j) => j.enabled);
       const covering = enabled.find(
         (j) =>
-          (j.selection === 'all' && !(j.exclude ?? []).includes(g.id) && !(j.exclude ?? []).includes(String(g.vmid))) ||
-          (j.selection === 'guests' && ((j.guests ?? []).includes(g.id) || (j.guests ?? []).includes(String(g.vmid)))),
+          (j.selection === 'all' &&
+            !(j.exclude ?? []).includes(g.id) &&
+            !(j.exclude ?? []).includes(String(g.vmid))) ||
+          (j.selection === 'guests' &&
+            ((j.guests ?? []).includes(g.id) || (j.guests ?? []).includes(String(g.vmid)))),
       );
       let storage = covering?.storage ?? null;
       if (!storage && last && budget.reads > 0) {
         // A backup without a plan that names it (made by hand, or a pool's plan): its newest volume says where.
         budget.reads--;
         const volumes = await hosts
-          .call<unknown>({ path: `${G(server.id, g.id)}/backups`, actor: { ...WHOMBAT_ACTOR, role: 'operator' } })
+          .call<unknown>({
+            path: `${G(server.id, g.id)}/backups`,
+            actor: { ...WHOMBAT_ACTOR, role: 'operator' },
+          })
           .then(toHostBackupVolumes)
           .catch(() => []);
-        storage = [...volumes].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0]?.storage ?? null;
+        storage =
+          [...volumes].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0]
+            ?.storage ?? null;
       }
       const at = storage ? storageState(storages?.get(storage)) : null;
       if (!last && !covering && g.backupJob !== true) state = 'none';
@@ -289,7 +311,13 @@ export async function restoreTestServerView(
     eligible: eligible.map((g) => ({ id: g.id, name: g.name.slice(0, 160), kind: g.kind })),
     ...(blocked ? { blocked } : {}),
     last,
-    running: running ? { guestId: running.guestId, guestName: running.guestName.slice(0, 160), startedAt: running.startedAt.toISOString() } : null,
+    running: running
+      ? {
+          guestId: running.guestId,
+          guestName: running.guestName.slice(0, 160),
+          startedAt: running.startedAt.toISOString(),
+        }
+      : null,
     next: next?.toISOString() ?? null,
   };
 }
@@ -309,7 +337,11 @@ async function whombatRow(services: Services, unread: string[], name: string): P
   const now = configured ? await placesNow(services).catch(() => null) : null;
   const place = now?.places.find((p) => p.id === now.currentPlaceId);
   const where = configured ? (place?.name ?? status.destination.display ?? null) : null;
-  const state: ProtectedState = !configured ? 'none' : status.destination.kind === 'local' ? 'local' : 'copied';
+  const state: ProtectedState = !configured
+    ? 'none'
+    : status.destination.kind === 'local'
+      ? 'local'
+      : 'copied';
   return {
     ...base,
     state,
@@ -331,11 +363,12 @@ export async function buildProtectedView(services: Services, burrowId: string): 
 
   const hosts = hostsFor(services);
   const serves = await hosts.serves(burrowId).catch(() => false);
-  const servers = serves
-    ? ((await hosts.fleet().catch(() => null))?.servers ?? null)
-    : [];
+  const servers = serves ? ((await hosts.fleet().catch(() => null))?.servers ?? null) : [];
   if (servers === null) unread.push('Servers');
-  const settings = await db.select().from(restoreTestServers).where(eq(restoreTestServers.burrowId, burrowId));
+  const settings = await db
+    .select()
+    .from(restoreTestServers)
+    .where(eq(restoreTestServers.burrowId, burrowId));
   const testRows = await db
     .select()
     .from(restoreTests)
@@ -352,7 +385,9 @@ export async function buildProtectedView(services: Services, burrowId: string): 
   const machines = new Map<string, StoredProtection | null>();
   const budget = { reads: BACKUP_READS_MAX };
   const restore: RestoreTestServer[] = [];
-  for (const server of (servers ?? []).filter((s) => !isTemporaryServer(s.name) && !isTemporaryServer(s.id))) {
+  for (const server of (servers ?? []).filter(
+    (s) => !isTemporaryServer(s.name) && !isTemporaryServer(s.id),
+  )) {
     const found = await serverMachines(services, server, newestTest, budget, unread);
     // The server itself: Whombat sees its machines' backups, not a backup of the server's own system.
     rows.push({
@@ -390,10 +425,13 @@ export async function buildProtectedView(services: Services, burrowId: string): 
       protection: catalogConnections.protection,
     })
     .from(catalogConnections)
-    .where(and(eq(catalogConnections.burrowId, burrowId), inArray(catalogConnections.catalogId, [...DATA_KINDS])));
+    .where(
+      and(eq(catalogConnections.burrowId, burrowId), inArray(catalogConnections.catalogId, [...DATA_KINDS])),
+    );
   for (const c of connections) {
     if (c.status !== 'active') continue;
-    const at = (c.glance as { machine?: { serverId: string; guestId: string | null; name: string } } | null)?.machine;
+    const at = (c.glance as { machine?: { serverId: string; guestId: string | null; name: string } } | null)
+      ?.machine;
     const machine = at ? machines.get(`${at.serverId}\n${at.guestId ?? ''}`) : undefined;
     const ownFact = (c.protection as StoredProtection | null) ?? null;
     const best = betterProtection(ownFact, machine ?? null);
@@ -412,7 +450,12 @@ export async function buildProtectedView(services: Services, burrowId: string): 
       via: via ? via.slice(0, 160) : null,
     });
   }
-  return { rows: rows.slice(0, 1000), restoreTests: restore.slice(0, 100), unread: unread.slice(0, 100), at: now.toISOString() };
+  return {
+    rows: rows.slice(0, 1000),
+    restoreTests: restore.slice(0, 100),
+    unread: unread.slice(0, 100),
+    at: now.toISOString(),
+  };
 }
 
 const kept = new WeakMap<Services, Map<string, { at: number; view: Promise<ProtectedView> }>>();

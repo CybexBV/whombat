@@ -37,9 +37,10 @@ describe('a NAS’s own backups', () => {
         { name: 'USB', result: 'ok', last: d('2026-11-27T04:00:00Z'), target: 'local' },
       ]),
     ).toMatchObject({ state: 'copied', where: 'To B2', lastAt: '2026-11-27T02:00:00.000Z' });
-    expect(synologyProtection([{ name: 'USB', result: 'ok', last: d('2026-11-27T04:00:00Z'), target: 'local' }])?.state).toBe(
-      'local',
-    );
+    expect(
+      synologyProtection([{ name: 'USB', result: 'ok', last: d('2026-11-27T04:00:00Z'), target: 'local' }])
+        ?.state,
+    ).toBe('local');
     const failed = synologyProtection([
       { name: 'To B2', result: 'failed', last: d('2026-11-27T02:00:00Z'), target: 'cloud' },
     ]);
@@ -54,9 +55,10 @@ describe('a NAS’s own backups', () => {
         { kind: 'replication', name: 'to-backup', result: 'ok', at: d('2026-11-27T02:00:00Z') },
       ]),
     ).toMatchObject({ state: 'copied', where: 'to-backup' });
-    expect(truenasProtection([{ kind: 'snapshot', name: 'tank', result: 'ok', at: d('2026-11-27T01:00:00Z') }])?.state).toBe(
-      'local',
-    );
+    expect(
+      truenasProtection([{ kind: 'snapshot', name: 'tank', result: 'ok', at: d('2026-11-27T01:00:00Z') }])
+        ?.state,
+    ).toBe('local');
     expect(truenasProtection([])?.state).toBe('none');
   });
   it('the better of a service’s own facts and its machine’s wins', () => {
@@ -68,7 +70,12 @@ describe('a NAS’s own backups', () => {
 });
 
 describe('restore test problems', () => {
-  const row = (guestId: string, outcome: 'worked' | 'failed' | 'skipped', reason: string | null, day: number) => ({
+  const row = (
+    guestId: string,
+    outcome: 'worked' | 'failed' | 'skipped',
+    reason: string | null,
+    day: number,
+  ) => ({
     serverId: 'pve-01',
     guestId,
     outcome,
@@ -94,7 +101,10 @@ describe('the off-site copy of this Whombat’s backups', () => {
       name: 'Backblaze',
       lastAt: '2026-11-28T03:10:00Z',
     });
-    expect(offsiteOf({ offsite: { provider: 'S3', lastCopyAt: null } })).toEqual({ name: 'S3', lastAt: null });
+    expect(offsiteOf({ offsite: { provider: 'S3', lastCopyAt: null } })).toEqual({
+      name: 'S3',
+      lastAt: null,
+    });
     expect(offsiteOf({})).toBeNull();
     expect(offsiteOf({ offsite: { configured: false } })).toBeNull();
   });

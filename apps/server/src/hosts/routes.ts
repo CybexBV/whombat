@@ -5,7 +5,7 @@
  * confirmations passed through, and is then signed with `hosts.change` and recorded for Done recently (`commands.ts`). Only the oldest burrow sees servers
  * (ONE-DH02); without the service every route but `hosts.status` answers 503 `hosts_unavailable`.
  */
-import { latestRestoreTest } from '../backup-trust/view';
+
 import {
   api,
   HOST_CONTROL_LEVEL_DEFAULT,
@@ -27,6 +27,7 @@ import {
   VAULT_LIMIT_MESSAGES,
   VAULT_SSH_SERVERS_MAX,
 } from '@whombat/core';
+import { latestRestoreTest } from '../backup-trust/view';
 import { externalEffect, outsideCommandScope } from '../commit/scope';
 import { hostsAlertsOverlapping, serverFirstReportAt, serverUptime } from '../incidents/history';
 import { UPTIME_WEEK_MS } from '../incidents/uptime';
@@ -1351,7 +1352,8 @@ export const hostsRoutes: RouteDef[] = [
         (guest.platform === 'pve' || guest.platform === 'incus' || guest.platform === 'libvirt'),
     };
     // The newest restore test of a Proxmox machine (backup-trust.md).
-    if (guest.platform === 'pve') detail.restoreTest = await latestRestoreTest(ctx.services, ctx.access.burrow.id, serverId, guestId);
+    if (guest.platform === 'pve')
+      detail.restoreTest = await latestRestoreTest(ctx.services, ctx.access.burrow.id, serverId, guestId);
     return detail;
   }),
 

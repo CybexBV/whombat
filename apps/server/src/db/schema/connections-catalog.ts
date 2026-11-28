@@ -36,8 +36,8 @@ import {
 import type { ToolLimits } from '../../connections/limits';
 import type { ConnectionGlance } from '../../home/types';
 import { ts } from './common';
-import type { StoredProtection } from './restore-tests';
 import { principals } from './principals';
+import type { StoredProtection } from './restore-tests';
 import { accounts, burrows } from './tenancy';
 
 /** One connection from the catalog (CX-17). */

@@ -29,7 +29,9 @@ function useAfterChange(burrow: string) {
         old
           ? {
               ...old,
-              restoreTests: old.restoreTests.map((s) => (s.serverId === result.data.serverId ? result.data : s)),
+              restoreTests: old.restoreTests.map((s) =>
+                s.serverId === result.data.serverId ? result.data : s,
+              ),
             }
           : old,
       );

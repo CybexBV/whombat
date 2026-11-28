@@ -226,7 +226,9 @@ export const WhatsProtectedInput = z.object({
     .min(1)
     .max(120)
     .optional()
-    .describe('Only rows whose name or server contains these words (“plex”, “pve-01”); leave out for everything'),
+    .describe(
+      'Only rows whose name or server contains these words (“plex”, “pve-01”); leave out for everything',
+    ),
 });
 export type WhatsProtectedInput = z.input<typeof WhatsProtectedInput>;
 

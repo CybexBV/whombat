@@ -22,7 +22,14 @@ const GIB = 1024 ** 3;
 describe('eligibleGuests', () => {
   it('keeps Proxmox VMs and containers, never templates, copies, temporary machines or this Whombat', () => {
     const got = eligibleGuests([
-      { id: 'pve:101', name: 'plex', platform: 'pve', kind: 'vm', guest_agent: 'running', last_backup: { at: '2026-11-27T02:00:00Z' } },
+      {
+        id: 'pve:101',
+        name: 'plex',
+        platform: 'pve',
+        kind: 'vm',
+        guest_agent: 'running',
+        last_backup: { at: '2026-11-27T02:00:00Z' },
+      },
       { id: 'pve:102', name: 'pihole', platform: 'pve', kind: 'container' },
       { id: 'pve:900', name: 'debian-tpl', platform: 'pve', kind: 'vm', template: true },
       { id: 'pve:990001', name: 'whombat-test-of-plex', platform: 'pve', kind: 'vm' },
@@ -31,7 +38,10 @@ describe('eligibleGuests', () => {
       { id: 'docker:web', name: 'web', platform: 'docker', kind: 'container' },
     ]);
     expect(got.map((g) => g.id)).toEqual(['pve:102', 'pve:101']);
-    expect(got.find((g) => g.id === 'pve:101')).toMatchObject({ agent: true, lastBackupAt: '2026-11-27T02:00:00Z' });
+    expect(got.find((g) => g.id === 'pve:101')).toMatchObject({
+      agent: true,
+      lastBackupAt: '2026-11-27T02:00:00Z',
+    });
   });
 });
 
@@ -71,9 +81,9 @@ describe('when a test runs', () => {
     const noon = new Date('2026-11-28T11:00:00Z');
     expect(nextTestAt(noon, CHANGE_WINDOW_DEFAULT, TZ, null)?.toISOString()).toBe('2026-11-29T02:00:00.000Z');
     expect(nextTestAt(inWindow, CHANGE_WINDOW_DEFAULT, TZ, null)?.toISOString()).toBe(inWindow.toISOString());
-    expect(
-      nextTestAt(noon, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-28T02:05:00Z'))?.toISOString(),
-    ).toBe('2026-12-04T02:05:00.000Z');
+    expect(nextTestAt(noon, CHANGE_WINDOW_DEFAULT, TZ, new Date('2026-11-28T02:05:00Z'))?.toISOString()).toBe(
+      '2026-12-04T02:05:00.000Z',
+    );
   });
 });
 
@@ -98,9 +108,15 @@ describe('the copy', () => {
     );
     expect(set.net0).toContain('link_down=1');
     expect(set.net1).not.toContain('link_down=0');
-    expect(set).toMatchObject({ name: 'whombat-test-of-plex', onboot: '0', tags: `media;${RESTORE_TEST_TAG}` });
+    expect(set).toMatchObject({
+      name: 'whombat-test-of-plex',
+      onboot: '0',
+      tags: `media;${RESTORE_TEST_TAG}`,
+    });
     expect(set.scsi0).toBeUndefined();
-    expect(copySettings('container', { hostname: 'pihole', net0: 'name=eth0,bridge=vmbr0' }, 'x').hostname).toBe('x');
+    expect(
+      copySettings('container', { hostname: 'pihole', net0: 'name=eth0,bridge=vmbr0' }, 'x').hostname,
+    ).toBe('x');
     expect(networkDown({ net0: linkDown('name=eth0,bridge=vmbr0'), memory: '512' })).toBe(true);
     expect(networkDown({ net0: 'name=eth0,bridge=vmbr0' })).toBe(false);
   });
@@ -112,7 +128,13 @@ describe('the copy', () => {
     expect(usesHostParts({ values: { ide2: 'cdrom,media=cdrom' } })).toBe(true);
     expect(usesHostParts({ values: {}, restricted: ['lxc.cgroup2.devices.allow'] })).toBe(true);
     expect(
-      usesHostParts({ values: { scsi0: 'local-lvm:vm-101-disk-0', ide2: 'local:iso/debian.iso,media=cdrom', serial0: 'socket' } }),
+      usesHostParts({
+        values: {
+          scsi0: 'local-lvm:vm-101-disk-0',
+          ide2: 'local:iso/debian.iso,media=cdrom',
+          serial0: 'socket',
+        },
+      }),
     ).toBe(false);
   });
 
@@ -144,9 +166,9 @@ describe('the copy', () => {
     expect(storageFor('container', storages, [], 64 * GIB)).toBeNull();
     // Over nine tenths full after the copy.
     expect(storageFor('vm', storages, ['tank'], 850 * GIB)).toBeNull();
-    expect(storagesOf({ scsi0: 'local-lvm:vm-101-disk-0', ide2: 'local:iso/x.iso,media=cdrom', net0: 'x' })).toEqual([
-      'local-lvm',
-    ]);
+    expect(
+      storagesOf({ scsi0: 'local-lvm:vm-101-disk-0', ide2: 'local:iso/x.iso,media=cdrom', net0: 'x' }),
+    ).toEqual(['local-lvm']);
   });
 });
 
@@ -157,7 +179,9 @@ describe('bootVerdict', () => {
 
   it('waits for the guest agent inside the copy when the real machine has one', () => {
     expect(bootVerdict({ ...base, state: 'running', runningAt: at(1), now: at(3) }).verdict).toBe('wait');
-    expect(bootVerdict({ ...base, state: 'running', guestAgent: true, runningAt: at(1), now: at(3) })).toEqual({
+    expect(
+      bootVerdict({ ...base, state: 'running', guestAgent: true, runningAt: at(1), now: at(3) }),
+    ).toEqual({
       verdict: 'worked',
       booted: true,
     });

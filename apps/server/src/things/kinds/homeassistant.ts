@@ -23,6 +23,7 @@ import type {
   ThingPageRow,
   ThingPageTab,
 } from '@whombat/core';
+import { haProtection } from '../../backup-trust/protection';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { startOfLocalDay } from '../../home/time';
 import type { ConnectionGlance } from '../../home/types';
@@ -72,7 +73,6 @@ import {
   ReadProblem,
   withDeadline,
 } from './read';
-import { haProtection } from '../../backup-trust/protection';
 import type { KindSeen } from './registry';
 import {
   addedNote,

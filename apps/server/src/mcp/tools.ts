@@ -23,6 +23,7 @@ import {
   proposesInTurn,
 } from '../automations/proposed-actions';
 import { automationOpensPrText, automationOwnsPullRequest } from '../automations/workspace';
+import { whatsProtectedTool } from '../backup-trust/tool';
 import { backupBringBackTool } from '../backups/look/tool';
 import { BROWSER_TOOL_HANDLERS } from '../browser/preview-tool';
 import { setChatTitle } from '../chats/commands';
@@ -77,7 +78,6 @@ import {
   searchWebTool,
   triageAhead,
 } from '../looks-ahead/turn';
-import { whatsProtectedTool } from '../backup-trust/tool';
 import { whombatBackupTool } from '../managed/backup-tool';
 import { tailnetDevicesTool } from '../managed/tailnet-tool';
 import { newsHeadlinesTool } from '../news/tool';

@@ -27,7 +27,15 @@ import { and, desc, eq, gte, isNotNull, isNull } from 'drizzle-orm';
 import { changeWindowOf } from '../care/window';
 import { burrows, restoreTestServers, restoreTests } from '../db/schema/index';
 import { HostsError, HostsUnavailable } from '../hosts/client';
-import { arr, obj, toHostBackupVolumes, toHostChoices, toHostGuestConfig, toHostManageResult, toHostTask } from '../hosts/map';
+import {
+  arr,
+  obj,
+  toHostBackupVolumes,
+  toHostChoices,
+  toHostGuestConfig,
+  toHostManageResult,
+  toHostTask,
+} from '../hosts/map';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
 import { G, S } from '../hosts/tools-shared';
 import { loadAgentRow } from '../read/principals';
@@ -161,7 +169,10 @@ export class RestoreTests {
     if (!agent) return;
     const as = { burrowId, actorId: agent.id };
     const db = this.services.db;
-    const settings = await db.select().from(restoreTestServers).where(eq(restoreTestServers.burrowId, burrowId));
+    const settings = await db
+      .select()
+      .from(restoreTestServers)
+      .where(eq(restoreTestServers.burrowId, burrowId));
     const active = await db
       .select()
       .from(restoreTests)
@@ -203,10 +214,14 @@ export class RestoreTests {
       }
     }
 
-    await this.#sweep(burrowId, settings.map((s) => s.serverId)).catch((err) =>
-      this.services.log.warn({ err: String(err) }, 'restore tests: the sweep failed'),
+    await this.#sweep(
+      burrowId,
+      settings.map((s) => s.serverId),
+    ).catch((err) => this.services.log.warn({ err: String(err) }, 'restore tests: the sweep failed'));
+    await this.#refreshHints(
+      burrowId,
+      settings.filter((s) => s.on).map((s) => s.serverId),
     );
-    await this.#refreshHints(burrowId, settings.filter((s) => s.on).map((s) => s.serverId));
   }
 
   /**
@@ -290,7 +305,10 @@ export class RestoreTests {
       tries: 0,
     });
     if (outcome !== 'worked')
-      this.services.log.info({ test: t.id, guest: t.guestId, outcome, reason }, 'restore tests: a test ended');
+      this.services.log.info(
+        { test: t.id, guest: t.guestId, outcome, reason },
+        'restore tests: a test ended',
+      );
   }
 
   /** A call that went wrong in a step: tried again later, or the end with `reason`. */
@@ -374,7 +392,9 @@ export class RestoreTests {
       }
       let config: ReturnType<typeof toHostGuestConfig>;
       try {
-        config = toHostGuestConfig(await hosts.call<unknown>({ path: `${G(t.serverId, t.guestId)}/config`, actor: ADMIN }));
+        config = toHostGuestConfig(
+          await hosts.call<unknown>({ path: `${G(t.serverId, t.guestId)}/config`, actor: ADMIN }),
+        );
       } catch (err) {
         if (codeOf(err) === 'unsupported') return this.#end(as, t, 'skipped', 'other_node');
         throw err;
@@ -383,7 +403,9 @@ export class RestoreTests {
       const backups = toHostBackupVolumes(
         await hosts.call<unknown>({ path: `${G(t.serverId, t.guestId)}/backups`, actor: ADMIN }),
       ).filter((b) => b.volume);
-      const newest = [...backups].sort((a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''))[0];
+      const newest = [...backups].sort(
+        (a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''),
+      )[0];
       if (!newest) return this.#end(as, t, 'skipped', 'no_backup');
       // Enough free memory for the copy, as the newest report says.
       const memoryMb = Number(config.values.memory ?? '');
@@ -393,7 +415,11 @@ export class RestoreTests {
         if (memoryMb > freeMb) return this.#end(as, t, 'skipped', 'no_memory');
       }
       const choices = toHostChoices(
-        await hosts.call<unknown>({ path: `${S(t.serverId)}/manage/choices`, query: { platform: 'pve' }, actor: ADMIN }),
+        await hosts.call<unknown>({
+          path: `${S(t.serverId)}/manage/choices`,
+          query: { platform: 'pve' },
+          actor: ADMIN,
+        }),
       );
       const diskBytes = (config.disks ?? [])
         .filter((d) => d.media !== 'cdrom' && !d.unused)
@@ -484,7 +510,8 @@ export class RestoreTests {
       return this.#configuring(t, as);
     }
     // Asked but never answered, and no copy came: it couldn't run (asking again could make a second copy).
-    if (!copy && now.getTime() - t.stepAt.getTime() > LOST_RESTORE_MS) return this.#end(as, t, 'skipped', 'unreachable');
+    if (!copy && now.getTime() - t.stepAt.getTime() > LOST_RESTORE_MS)
+      return this.#end(as, t, 'skipped', 'unreachable');
   }
 
   async #configuring(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
@@ -513,7 +540,10 @@ export class RestoreTests {
         await this.#step(as, t, { tries: t.tries + 1 });
         return;
       }
-      this.services.log.warn({ err: String(err), test: t.id }, 'restore tests: the copy’s settings were refused');
+      this.services.log.warn(
+        { err: String(err), test: t.id },
+        'restore tests: the copy’s settings were refused',
+      );
       return this.#end(as, t, 'skipped', transient(err) ? 'unreachable' : 'network_kept');
     }
     await this.#step(as, t, { step: 'starting', tries: 0 });
@@ -576,7 +606,10 @@ export class RestoreTests {
     // Only ever the copy: the number was free when the test chose it, it is in the copies' range, and the restore was
     // asked to make it there (before it is renamed it carries the real machine's name).
     if (copy.self || !isRestoreTestId(copy.id)) {
-      this.services.log.warn({ test: t.id, guest: copy.id }, 'restore tests: the copy’s number holds another machine');
+      this.services.log.warn(
+        { test: t.id, guest: copy.id },
+        'restore tests: the copy’s number holds another machine',
+      );
       return this.#step(as, t, { finished: true });
     }
     if (t.tries >= CLEANUP_TRIES) {
@@ -621,7 +654,9 @@ export class RestoreTests {
     const recent = await db
       .selectDistinct({ serverId: restoreTests.serverId })
       .from(restoreTests)
-      .where(and(eq(restoreTests.burrowId, burrowId), gte(restoreTests.startedAt, new Date(now - SWEEP_AFTER_MS))));
+      .where(
+        and(eq(restoreTests.burrowId, burrowId), gte(restoreTests.startedAt, new Date(now - SWEEP_AFTER_MS))),
+      );
     const active = await db
       .select({ serverId: restoreTests.serverId })
       .from(restoreTests)
@@ -633,7 +668,10 @@ export class RestoreTests {
       const guests = (await this.#guests(serverId).catch(() => [])).map(guestFacts);
       for (const copy of guests.filter((g) => !g.self && isRestoreTestCopy(g)))
         await this.#remove(serverId, copy).catch((err) =>
-          this.services.log.warn({ err: String(err), guest: copy.id }, 'restore tests: a left copy wasn’t removed'),
+          this.services.log.warn(
+            { err: String(err), guest: copy.id },
+            'restore tests: a left copy wasn’t removed',
+          ),
         );
     }
   }
@@ -674,10 +712,9 @@ export class RestoreTests {
  * The machines whose newest test (that came to a verdict) failed, on servers whose tests are on: one each. A skipped
  * test says nothing about the backup, so it neither raises nor clears a problem.
  */
-export function failingTests<R extends Pick<TestRow, 'serverId' | 'guestId' | 'outcome' | 'reason' | 'startedAt'>>(
-  rows: readonly R[],
-  onServers: readonly string[],
-): R[] {
+export function failingTests<
+  R extends Pick<TestRow, 'serverId' | 'guestId' | 'outcome' | 'reason' | 'startedAt'>,
+>(rows: readonly R[], onServers: readonly string[]): R[] {
   const newest = new Map<string, R>();
   for (const r of [...rows].sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())) {
     if (!onServers.includes(r.serverId) || r.outcome === 'skipped' || !r.outcome) continue;

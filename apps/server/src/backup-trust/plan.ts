@@ -66,7 +66,8 @@ export function eligibleGuests(raw: readonly unknown[]): Candidate[] {
     if (g.kind !== 'vm' && g.kind !== 'container') continue;
     if (g.template === true || g.self === true) continue;
     const tags = Array.isArray(g.tags) ? g.tags.filter((t): t is string => typeof t === 'string') : [];
-    if (isRestoreTestCopy({ id, name, tags }) || isTemporaryGuest({ id, name, platform: 'pve', tags })) continue;
+    if (isRestoreTestCopy({ id, name, tags }) || isTemporaryGuest({ id, name, platform: 'pve', tags }))
+      continue;
     const backup = obj(g.last_backup);
     out.push({
       id,
@@ -119,7 +120,12 @@ export function testDue(now: Date, w: ChangeWindow, timeZone: string, lastStarte
 }
 
 /** When the next weekly test starts: the first moment of the quiet hours a week after the last test (or now). */
-export function nextTestAt(now: Date, w: ChangeWindow, timeZone: string, lastStartedAt: Date | null): Date | null {
+export function nextTestAt(
+  now: Date,
+  w: ChangeWindow,
+  timeZone: string,
+  lastStartedAt: Date | null,
+): Date | null {
   const earliest = new Date(Math.max(now.getTime(), (lastStartedAt?.getTime() ?? 0) + TEST_EVERY_MS));
   const p = zonedParts(earliest, timeZone);
   const usable = (changeWindowMinutes(w) - Math.max(1, marginOf(w))) * MIN;
@@ -174,7 +180,10 @@ function volumeOf(value: string): string {
 const isCdrom = (value: string) => /(^|,)media=cdrom(,|$)/.test(value);
 
 /** Whether a machine's settings use parts of the server itself (then it isn't tested). */
-export function usesHostParts(config: { values: Record<string, string>; restricted?: readonly string[] }): boolean {
+export function usesHostParts(config: {
+  values: Record<string, string>;
+  restricted?: readonly string[];
+}): boolean {
   const keys = [...Object.keys(config.values), ...(config.restricted ?? [])];
   if (keys.some((k) => HOST_KEYS.test(k))) return true;
   for (const [k, v] of Object.entries(config.values)) {
@@ -233,7 +242,8 @@ export function copySettings(
   copyName: string,
 ): Record<string, string> {
   const set: Record<string, string> = {};
-  for (const [k, v] of Object.entries(values)) if (NET_KEY.test(k) && !LINK_DOWN.test(v)) set[k] = linkDown(v);
+  for (const [k, v] of Object.entries(values))
+    if (NET_KEY.test(k) && !LINK_DOWN.test(v)) set[k] = linkDown(v);
   const nameKey = kind === 'vm' ? 'name' : 'hostname';
   if (values[nameKey] !== copyName) set[nameKey] = copyName;
   const tags = (values.tags ?? '').split(/[;, ]+/).filter(Boolean);
@@ -277,7 +287,8 @@ export function storageFor(
   const fits = storages.filter((s) => {
     if (!s.content.includes(content) || typeof s.availBytes !== 'number') return false;
     if (s.availBytes < need * 1.1 + GIB) return false;
-    if (s.totalBytes && s.totalBytes > 0 && (s.totalBytes - s.availBytes + need) / s.totalBytes > 0.9) return false;
+    if (s.totalBytes && s.totalBytes > 0 && (s.totalBytes - s.availBytes + need) / s.totalBytes > 0.9)
+      return false;
     return true;
   });
   for (const id of preferred) if (fits.some((s) => s.id === id)) return id;
@@ -325,7 +336,8 @@ export function bootVerdict(input: {
   const { now } = input;
   if (input.state !== 'running') {
     if (input.runningAt) return { verdict: 'failed', reason: 'stopped_by_itself' };
-    if (now.getTime() - input.askedAt.getTime() >= START_WAIT_MS) return { verdict: 'failed', reason: 'start_failed' };
+    if (now.getTime() - input.askedAt.getTime() >= START_WAIT_MS)
+      return { verdict: 'failed', reason: 'start_failed' };
     return { verdict: 'wait', runningAt: null };
   }
   const since = input.runningAt ?? now;

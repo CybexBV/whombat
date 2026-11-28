@@ -36,7 +36,11 @@ export const backupTrustRoutes: RouteDef[] = [
     const burrow = await loadBurrowRow(ctx.services.db, ctx.access.burrow.id);
     if (!burrow) throw notFound('Whombat');
     const server = await proxmoxServer(ctx.services, burrow.id, ctx.params.serverId);
-    await commitAs(ctx, setRestoreTests, { ...ctx.body, serverId: server.id, serverName: server.name.slice(0, 160) });
+    await commitAs(ctx, setRestoreTests, {
+      ...ctx.body,
+      serverId: server.id,
+      serverName: server.name.slice(0, 160),
+    });
     forgetProtectedView(ctx.services);
     return restoreTestServerView(ctx.services, burrow, server);
   }),
@@ -48,10 +52,16 @@ export const backupTrustRoutes: RouteDef[] = [
     const before = await restoreTestServerView(ctx.services, burrow, server);
     if (before.running) throw conflict('A restore test is already running on this server.');
     if (before.blocked) throw conflict(BLOCKED_TEXT[before.blocked]);
-    const id = await restoreTestsFor(ctx.services).startTest(burrow.id, server.id, ctx.body.guest ?? null, true, {
-      burrowId: burrow.id,
-      actorId: ctx.access.principal.id,
-    });
+    const id = await restoreTestsFor(ctx.services).startTest(
+      burrow.id,
+      server.id,
+      ctx.body.guest ?? null,
+      true,
+      {
+        burrowId: burrow.id,
+        actorId: ctx.access.principal.id,
+      },
+    );
     if (!id) throw conflict(ctx.body.guest ? 'That machine can’t be tested.' : BLOCKED_TEXT.no_guests);
     forgetProtectedView(ctx.services);
     return restoreTestServerView(ctx.services, burrow, server);
