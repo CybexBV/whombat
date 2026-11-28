@@ -2065,9 +2065,9 @@ Setup and operation: `docs/github.md`.
   compares what it already reads. The connection health pass hands each kind's `KindSeen.tracked` (its version, its
   devices' firmware, its proxy hosts or tunnel routes) to `trackConnection`; a 10-minute home job
   (`home.changes-servers`) reads each online server's detail from the hosts service and compares its boot time, kernel,
-  system version, waiting updates and Docker containers' images (the agent's `image_id`, else the image reference;
+  system version, waiting updates installed (the count fell to zero) and Docker containers' images (the agent's `image_id`, else the image reference;
   Whombat's own containers left out). `change_baselines` keeps the last read per thing and source; a first read only
-  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job): more than 3 of a
+  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job through the pipeline): more than 3 of a
   kind in one read are one row, the same item again within 30 minutes merges and one that went back is deleted, and a
   `changes` row of Whombat's own about the thing or the server it runs on, from 2 hours before the read before, makes it
   `whombat`, else `outside`. Words are made when read, in the reader's language (`changes/words.ts`). Nothing alerts:

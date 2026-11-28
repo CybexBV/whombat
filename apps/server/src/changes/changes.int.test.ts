@@ -24,6 +24,7 @@ import { settingsCopyFile } from './copies/download';
 import { takeSettingsCopy } from './copies/run';
 import { CopyFailed, type CopyService } from './copies/types';
 import { settingsCopyOf } from './copies/view';
+import { changesServerPass } from './servers';
 
 const t = useTestServer({ seed: true, listen: true });
 const MIN = 60_000;
@@ -69,6 +70,36 @@ beforeAll(async () => {
 
 afterAll(() => {
   t.services.clock = real;
+});
+
+describe('changes older than 90 days', () => {
+  it('go in the servers’ pass, through the pipeline', async () => {
+    const id = newId('thingChange');
+    await t.services.db.insert(thingChanges).values({
+      id,
+      burrowId: TEST_BURROW_ID,
+      thingId: 'server:old-01',
+      kind: 'restart',
+      fact: { k: 'restart', kernel: null },
+      by: 'outside',
+      seenAt: new Date(T0.getTime() - 91 * 24 * 60 * MIN),
+    });
+    const pipeline = t.services.pipeline;
+    const original = pipeline.transactAccount.bind(pipeline);
+    let through = 0;
+    pipeline.transactAccount = (fn) => {
+      through++;
+      return original(fn);
+    };
+    try {
+      at(0);
+      await changesServerPass(t.services);
+    } finally {
+      pipeline.transactAccount = original;
+    }
+    expect(through).toBeGreaterThan(0);
+    expect(await t.services.db.select().from(thingChanges).where(eq(thingChanges.id, id))).toEqual([]);
+  });
 });
 
 describe('a connection’s version', () => {
