@@ -7,11 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -23,10 +20,6 @@ import (
 // `whombat-agent allow <switch>…`, `deny <switch>…` and `policy` (PX-04):
 // change [remote_control] in agent.toml and make the running agent read it
 // again, or show the switches.
-
-// agentPIDFile is where the SysV and Unraid scripts' supervisor keeps its
-// PID.
-const agentPIDFile = "/run/whombat-agent.pid"
 
 // policyArgs splits the arguments into switches and --config-dir (before
 // or after them).
@@ -84,8 +77,8 @@ func setLevel(dir string, explicit bool, level string, noReload bool) error {
 	if _, ok := proto.ControlSwitches(level); !ok {
 		return fmt.Errorf("%q is not a level; the levels are %s", level, strings.Join(proto.ControlLevels, ", "))
 	}
-	if !explicit && os.Geteuid() != 0 {
-		return fmt.Errorf("this changes the agent's own settings, so run it as root: sudo whombat-agent policy set %s", level)
+	if !explicit && !isRoot() {
+		return fmt.Errorf("this changes the agent's own settings, so run it as %s", asRoot("whombat-agent policy set "+level))
 	}
 	if _, err := agent.LoadConfig(dir); err != nil {
 		return notEnrolled(dir, err)
@@ -93,7 +86,7 @@ func setLevel(dir string, explicit bool, level string, noReload bool) error {
 	cfg, err := agent.SetControlLevel(dir, level)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("cannot change %s: run this as root (sudo whombat-agent policy set %s)", filepath.Join(dir, agent.ConfigFileName), level)
+			return fmt.Errorf("cannot change %s: run this as %s", filepath.Join(dir, agent.ConfigFileName), asRoot("whombat-agent policy set "+level))
 		}
 		return err
 	}
@@ -147,8 +140,8 @@ func cmdHub(args []string) error {
 	default:
 		return errors.New("hub takes one URL, like wss://10.100.1.5:8443")
 	}
-	if !explicit && os.Geteuid() != 0 {
-		return fmt.Errorf("this changes the agent's own settings, so run it as root: sudo whombat-agent hub %s", names[0])
+	if !explicit && !isRoot() {
+		return fmt.Errorf("this changes the agent's own settings, so run it as %s", asRoot("whombat-agent hub "+names[0]))
 	}
 	changed, err := agent.UpdateHub(dir, names[0])
 	if err != nil {
@@ -159,19 +152,15 @@ func cmdHub(args []string) error {
 		fmt.Printf("%s already reports to %s.\n", hostName(), ws)
 		return nil
 	}
-	if !noRestart && filepath.Clean(dir) == agent.DefaultConfigDir && launchdLoaded() {
-		if out, err := exec.Command(launchctlPath, "kickstart", "-k", launchdService).CombinedOutput(); err != nil {
-			return fmt.Errorf("agent.toml is changed, but launchctl kickstart -k %s failed: %s", launchdService, strings.TrimSpace(string(out)))
+	if !noRestart {
+		restarted, err := restartAgent(dir)
+		if err != nil {
+			return fmt.Errorf("agent.toml is changed, but %w", err)
 		}
-		fmt.Printf("%s now reports to %s.\n", hostName(), ws)
-		return nil
-	}
-	if !noRestart && filepath.Clean(dir) == agent.DefaultConfigDir && systemdActive() {
-		if out, err := exec.Command("systemctl", "restart", "whombat-agent.service").CombinedOutput(); err != nil {
-			return fmt.Errorf("agent.toml is changed, but systemctl restart whombat-agent failed: %s", strings.TrimSpace(string(out)))
+		if restarted {
+			fmt.Printf("%s now reports to %s.\n", hostName(), ws)
+			return nil
 		}
-		fmt.Printf("%s now reports to %s.\n", hostName(), ws)
-		return nil
 	}
 	fmt.Printf("%s now reports to %s once its agent restarts.\n", hostName(), ws)
 	return nil
@@ -227,8 +216,8 @@ func cmdSwitch(name string, on bool, args []string) error {
 	}
 	// The agent's own configuration is root's (mode 0600) and so is the
 	// agent; another directory's file permissions decide for themselves.
-	if !explicit && os.Geteuid() != 0 {
-		return fmt.Errorf("this changes the agent's own settings, so run it as root: sudo whombat-agent %s %s", name, strings.Join(names, " "))
+	if !explicit && !isRoot() {
+		return fmt.Errorf("this changes the agent's own settings, so run it as %s", asRoot("whombat-agent "+name+" "+strings.Join(names, " ")))
 	}
 	before, err := agent.LoadConfig(dir)
 	if err != nil {
@@ -241,7 +230,7 @@ func cmdSwitch(name string, on bool, args []string) error {
 	cfg, err := agent.UpdateRemoteControl(dir, set)
 	if err != nil {
 		if errors.Is(err, os.ErrPermission) {
-			return fmt.Errorf("cannot change %s: run this as root (sudo whombat-agent %s %s)", filepath.Join(dir, agent.ConfigFileName), name, strings.Join(names, " "))
+			return fmt.Errorf("cannot change %s: run this as %s", filepath.Join(dir, agent.ConfigFileName), asRoot("whombat-agent "+name+" "+strings.Join(names, " ")))
 		}
 		return err
 	}
@@ -295,67 +284,6 @@ func joinWords(w []string, conj string) string {
 		return w[0]
 	}
 	return strings.Join(w[:len(w)-1], ", ") + " " + conj + " " + w[len(w)-1]
-}
-
-// reloadAgent makes the running agent of dir read agent.toml again:
-// systemd's unit when it is active (the agent of /etc/whombat-agent), else
-// SIGHUP to the supervisor in the PID file (SysV, Unraid), else to the
-// agent processes of dir (OpenRC's supervise-daemon, by hand). false: no
-// agent runs, the change applies when it starts.
-func reloadAgent(dir string) (bool, error) {
-	if filepath.Clean(dir) == agent.DefaultConfigDir && launchdLoaded() {
-		// launchd hands the agent SIGHUP, which re-reads agent.toml (a
-		// reload, as systemctl reload is on Linux).
-		if out, err := exec.Command(launchctlPath, "kill", "SIGHUP", launchdService).CombinedOutput(); err != nil {
-			return false, fmt.Errorf("launchctl kill SIGHUP %s: %s", launchdService, strings.TrimSpace(string(out)))
-		}
-		return true, nil
-	}
-	if filepath.Clean(dir) == agent.DefaultConfigDir && systemdActive() {
-		if out, err := exec.Command("systemctl", "reload", "whombat-agent.service").CombinedOutput(); err != nil {
-			return false, fmt.Errorf("systemctl reload whombat-agent: %s", strings.TrimSpace(string(out)))
-		}
-		return true, nil
-	}
-	agents := agent.FindAgents("/proc", dir, os.Getpid())
-	if b, err := os.ReadFile(agentPIDFile); err == nil {
-		pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-		for _, a := range agents {
-			if a.PID == pid && a.Supervisor {
-				agents = []agent.AgentProcess{a}
-				break
-			}
-		}
-	}
-	if len(agents) == 0 {
-		return false, nil
-	}
-	n, err := agent.SignalReload(agents)
-	if n == 0 {
-		return false, err
-	}
-	return true, nil
-}
-
-// The agent's LaunchDaemon on a Mac, in launchd's system domain.
-const (
-	launchctlPath  = "/bin/launchctl"
-	launchdService = "system/" + agent.LaunchdLabel
-)
-
-// launchdLoaded: a Mac whose launchd has the agent's LaunchDaemon loaded.
-func launchdLoaded() bool {
-	if runtime.GOOS != "darwin" {
-		return false
-	}
-	return exec.Command(launchctlPath, "print", launchdService).Run() == nil
-}
-
-func systemdActive() bool {
-	if _, err := os.Stat("/run/systemd/system"); err != nil {
-		return false
-	}
-	return exec.Command("systemctl", "is-active", "--quiet", "whombat-agent.service").Run() == nil
 }
 
 func hostName() string {
