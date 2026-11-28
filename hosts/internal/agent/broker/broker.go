@@ -125,6 +125,12 @@ type Broker struct {
 	pkgMgr          *pkgTasks
 	pkgHost         pkgHost
 	OnPackageChange func(ended bool)
+
+	// App updates (app_tasks.go), created on first use; OnAppChange runs
+	// when an app task started or ended (the agent reports).
+	appOnce     sync.Once
+	appMgr      *appTasks
+	OnAppChange func()
 }
 
 // New returns the broker. inv returns the latest report, used to validate

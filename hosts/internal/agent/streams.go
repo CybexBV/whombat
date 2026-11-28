@@ -241,6 +241,18 @@ func (rt *Runtime) RefreshPackages(ended bool) {
 	}
 }
 
+// RefreshApps reads the containers again and reports at once: an app
+// update started or ended (Broker.OnAppChange calls it).
+func (rt *Runtime) RefreshApps() {
+	if c, ok := rt.Collector.(interface{ RefreshApps() }); ok {
+		c.RefreshApps()
+	}
+	select {
+	case rt.collectNow <- struct{}{}:
+	default:
+	}
+}
+
 // RefreshUnraid reads unRAID's state, the containers and the libvirt
 // autostart flags again and reports at once: an unRAID operation started
 // or ended, or an autostart changed (Broker.OnUnraidChange calls it when
