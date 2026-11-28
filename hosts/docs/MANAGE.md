@@ -116,7 +116,8 @@ start and on reload, idempotent; failures are logged and returned as
 3. When the privilege `Sys.AccessNetwork` exists (PVE 8.3+): role
    `WhombatNetwork` = `Sys.AccessNetwork`, ACL on `/nodes/<node>` for the
    user (this is what `download-url` needs instead of `Sys.Modify` on `/`).
-   `Choices.Download` reports whether it is there.
+   `Choices.Download` reports whether it is there. (`Choices.restore_isolate`, set by the hub from the agent's
+   capabilities, says whether `backup.restore` takes `isolate`.)
 4. Token `whombat-manage@pve!agent-<node>` (`--privsep 0`), stored in
    `/etc/whombat-agent/pve-manage-token` (0600, `[pve] manage_token_file`), like
    the read-only token (`provisionPVEToken`). Never logged.
@@ -162,7 +163,7 @@ Async PVE endpoints return a UPID: answer `OK` with `Task{ID: upid}`.
 | guest.migrate | VM `POST .../qemu/{vmid}/migrate {target, online, with-local-disks, targetstorage}`; CT `POST .../lxc/{vmid}/migrate {target, restart, timeout, target-storage}` | Cluster only; target another node; the digest (if given) compared with `GET .../config` first; running VM → `online=1` + `with-local-disks=1`, running CT → `restart=1`, `timeout=180`, stopped → offline; templates refused. Needs `VM.Migrate` (listed in `WhombatManage`). |
 | backup.list | content `?content=backup&vmid=` of every active storage with `backup` content | `verification.state` → Verified; `protected`, `notes`, `encrypted`, `format`, `subtype` → Kind. |
 | backup.create | `POST /nodes/{n}/vzdump {vmid, storage, mode, compress, notes-template, protected}` | Storage must offer `backup`; mode default snapshot; compress default zstd (ignored for PBS). |
-| backup.restore | VM `POST /nodes/{n}/qemu {vmid, archive, storage, force, unique, start}`; CT `POST /nodes/{n}/lxc {vmid, ostemplate: archive, restore: 1, storage, force, unique, start}` | Volume must be a backup volume of this node's storages; GuestID set = overwrite (`force=1`, guest stopped, same vmid); else NewID / next id. |
+| backup.restore | VM `POST /nodes/{n}/qemu {vmid, archive, storage, force, unique, start}`; CT `POST /nodes/{n}/lxc {vmid, ostemplate: archive, restore: 1, storage, force, unique, start}` | Volume must be a backup volume of this node's storages; GuestID set = overwrite (`force=1`, guest stopped, same vmid); else NewID / next id. **Isolate** (`{name, marker, tag}`, a new guest that doesn't start; agents with the capability `restore_isolate`, the hub refuses it to others with `agent_outdated`): the agent reads the backup's configuration (`GET /nodes/{n}/vzdump/extractconfig`) and restores with `onboot=0`, every `netN` of it with `link_down=1` and a new MAC (the rest as it was), `protection=0` when it had protection, `name`/`hostname`, `description` = the marker and `tags` = its tags plus the tag. Proxmox VE writes these over the backup's own settings with the restore (VMs: PVE 7.2 and later; older ones refuse the restore, so nothing is made); a container's restore leaves `unique` out, which would give it the backup's cards back. A restore refused over the tag alone (a cluster that keeps tags to a list) is sent once more without it. |
 | backup.update | `PUT /nodes/{n}/storage/{s}/content/{volume} {notes, protected}` | |
 | backup.delete | `DELETE /nodes/{n}/storage/{s}/content/{volume}` | Refuse protected (`protected`). |
 | content.list | `GET /nodes/{n}/storage/{s}/content?content=` | iso, vztmpl, import. |
@@ -236,7 +237,10 @@ e1000e, rtl8139, vmxnet3, then `bridge` (must be one of Choices.Bridges),
 `tag` (1–4094), `firewall`, `rate`, `queues`, `mtu`, `link_down`,
 `trunks`, `macaddr`. CT: `name`, `bridge`, `hwaddr`, `ip`, `gw`, `ip6`,
 `gw6`, `tag`, `firewall`, `rate`, `mtu`, `link_down`, `type=veth`.
-Unknown sub-keys are passed through (PVE validates them).
+Unknown sub-keys are passed through (PVE validates them). A card's
+current value with only `link_down=1` added is always taken, whatever its
+model or bridge: pulling the cable never fails over a card Whombat doesn't
+offer.
 
 **Property strings** (Go `parsePropString` / TS `parseProps`): an ordered
 list of `key=value` items separated by `,`; an item without `=` is the
@@ -1010,7 +1014,7 @@ re-authentication. `web/src/api/manage.ts` calls exactly these.
 | DELETE | `/guests/{guestId}` | guest.delete | admin | `?confirm_name=&purge=1` |
 | GET | `/guests/{guestId}/backups` | backup.list | operator | → `{items}` |
 | POST | `/guests/{guestId}/backups` | backup.create | operator | `{storage, mode, compress, notes, protected}` |
-| POST | `/backups/restore` | backup.restore | admin | `{platform, volume, new_id \| guest, storage, start, unique, confirm}` |
+| POST | `/backups/restore` | backup.restore | admin | `{platform, volume, new_id \| guest, storage, start, unique, isolate, confirm}` |
 | PATCH | `/backups` | backup.update | operator | `{platform, volume, notes, protected}` |
 | DELETE | `/backups` | backup.delete | admin | `?platform=&volume=` |
 | GET | `/storage/{storage}/content` | content.list | operator | `?platform=&content=` → `{items}` |

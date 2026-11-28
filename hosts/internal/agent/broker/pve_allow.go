@@ -197,6 +197,12 @@ func (c *pveCheck) value(ctx context.Context, key, v string) error {
 	case keyFeatures:
 		return checkFeatures(key, v)
 	case keyNet:
+		// Pulling a card's cable leaves the card as it is, whatever its
+		// model or bridge: a restored copy can be cut off even when the
+		// backup's card is one Whombat doesn't offer or its bridge is gone.
+		if c.onlyLinkDown(key, v) {
+			return nil
+		}
 		if c.kind == "vm" {
 			return c.vmNet(key, v)
 		}
@@ -235,6 +241,37 @@ var (
 	pveAllNICModels = []string{"model", "e1000", "e1000-82540em", "e1000-82544gc", "e1000-82545em", "e1000e",
 		"i82551", "i82557b", "i82559er", "ne2k_isa", "ne2k_pci", "pcnet", "rtl8139", "virtio", "vmxnet3"}
 )
+
+// onlyLinkDown reports whether v is the card's value as it is now (its
+// pending value, else its current one) with link_down=1 and nothing else
+// changed.
+func (c *pveCheck) onlyLinkDown(key, v string) bool {
+	if c.create {
+		return false
+	}
+	old, ok := c.pend[key]
+	if !ok {
+		old, ok = c.cur[key]
+	}
+	if !ok || old == "" {
+		return false
+	}
+	strip := func(p propString) (propString, bool) {
+		var out propString
+		down := false
+		for _, it := range p {
+			if it.HasKey && it.Key == "link_down" {
+				down = it.Value == "1"
+				continue
+			}
+			out = append(out, it)
+		}
+		return out, down
+	}
+	before, _ := strip(parsePropString(old))
+	after, down := strip(parsePropString(v))
+	return down && slices.Equal(before, after)
+}
 
 func (c *pveCheck) vmNet(key, v string) error {
 	p := parsePropString(v)

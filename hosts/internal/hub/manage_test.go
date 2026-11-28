@@ -433,3 +433,68 @@ func TestGuestTagsThroughTheAPI(t *testing.T) {
 		}
 	}
 }
+
+// An isolated restore reaches only an agent that can do it: an older one
+// would restore the backup as it is. The choices answer says which.
+func TestManageIsolatedRestore(t *testing.T) {
+	e, admin := adminEnv(t, nil)
+	fa := setupManageHost(t, e, admin)
+	const restore = "/api/v1/servers/shale/backups/restore"
+	const choices = "/api/v1/servers/shale/manage/choices?platform=pve"
+	iso := map[string]any{"name": "whombat-test-of-web", "marker": "whombat-rst_abc123", "tag": "whombat-restore-test"}
+	body := func(extra map[string]any) map[string]any {
+		b := map[string]any{"platform": "pve", "volume": "pbs-01:backup/vm/100/2026-10-17T01:00:00Z", "new_id": 990001,
+			"storage": "local-zfs", "unique": true, "isolate": iso}
+		for k, v := range extra {
+			b[k] = v
+		}
+		return b
+	}
+	sent := func() int {
+		fa.mu.Lock()
+		defer fa.mu.Unlock()
+		return len(fa.manages)
+	}
+
+	// The agent from before: refused, nothing sent; the choices say no.
+	var ch proto.Choices
+	var raw map[string]any
+	admin.json(http.MethodGet, choices, nil, 200, &raw)
+	if raw["restore_isolate"] != nil {
+		t.Errorf("an old agent's choices: %v", raw)
+	}
+	before := sent()
+	if p := admin.problem(http.MethodPost, restore, body(nil), 409); p.Code != "agent_outdated" {
+		t.Errorf("old agent: %+v", p)
+	}
+	if sent() != before {
+		t.Fatal("an isolated restore reached an agent that can't do it")
+	}
+
+	// Never for anything but a new Proxmox VE guest that doesn't start.
+	for _, extra := range []map[string]any{{"platform": "incus"}, {"start": true}, {"new_id": nil},
+		{"isolate": map[string]any{"name": "web", "marker": "two words"}}} {
+		if p := admin.problem(http.MethodPost, restore, body(extra), 400); p.Code != "invalid_value" {
+			t.Errorf("%v: %+v", extra, p)
+		}
+	}
+
+	// The newer agent: it gets the isolation as asked.
+	rep := fa.report("shale")
+	rep.Agent.Caps = []string{proto.CapRestoreIsolate}
+	fa.send(proto.MsgReport, rep)
+	waitFor(t, "the capability", 3*time.Second, func() bool {
+		st, _ := e.h.snapshotOne("shale")
+		return st != nil && agentCan(st.Report, proto.CapRestoreIsolate)
+	})
+	admin.json(http.MethodGet, choices, nil, 200, &ch)
+	if !ch.RestoreIsolate {
+		t.Errorf("a newer agent's choices: %+v", ch)
+	}
+	admin.json(http.MethodPost, restore, body(nil), 202, nil)
+	req := fa.lastManage(t)
+	if req.Op != proto.OpBackupRestore || req.NewID != 990001 || req.Isolate == nil ||
+		*req.Isolate != (proto.RestoreIsolation{Name: "whombat-test-of-web", Marker: "whombat-rst_abc123", Tag: "whombat-restore-test"}) {
+		t.Errorf("agent got %+v", req)
+	}
+}

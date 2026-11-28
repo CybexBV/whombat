@@ -86,6 +86,10 @@ func hasCap(r *proto.Report, c string) bool {
 	return false
 }
 
+// agentCan reports whether the agent of a server's latest report has a
+// capability (false before its first report).
+func agentCan(r *proto.Report, c string) bool { return r != nil && hasCap(r, c) }
+
 // helperReason is the first reason a Mac can't take the hub's helper (code
 // "" = it can): the build, the connection, the version, the agent's
 // capability and key, its update switch, the host shell on both sides.

@@ -623,6 +623,9 @@ const (
 	// CapHelperUpdate: the agent installs Whombat Helper sent on the update
 	// stream (UpdateRequest.Component UpdateComponentHelper).
 	CapHelperUpdate = "helper_update"
+	// CapRestoreIsolate: the agent restores a Proxmox VE backup as a copy
+	// cut off from the start (ManageRequest.Isolate).
+	CapRestoreIsolate = "restore_isolate"
 )
 
 // ---- Hub-initiated RPCs -----------------------------------------------------
