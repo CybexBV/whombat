@@ -25,6 +25,7 @@ export * from './deployments';
 export * from './desk';
 export * from './devices';
 export * from './events';
+export * from './exposure';
 export * from './feedback';
 export * from './findmy';
 export * from './followed-tasks';

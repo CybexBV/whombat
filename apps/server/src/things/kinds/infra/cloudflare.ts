@@ -20,6 +20,7 @@ import type {
   ThingTone,
 } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../../connections/types';
+import { EXPOSURE_NEW } from '../../../exposure/check';
 import { ApiError } from '../../../lib/errors';
 import type { Services } from '../../../services';
 import { checkWatched } from '../../quiet/defaults';
@@ -562,6 +563,8 @@ export const CLOUDFLARE_CHECKS: readonly KindCheck[] = [
     perItem: false,
     startsOn: false,
   },
+  // Something new is open to the internet: a new opening in its settings (internet-exposure.md).
+  EXPOSURE_NEW,
 ];
 
 /** What this read couldn't see (QN-11): a part the token may not read, a refused account, sites past the first ten. */

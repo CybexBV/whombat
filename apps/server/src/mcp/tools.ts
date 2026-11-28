@@ -53,6 +53,7 @@ import { runs, searchAnswers } from '../db/schema/index';
 import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
+import { internetExposureTool } from '../exposure/agent';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
 import { outsidersFileIds } from '../files/access';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
@@ -700,6 +701,7 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   thing_watch: thingWatchTool,
   watch_status: (ctx) => watchStatusTool(ctx),
   watch_history: (ctx, input) => watchHistoryTool(ctx, input),
+  internet_exposure: (ctx) => internetExposureTool(ctx),
   // Keep a thing quiet for a while, only on the person's word.
   quiet_until: (ctx, input) => quietUntilTool(ctx, input),
   // What the assistant found out about a look (look-research.md LR-05): listed and run only in a look's turns.

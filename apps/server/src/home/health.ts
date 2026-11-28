@@ -26,6 +26,7 @@ import {
   CATALOG,
   type CatalogEntry,
   catalogEntry,
+  EXPOSURE_NEW_CHECK,
   isAgentConnection,
   isGatewayConnection,
   resolveMcpUrl,
@@ -41,6 +42,7 @@ import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
 import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
 import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
+import { exposureSeen } from '../exposure/lines';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
@@ -400,6 +402,13 @@ export async function checkConnectionHealth(
             if (older) lines.push(older);
           }
           skipped = seen.skipped ?? [];
+        }
+        // What its settings opened to the internet since Whombat kept its first list (internet-exposure.md).
+        const exposure = await exposureSeen(services, row, now);
+        lines.push(...exposure.notices);
+        if (!exposure.read) {
+          const before = skipped;
+          skipped = (check) => check === EXPOSURE_NEW_CHECK || isSkipped(before, check);
         }
       }
       const disk = await machineDisk(services, row, now, seen?.machine).catch(() => null);

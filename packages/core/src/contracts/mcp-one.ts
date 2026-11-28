@@ -10,6 +10,7 @@
  * - `watch_checks`: what Whombat watches on a connection, server or device, and switching a check off or on when the
  *   person said so (Whombat docs/decisions/on-purpose.md).
  * - `watch_status` and `watch_history`: what needs the person now, and what went wrong over a period, read-only.
+ * - `internet_exposure`: what the internet can reach, from the settings Whombat reads (Whombat internet-exposure.md).
  * - `quiet_until`: keep a connection, server or device quiet until a time, or end that, when the person said so
  *   (Whombat).
  */
@@ -244,6 +245,36 @@ export const ONE_MCP_TOOLS = {
         .array(z.object({ words: z.string(), started: z.string(), ended: z.string().optional() }))
         .optional(),
       note: z.string().optional(),
+    }),
+    requiredKey: null,
+    readOnly: true,
+    personal: true,
+  }),
+  internet_exposure: oneTool({
+    name: 'internet_exposure',
+    title: 'What the internet can reach',
+    description:
+      'What of the person’s things the internet can reach, read from the settings of what Whombat is connected to: proxy hosts, Cloudflare tunnels, port forwards on the router and Tailscale Funnel. Each opening says where it comes from, what it leads to, what guards it (HTTPS, an access list, Cloudflare Access), whether it is new and what is worth a look; `places` says what Whombat read and what it can’t see, so never call the list complete. Use it for “Is anything of mine exposed?” and when looking into a new opening. Changing an opening is done in its own service; “This is meant” is watch_checks with check exposure.new and the opening’s subject.',
+    input: z.object({}),
+    output: commitOutcome({
+      summary: z.string(),
+      openings: z.array(
+        z.object({
+          line: z.string(),
+          via: z.string(),
+          protection: z.string(),
+          worthALook: z.string().optional(),
+          isNew: z.boolean(),
+          meant: z.boolean(),
+          firstSeen: z.string().optional(),
+          /** The connection whose settings open it, and the item This is meant switches off. */
+          source: z.string(),
+          subject: z.string(),
+          subjectName: z.string(),
+        }),
+      ),
+      places: z.array(z.object({ name: z.string(), state: z.string(), words: z.string() })),
+      note: z.string(),
     }),
     requiredKey: null,
     readOnly: true,

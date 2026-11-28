@@ -16,6 +16,7 @@ import type {
   ThingPageTab,
 } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
+import { EXPOSURE_NEW } from '../../exposure/check';
 import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import { CLIENTS_KEY, GW_CPU_KEY, GW_MEM_KEY, readPoints } from '../points';
@@ -309,6 +310,8 @@ export const UNIFI_CHECKS: readonly KindCheck[] = [
   },
   { check: 'unifi.gateway_busy', name: 'A busy gateway', nature: 'problem', perItem: false, startsOn: false },
   { check: 'unifi.firmware', name: 'Firmware updates', nature: 'fyi', perItem: false, startsOn: false },
+  // Something new is open to the internet: a new opening in its settings (internet-exposure.md).
+  EXPOSURE_NEW,
 ];
 
 const BACK_ONLINE = { lifts: 'fixed', words: 'Until it’s back online.' } as const;

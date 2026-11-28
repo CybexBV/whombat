@@ -42,6 +42,7 @@ import type { CatalogConnectionRow } from '../connections/types';
 import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
+import { exposurePageNotices } from '../exposure/lines';
 import { listChanges } from '../home/changes';
 import { burrowLocale } from '../i18n/locale';
 import { localizeTree } from '../i18n/phrases';
@@ -91,7 +92,7 @@ import {
   UP_KEY,
 } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
-import type { LooseNotice } from './quiet/types';
+import type { KindNotice, LooseNotice } from './quiet/types';
 import { heldPage, type MarkedLines, markLines } from './quiet/wire';
 import {
   hostsServing,
@@ -258,13 +259,15 @@ export async function connectionPage(
     viewer,
     quiet,
   };
-  const [view, tools, changed, partOf, connected, states] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states, exposure] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
     within(partOfServer(services, viewer.burrowId, row), 5_000, null),
     connectedByLine(services, row, viewer, timeZone),
     thingStates(services.db, id),
+    // What its settings opened to the internet lately (internet-exposure.md); never slows the page down.
+    within(exposurePageNotices(services, row), 3_000, [] as KindNotice[]),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
   const misplaced = view?.slots ? slotProblems(view) : [];
@@ -325,6 +328,7 @@ export async function connectionPage(
   const backup = backupNotice(figures, now);
   const lines: LooseNotice[] = [
     ...(view?.notices ?? []),
+    ...exposure,
     ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
     ...genericNotices(

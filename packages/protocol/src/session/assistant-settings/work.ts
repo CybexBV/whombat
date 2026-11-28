@@ -274,6 +274,7 @@ export const WORK_SETTINGS = {
   'things.setWatch': change('overview', 'Stop or start watching a check on a connection or device'),
   'things.watch': read('overview', 'Read what Whombat watches on a connection or device'),
   'things.history': read('overview', 'Read what went wrong with a server, connection or device lately'),
+  'things.exposure': read('overview', 'Read what the internet can reach'),
 
   'tracker.decide': NONE,
   'tracker.item': NONE,

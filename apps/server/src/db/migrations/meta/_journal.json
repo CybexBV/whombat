@@ -309,6 +309,13 @@
       "when": 1795802594460,
       "tag": "0043_search_answer_language",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1795856157317,
+      "tag": "0044_exposure",
+      "breakpoints": true
     }
   ]
 }

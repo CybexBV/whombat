@@ -19,6 +19,7 @@ import type {
 import { externalEffect } from '../../../commit/scope';
 import { connectionPolicy } from '../../../connections/destination';
 import type { CatalogConnectionRow } from '../../../connections/types';
+import { EXPOSURE_NEW } from '../../../exposure/check';
 import { OutboundError, outboundRequest } from '../../../lib/outbound';
 import type { Services } from '../../../services';
 import { shortHash } from '../../quiet/items';
@@ -83,6 +84,21 @@ export interface NpmSite {
   certificate: NpmCertificate | null;
   /** When it was added (`created_on`; editing it doesn't change it). */
   created?: Date | null;
+  /** The access list in front of it (users or allowed addresses), for Open to the internet; null when none. */
+  access?: { id: number; name: string } | null;
+  /** HTTP is sent on to HTTPS (`ssl_forced`). */
+  sslForced?: boolean;
+}
+
+/** A stream: a TCP or UDP port Nginx Proxy Manager forwards (`/api/nginx/streams`), for Open to the internet. */
+export interface NpmStream {
+  id: number;
+  incomingPort: number;
+  /** “192.168.1.30:25565”. */
+  target: string;
+  tcp: boolean;
+  udp: boolean;
+  enabled: boolean;
 }
 
 export interface NpmSnapshot {
@@ -95,6 +111,8 @@ export interface NpmSnapshot {
   created?: { streams: (Date | null)[]; dead: (Date | null)[] };
   /** Its redirection hosts couldn't be read: their lines don't look fixed (QN-11). */
   redirectsUnread?: boolean;
+  /** Its streams, for Open to the internet; absent when they couldn't be read. */
+  streamList?: NpmStream[];
 }
 
 /** Nginx Proxy Manager's dates (“2026-11-10 19:46:00”, UTC, or ISO). */
@@ -159,9 +177,41 @@ export function parseProxyHosts(body: unknown): NpmSite[] {
         error: nginxError(meta.nginx_err),
         certificate: certificateOf(h.certificate),
         created: npmDate(h.created_on),
+        access: accessOf(h),
+        sslForced: h.ssl_forced === true || h.ssl_forced === 1,
       };
     })
     .filter((s): s is NpmSite => s !== null);
+}
+
+/** The access list a host uses (`access_list_id`, expanded `access_list`); null when it has none. */
+function accessOf(h: Record<string, unknown>): NpmSite['access'] {
+  const id = num(h.access_list_id) ?? num(rec(h.access_list).id);
+  if (!id) return null;
+  return { id, name: clip(str(rec(h.access_list).name) ?? `#${id}`, 80) };
+}
+
+/** `/api/nginx/streams`: the switched-on and switched-off TCP and UDP forwards. */
+export function parseStreams(body: unknown): NpmStream[] {
+  return list(body)
+    .slice(0, 200)
+    .map((raw): NpmStream | null => {
+      const x = rec(raw);
+      const id = num(x.id);
+      const incomingPort = num(x.incoming_port);
+      if (id === null || incomingPort === null) return null;
+      const host = str(x.forwarding_host) ?? '';
+      const port = num(x.forwarding_port);
+      return {
+        id,
+        incomingPort,
+        target: clip(`${host}${port ? `:${port}` : ''}`, 200),
+        tcp: x.tcp_forwarding !== false && x.tcp_forwarding !== 0,
+        udp: x.udp_forwarding === true || x.udp_forwarding === 1,
+        enabled: x.enabled !== false && x.enabled !== 0,
+      };
+    })
+    .filter((x): x is NpmStream => x !== null);
 }
 
 /** `/api/nginx/redirection-hosts?expand=certificate`. */
@@ -199,7 +249,7 @@ export const npmReader = snapshotReader<NpmSnapshot>(NAME, 'npm', async (service
   const get = (path: string, query?: Record<string, string>) => getJson(services, row, NAME, path, query);
   const [root, proxies, redirects, streams, dead] = await Promise.all([
     optional(get('/api/')),
-    get('/api/nginx/proxy-hosts', { expand: 'certificate' }),
+    get('/api/nginx/proxy-hosts', { expand: 'certificate,access_list' }),
     optional(get('/api/nginx/redirection-hosts', { expand: 'certificate' })),
     optional(get('/api/nginx/streams')),
     optional(get('/api/nginx/dead-hosts')),
@@ -215,6 +265,7 @@ export const npmReader = snapshotReader<NpmSnapshot>(NAME, 'npm', async (service
       dead: dead ? list(dead).map((x) => npmDate(rec(x).created_on)) : [],
     },
     ...(redirects ? {} : { redirectsUnread: true }),
+    ...(streams ? { streamList: parseStreams(streams) } : {}),
   };
 });
 
@@ -409,6 +460,8 @@ export const NPM_CHECKS: readonly KindCheck[] = [
     perItem: false,
     startsOn: false,
   },
+  // Something new is open to the internet: a new opening in its settings (internet-exposure.md).
+  EXPOSURE_NEW,
 ];
 
 /** What this read couldn't see (QN-11): its redirections, answers not asked (past the first 30, or none). */
