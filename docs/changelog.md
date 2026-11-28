@@ -47,6 +47,8 @@ them once they have been tried on Beta.
   as Whombat can see. Open it under Servers or Settings → This Whombat → Backups, and ask your assistant to set up
   backups for anything that isn’t safe yet.
 - What’s protected shows your Whombat’s copy somewhere else, and says when copying there fails.
+- What’s protected counts a backup as copied or kept only once one has worked, where it really is. A backup plan that
+  never worked says so, and a copy somewhere else says “nothing to copy yet” until there is a backup.
 - Whombat can test your Proxmox backups: once a week in the quiet hours it restores one machine’s backup as a copy with
   its network off, checks that it starts, and deletes it again. Your real machine isn’t touched. Turn on “Test my
   backups” on the What’s protected page; the result shows on the machine’s page.
