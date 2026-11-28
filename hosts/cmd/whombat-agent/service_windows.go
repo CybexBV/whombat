@@ -385,19 +385,41 @@ func cmdUninstall(args []string) error {
 }
 
 // removeProgram removes the agent's program folder. The running
-// executable can't be deleted, but it can move: to Windows' own temporary
-// folder, from where it goes at the next restart.
+// executable can't be deleted, but it can move (programAside), from where
+// it goes at the next restart. When it can't move either, it and its
+// folder go at the next restart, and the rest now.
 func removeProgram(exe string) error {
 	dir := filepath.Dir(exe)
 	if !strings.EqualFold(filepath.Base(dir), "Whombat") {
 		// Not install.ps1's folder: leave the person's own place alone.
 		return nil
 	}
-	tmp := filepath.Join(os.Getenv("SystemRoot"), "Temp", fmt.Sprintf("whombat-agent-%d.exe", time.Now().UnixNano()))
-	if err := os.Rename(exe, tmp); err == nil {
-		if p, err := windows.UTF16PtrFromString(tmp); err == nil {
-			_ = windows.MoveFileEx(p, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+	name := fmt.Sprintf("whombat-agent-%d.exe", time.Now().UnixNano())
+	for _, to := range programAside(exe, os.Getenv("SystemRoot"), name) {
+		if err := os.Rename(exe, to); err == nil {
+			deleteAtRestart(to)
+			return os.RemoveAll(dir)
 		}
 	}
-	return os.RemoveAll(dir)
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		if p := filepath.Join(dir, e.Name()); !strings.EqualFold(p, exe) {
+			if err := os.RemoveAll(p); err != nil {
+				return err
+			}
+		}
+	}
+	deleteAtRestart(exe)
+	deleteAtRestart(dir) // after exe: Windows deletes in the order asked
+	return nil
+}
+
+// deleteAtRestart has Windows delete path when it next starts.
+func deleteAtRestart(path string) {
+	if p, err := windows.UTF16PtrFromString(path); err == nil {
+		_ = windows.MoveFileEx(p, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+	}
 }
