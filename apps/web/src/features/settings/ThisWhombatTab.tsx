@@ -44,7 +44,7 @@ import { TeamReportsAbout } from '../teamReports/TeamReportsAbout';
 import { VoiceSection } from '../voice/VoiceSection';
 import { AgentUpdatesSection } from './AgentUpdatesSwitch';
 import { BackupFileSection } from './BackupFileSection';
-import { BackupOverview } from './BackupOverview';
+import { BackupOverview, useBackupOptionsShown } from './BackupOverview';
 import { BackupPlacesSection } from './BackupPlaces';
 import {
   ApplianceLoadError,
@@ -185,7 +185,7 @@ export function ThisWhombatTab({
               burrow={burrow}
             />
           ) : null}
-          <ProtectedLinkSection />
+          <ProtectedLinkSection withBackups={managed ? !!appliance.status : null} />
           <BackupFileSection burrow={burrow} />
         </PartBody>
       ) : part === 'screen' ? (
@@ -498,10 +498,15 @@ function OverviewPart({
   );
 }
 
-/** Under this Whombat's backups: What's protected, for everything else that holds data (backup-trust.md). */
-function ProtectedLinkSection() {
+/**
+ * Under this Whombat's backups: What's protected, for everything else that holds data (backup-trust.md). Only beside
+ * backups of its own, so a Whombat without them still says there is nothing to set here. `withBackups` is a managed
+ * Whombat's answer; `null` asks the backup service, as the backups above do.
+ */
+function ProtectedLinkSection({ withBackups }: { withBackups: boolean | null }) {
   const supported = useProtectedSupported();
-  if (!supported) return null;
+  const shown = useBackupOptionsShown();
+  if (!supported || !(withBackups ?? (shown === 'yes' || shown === 'down'))) return null;
   const words = protectedPageWords(currentLocale());
   return (
     <section className={styles.section} aria-label={words.link}>

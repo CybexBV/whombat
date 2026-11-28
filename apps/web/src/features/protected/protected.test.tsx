@@ -1,7 +1,7 @@
 /**
  * What's protected on the web (Whombat backup-trust.md): the three groups with their rows, *Ask {assistant} to set up
- * backups* only where a copy isn't elsewhere, the restore tests' switch and *Test one now*, and the way in from the
- * Servers list. Fixture mode's world (`protectedFixtures.ts`).
+ * backups* only where a copy isn't elsewhere, the restore tests' switch and *Test one now*, and the ways in from the
+ * Servers list and This Whombat's backups. Fixture mode's world (`protectedFixtures.ts`).
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -50,6 +50,12 @@ describe('What’s protected', () => {
   it('is reached from the Servers list', async () => {
     renderApp('/servers', fixtureServices({ hosts: true }));
     const link = await screen.findByRole('link', { name: /What’s protected/ });
+    expect(link.getAttribute('href')).toBe('/protected');
+  });
+
+  it('is reached from This Whombat’s backups, beside the backups themselves', async () => {
+    renderApp('/settings?tab=appliance&section=backups', fixtureServices());
+    const link = await screen.findByRole('link', { name: /What’s protected/ }, { timeout: 5000 });
     expect(link.getAttribute('href')).toBe('/protected');
   });
 });
