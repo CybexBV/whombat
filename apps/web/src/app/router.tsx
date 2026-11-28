@@ -224,6 +224,10 @@ const DoneScreen = lazyRouteComponent(() => import('../features/home/DoneScreen'
 const ChatRoomScreen = lazyRouteComponent(() => import('../features/chats/ChatRoomScreen'), 'ChatRoomScreen');
 const ThingScreen = lazyRouteComponent(() => import('../features/things/ThingScreen'), 'ThingScreen');
 const PlaceScreen = lazyRouteComponent(() => import('../features/things/places/ThingPlace'), 'PlaceScreen');
+const ExposureScreen = lazyRouteComponent(
+  () => import('../features/things/exposure/ExposureScreen'),
+  'ExposureScreen',
+);
 // The Skills page of a Whombat without the skill library (AP-1261, AP-2305).
 const BrandPage = lazyRouteComponent(() => import('./pages/brand/BrandPage'), 'BrandPage');
 const MobileInfoPage = lazyRouteComponent(() => import('./pages/MobileInfoPage'), 'MobileInfoPage');
@@ -512,6 +516,16 @@ const serversRoute = createRoute({
   component: withScreens([PlaceScreen, ThingScreen], function ServersRoute() {
     const burrow = useOpenBurrow();
     return <PlaceScreen burrow={burrow} place="servers" />;
+  }),
+});
+
+/** Open to the internet (Whombat internet-exposure.md), in the Servers place: the list beside it on a wide window. */
+const internetRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'internet',
+  component: withScreens([ExposureScreen], function InternetRoute() {
+    const burrow = useOpenBurrow();
+    return <ExposureScreen burrow={burrow} />;
   }),
 });
 
@@ -1202,6 +1216,7 @@ export const routeTree = rootRoute.addChildren([
     burrowIndexRoute,
     connectionsRoute,
     serversRoute,
+    internetRoute,
     connectedRoute,
     dashboardRoute,
     chatRoomRoute,

@@ -100,6 +100,7 @@ export function parseShellLocation(pathname: string, search?: Record<string, unk
     case 'dashboard':
       return id ? { kind: 'other' } : { kind: 'place', place: 'connections' };
     case 'servers':
+    case 'internet':
       return id ? { kind: 'other' } : { kind: 'place', place: 'servers' };
     case 'connected':
       return id ? { kind: 'other' } : { kind: 'place', place: 'connections' };

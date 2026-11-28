@@ -41,6 +41,7 @@ import { type DelegationFixture, delegationSeeded } from './delegationFixtures';
 import { type DeskFixtureKind, deskFixtureHasBattery, deskFixtureKind } from './deskFixtures';
 import { createEssentialsFixtures } from './essentialsFixtures';
 import { createEssentialsSettingsFixtures } from './essentialsSettingsFixtures';
+import { createExposureFixtures } from './exposureFixtures';
 import { createFeedbackChatFixtures } from './feedbackChatFixtures';
 import { createFilesWorld, type FilesWorld, handleFilesRequest, markMessageFiles } from './filesFixtures';
 import { type FirstDayFixture, firstDayFixtureOf } from './firstDayFixtures';
@@ -736,6 +737,15 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
     out = async (input, init) => {
       const req = input instanceof Request ? input : new Request(input, init);
       return signedIn ? monitoring.fetch(req, (r) => inner(r)) : inner(req);
+    };
+  }
+  {
+    // Open to the internet: what Mara's proxy, tunnel and router let in, and This is meant.
+    const inner = out;
+    const exposure = createExposureFixtures();
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      return signedIn ? exposure.fetch(req, (r) => inner(r)) : inner(req);
     };
   }
   if (models) {

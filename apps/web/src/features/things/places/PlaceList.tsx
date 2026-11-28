@@ -8,13 +8,17 @@
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
+  EXPOSURE_PATH,
+  exposureText,
   type PlaceRow,
   placeSummaryParts,
   placeWords,
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
-import { Plus } from 'lucide-react';
+import { useSessionProtocol } from '@whombat/client/react';
+import { EXPOSURE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
+import { Globe, Plus } from 'lucide-react';
 import { Fragment, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
 import { useRowMenu } from '../../../app/shell/ContextMenu';
@@ -34,7 +38,7 @@ export interface PlaceListProps {
   burrow: string;
   place: ThingPlace;
   rows: readonly PlaceRow[];
-  /** The page open beside the list (its thing id), or null. */
+  /** The page open beside the list (its thing id, or `EXPOSURE_PATH` for Open to the internet), or null. */
   selected: string | null;
   /** Where the `+` goes; null where it can't add (no hosts service, a guest). */
   addHref: string | null;
@@ -128,6 +132,7 @@ export function PlaceList({
         ) : (
           <p className={styles.empty}>{words.empty}</p>
         )}
+        {place === 'servers' ? <InternetRow selected={selected === EXPOSURE_PATH} /> : null}
         {pending && addHref ? (
           <div className={styles.waiting} data-server-waiting={pending}>
             <div className={styles.waitingText}>
@@ -142,6 +147,35 @@ export function PlaceList({
       </nav>
       {menu.element}
     </div>
+  );
+}
+
+/**
+ * Open to the internet at the end of Servers (Whombat internet-exposure.md): what the internet can reach through the
+ * proxies, tunnels and routers Whombat is connected to. Only on a Whombat that can say.
+ */
+function InternetRow({ selected }: { selected: boolean }) {
+  const i18n = useWebI18n();
+  const supported = protocolAtLeast(useSessionProtocol(), EXPOSURE_MINOR);
+  if (!supported) return null;
+  const words = exposureText(i18n.tag);
+  return (
+    <AppLink
+      href={EXPOSURE_PATH}
+      className={cx(styles.row, styles.extra, selected && styles.on)}
+      aria-current={selected ? 'page' : undefined}
+      aria-label={`${words.title}, ${words.row}`}
+      data-row="internet"
+    >
+      <span className={styles.logo} aria-hidden="true">
+        <Icon icon={Globe} size={20} />
+      </span>
+      <span className={styles.name}>{words.title}</span>
+      <span />
+      <span className={styles.line}>
+        <span className={styles.lineText}>{words.row}</span>
+      </span>
+    </AppLink>
   );
 }
 

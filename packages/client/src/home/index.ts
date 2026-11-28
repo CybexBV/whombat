@@ -6,6 +6,7 @@ export * from './arrange';
 export * from './automationIdeas';
 export * from './changes';
 export * from './chats';
+export * from './exposure';
 export * from './fakeArrange';
 export * from './greeting';
 export * from './handoff';

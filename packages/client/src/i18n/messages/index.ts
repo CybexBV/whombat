@@ -11,6 +11,7 @@ import { CHAT_WORK_AREAS } from './chatWork';
 import { CONNECTIONS_HOSTS_AREAS } from './connectionsHosts';
 import { DESK_WORDS } from './desk';
 import { DESK_SCREENS_WORDS } from './deskScreens';
+import { EXPOSURE_PAGE_WORDS } from './exposure';
 import { HOST_MANAGED_AREAS } from './hostManaged';
 import { ACCOUNTS_WORDS, MANAGED_STATUS_WORDS } from './managedStatus';
 import { ONE_PASSKEY_WORDS } from './onePasskey';
@@ -36,6 +37,7 @@ const AREAS = [
   REMOTE_HELP_CLIENT_WORDS,
   ONE_PASSKEY_WORDS,
   OWN_NAME_WORDS,
+  EXPOSURE_PAGE_WORDS,
   ...CHAT_WORK_AREAS,
   ...CONNECTIONS_HOSTS_AREAS,
   ...HOST_MANAGED_AREAS,
