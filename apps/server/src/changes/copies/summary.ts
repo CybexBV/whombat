@@ -4,7 +4,8 @@
  * changes by itself (times, counters) left out before hashing. Two copies' summaries say what changed in counts per
  * part; the settings themselves, their names and lines included, never leave the copy, and only these counts reach the
  * assistant. Beside the items, a hash of the whole copy's settings with its secrets says whether two copies are the
- * same.
+ * same. On the box every hash is keyed with its master key, so neither a name nor a small value can be guessed back
+ * from a list of likely ones.
  */
 import { createHash } from 'node:crypto';
 import type { SettingsPartChange } from '../../db/schema/changes';
@@ -20,8 +21,22 @@ export type SettingsSummary = Record<string, string>;
  */
 export const CONTENT_KEY = '~content';
 
+/**
+ * The summary's mark of how it was made: its hashes keyed on the box and today's list of secret fields. Two summaries
+ * with different marks can't be compared item by item (the same value hashes differently, and an item may now be a
+ * secret left out), so the first copy after the change is kept as a different one and says nothing changed in it.
+ */
+export const MADE_KEY = '~made';
+const MADE = '2';
+
 /** What is kept of an item's key: a short hash, so names, addresses and whole lines stay in the sealed copy. */
 export type KeyHasher = (key: string) => string;
+
+/** How a summary hashes item keys and values (and the whole content). */
+export interface CopyHasher {
+  key: KeyHasher;
+  value: (canonical: string) => string;
+}
 
 /** An unkeyed hash, for summaries made without the box (tests). */
 export const plainKeyHasher: KeyHasher = (key) =>
@@ -33,6 +48,18 @@ export const copyKeyHasher =
   (key) =>
     services.custody.mac('settings-copy-item', key).slice(0, 16);
 
+/** Unkeyed, for tests. */
+export const plainHasher: CopyHasher = {
+  key: plainKeyHasher,
+  value: (canonical) => createHash('sha256').update(canonical).digest('hex').slice(0, 16),
+};
+
+/** The box's own: keys and values (a port, a yes or no, a short name) keyed with its master key. */
+export const copyHasher = (services: Pick<Services, 'custody'>): CopyHasher => ({
+  key: copyKeyHasher(services),
+  value: (canonical) => services.custody.mac('settings-copy-value', canonical).slice(0, 16),
+});
+
 const HASHED_KEY = /^~[A-Za-z0-9_-]{16}$/;
 const itemKey = (part: string, key: string, hashKey: KeyHasher) => `${part}/~${hashKey(key)}`;
 
@@ -41,17 +68,15 @@ const ITEMS_MAX = 5000;
 
 /**
  * A field whose value is a secret: never hashed, never kept. Besides passwords, keys and tokens: SNMP communities, an
- * LDAP server's bind password (`ldap_bindpw`), OpenVPN's static TLS key (`tls`) and an IPsec or OpenVPN shared key.
+ * LDAP server's bind password (`ldap_bindpw`), OpenVPN's static TLS key (`tls`), an IPsec or OpenVPN shared key,
+ * credentials, an auth value (`auth`, `basic_auth`; not `author`, `authmode` or Nginx Proxy Manager's `pass_auth`
+ * switch), a database DSN, a webhook's address, a session id or cookie (not `session_timeout`) and a seed.
  */
 export const SECRET_FIELD =
-  /password|passwd|passphrase|^pass$|pwhash|bindpw|secret|token|totp|otp|apikey|api_key|privkey|private|^prv$|psk|sharedkey|community|bcrypt|authorizedkeys|sshkey|^(cert|crt|key|tls|tlskey)$|[_-]key$/i;
+  /password|passwd|passphrase|^pass$|pwhash|bindpw|secret|token|totp|otp|apikey|api_key|privkey|private|^prv$|psk|sharedkey|community|bcrypt|authorizedkeys|sshkey|^(cert|crt|key|tls|tlskey)$|[_-]key$|credentials?$|(?<!pass_)auth$|auth[_-]?(key|pass|header)$|dsn$|webhook([_-]?ur[il])?$|session[_-]?(id|cookie)s?$|seed([_-]?phrase)?$/i;
 
-/** A short hash of a value, the same for the same value whatever its keys' order. */
-export function itemHash(value: unknown): string {
-  return createHash('sha256').update(canonical(value)).digest('hex').slice(0, 16);
-}
-
-function canonical(value: unknown): string {
+/** The text a value's hash is made of, the same for the same value whatever its keys' order. */
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object')
     return `{${Object.keys(value)
@@ -88,7 +113,9 @@ export class SummaryBuilder {
   readonly #keys = new Set<string>();
   #count = 0;
 
-  constructor(private readonly hashKey: KeyHasher = plainKeyHasher) {}
+  constructor(private readonly hasher: CopyHasher = plainHasher) {
+    this.#out[MADE_KEY] = MADE;
+  }
 
   add(part: string, key: string, value: unknown): void {
     if (this.#count >= ITEMS_MAX) return;
@@ -96,13 +123,13 @@ export class SummaryBuilder {
     let at = base;
     for (let n = 2; this.#keys.has(`${part}/${at}`); n++) at = `${base}#${n}`;
     this.#keys.add(`${part}/${at}`);
-    this.#out[itemKey(part, at, this.hashKey)] = itemHash(value);
+    this.#out[itemKey(part, at, this.hasher.key)] = this.hasher.value(canonical(value));
     this.#count++;
   }
 
   /** The whole copy's settings, secrets in (`cleaned(…, 'keep')`): `CONTENT_KEY`. */
   content(value: unknown): void {
-    this.#out[CONTENT_KEY] = itemHash(value);
+    this.#out[CONTENT_KEY] = this.hasher.value(canonical(value));
   }
 
   get summary(): SettingsSummary {
@@ -132,8 +159,12 @@ export function hashedSummary(summary: SettingsSummary, hashKey: KeyHasher): Set
   return out;
 }
 
-/** What changed between two summaries, part by part, in the order the parts first appear. */
+/**
+ * What changed between two summaries, part by part, in the order the parts first appear: nothing told when they were
+ * made differently (`MADE_KEY`), as their items can't be compared.
+ */
 export function diffSummaries(before: SettingsSummary, after: SettingsSummary): SettingsPartChange[] {
+  if (before[MADE_KEY] !== after[MADE_KEY]) return [];
   const parts = new Map<string, SettingsPartChange>();
   const part = (key: string) => {
     const name = key.slice(0, key.indexOf('/')) || 'other';

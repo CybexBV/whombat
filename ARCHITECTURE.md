@@ -2118,9 +2118,10 @@ Setup and operation: `docs/github.md`.
   Pi-hole's Teleporter zip and Nginx Proxy Manager's hosts as JSON, once a night between 02:00 and 05:00 at the box's
   clock (a failed try again after an hour, three times), through the connection's own key. Each copy is sealed with the
   custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same content
-  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key (`custody.mac`) and a
-  hash of what it holds with secrets cleaned out, and a hash of the whole copy's content with its secrets
-  (`CONTENT_KEY`). Two copies' summaries are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
+  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key and of what it holds
+  with secrets cleaned out (`custody.mac`), and a keyed hash of the whole copy's content with its secrets
+  (`CONTENT_KEY`; Pi-hole's covers the Teleporter zip's own files too, `copies/zip.ts`). Two copies' summaries made the
+  same way (`MADE_KEY`) are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
   and, once a copy worked and none has for 48 hours, the “Settings copy failing” line (`settings.copy`).
   `things.settingsCopy` gives the newest copy's bytes as base64 to the person, read through an export stream.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
