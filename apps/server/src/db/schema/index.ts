@@ -48,6 +48,7 @@ export * from './repo-manager';
 export * from './repo-setup';
 export * from './schedules';
 export * from './server-asks';
+export * from './restore-tests';
 export * from './server-cares';
 export * from './server-names';
 export * from './shares';

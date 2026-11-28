@@ -36,6 +36,7 @@ import {
 import type { ToolLimits } from '../../connections/limits';
 import type { ConnectionGlance } from '../../home/types';
 import { ts } from './common';
+import type { StoredProtection } from './restore-tests';
 import { principals } from './principals';
 import { accounts, burrows } from './tenancy';
 
@@ -127,6 +128,11 @@ export const catalogConnections = pgTable(
      */
     glance: jsonb('glance').$type<ConnectionGlance>(),
     glanceAt: ts('glance_at'),
+    /**
+     * Its own backups as the health pass last read them, for What's protected (backup-trust.md, migration 0044): where
+     * the newest copy is and how old. Null: the kind reads no backups, or none was read yet.
+     */
+    protection: jsonb('protection').$type<StoredProtection | null>(),
     /** The hosts service's check for a Website or address connection. */
     hubCheckId: text('hub_check_id'),
     /** A reading before these probe settings were applied describes a different check. */

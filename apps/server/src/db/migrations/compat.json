@@ -3,7 +3,9 @@
   "format": 1,
   "schemaBase": 76,
   "postgres": {
-    "majors": [17]
+    "majors": [
+      17
+    ]
   },
   "runtime": {
     "readsFrom": "0000_baseline",
@@ -273,6 +275,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The language a search answer is written in: one nullable text column on search_answers. The release before it reads and writes past it; an answer it writes has none and counts as English, as every answer did before."
+    },
+    "0044_restore_tests": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Backups you can trust (docs/decisions/backup-trust.md): two new tables, restore_test_servers (the person's restore test switch per Proxmox server) and restore_tests (one row per test, moved step by step), and one nullable jsonb column on catalog_connections (protection, what a connection's own backups are). The release before it reads and writes past them; a test it leaves half done is finished and its copy deleted when this release runs again."
     }
   }
 }
