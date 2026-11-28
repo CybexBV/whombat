@@ -1,15 +1,20 @@
 // Package apps updates Docker Compose apps on the agent's server (docs/MANAGE.md
-// 2.10, Whombat's app-updates.md): for each app it keeps the image that runs
-// now, pulls the newest image of the app's Compose service, recreates only
-// that service in its own project folder with its own files, and watches it.
-// When the new container stops, keeps restarting or fails its health check,
-// it tags the previous image as the service's image again and recreates the
-// service without pulling, so the app runs as before.
+// 2.11, Whombat's app-updates.md): for each app it keeps the image that runs
+// now, pulls exactly the newer image the person said yes to, recreates only
+// the services that run that image, in their own project folder with their
+// own files, without letting Compose pull or build, and watches them. When a
+// new container stops, keeps restarting or fails its health check, it tags
+// the previous image as the services' image again and recreates them, so the
+// app runs as before. It refuses an app that isn't what the person said yes
+// to any more.
 //
 // The work runs outside the agent (`whombat-agent app-task --dir DIR` in a
 // transient systemd unit, like a package task), so an agent that restarts
 // meanwhile doesn't leave an app half updated; the runner writes result.json
-// last.
+// last. Before it replaces a service it writes down how to go back
+// (progress.json), so an update the server stopped part-way is finished
+// when the agent runs again: kept when the app runs, put back when it
+// doesn't.
 package apps
 
 import (
@@ -21,13 +26,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"rackoon/internal/proto"
 )
 
 // A task's files, in its own directory below the agent's state directory.
 const (
-	SpecFile   = "task.json"
-	LogFile    = "log"
-	ResultFile = "result.json"
+	SpecFile     = "task.json"
+	LogFile      = "log"
+	ResultFile   = "result.json"
+	ProgressFile = "progress.json"
 )
 
 // Limits: one app may take this long (a big image's pull, the watch and
@@ -51,10 +59,55 @@ type TaskSpec struct {
 	Apps      []string  `json:"apps"`
 	HoldMajor bool      `json:"hold_major,omitempty"`
 	Started   time.Time `json:"started"`
+	// Expect: what was checked of each app when the person said yes.
+	Expect []proto.AppExpect `json:"expect,omitempty"`
 	// Unit: the transient systemd unit running it; PID: the runner's
 	// process without systemd.
 	Unit string `json:"unit,omitempty"`
 	PID  int    `json:"pid,omitempty"`
+	// Resumes: how often the agent started the runner again to finish an
+	// update the server stopped part-way; Resumed: when it last did.
+	Resumes int       `json:"resumes,omitempty"`
+	Resumed time.Time `json:"resumed,omitempty"`
+}
+
+// Progress is what a task has done so far (progress.json): the apps that
+// ended, and, while services are being replaced, how to put them back.
+type Progress struct {
+	Done    []Outcome `json:"done"`
+	Pending *Pending  `json:"pending,omitempty"`
+}
+
+// Pending is the update being made now: the project and the services
+// replaced together, the image they ran (OldID, kept under Backup), the one
+// they go to (NewID, once pulled) and each container's outcome so far.
+type Pending struct {
+	Project  Project   `json:"project"`
+	Services []string  `json:"services"`
+	Apps     []Outcome `json:"apps"`
+	Ref      string    `json:"ref"`
+	OldID    string    `json:"old_id"`
+	NewID    string    `json:"new_id,omitempty"`
+	Backup   string    `json:"backup"`
+	// Moved: the image's tag may already name the new image.
+	Moved bool `json:"moved,omitempty"`
+}
+
+// ReadProgress reads progress.json; nil when the task wrote none.
+func ReadProgress(dir string) (*Progress, error) {
+	var p Progress
+	if err := readJSON(filepath.Join(dir, ProgressFile), &p); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &p, nil
+}
+
+// WriteProgress writes progress.json atomically.
+func WriteProgress(dir string, p *Progress) error {
+	return writeJSON(filepath.Join(dir, ProgressFile), p)
 }
 
 // Task result statuses (the task as a whole: ok when every app ended
@@ -160,9 +213,46 @@ const (
 	LabelFiles      = "com.docker.compose.project.config_files"
 	LabelEnvFiles   = "com.docker.compose.project.environment_file"
 	LabelOneOff     = "com.docker.compose.oneoff"
+	// LabelConfigHash is Compose's hash of the service's settings when it
+	// created the container.
+	LabelConfigHash = "com.docker.compose.config-hash"
 	// LabelVersion is the OCI version label many images carry.
 	LabelVersion = "org.opencontainers.image.version"
 )
+
+var (
+	// nameRe is a project or service name Whombat passes to Compose. An
+	// image's own labels can claim to be Compose's, so a name that could
+	// read as an option ("--build") isn't taken.
+	nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	// digestRe is an image id or a registry digest.
+	digestRe = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
+	hashRe   = regexp.MustCompile(`^[0-9a-f]{1,128}$`)
+	// refRe is an image reference Whombat passes to Docker.
+	refRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$`)
+)
+
+// ValidName reports whether a Compose project or service name is safe to pass.
+func ValidName(s string) bool { return nameRe.MatchString(s) }
+
+// ValidDigest reports whether s is "sha256:" and 64 hex digits (an image id
+// or a registry digest).
+func ValidDigest(s string) bool { return digestRe.MatchString(s) }
+
+// ValidConfigHash reports whether s looks like Compose's config hash.
+func ValidConfigHash(s string) bool { return hashRe.MatchString(s) }
+
+// ValidRef reports whether an image reference is safe to pass to Docker.
+func ValidRef(s string) bool { return refRe.MatchString(s) }
+
+// ConfigHashOf is the container's Compose config hash ("" when it has none
+// that looks like one).
+func ConfigHashOf(labels map[string]string) string {
+	if h := strings.TrimSpace(labels[LabelConfigHash]); ValidConfigHash(h) {
+		return h
+	}
+	return ""
+}
 
 // Project is how Compose started a service: the project's name, folder and
 // files, as the container's labels say.
@@ -175,10 +265,11 @@ type Project struct {
 }
 
 // ProjectOf reads a container's Compose labels; ok is false for a container
-// Compose didn't start (or a one-off `compose run` container).
+// Compose didn't start (or a one-off `compose run` container), and for one
+// whose project or service name Whombat wouldn't pass to Compose.
 func ProjectOf(labels map[string]string) (Project, bool) {
 	p := Project{Name: labels[LabelProject], Service: labels[LabelService], Dir: labels[LabelWorkingDir]}
-	if p.Name == "" || p.Service == "" || strings.EqualFold(labels[LabelOneOff], "true") {
+	if !ValidName(p.Name) || !ValidName(p.Service) || strings.EqualFold(labels[LabelOneOff], "true") {
 		return Project{}, false
 	}
 	p.Files = splitPaths(labels[LabelFiles], p.Dir)
@@ -215,7 +306,10 @@ func (p Project) Usable(stat func(string) (os.FileInfo, error)) bool {
 	if st, err := stat(p.Dir); err != nil || !st.IsDir() {
 		return false
 	}
-	for _, f := range p.Files {
+	for _, f := range append(append([]string{}, p.Files...), p.EnvFiles...) {
+		if !filepath.IsAbs(f) {
+			return false
+		}
 		if st, err := stat(f); err != nil || st.IsDir() {
 			return false
 		}

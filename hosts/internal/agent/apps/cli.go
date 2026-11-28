@@ -107,7 +107,7 @@ func (i inspected) container() Container {
 }
 
 func (c *CLI) inspect(ctx context.Context, ids ...string) ([]Container, error) {
-	out, err := c.output(ctx, append([]string{c.docker, "inspect", "--type", "container"}, ids...)...)
+	out, err := c.output(ctx, append([]string{c.docker, "inspect", "--type", "container", "--"}, ids...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -136,9 +136,9 @@ func (c *CLI) Container(ctx context.Context, name string) (*Container, error) {
 	return &cs[0], nil
 }
 
-func (c *CLI) ServiceContainers(ctx context.Context, project, service string) ([]Container, error) {
+func (c *CLI) ProjectContainers(ctx context.Context, project string) ([]Container, error) {
 	out, err := c.output(ctx, c.docker, "ps", "--all", "--quiet", "--no-trunc",
-		"--filter", "label="+LabelProject+"="+project, "--filter", "label="+LabelService+"="+service)
+		"--filter", "label="+LabelProject+"="+project)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (c *CLI) ServiceContainers(ctx context.Context, project, service string) ([
 }
 
 func (c *CLI) Image(ctx context.Context, ref string) (string, map[string]string, error) {
-	out, err := c.output(ctx, c.docker, "image", "inspect", ref)
+	out, err := c.output(ctx, c.docker, "image", "inspect", "--", ref)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "no such") {
 			return "", nil, nil
@@ -180,12 +180,43 @@ func (c *CLI) Image(ctx context.Context, ref string) (string, map[string]string,
 	return list[0].ID, list[0].Config.Labels, nil
 }
 
+func (c *CLI) Pull(ctx context.Context, ref string, w io.Writer) error {
+	// A big image on a slow line.
+	return c.run(ctx, 20*time.Minute, w, c.docker, "pull", "--", ref)
+}
+
 func (c *CLI) Tag(ctx context.Context, src, dst string) error {
-	return c.run(ctx, time.Minute, nil, c.docker, "tag", src, dst)
+	return c.run(ctx, time.Minute, nil, c.docker, "tag", "--", src, dst)
 }
 
 func (c *CLI) Untag(ctx context.Context, ref string) error {
-	return c.run(ctx, time.Minute, nil, c.docker, "image", "rm", ref)
+	return c.run(ctx, time.Minute, nil, c.docker, "image", "rm", "--", ref)
+}
+
+// ConfigHash reads `docker compose config --hash=<service>`: one line,
+// "<service> <hash>".
+func (c *CLI) ConfigHash(ctx context.Context, p Project, service string) (string, error) {
+	cmd := c.composeCmd(ctx)
+	if cmd == nil {
+		return "", ErrNoCompose
+	}
+	argv := append(append(append([]string{}, cmd...), p.Args()...), "config", "--hash="+service)
+	out, err := c.output(ctx, argv...)
+	if err != nil {
+		return "", err
+	}
+	return parseConfigHash(string(out), service)
+}
+
+// parseConfigHash finds the service's hash in `config --hash` output.
+func parseConfigHash(out, service string) (string, error) {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) == 2 && f[0] == service && ValidConfigHash(f[1]) {
+			return f[1], nil
+		}
+	}
+	return "", fmt.Errorf("compose didn’t say the settings of %s", service)
 }
 
 // composeCmd finds Compose: the docker plugin, else docker-compose.
@@ -211,9 +242,6 @@ func (c *CLI) Compose(ctx context.Context, p Project, w io.Writer, args ...strin
 		return ErrNoCompose
 	}
 	timeout := 5 * time.Minute
-	if len(args) > 0 && args[0] == "pull" {
-		timeout = 20 * time.Minute // a big image on a slow line
-	}
 	argv := append(append(append([]string{}, cmd...), p.Args()...), args...)
 	return c.run(ctx, timeout, w, argv...)
 }

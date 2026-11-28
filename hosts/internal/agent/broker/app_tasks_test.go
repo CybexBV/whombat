@@ -1,6 +1,7 @@
 package broker
 
 import (
+	"fmt"
 	"runtime"
 	"slices"
 	"strings"
@@ -226,4 +227,94 @@ func TestAppTaskRunnerGone(t *testing.T) {
 		t.Fatalf("next update: %+v", r)
 	}
 	f.end(t, b.appMgr, r.Task.ID, &apps.TaskResult{Status: apps.StatusOK})
+}
+
+// What the person said yes to travels with the task; malformed facts are refused.
+func TestAppTaskExpect(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("app updates are for Linux servers")
+	}
+	b, f := appBroker(t, composeGuests())
+	id64 := "sha256:" + strings.Repeat("a", 64)
+	good := proto.AppExpect{App: "immich_server", Service: "immich-server", ImageID: id64, Digest: "sha256:" + strings.Repeat("b", 64), ConfigHash: "c0ffee"}
+	for name, e := range map[string]proto.AppExpect{
+		"another app":    {App: "immich_redis", Service: "redis", ImageID: id64},
+		"option service": {App: "immich_server", Service: "--build", ImageID: id64},
+		"image id":       {App: "immich_server", Service: "immich-server", ImageID: "latest"},
+		"digest":         {App: "immich_server", Service: "immich-server", ImageID: id64, Digest: "sha256:abc"},
+		"compose hash":   {App: "immich_server", Service: "immich-server", ImageID: id64, ConfigHash: "-x"},
+	} {
+		r := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpAppUpdate, Apps: []string{"immich_server"}, AppExpect: []proto.AppExpect{e}})
+		if r.OK || r.Code != proto.CodeInvalidValue {
+			t.Errorf("%s: %+v", name, r)
+		}
+	}
+	if r := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpAppUpdate, Apps: []string{"immich_server"}, AppExpect: []proto.AppExpect{good, good}}); r.Code != proto.CodeInvalidValue {
+		t.Errorf("twice: %+v", r)
+	}
+	if len(f.argv) != 0 {
+		t.Fatalf("a refused update started: %v", f.argv)
+	}
+	r := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpAppUpdate, Apps: []string{"immich_server"}, AppExpect: []proto.AppExpect{good}})
+	if !r.OK {
+		t.Fatalf("update: %+v", r)
+	}
+	spec, _ := apps.ReadSpec(b.appMgr.taskDir(r.Task.ID))
+	if len(spec.Expect) != 1 || spec.Expect[0] != good {
+		t.Errorf("spec: %+v", spec.Expect)
+	}
+	f.end(t, b.appMgr, r.Task.ID, &apps.TaskResult{Status: apps.StatusOK})
+}
+
+// A runner the server stopped while it replaced an app is started again to
+// finish it (twice at most); after that the task ends with what is known.
+func TestAppTaskResume(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("app updates are for Linux servers")
+	}
+	b, f := appBroker(t, composeGuests())
+	resp := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpAppUpdate, Apps: []string{"immich_server", "immich_redis"}})
+	if !resp.OK {
+		t.Fatalf("update: %+v", resp)
+	}
+	id := resp.Task.ID
+	dir := b.appMgr.taskDir(id)
+	hx := strings.TrimPrefix(id, "app:")
+	pend := &apps.Pending{Services: []string{"immich-server"}, OldID: "sha256:old", Backup: "x:whombat-previous-immich-server",
+		Apps: []apps.Outcome{{App: "immich_server", Service: "immich-server", From: "2.3.0", To: "2.4.0"}}}
+	if err := apps.WriteProgress(dir, &apps.Progress{Pending: pend}); err != nil {
+		t.Fatal(err)
+	}
+	stop := func() {
+		spec, _ := apps.ReadSpec(dir)
+		f.mu.Lock()
+		f.active[spec.Unit] = false
+		f.mu.Unlock()
+	}
+	for n := 1; n <= 2; n++ {
+		stop()
+		st := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpTaskStatus, Task: id, LogStart: -1})
+		if !st.OK || st.TaskStatus.Status != "running" {
+			t.Fatalf("resume %d: %+v", n, st.TaskStatus)
+		}
+		spec, _ := apps.ReadSpec(dir)
+		unit := fmt.Sprintf("whombat-app-%s-%d.service", hx, n)
+		argv := strings.Join(f.argv[len(f.argv)-1], " ")
+		if spec.Resumes != n || spec.Unit != unit || !strings.Contains(argv, "--unit="+unit) || !strings.Contains(argv, "app-task --dir "+dir) {
+			t.Fatalf("resume %d: spec %+v, argv %s", n, spec, argv)
+		}
+		if busy, _ := b.AppReport(); !busy["immich_server"] {
+			t.Fatalf("resume %d: not busy", n)
+		}
+	}
+	stop()
+	st := b.Manage(t.Context(), proto.ManageRequest{Op: proto.OpTaskStatus, Task: id, LogStart: -1})
+	ts := st.TaskStatus
+	if ts.Status != "error" || len(ts.Apps) != 2 || ts.Apps[0].Reason != proto.AppReasonBackFail || ts.Apps[1].Reason != proto.AppReasonInterrupted {
+		t.Fatalf("settled: %+v", ts)
+	}
+	if len(f.argv) != 3 {
+		t.Fatalf("units started: %d", len(f.argv))
+	}
+	waitFor(t, func() bool { busy, _ := b.AppReport(); return len(busy) == 0 })
 }

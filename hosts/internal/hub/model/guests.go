@@ -78,7 +78,9 @@ type Guest struct {
 
 // GuestApp is a Compose app's update state: its service, its version and the
 // newer image's when known, why it can't be updated, whether an update runs
-// now, and how the last one went.
+// now, and how the last one went. NewDigest (the newer image's registry
+// digest) and ConfigHash (Compose's hash of the service's settings) are
+// what an update sends back as `expect`, when the agent says them.
 type GuestApp struct {
 	Service    string   `json:"service"`
 	Version    *string  `json:"version"`
@@ -86,6 +88,8 @@ type GuestApp struct {
 	Blocked    *string  `json:"blocked"`
 	Updating   bool     `json:"updating"`
 	Last       *AppLast `json:"last"`
+	NewDigest  *string  `json:"new_digest,omitempty"`
+	ConfigHash *string  `json:"config_hash,omitempty"`
 }
 
 // AppLast is a Compose app's last update: updated, current (nothing newer),
@@ -110,7 +114,7 @@ func buildGuestApp(a *proto.GuestApp) *GuestApp {
 		return nil
 	}
 	out := &GuestApp{Service: a.Service, Version: optText(a.Version), NewVersion: optText(a.NewVersion),
-		Blocked: optText(a.Blocked), Updating: a.Updating}
+		Blocked: optText(a.Blocked), Updating: a.Updating, NewDigest: optText(a.NewDigest), ConfigHash: optText(a.ConfigHash)}
 	if l := a.Last; l != nil {
 		out.Last = &AppLast{Status: l.Status, Reason: optText(l.Reason), From: optText(l.From), To: optText(l.To), At: T(l.Finished)}
 	}

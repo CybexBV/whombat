@@ -20,7 +20,7 @@ import (
 // with a task "app:<16 hex>" the hub follows like a package task (GET
 // /tasks/{task}?platform=host). An admin's, confirmed.
 var appsManageRoutes = []manageRoute{
-	{method: "POST", path: "/apps/update", op: proto.OpAppUpdate, admin: true, body: []string{"apps", "hold_major", "confirm"}},
+	{method: "POST", path: "/apps/update", op: proto.OpAppUpdate, admin: true, body: []string{"apps", "hold_major", "expect", "confirm"}},
 }
 
 // appOps are the operations of appsManageRoutes.
@@ -49,6 +49,11 @@ func (h *Hub) appsManageHandler(rt manageRoute) handlerFunc {
 			return invalidFields(fe)
 		}
 		req.Apps = names
+		// What the person said yes to: the agent updates an app only while it
+		// still finds it so, and checks the values itself.
+		if req.AppExpect, fe = appExpect(names, req.AppExpect); len(fe) > 0 {
+			return invalidFields(fe)
+		}
 		gid := model.HostGuestID
 		if len(names) == 1 {
 			gid = model.GuestID(proto.PlatformDocker, names[0])
@@ -109,6 +114,27 @@ func appNames(in []string) ([]string, map[string]string) {
 		if !slices.Contains(out, name) {
 			out = append(out, name)
 		}
+	}
+	return out, nil
+}
+
+// appExpect names each expectation's app as a container, like the apps:
+// one per app the request names, at most.
+func appExpect(names []string, in []proto.AppExpect) ([]proto.AppExpect, map[string]string) {
+	seen := map[string]bool{}
+	out := make([]proto.AppExpect, 0, len(in))
+	for _, e := range in {
+		if platform, id, ok := model.SplitGuestID(e.App); ok && platform == proto.PlatformDocker {
+			e.App = id
+		}
+		if !slices.Contains(names, e.App) || seen[e.App] {
+			return nil, map[string]string{"expect": "Say once what was checked of each app the update names."}
+		}
+		seen[e.App] = true
+		out = append(out, e)
+	}
+	if len(out) == 0 {
+		return nil, nil
 	}
 	return out, nil
 }

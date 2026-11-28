@@ -547,16 +547,16 @@ func (d *dockerCollector) run(ctx context.Context) error {
 		if sz, ok := d.sizes[e.ID]; ok {
 			g.DiskUsedBytes = ptr(sz)
 		}
-		var newVersion string
+		var newer imageResult
 		if e.State == "running" {
 			cand := imageCand{Ref: e.Image, ImageID: e.ImageID}
 			running = append(running, cand)
 			if u, ok := updates[cand.key()]; ok {
 				g.UpdateAvailable = copyPtr(u.update)
-				newVersion = u.version
+				newer = u
 			}
 		}
-		g.App = composeApp(e.Labels, ex.image, e.Image, newVersion)
+		g.App = composeApp(e.Labels, ex.image, e.Image, newer)
 		if sr := stats[i]; sr.st != nil && sr.err == nil {
 			st := sr.st
 			at := st.Read
@@ -796,8 +796,10 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 // composeApp marks a container Whombat can update: one started by Docker
 // Compose, from an image it can pull again (not pinned to a digest).
 // Whether its project folder can be read is checked when it is updated:
-// the agent's sandbox hides home folders, the update runs outside it.
-func composeApp(labels map[string]string, configured, image, newVersion string) *proto.GuestApp {
+// the agent's sandbox hides home folders, the update runs outside it. The
+// newer image's digest and Compose's hash of the service's settings go with
+// it, so an update deploys exactly what was checked.
+func composeApp(labels map[string]string, configured, image string, newer imageResult) *proto.GuestApp {
 	p, ok := apps.ProjectOf(labels)
 	if !ok {
 		return nil
@@ -806,7 +808,11 @@ func composeApp(labels map[string]string, configured, image, newVersion string) 
 	if ref == "" {
 		ref = image
 	}
-	a := &proto.GuestApp{Service: p.Service, Version: apps.VersionOf(labels, ref), NewVersion: newVersion}
+	a := &proto.GuestApp{Service: p.Service, Version: apps.VersionOf(labels, ref), NewVersion: newer.version,
+		ConfigHash: apps.ConfigHashOf(labels)}
+	if apps.ValidDigest(newer.digest) {
+		a.NewDigest = newer.digest
+	}
 	if apps.Pinned(ref) {
 		a.Blocked = proto.AppReasonPinned
 	}

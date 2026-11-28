@@ -14,6 +14,11 @@ import (
 
 const appTestTask = "app:0123456789abcdef"
 
+var (
+	appImageID   = "sha256:" + strings.Repeat("a", 64)
+	appNewDigest = "sha256:" + strings.Repeat("b", 64)
+)
+
 // appAgent answers like an agent that updates apps.
 type appAgent struct {
 	mu  sync.Mutex
@@ -47,7 +52,8 @@ func TestAppsRoutes(t *testing.T) {
 	rep := fa.report("basalt")
 	rep.Docker = &proto.Platform{Guests: []proto.Guest{
 		{ID: "immich_server", Name: "immich_server", Kind: "container", State: proto.StateRunning, Project: "immich",
-			App: &proto.GuestApp{Service: "immich-server", Version: "2.3.0", NewVersion: "2.4.0",
+			ImageID: appImageID,
+			App: &proto.GuestApp{Service: "immich-server", Version: "2.3.0", NewVersion: "2.4.0", NewDigest: appNewDigest, ConfigHash: "c0ffee",
 				Last: &proto.AppLast{Status: proto.AppRolledBack, Reason: proto.AppReasonStopped, From: "2.2.1", To: "2.3.0", Finished: finished}}},
 		{ID: "pinned", Name: "pinned", Kind: "container", State: proto.StateRunning, Project: "web",
 			App: &proto.GuestApp{Service: "web", Blocked: proto.AppReasonPinned}},
@@ -77,6 +83,10 @@ func TestAppsRoutes(t *testing.T) {
 		app["updating"] != false || last["status"] != "rolled_back" || last["at"] != "2026-11-20T03:00:00Z" || last["to"] != "2.3.0" {
 		t.Errorf("app: %v", byID["docker:immich_server"]["app"])
 	}
+	// What an update sends back to say what was checked.
+	if app["new_digest"] != appNewDigest || app["config_hash"] != "c0ffee" {
+		t.Errorf("binding facts: %v", app)
+	}
 	if _, ok := byID["docker:lonely"]["app"]; ok {
 		t.Errorf("a container docker run started has no app: %v", byID["docker:lonely"])
 	}
@@ -98,6 +108,7 @@ func TestAppsRoutes(t *testing.T) {
 		{admin, map[string]any{"apps": []string{"docker:missing"}, "confirm": true}, 404, "guest_not_found"},
 		{admin, map[string]any{"apps": []string{"docker:lonely"}, "confirm": true}, 409, "not_compose"},
 		{admin, map[string]any{"apps": []string{"pinned"}, "confirm": true}, 409, "app_pinned"},
+		{admin, map[string]any{"apps": []string{"docker:immich_server"}, "expect": []map[string]any{{"app": "docker:other", "service": "web", "image_id": appImageID}}, "confirm": true}, 400, "invalid_value"},
 	} {
 		if p := c.who.problem(http.MethodPost, base+"/apps/update", c.body, c.status); p.Code != c.code {
 			t.Errorf("%v: %+v", c.body, p)
@@ -114,7 +125,10 @@ func TestAppsRoutes(t *testing.T) {
 	var res struct {
 		Task *proto.TaskRef `json:"task"`
 	}
-	admin.json(http.MethodPost, base+"/apps/update", map[string]any{"apps": []string{"docker:immich_server", "immich_server"}, "hold_major": true, "confirm": true}, 202, &res)
+	expect := []map[string]any{{"app": "docker:immich_server", "service": "immich-server", "image_id": appImageID,
+		"digest": appNewDigest, "config_hash": "c0ffee"}}
+	admin.json(http.MethodPost, base+"/apps/update", map[string]any{"apps": []string{"docker:immich_server", "immich_server"}, "hold_major": true,
+		"expect": expect, "confirm": true}, 202, &res)
 	if res.Task == nil || res.Task.ID != appTestTask {
 		t.Fatalf("update: %+v", res)
 	}
@@ -128,6 +142,10 @@ func TestAppsRoutes(t *testing.T) {
 	fa.mu.Unlock()
 	if strings.Join(req.Apps, ",") != "immich_server" || !req.HoldMajor || req.Platform != proto.PlatformHost {
 		t.Errorf("agent got %+v", req)
+	}
+	want := proto.AppExpect{App: "immich_server", Service: "immich-server", ImageID: appImageID, Digest: appNewDigest, ConfigHash: "c0ffee"}
+	if len(req.AppExpect) != 1 || req.AppExpect[0] != want {
+		t.Errorf("agent got expect %+v", req.AppExpect)
 	}
 	deadline := time.After(5 * time.Second)
 	var ev map[string]any
