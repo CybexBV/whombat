@@ -84,7 +84,7 @@ describe('BACKUP FILE', () => {
       within(restore)
         .getByRole('link', { name: /blackbox/ })
         .getAttribute('href'),
-    ).toBe('/connections?add=1&address=10.100.1.31');
+    ).toBe('/servers?add=1&address=10.100.1.31');
     await user.click(within(restore).getByRole('button', { name: 'Done' }));
     expect(within(restore).getByRole('button', { name: 'Choose a file' })).toBeTruthy();
   });
