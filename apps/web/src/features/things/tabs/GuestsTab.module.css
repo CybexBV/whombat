@@ -209,6 +209,19 @@ th[aria-sort="descending"] .sortBtn {
   font: 500 12.5px var(--font-sans);
 }
 
+.bad {
+  margin-top: 1px;
+  color: var(--bad);
+  font: 500 12.5px var(--font-sans);
+}
+
+.appsNote {
+  margin: 0;
+  padding: 0 20px 12px;
+  color: var(--mut);
+  font: 400 13px var(--font-sans);
+}
+
 .self.self {
   gap: 4px;
   padding: 1px 7px;

@@ -25,10 +25,11 @@ import { personalDmId } from '../domain/personal-dm';
 import { ApiError } from '../lib/errors';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
+import { addressIndex } from '../things/runs-on';
 import { HOSTS_API, seg } from './client';
 import { arr, obj, toHostGuest } from './map';
 import { HOSTS_TEXT, hostsFor, WHOMBAT_ACTOR } from './service';
-import { cardReasons } from './tools-apps';
+import { cardReasons, proxmoxGuestOf } from './tools-apps';
 
 /** Why the page's Update can't ask, in the person's words; null when it can. */
 export function appAskRefusal(guests: readonly HostGuest[], wanted: readonly string[]): string | null {
@@ -48,7 +49,7 @@ export function appAskRefusal(guests: readonly HostGuest[], wanted: readonly str
 /** Asks to update apps for the person; the approval's number, which the page opens. */
 export async function askAppUpdate(
   services: Services,
-  input: { burrowId: string; personId: string; serverId: string; apps: string[]; snapshot: boolean },
+  input: { burrowId: string; personId: string; serverId: string; apps: string[]; snapshot?: boolean },
 ): Promise<HostManageResult> {
   const { db } = services;
   const apps = [...new Set(input.apps)].slice(0, APP_UPDATE_MAX);
@@ -80,12 +81,18 @@ export async function askAppUpdate(
   if (refused) throw new ApiError('conflict', refused);
   const picked = guests.filter((g) => apps.includes(g.id));
   const reasons = cardReasons(picked);
+  // A snapshot first is offered whenever the server is a Proxmox guest Whombat watches, unless the page said no.
+  const snapshot =
+    input.snapshot ??
+    (await addressIndex(hostsFor(services))
+      .then((index) => proxmoxGuestOf(index, input.serverId) !== null)
+      .catch(() => false));
   const args = {
     server: input.serverId,
     apps: picked.map((g) => g.id),
     ask: true,
     ...(reasons.length ? { reasons } : {}),
-    ...(input.snapshot ? { snapshot: true } : {}),
+    ...(snapshot ? { snapshot: true } : {}),
   };
   const callId = newCallId();
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));

@@ -186,8 +186,10 @@ export const APP_TOOLS: Adapter = {
           if (g.labels?.['whombat.service']) continue;
           byServer.set(g.serverId, [...(byServer.get(g.serverId) ?? []), g]);
         }
+        const index = await addressIndex(s.hosts).catch(() => null);
         const servers = [...byServer.entries()].map(([serverId, list]) => {
           const hasApps = agentReportsApps(list);
+          const vm = index ? proxmoxGuestOf(index, serverId) : null;
           const apps = list.filter((g) => g.app).map((g) => appFacts(g, hasApps));
           const outdated = !hasApps && list.some((g) => g.project);
           return {
@@ -198,6 +200,8 @@ export const APP_TOOLS: Adapter = {
                   note: 'This server’s helper is older than app updates; it gets the newer one by itself.',
                 }
               : {}),
+            // The Proxmox guest this server is: app_update can take a snapshot of it first (snapshot: true).
+            ...(vm && hasApps ? { snapshotFirst: vm.name } : {}),
             apps,
             ...(list.some((g) => !g.app && !g.project)
               ? { notCompose: list.filter((g) => !g.app && !g.project).map((g) => g.id) }
@@ -206,7 +210,7 @@ export const APP_TOOLS: Adapter = {
         });
         return output({
           servers,
-          next: 'app_update updates them. A database or a new major version asks the person first (ask: true with its reasons). Containers docker run started can’t be updated: Whombat can update apps started with Docker Compose.',
+          next: 'app_update updates them. A database or a new major version asks the person first (ask: true with its reasons). Where snapshotFirst names a VM, offer a snapshot first (snapshot: true). Containers docker run started can’t be updated: Whombat can update apps started with Docker Compose.',
         });
       },
       server ? { server } : {},

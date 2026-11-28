@@ -3177,6 +3177,7 @@ export const HostAppUpdateParams = z.object({
     .array(z.string().regex(/^docker:[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/))
     .min(1)
     .max(APP_UPDATE_MAX),
+  /** A snapshot of the Proxmox guest the server is, first. Unsaid: whenever Whombat can take one. */
   snapshot: z.boolean().optional(),
 });
 export type HostAppUpdateParams = z.infer<typeof HostAppUpdateParams>;

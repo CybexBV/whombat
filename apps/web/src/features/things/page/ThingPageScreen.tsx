@@ -107,6 +107,7 @@ import { WhatHappened } from '../quiet/WhatHappened';
 import { useThingSearch } from '../search';
 import things from '../Things.module.css';
 import { THING_ICONS } from '../thingIcons';
+import { AppUpdateFact, runsInContainer } from './AppUpdateFact';
 import { LookCard } from './LookCard';
 import { RunsOnDialog } from './RunsOnDialog';
 import styles from './ThingPage.module.css';
@@ -591,6 +592,7 @@ function Head({
               </span>
             ) : null}
             {checked ? <Fact line={checked} /> : null}
+            {runsInContainer(page.runsOn) ? <AppUpdateFact burrow={burrow} runsOn={page.runsOn} /> : null}
           </>
         ) : null
       }

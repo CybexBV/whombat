@@ -1440,7 +1440,8 @@ export const hostsRoutes: RouteDef[] = [
         personId: g.person.id,
         serverId,
         apps: params.apps,
-        snapshot: params.snapshot === true,
+        // Unsaid: a snapshot first whenever the server is a Proxmox guest Whombat watches; the card says so.
+        ...(typeof params.snapshot === 'boolean' ? { snapshot: params.snapshot } : {}),
       });
     }
     const call = manageCall(serverId, req);

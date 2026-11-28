@@ -42,6 +42,38 @@
   outline-offset: 2px;
 }
 
+/* A Compose app's update in the fact line: amber while one waits, red when the last one didn't work. */
+.appNote {
+  color: var(--warn);
+}
+
+.appBad {
+  color: var(--bad);
+}
+
+.appUpdate {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+
+.appUpdate:hover {
+  color: var(--ink);
+}
+
+.appUpdate:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.appUpdate:disabled {
+  color: var(--mut);
+  cursor: default;
+}
+
 /* The tabs' counts: the mock's 6px after the label. */
 .tabs > button > span:last-child {
   margin-left: 2px;
