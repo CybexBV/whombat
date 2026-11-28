@@ -528,7 +528,7 @@ export function createMonitoringFixtures(opts: { now?: () => number; seeded: boo
             'Pi-hole’s settings changed: local DNS records (1 added)',
             20 * HOUR,
           ),
-          change('och_fx_pihole_1', 'version', 'Pi-hole went from 6.1.4 to 6.2.1', 9 * DAY),
+          change('och_fx_pihole_1', 'version', 'Pi-hole went from 6.0.6 to 6.1.4', 9 * DAY),
         ];
       default:
         return [];

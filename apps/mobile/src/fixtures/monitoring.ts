@@ -260,7 +260,7 @@ export function createMonitoringFixtures({ now, timeZone }: MonitoringFixtureOpt
     ],
     'connection:con_pihole': [
       ['settings', 'Pi-hole’s settings changed: local DNS records (1 added)', 1, '03:12', 'outside'],
-      ['version', 'Pi-hole went from 6.1.4 to 6.2.1', 8, '11:30', 'outside'],
+      ['version', 'Pi-hole went from 6.0.6 to 6.1.4', 8, '11:30', 'outside'],
     ],
   };
 
