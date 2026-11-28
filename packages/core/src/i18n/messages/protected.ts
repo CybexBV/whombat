@@ -47,8 +47,8 @@ export const PROTECTED_MESSAGES = splitPairs({
     { one: '{count} alleen op de eigen machine', other: '{count} alleen op de eigen machine' },
   ],
   'protected.count.none': [
-    { one: '{count} not backed up', other: '{count} not backed up' },
-    { one: '{count} zonder back-up', other: '{count} zonder back-up' },
+    { one: '{count} without a backup Whombat can see', other: '{count} without a backup Whombat can see' },
+    { one: '{count} zonder back-up die Whombat ziet', other: '{count} zonder back-up die Whombat ziet' },
   ],
 
   'protected.line.via': ['With {machine}', 'Met {machine}'],
