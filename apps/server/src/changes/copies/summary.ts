@@ -13,9 +13,12 @@ export type SettingsSummary = Record<string, string>;
 /** The most items a summary keeps. */
 const ITEMS_MAX = 5000;
 
-/** A field whose value is a secret: never hashed, never kept. */
+/**
+ * A field whose value is a secret: never hashed, never kept. Besides passwords, keys and tokens: SNMP communities, an
+ * LDAP server's bind password (`ldap_bindpw`), OpenVPN's static TLS key (`tls`) and an IPsec or OpenVPN shared key.
+ */
 export const SECRET_FIELD =
-  /password|passwd|passphrase|^pass$|pwhash|secret|token|totp|otp|apikey|api_key|privkey|private|^prv$|psk|bcrypt|authorizedkeys|sshkey|^(cert|crt|key|tlskey)$|[_-]key$/i;
+  /password|passwd|passphrase|^pass$|pwhash|bindpw|secret|token|totp|otp|apikey|api_key|privkey|private|^prv$|psk|sharedkey|community|bcrypt|authorizedkeys|sshkey|^(cert|crt|key|tls|tlskey)$|[_-]key$/i;
 
 /** A short hash of a value, the same for the same value whatever its keys' order. */
 export function itemHash(value: unknown): string {

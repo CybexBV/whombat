@@ -11,6 +11,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueDispatchToken } from '../auth/agent-tokens';
+import { DIRECT_SCHEMA, NewerAutomationsGate } from '../automations/release-gate';
 import {
   automations,
   burrows,
@@ -33,6 +34,7 @@ import { useTestServer } from '../test/harness';
 import { mcpClient } from '../test/mcp';
 import { addPersonalAgent } from '../test/personal';
 import { sessionFor } from '../test/tokens';
+import { careOfferFor } from './facts';
 import { careBurrow } from './watch';
 
 const fake = new FakeHostsService();
@@ -298,6 +300,36 @@ describe('older servers’ hints get the same plan', () => {
     const context = await buildDispatchContext(t.services, await dispatchRow(row?.dispatchId ?? ''));
     expect(context.look?.care?.new).toBe(false);
     expect(context.look?.care?.steps.some((s) => s.id === 'backup')).toBe(true);
+  });
+
+  it('leaves out restore tests while the release the box would go back to doesn’t know them', async () => {
+    const opened = t.services.newerAutomations;
+    const closed = new NewerAutomationsGate(
+      { NODE_ENV: 'production', WHOMBAT_RELEASE_ID: 'rel-now' },
+      async () => true,
+      async () => DIRECT_SCHEMA,
+    );
+    closed.follow(() => ({
+      state: 'Healthy',
+      current: 'rel-now',
+      candidate: null,
+      lastCheckedAt: null,
+      deferredReason: null,
+      failure: null,
+      lastUpdate: { release: 'rel-now', from: 'rel-before', at: new Date().toISOString() },
+    }));
+    hostsFor(t.services).forget();
+    expect((await careOfferFor(t.services, TEST_BURROW_ID, 'shale'))?.steps.map((s) => s.care)).toContain(
+      'restore_test',
+    );
+    t.services.newerAutomations = closed;
+    try {
+      const steps = (await careOfferFor(t.services, TEST_BURROW_ID, 'shale'))?.steps ?? [];
+      expect(steps.map((s) => s.care)).toContain('backup');
+      expect(steps.some((s) => s.care === 'restore_test' || s.restoreTests)).toBe(false);
+    } finally {
+      t.services.newerAutomations = opened;
+    }
   });
 });
 

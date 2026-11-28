@@ -87,7 +87,8 @@ export async function trackServer(
 /** One pass over the online servers; returns how many changes are new. Changes older than 90 days go too. */
 export async function changesServerPass(services: Services): Promise<number> {
   const now = services.clock();
-  await pruneChanges(services.db, now);
+  // Every write goes through the pipeline: this one has no burrow or person, like the incidents' prune.
+  await services.pipeline.transactAccount((tx) => pruneChanges(tx, now));
   const hosts = hostsFor(services);
   if (!hosts.present) return 0;
   const burrow = await hosts.homeBurrow();

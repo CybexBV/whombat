@@ -299,6 +299,22 @@ describe('a care plan per kind of server (care-plan.md)', () => {
     expect(nowhere.map((s) => s.id)).toEqual([]);
   });
 
+  it('offers app updates and restore tests only when the release it would go back to knows them', () => {
+    const proxmox = {
+      server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox' as const, self: false },
+      guests: pve(2, [{ id: 'docker:immich_server', name: 'immich', platform: 'docker', project: 'immich' }]),
+      backupStorages: [{ id: 'pbs-01', type: 'pbs' }],
+    };
+    const now = careSteps(facts(proxmox), W);
+    expect(now.map((s) => s.id)).toEqual(['backup', 'restore_test', 'updates', 'apps']);
+    expect(now.find((s) => s.id === 'apps')?.automation).toBe('apps');
+    const older = careSteps(facts({ ...proxmox, olderRelease: true }), W);
+    // That release knows the plain `apps` step (telling the person), never its automation or a restore test.
+    expect(older.map((s) => s.id)).toEqual(['backup', 'updates', 'apps']);
+    expect(older.find((s) => s.id === 'apps')?.automation).toBeUndefined();
+    expect(older.some((s) => s.restoreTests)).toBe(false);
+  });
+
   it('knows the lines it answers, its own key, and says it in a push', () => {
     expect(isCareCheck('host.hint.guest.no_backup_job')).toBe(true);
     expect(isCareCheck('host.hint.incus.no_snapshots')).toBe(true);

@@ -13,9 +13,10 @@ import { npmReader } from '../things/kinds/infra/nginx-proxy-manager';
 import { opnsenseReader } from '../things/kinds/infra/opnsense';
 import { optional, serviceUrl } from '../things/kinds/infra/shared';
 import { cachedRead, getJson, latestRead } from '../things/kinds/read';
-import { str } from '../things/words';
+import { list, rec, str } from '../things/words';
 import {
   type Blind,
+  DNAT_RULES_MAX,
   funnelAllowed,
   npmOpenings,
   opnsenseUpnp,
@@ -143,6 +144,29 @@ async function cloudflare(
   return { openings, complete, blind };
 }
 
+/** OPNsense's rules per page of its search. */
+export const DNAT_PAGE = 500;
+
+/**
+ * Every destination NAT rule, a page at a time (`current` 1, 2, …) until its `total` is read, or, from an answer
+ * without one, until a page isn't full; `partial` when there were more than one read takes (`DNAT_RULES_MAX`).
+ */
+export async function dnatRules(
+  page: (n: number) => Promise<unknown>,
+): Promise<{ rows: unknown[]; partial: boolean }> {
+  const rows: unknown[] = [];
+  for (let n = 1; n <= DNAT_RULES_MAX / DNAT_PAGE; n++) {
+    const body = rec(await page(n));
+    const got = list(body.rows);
+    rows.push(...got);
+    const total = Number(body.total);
+    const more = Number.isFinite(total) && total > 0 ? rows.length < total : got.length >= DNAT_PAGE;
+    if (!got.length) return { rows, partial: more };
+    if (!more) return { rows, partial: false };
+  }
+  return { rows, partial: true };
+}
+
 async function opnsense(
   services: Services,
   row: CatalogConnectionRow,
@@ -154,23 +178,26 @@ async function opnsense(
       services,
       row,
       `exposure-opnsense:${row.id}`,
-      async () =>
-        parseDnat(
-          await getJson(services, row, 'OPNsense', '/api/firewall/d_nat/search_rule', {
-            current: '1',
-            rowCount: '500',
+      async () => {
+        const read = await dnatRules((n) =>
+          getJson(services, row, 'OPNsense', '/api/firewall/d_nat/search_rule', {
+            current: String(n),
+            rowCount: String(DNAT_PAGE),
           }),
-        ),
+        );
+        return { ...parseDnat({ rows: read.rows }), partial: read.partial };
+      },
       mode,
     ),
     optional(opnsenseReader.cached(services, row, now)),
   ]);
   const upnp = opnsenseUpnp(snapshot?.services ?? null);
-  return {
-    openings: forwards,
-    complete: true,
-    blind: upnp === true ? [{ code: 'upnp_on' }] : upnp === null ? [{ code: 'upnp_unknown' }] : [],
-  };
+  const blind: Blind[] = [...forwards.blind];
+  // More rules than one read takes: what it found is listed, and the place never reads as complete.
+  if (forwards.partial) blind.push({ code: 'forwards_partial' });
+  if (upnp === true) blind.push({ code: 'upnp_on' });
+  else if (upnp === null) blind.push({ code: 'upnp_unknown' });
+  return { openings: forwards.openings, complete: !forwards.partial, blind };
 }
 
 /** The console's older API, beside the official one (`/proxy/network/api/…`). */

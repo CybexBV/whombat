@@ -1,6 +1,7 @@
 /**
  * What Whombat has seen open per connection (docs/decisions/internet-exposure.md): the first full read is the silent
- * first list, every opening after it is new until the person says it's meant or it closes. An opening that closed and
+ * first list, every opening after it is new for two weeks (`NEW_FOR_MS`), until the person says it's meant or until it
+ * closes. An opening that closed and
  * opens again within 30 days isn't new: switching a host off and on again says nothing. Only fingerprints and times are
  * kept (`exposure_openings`).
  */

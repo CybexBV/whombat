@@ -10,8 +10,11 @@ import { ts } from './common';
 import { catalogConnections } from './connections-catalog';
 import { burrows } from './tenancy';
 
-/** Why a step failed, beside its answer code: no answer in time, an answer Whombat couldn't read, nothing there. */
-export type ServiceTestReason = 'status' | 'timeout' | 'unreadable' | 'missing' | 'stale';
+/**
+ * Why a step failed, beside its answer code: no answer in time, an answer Whombat couldn't read, nothing there, or a
+ * web page where the service's data should be (`page`: a sign-in page in front of it, or a wrong address).
+ */
+export type ServiceTestReason = 'status' | 'timeout' | 'unreadable' | 'missing' | 'stale' | 'page';
 
 /** What a run's words say besides its outcome. */
 export interface ServiceTestFacts {

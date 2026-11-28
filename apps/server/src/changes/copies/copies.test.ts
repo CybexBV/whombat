@@ -145,6 +145,24 @@ describe('cleaning', () => {
       nested: { ok: true },
     });
   });
+
+  it('drops SNMP communities, LDAP bind passwords, TLS and shared keys', () => {
+    for (const field of [
+      'community',
+      'rocommunity',
+      'ldap_bindpw',
+      'bindpw',
+      'tls',
+      'sharedkey',
+      'shared_key',
+    ])
+      expect(cleaned({ [field]: 'secret-value', name: 'x' }), field).toEqual({ name: 'x' });
+    // Their neighbours that aren't secrets stay.
+    expect(cleaned({ tls_type: 'auth', syslocation: 'attic' })).toEqual({
+      tls_type: 'auth',
+      syslocation: 'attic',
+    });
+  });
 });
 
 describe('when a copy is due', () => {

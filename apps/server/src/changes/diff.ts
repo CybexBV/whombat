@@ -184,8 +184,9 @@ export function nextServerState(before: ServerState | null, read: ServerRead): S
 
 /**
  * A server's changes: a restart (its boot time moved, with the kernel it came back with when that changed), a new
- * kernel without one, its system's own version, and waiting updates that went (installed: by whom is decided by what
- * Whombat did there). Updates that appear are news, not a change of the server.
+ * kernel without one, its system's own version, and waiting updates that were installed: the count fell to zero (by
+ * whom is decided by what Whombat did there). Updates that appear are news, not a change of the server, and a count
+ * that only fell is too: a refreshed package list can lower it without anything being installed.
  */
 export function diffServer(before: ServerState | null, after: ServerState): ChangeDraft[] {
   if (!before) return [];
@@ -205,7 +206,7 @@ export function diffServer(before: ServerState | null, after: ServerState): Chan
     out.push({ kind: 'system', subject: 'kernel', fact: { k: 'kernel', to: after.kernel as string } });
   if (before.os && after.os && before.os !== after.os)
     out.push({ kind: 'system', subject: 'os', fact: { k: 'os', from: before.os, to: after.os } });
-  if (before.updates !== undefined && after.updates !== undefined && after.updates < before.updates)
+  if (before.updates !== undefined && before.updates > 0 && after.updates === 0)
     out.push({
       kind: 'system',
       subject: 'packages',
@@ -280,7 +281,8 @@ export function diffContainers(before: ContainerState | null, after: ContainerSt
 
 /**
  * A change seen again soon after one of the same item (`MERGE_MS`): the two as one (from the first's start to the
- * second's end), `'gone'` when the second undid the first (2.3 → 2.4 → 2.3), or null when they don't merge.
+ * second's end), `'gone'` when the second undid the first (2.3 → 2.4 → 2.3), or null when they don't merge. A new image
+ * under the same tag (`app:latest` to `app:latest`) undoes nothing: two of them are one change.
  */
 export function mergeFacts(earlier: ChangeFact, later: ChangeFact): ChangeFact | 'gone' | null {
   if (earlier.k !== later.k) return null;
@@ -291,7 +293,9 @@ export function mergeFacts(earlier: ChangeFact, later: ChangeFact): ChangeFact |
     case 'firmware': {
       const e = earlier as typeof later;
       if (later.k === 'version' && (e as { name: string }).name !== later.name) return null;
-      return e.from === later.to ? 'gone' : ({ ...later, from: e.from } as ChangeFact);
+      return e.from === later.to && later.from !== later.to
+        ? 'gone'
+        : ({ ...later, from: e.from } as ChangeFact);
     }
     case 'route': {
       const e = earlier as typeof later;

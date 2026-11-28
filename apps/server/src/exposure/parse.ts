@@ -45,10 +45,13 @@ export interface SourceOpenings {
 
 /**
  * What a source couldn't show: its streams or a tunnel's settings unread, tunnels set up on their own server, Access
- * unreadable, UPnP switched on (its openings can't be read), UPnP unknown, Funnel allowed (what it shares can't be read).
+ * unreadable, UPnP switched on (its openings can't be read), UPnP unknown, Funnel allowed (what it shares can't be read),
+ * more port forwards than one read takes, port forwards whose port or target is an alias Whombat can't read.
  */
 export type Blind =
   | { code: 'streams_unread' }
+  | { code: 'forwards_partial' }
+  | { code: 'forwards_unread'; count: number; names: string }
   | { code: 'tunnels_unread' }
   | { code: 'tunnel_local'; name: string }
   | { code: 'tunnel_config_unread'; name: string }
@@ -237,9 +240,50 @@ function field(r: Record<string, unknown>, ...names: string[]): unknown {
 
 const truthy = (v: unknown) => v === true || v === 1 || v === '1' || v === 'true';
 
-/** The first port of “32400”, “8000-8010”, “8000:8010”; null for an alias or none. */
+/** Ports a router names as the system's services list does (OPNsense keeps `http`, `https`, `ssh`…). */
+const PORT_NAMES: Readonly<Record<string, number>> = {
+  ftp: 21,
+  ssh: 22,
+  telnet: 23,
+  smtp: 25,
+  domain: 53,
+  dns: 53,
+  http: 80,
+  www: 80,
+  kerberos: 88,
+  pop3: 110,
+  ntp: 123,
+  imap: 143,
+  snmp: 161,
+  ldap: 389,
+  https: 443,
+  'microsoft-ds': 445,
+  smb: 445,
+  smtps: 465,
+  isakmp: 500,
+  submission: 587,
+  ldaps: 636,
+  imaps: 993,
+  pop3s: 995,
+  openvpn: 1194,
+  pptp: 1723,
+  mysql: 3306,
+  'ms-wbt-server': 3389,
+  rdp: 3389,
+  'ipsec-nat-t': 4500,
+  sip: 5060,
+  postgresql: 5432,
+  rfb: 5900,
+  vnc: 5900,
+  'http-alt': 8080,
+};
+
+/** The first port of “32400”, “8000-8010”, “8000:8010” or a named one (“https”); null for an alias or none. */
 export function firstPort(v: unknown): number | null {
-  const m = /^\s*(\d{1,5})/.exec(String(v ?? ''));
+  const text = String(v ?? '').trim();
+  const named = PORT_NAMES[text.toLowerCase()];
+  if (named !== undefined) return named;
+  const m = /^(\d{1,5})/.exec(text);
   const n = m ? Number(m[1]) : null;
   return n !== null && n > 0 && n < 65_536 ? n : null;
 }
@@ -250,14 +294,25 @@ function fromAnywhere(v: unknown): boolean {
   return s === 'any' || s === '' || s === '0.0.0.0/0' || s === '::/0';
 }
 
+/** The most rules one read of OPNsense's destination NAT takes (its pages together). */
+export const DNAT_RULES_MAX = 5000;
+
+/** OPNsense's port forwards: those it could read, and what it couldn't. */
+export interface DnatRead {
+  openings: RawOpening[];
+  blind: Blind[];
+}
+
 /**
  * `/api/firewall/d_nat/search_rule` (OPNsense 25.7 and later): the port forwards on a WAN interface that are switched
  * on and redirect (`nordr` is “don't redirect”). A rule on another interface (a DNS redirect on the LAN) opens nothing
- * to the internet.
+ * to the internet. A WAN forward whose port or target is an alias Whombat can't read isn't dropped silently: it is a
+ * blind spot of the place, by its description.
  */
-export function parseDnat(body: unknown): RawOpening[] {
-  return list(rec(body).rows)
-    .slice(0, 500)
+export function parseDnat(body: unknown): DnatRead {
+  const unread: string[] = [];
+  const openings = list(rec(body).rows)
+    .slice(0, DNAT_RULES_MAX)
     .map((raw): RawOpening | null => {
       const r = rec(raw);
       if (truthy(field(r, 'disabled')) || truthy(field(r, 'nordr'))) return null;
@@ -266,7 +321,10 @@ export function parseDnat(body: unknown): RawOpening[] {
       const dst = field(r, 'destination.port', 'destination_port', 'dstport');
       const port = firstPort(dst);
       const targetHost = str(field(r, 'target'));
-      if (port === null || !targetHost) return null;
+      if (port === null || !targetHost) {
+        unread.push(clip(str(field(r, 'descr', 'description')) ?? String(dst ?? targetHost ?? '?'), 40));
+        return null;
+      }
       const local = firstPort(field(r, 'local-port', 'local_port', 'localport')) ?? port;
       const proto = (str(field(r, 'protocol')) ?? 'TCP').toUpperCase();
       const source = field(r, 'source.network', 'source_net', 'source.address');
@@ -289,6 +347,10 @@ export function parseDnat(body: unknown): RawOpening[] {
       };
     })
     .filter((o): o is RawOpening => o !== null);
+  const blind: Blind[] = unread.length
+    ? [{ code: 'forwards_unread', count: unread.length, names: clip(unread.slice(0, 3).join(', '), 120) }]
+    : [];
+  return { openings, blind };
 }
 
 /** Whether OPNsense's UPnP service runs (`miniupnpd` in its services); null when its services weren't read. */

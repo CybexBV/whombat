@@ -176,8 +176,8 @@ export async function changesSince(
     .limit(limit);
 }
 
-/** Changes older than 90 days go; returns how many. */
-export async function pruneChanges(db: Db, now: Date): Promise<number> {
+/** Changes older than 90 days go; returns how many. Run inside the pipeline's transaction (`transactAccount`). */
+export async function pruneChanges(db: Db | Tx, now: Date): Promise<number> {
   const gone = await db
     .delete(thingChanges)
     .where(lt(thingChanges.seenAt, new Date(now.getTime() - CHANGES_KEEP_DAYS * DAY)))

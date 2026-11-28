@@ -16,6 +16,7 @@ import {
   buildOpening,
   type Links,
   linkOf,
+  NEW_FOR_MS,
   NO_LINKS,
   type OpeningCtx,
   openingId,
@@ -37,7 +38,7 @@ import {
   unifiSiteName,
   unifiUpnp,
 } from './parse';
-import { unifiLegacyBase } from './read';
+import { DNAT_PAGE, dnatRules, unifiLegacyBase } from './read';
 import { sourceOf, summaryOf } from './view';
 
 const NOW = new Date('2026-11-28T10:00:00Z');
@@ -198,13 +199,55 @@ describe('routers', () => {
         },
       ],
     });
-    expect(rows.map((o) => [o.address, o.target, o.guard, o.label])).toEqual([
+    expect(rows.openings.map((o) => [o.address, o.target, o.guard, o.label])).toEqual([
       ['32400', '10.100.0.40:32400', 'none', 'Plex'],
       ['3389', '10.100.0.50:3389', 'some_addresses', undefined],
     ]);
+    expect(rows.blind).toEqual([]);
     expect(opnsenseUpnp([{ id: 'miniupnpd', running: true }])).toBe(true);
     expect(opnsenseUpnp([{ id: 'unbound', running: true }])).toBe(false);
     expect(opnsenseUpnp(null)).toBeNull();
+  });
+
+  it('reads OPNsense’s named ports, and says which WAN forwards it can’t read instead of dropping them', () => {
+    const read = parseDnat({
+      rows: [
+        { interface: 'wan', protocol: 'TCP', 'destination.port': 'https', target: '10.100.0.2' },
+        {
+          interface: 'wan',
+          protocol: 'TCP',
+          'destination.port': 'http',
+          target: '10.100.0.2',
+          'local-port': 'http-alt',
+        },
+        { interface: 'wan', 'destination.port': 'GamePorts', target: '10.100.0.9', descr: 'Games' },
+        { interface: 'lan', 'destination.port': 'LanAlias', target: '10.100.0.9' },
+      ],
+    });
+    expect(read.openings.map((o) => [o.port, o.targetPort])).toEqual([
+      [443, 443],
+      [80, 8080],
+    ]);
+    expect(read.blind).toEqual([{ code: 'forwards_unread', count: 1, names: 'Games' }]);
+  });
+
+  it('reads every page of OPNsense’s rules, and marks a read that couldn’t take them all as partial', async () => {
+    const rule = { interface: 'wan', 'destination.port': '443', target: '10.100.0.2' };
+    const pages = (total: number) => async (n: number) => ({
+      total,
+      rows: Array.from({ length: Math.max(0, Math.min(DNAT_PAGE, total - (n - 1) * DNAT_PAGE)) }, () => rule),
+    });
+    const two = await dnatRules(pages(DNAT_PAGE + 3));
+    expect([two.rows.length, two.partial]).toEqual([DNAT_PAGE + 3, false]);
+    const huge = await dnatRules(pages(20_000));
+    expect(huge.partial).toBe(true);
+    // An answer without a total: a page that isn't full is the last.
+    const asked: number[] = [];
+    const untold = await dnatRules(async (n) => {
+      asked.push(n);
+      return { rows: n === 1 ? Array.from({ length: DNAT_PAGE }, () => rule) : [rule] };
+    });
+    expect([untold.rows.length, untold.partial, asked]).toEqual([DNAT_PAGE + 1, false, [1, 2]]);
   });
 
   it('reads UniFi’s port forwards, its UPnP switch and its site', () => {
@@ -345,6 +388,16 @@ describe('an opening in words', () => {
     expect(buildOpening(raw(), ctx({ kept: kept(false), meant: new Set([`open:${id}`]) })).isNew).toBe(false);
   });
 
+  it('is new for two weeks after it opened, then known', () => {
+    const id = openingId('con_npm', raw());
+    const seen = (ago: number) =>
+      new Map([[id, { firstSeen: new Date(NOW.getTime() - ago), baseline: false }]]);
+    expect(buildOpening(raw(), ctx({ kept: seen(NEW_FOR_MS - 60_000) })).isNew).toBe(true);
+    expect(buildOpening(raw(), ctx({ kept: seen(NEW_FOR_MS) })).isNew).toBe(false);
+    expect(newOpeningNotices('con_npm', [raw()], seen(NEW_FOR_MS - 60_000), NO_LINKS, NOW)).toHaveLength(1);
+    expect(newOpeningNotices('con_npm', [raw()], seen(NEW_FOR_MS + 1), NO_LINKS, NOW)).toEqual([]);
+  });
+
   it('puts what is worth a look and new first, and sums up', () => {
     const a = buildOpening(raw({ address: 'a.example.com' }), ctx());
     const b = buildOpening(raw({ address: 'b.example.com', https: 'no' }), ctx());
@@ -366,6 +419,34 @@ describe('the places Whombat looked', () => {
     );
     expect(upnp.state).toBe('partly');
     expect(upnp.words).toMatch(/^2 openings\. UPnP/);
+    // A read that missed part of a place never says nothing is open there.
+    const opn = { id: 'con_o', label: 'OPNsense', catalogId: 'opnsense' };
+    const partial = sourceOf(
+      opn,
+      { ok: true, value: { openings: [], complete: false, blind: [{ code: 'forwards_partial' }] } },
+      0,
+      'en-GB',
+    );
+    expect(partial.state).toBe('partly');
+    expect(partial.words).not.toMatch(/^Nothing open\./);
+    expect(
+      sourceOf(opn, { ok: true, value: { openings: [], complete: true, blind: [] } }, 0, 'en-GB').words,
+    ).toBe('Nothing open');
+    const alias = sourceOf(
+      opn,
+      {
+        ok: true,
+        value: {
+          openings: [],
+          complete: true,
+          blind: [{ code: 'forwards_unread', count: 2, names: 'Games, VPN' }],
+        },
+      },
+      0,
+      'nl-NL',
+    );
+    expect(alias.words).toContain('Games, VPN');
+    expect(alias.words).toContain('alias');
     const ts = { id: 'con_t', label: 'Tailscale', catalogId: 'tailscale' };
     expect(
       sourceOf(ts, { ok: true, value: { openings: [], complete: true, blind: [] } }, 0, 'en-GB'),
@@ -485,10 +566,10 @@ describe('Something new is open to the internet', () => {
     const a = raw({ address: 'a.example.com' });
     const b = raw({ address: 'b.example.com' });
     const kept = new Map([
-      [openingId('con_npm', a), { baseline: true }],
-      [openingId('con_npm', b), { baseline: false }],
+      [openingId('con_npm', a), { firstSeen: NOW, baseline: true }],
+      [openingId('con_npm', b), { firstSeen: NOW, baseline: false }],
     ]);
-    expect(newOpeningNotices('con_npm', [a, b, b], kept, NO_LINKS).map((n) => n.subject?.name)).toEqual([
+    expect(newOpeningNotices('con_npm', [a, b, b], kept, NO_LINKS, NOW).map((n) => n.subject?.name)).toEqual([
       'b.example.com',
     ]);
   });

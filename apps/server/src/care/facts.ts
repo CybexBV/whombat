@@ -91,6 +91,8 @@ export async function careFactsOf(services: Services, burrowId: string, row: Hos
     backupStorages: backupStoragesOf(raw),
     has: Object.fromEntries(Object.keys(has).map((k) => [k, true])),
     nasShare: row.platform === 'proxmox' ? await nasShareFor(services, burrowId, row.id) : null,
+    // A plan is stored as offered: the release before app updates and restore tests can't read those steps.
+    ...((await services.newerAutomations.careStepsReady()) ? {} : { olderRelease: true }),
   };
 }
 

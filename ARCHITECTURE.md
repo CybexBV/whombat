@@ -1629,7 +1629,9 @@ Setup and operation: `docs/github.md`.
   — an Unraid server through Whombat's helper, else a TrueNAS through its API — added as storage first with
   `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups, weekly system updates in the quiet hours and,
   on a server with Docker Compose apps, their updates on Sunday night, never a
-  temporary machine. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
+  temporary machine. The app updates and a Proxmox server's weekly restore tests are offered only while the release the
+  box would go back to after a failed update knows them (`NewerAutomationsGate.careStepsReady`, the facts'
+  `olderRelease`), so no stored plan reaches a release that misreads it. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
   that proposes the ones that fit; the plan is a look's `look_plan` card (research key `care:server:<id>`), and Go
   ahead turns on the automations Whombat writes for it before the `look_fix` turn takes the rest. The server this
   Whombat runs on gets its plan once and keeps asking for its updates; a Whombat from before writes its servers down as
@@ -1768,13 +1770,13 @@ Setup and operation: `docs/github.md`.
 - **Open to the internet** (`apps/server/src/exposure/`, [internet-exposure.md](docs/decisions/internet-exposure.md)):
   `read.ts` reads each place's openings with the connection's own sign-in (Nginx Proxy Manager's proxy hosts and
   streams through its page's reader; Cloudflare's tunnel settings and Access applications; OPNsense's destination NAT
-  rules and its UPnP service; UniFi's port forwards and UPnP switch through the console's older API; Tailscale's policy
+  rules page by page and its UPnP service; UniFi's port forwards and UPnP switch through the console's older API; Tailscale's policy
   for Funnel), kept 10 minutes, and `parse.ts` turns them into openings and blind spots. `things.exposure` (`view.ts`)
   words every opening in the owner's language with what it leads to (a connection on that address and port, else a
   server or guest by its address, `lines.ts` `buildLinks`), how it is guarded and at most one certain highlight
   (`openings.ts`), and lists the places and what they couldn't see. The health pass (`home/health.ts`) reads each
   source connection, keeps fingerprints in `exposure_openings` (`baseline.ts`: the first complete read is the silent
-  first list, closed openings are forgotten after 30 days) and adds one `exposure.new` line per new opening to the
+  first list, an opening after it is new for 14 days, closed openings are forgotten after 30 days) and adds one `exposure.new` line per new opening to the
   connection's own; a read that fails leaves an Ignore of a gone line as it is. This is meant is Stop watching that one
   opening (`watch_offs` with subject `open:<id>`), which the page reads as meant. The assistant's `internet_exposure`
   (`agent.ts`) gives the same view. The web page is `/internet` in the Servers place, the phone's the `Internet` screen.
@@ -2056,8 +2058,10 @@ Setup and operation: `docs/github.md`.
   Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant each have one read-only test (`tests.ts`) that does what a
   person would through the connection's own sign-in (`signedConnectionFetch`): list files and read a file's first
   bytes, load the newest photo's preview, find the newest library item and read its first bytes, see a sensor's recent
-  reading. A step's failure is `access` (401, 403, a sign-in that can't be renewed), `broken` (another code, an
-  unreadable answer, nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
+  reading (aged by Home Assistant's own clock). A step's failure is `access` (401, 403, a sign-in that can't be
+  renewed), `broken` (another code, an unreadable answer — one without the service's JSON type and fields, a WebDAV
+  listing that isn't a `207 multistatus`, a file with no bytes —, a web page or redirect where its data should be,
+  nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
   (`service_test_runs`, 30 days). The page's card “Does it really work?” (`page.ts`) has Run now and Watch it, which
   go through `things.action` without a change (`actions.ts`). Watch it is the check `works.test` (starts off): the
   connection's health pass runs a watched test when due (every 15 minutes, a confirming run after a first failure, a
@@ -2067,9 +2071,9 @@ Setup and operation: `docs/github.md`.
   compares what it already reads. The connection health pass hands each kind's `KindSeen.tracked` (its version, its
   devices' firmware, its proxy hosts or tunnel routes) to `trackConnection`; a 10-minute home job
   (`home.changes-servers`) reads each online server's detail from the hosts service and compares its boot time, kernel,
-  system version, waiting updates and Docker containers' images (the agent's `image_id`, else the image reference;
+  system version, waiting updates installed (the count fell to zero) and Docker containers' images (the agent's `image_id`, else the image reference;
   Whombat's own containers left out). `change_baselines` keeps the last read per thing and source; a first read only
-  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job): more than 3 of a
+  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job through the pipeline): more than 3 of a
   kind in one read are one row, the same item again within 30 minutes merges and one that went back is deleted, and a
   `changes` row of Whombat's own about the thing or the server it runs on, from 2 hours before the read before, makes it
   `whombat`, else `outside`. Words are made when read, in the reader's language (`changes/words.ts`). Nothing alerts:

@@ -92,6 +92,10 @@ export const WORKS = splitPairs({
     '{name} opens, but none of its sensors changed in the last hour.',
     '{name} gaat open, maar geen van de sensoren is het afgelopen uur veranderd.',
   ],
+  'things.page.works.page': [
+    '{name} answered with a web page instead of its data when Whombat tried to {what}.',
+    '{name} gaf een webpagina in plaats van zijn gegevens toen Whombat probeerde {what}.',
+  ],
   'things.page.works.timeout': [
     '{name} opens, but it can’t {what} (it didn’t answer in time).',
     '{name} gaat open, maar het lukt niet om {what} (er kwam niet op tijd antwoord).',

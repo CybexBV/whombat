@@ -18,6 +18,8 @@ them once they have been tried on Beta.
   couldn’t see, like ports your router opens by itself.
 - When something new opens to the internet, Whombat tells you once and asks whether it’s meant. Press This is meant
   and it won’t point it out again.
+- A new opening counts as new for two weeks, and a service test that gets a sign-in page instead of the service says
+  so instead of passing.
 - Ask your agent “what can the internet reach?” and it answers from the same list.
 - Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
   page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back

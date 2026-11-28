@@ -55,6 +55,13 @@ export const THING_SCHEMA = '0027_incident_automation_watches';
  */
 export const DIRECT_SCHEMA = '0047_direct_automations';
 
+/**
+ * The first schema of a release that knows a care plan's weekly app updates and restore tests (`apps` with an
+ * automation, `restore_test`): the release before it can't read a plan that has them, and would turn an `apps` step into
+ * a weekly backup of the machines on *Go ahead*.
+ */
+export const CARE_STEPS_SCHEMA = '0048_restore_tests';
+
 type Json = unknown;
 
 const kindOf = (value: Json): unknown =>
@@ -199,6 +206,10 @@ export const schemaKnowsThings = (schema: string | null): boolean =>
 export const schemaKnowsDirect = (schema: string | null): boolean =>
   schema !== null && schema >= DIRECT_SCHEMA;
 
+/** Whether a recorded schema is `CARE_STEPS_SCHEMA` or later. */
+export const schemaKnowsCareSteps = (schema: string | null): boolean =>
+  schema !== null && schema >= CARE_STEPS_SCHEMA;
+
 /**
  * Whether this box may make, turn on and run automations the release before them can't run. Off in production until
  * the managed runtime follows the manager's update facts (`follow`) and they name a release that knows them.
@@ -213,6 +224,8 @@ export class NewerAutomationsGate {
   readonly #knowsThings = new Set<string>();
   /** Releases found there with a schema that runs automations that act without AI. */
   readonly #knowsDirect = new Set<string>();
+  /** Releases found there with a schema that knows a care plan's app updates and restore tests. */
+  readonly #knowsCareSteps = new Set<string>();
 
   constructor(
     private readonly config: Pick<Config, 'NODE_ENV' | 'WHOMBAT_RELEASE_ID'>,
@@ -261,6 +274,14 @@ export class NewerAutomationsGate {
    */
   async directReady(): Promise<boolean> {
     return this.#schemaReady(schemaKnowsDirect, this.#knowsDirect);
+  }
+
+  /**
+   * Whether a care plan may offer (and so store) its weekly app updates and restore tests: as `directReady`, with
+   * `CARE_STEPS_SCHEMA`. Until then the plan offers what the release before them knows.
+   */
+  async careStepsReady(): Promise<boolean> {
+    return this.#schemaReady(schemaKnowsCareSteps, this.#knowsCareSteps);
   }
 
   async #schemaReady(knows: (schema: string | null) => boolean, found: Set<string>): Promise<boolean> {
