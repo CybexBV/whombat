@@ -924,7 +924,8 @@ an app half updated is worse than a slow update. Per app, in order:
    a container of one of those services on another image is `changed`
    too; apps of the group named too are reported with it. A container
    recreated from a task's copy (step 3) names that copy as its file: its
-   project's own files are read from `<state_dir>/apps/projects/<project>.json`.
+   project's own files are read from `<state_dir>/apps/projects/<project>-<hash>.json`
+   (the hash of its folder; the note's name and folder must match).
 3. `docker compose --project-name … --project-directory … --file …
    --env-file … config --hash=<service>` for each service must equal its
    container's `config-hash` label (and `cfg_hash` when given): anything
@@ -933,12 +934,15 @@ an app half updated is worse than a slow update. Per app, in order:
    root only), its own `--hash` must give the same, and the project's files
    are noted; every `up` below runs from that copy with the same name,
    folder and env files.
-4. Tag the running image `<repo>:whombat-previous-<service>` and write
+4. When `compose up --help` doesn't list `--pull` (an older Compose), a
+   `pull_policy` in the written-down settings other than `missing`,
+   `if_not_present` or `never` is `failed` `compose_old`: nothing changed.
+   Tag the running image `<repo>:whombat-previous-<project>.<service>` and write
    `progress.json` (the services, the old image id, the reference, the
    tag) before anything moves.
-5. `docker pull -- <repo>@<digest>` (the `app_expect` digest; the
-   reference itself without one), 20 minutes at most. The same image id:
-   `current`.
+5. `docker pull -- <repo>@<digest>` (the `app_expect` digest of any app
+   of the group; different ones are `changed`; the reference itself without
+   one), 20 minutes at most. The same image id: `current`.
 6. With `HoldMajor`, a new major version (first numbers differ; calendar
    versions, a year first, have none) or a version not known on either
    side: the old image is tagged back (even past the deadline), nothing
@@ -946,7 +950,8 @@ an app half updated is worse than a slow update. Per app, in order:
 7. Tag the new image as the reference, then `docker compose … up --detach
    --no-deps --pull never --no-build --remove-orphans=false --scale
    <service>=<n> -- <services>` for the services that ran (without `--pull`
-   and `--remove-orphans=false` on an older Compose; `n` the containers
+   and `--remove-orphans=false` on an older Compose, only when the settings
+   ask for no pull: else, going back too, `ErrComposeOld`; `n` the containers
    each has), then watch their
    containers: running for 30 s, healthy when they have a health check (5
    minutes at most); exited, dead, two restarts since before the update or
@@ -955,7 +960,9 @@ an app half updated is worse than a slow update. Per app, in order:
 8. Works: the backup tag goes, `updated`. Fails: the old image id is
    tagged as the reference again and the same `up`s recreate them,
    watched the same way: `rolled_back`; when that fails too, `failed`
-   with reason `back_failed` and the backup tag stays for a person.
+   with reason `back_failed` and the backup tag stays for a person. An image
+   pulled that ends up running nowhere (held, put back, cut short) is
+   removed when no tag or container uses it.
 
 **When the server stops it part-way** (a restart, the unit killed): the
 broker finds the runner gone, no `result.json` and an update in
@@ -976,7 +983,7 @@ Commands run with `HOME=/root` (registry sign-ins `docker login` saved),
 log, `guest` when one app, and once it ended `apps: [{app, service,
 status: updated|current|held|rolled_back|failed, reason?, from?, to?,
 message?}]`. Reasons: `gone`, `no_compose`, `no_files`, `pinned`, `pull`,
-`no_cli`, `start`, `stopped`, `restarting`, `unhealthy`, `back_failed`,
+`no_cli`, `compose_old`, `start`, `stopped`, `restarting`, `unhealthy`, `back_failed`,
 `docker`, `timeout`, `changed`, `interrupted`.
 
 **The report**: `app.busy` while a task updates the container, `app.last`

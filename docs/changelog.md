@@ -30,6 +30,8 @@ them once they have been tried on Beta.
   changed after you said yes, Whombat leaves it alone and says so.
 - An app update also moves the stopped services that share the app’s image, and leaves them stopped. It never starts
   what you stopped or changes how many copies of a service run.
+- On a server whose Docker Compose is too old to start an app without downloading images itself, Whombat leaves the
+  app as it is and says the server needs a newer Docker Compose.
 - A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
 - Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
   container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says

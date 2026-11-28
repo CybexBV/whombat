@@ -1655,15 +1655,17 @@ Setup and operation: `docs/github.md`.
   (`HostGuest.app`: its service, its version and the newer image's, the newer image's digest, Compose's hash of the
   service's settings, `pinned`, whether an update runs, the last one) and runs an update as one host task
   (`app:<id>`): it checks the service, its image and that hash are what the yes was for (`expect`), tags the running
-  image `…:whombat-previous-<service>`, writes the project's settings down once (`config`, checked against that hash)
-  and the way back (`progress.json`), pulls exactly the checked digest, tags it as the service's image, recreates
-  from that copy the service and every one of the project that shares its image, keeping each one's number of
-  containers (`up --no-deps --pull never --no-build --scale`; a stopped one with `--no-start`, after the others), and
-  watches those that ran (healthy when they have a health check) for 30 seconds; when they don't come up it tags the
-  previous image back and recreates them the same way. The project's own files are noted
-  (`<state>/apps/projects/`), so the next update reads them, not the copy. A runner the server stopped part-way is
-  started again by the agent and, once Docker answers, finishes the update or goes back. The hub starts it
-  (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task (`HostTask.apps`).
+  image `…:whombat-previous-<project>.<service>`, writes the project's settings down once (`config`, checked against
+  that hash) and the way back (`progress.json`), pulls exactly the checked digest, tags it as the service's image,
+  recreates from that copy the service and every one of the project that shares its image, keeping each one's number
+  of containers (`up --no-deps --pull never --no-build --scale`; a stopped one with `--no-start`, after the others; an
+  older Compose without `--pull` only when the settings' `pull_policy` doesn't pull, else it refuses before anything
+  changes), and watches those that ran (healthy when they have a health check) for 30 seconds; when they don't come up
+  it tags the previous image back and recreates them the same way. The project's own files are noted
+  (`<state>/apps/projects/`, by name and folder), so the next update reads them, not the copy. A runner the server
+  stopped part-way is started again by the agent and, once Docker answers, finishes the update or goes back.
+  The hub starts it (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task
+  (`HostTask.apps`).
   Every update asks through the approval card: the assistant's `app_update` asks like a container update, and always
   for a database's, a new major version's or an unknown version's (`ask: true`, `serverAsksApply`), refusing them
   without a yes whose reasons cover them; `connection_call` writes what was checked, and the reasons the apps ask
