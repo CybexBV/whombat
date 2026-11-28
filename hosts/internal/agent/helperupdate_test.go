@@ -145,7 +145,7 @@ func TestHelperUpdateStream(t *testing.T) {
 		rt.Helper = fh
 	})
 	side := h.waitSide(t)
-	if r := recv(t, h.reports, "report"); !slices.Equal(r.Agent.Caps, []string{proto.CapHelperUpdate, proto.CapRestoreIsolate}) {
+	if r := recv(t, h.reports, "report"); !slices.Equal(r.Agent.Caps, []string{proto.CapHelperUpdate, proto.CapRestoreIsolate, proto.CapBackupConfig}) {
 		t.Fatalf("caps %v", r.Agent.Caps)
 	}
 	payload := append([]byte("PK helper zip "), make([]byte, 1200<<10)...)
@@ -224,7 +224,7 @@ func TestHelperUpdateNotAMac(t *testing.T) {
 	cfg := enrollAgent(t, h)
 	tr := startRuntime(t, cfg, nil)
 	side := h.waitSide(t)
-	if r := recv(t, h.reports, "report"); !slices.Equal(r.Agent.Caps, []string{proto.CapRestoreIsolate}) {
+	if r := recv(t, h.reports, "report"); !slices.Equal(r.Agent.Caps, []string{proto.CapRestoreIsolate, proto.CapBackupConfig}) {
 		t.Fatalf("caps without a helper: %v", r.Agent.Caps)
 	}
 	setTOML(t, tr.rt, map[string]string{"host_shell": "true"})

@@ -1385,6 +1385,7 @@ server whose kind is `libvirt`, else `incus`).
 | `GET …/guests/{guestId}/backups` | `backup.list` | operator | | | 200 `{items}` |
 | `POST …/guests/{guestId}/backups` | `backup.create` | operator | | `storage`, `mode`, `compress`, `notes`, `protected` | 202 |
 | `POST …/backups/restore` | `backup.restore` | admin | yes | `platform`, `volume`, `new_id` or `guest`, `storage`, `start`, `unique`, `isolate` (`{name, marker, tag}`: a new PVE guest cut off from the start, MANAGE.md 2.3; 409 `agent_outdated` from an agent without it), `confirm` | 202 |
+| `GET …/backups/config` | `backup.config` | operator | | `platform` (`pve` only; 501 `unsupported` otherwise), `volume`: the backup's own configuration, read without restoring it (MANAGE.md 2.3; 409 `agent_outdated` from an agent without it) | 200 |
 | `PATCH …/backups` | `backup.update` | operator | | `platform`, `volume`, `notes`, `protected` | 200 |
 | `DELETE …/backups` | `backup.delete` | admin | yes | `?platform=&volume=` | 200 / 202 |
 | `GET …/storage/{storage}/content` | `content.list` | operator | | `?platform=&content=` | 200 `{items}` |

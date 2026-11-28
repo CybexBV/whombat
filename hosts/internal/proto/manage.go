@@ -47,6 +47,11 @@ const (
 	OpBackupUpdate  = "backup.update"  // host: Volume, Notes, Protected
 	OpBackupDelete  = "backup.delete"  // host: Volume -> Task (or done)
 
+	// OpBackupConfig reads a Proxmox VE backup's own configuration (what a
+	// restore of it brings back: its disks and their sizes, its memory, its
+	// guest agent) without restoring it. Agents with CapBackupConfig.
+	OpBackupConfig = "backup.config" // host: Volume -> Config
+
 	OpContentList     = "content.list"     // host: Storage, Content (iso | vztmpl | import) -> Content
 	OpContentDownload = "content.download" // host: Storage, Content, URL, Filename, Checksum, ChecksumAlgorithm -> Task
 	OpContentDelete   = "content.delete"   // host: Volume -> Task (or done)

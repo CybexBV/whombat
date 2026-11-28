@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -377,6 +378,65 @@ func TestPVEBackupRestoreIsolated(t *testing.T) {
 	}
 	if ch := f.changes(); len(ch) != 0 {
 		t.Fatalf("refused restores sent: %v", ch)
+	}
+}
+
+// A backup's own settings come back without restoring it: its disks with
+// their sizes, its memory and guest agent, the parts of the server it uses;
+// not its snapshots or notes. Only a listed backup of this node is read.
+func TestPVEBackupConfig(t *testing.T) {
+	vol := "local:backup/vzdump-qemu-100-2026_10_16-01_00_02.vma.zst"
+	ctVol := "local:backup/vzdump-lxc-200-2026_10_16-01_10_00.tar.zst"
+	f := newFakePVE(t)
+	reads := 0
+	f.on("GET /nodes/pve1/vzdump/extractconfig", func(q url.Values) fakeResp {
+		reads++
+		if q.Get("volume") == ctVol {
+			return okResp("hostname: dns\nmemory: 512\nrootfs: local-zfs:subvol-200-disk-0,size=8G\nunprivileged: 1\n")
+		}
+		return okResp("#the real web server\nagent: 1\nhostpci0: 0000:01:00.0\nmemory: 16384\nname: web\n" +
+			"scsi0: local-zfs:vm-100-disk-0,size=32G\nscsi1: tank:vm-100-disk-1,size=2T\ncipassword: $5$secret\n" +
+			"\n[before-upgrade]\nscsi2: local-zfs:vm-100-disk-2,size=500G\n")
+	})
+	m := newTestManage(t, f)
+	r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: vol})
+	c := r.Config
+	if !r.OK || c == nil || c.Kind != "vm" || c.Values["memory"] != "16384" || c.Values["agent"] != "1" {
+		t.Fatalf("vm backup config: %+v", r)
+	}
+	if _, ok := c.Values["scsi2"]; ok || c.Values["cipassword"] != maskedSecret || c.Values["description"] != "" {
+		t.Errorf("values %v", c.Values)
+	}
+	var total uint64
+	for _, d := range c.Disks {
+		total += d.SizeBytes
+	}
+	if len(c.Disks) != 2 || total != 32<<30+2<<40 || !slices.Contains(c.Restricted, "hostpci0") {
+		t.Errorf("disks %+v restricted %v", c.Disks, c.Restricted)
+	}
+
+	r = manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: ctVol})
+	if !r.OK || r.Config == nil || r.Config.Kind != "container" || r.Config.Values["unprivileged"] != "1" ||
+		len(r.Config.Disks) != 1 || r.Config.Disks[0].SizeBytes != 8<<30 {
+		t.Fatalf("container backup config: %+v", r)
+	}
+
+	before := reads
+	for _, tc := range []struct {
+		vol  string
+		code string
+	}{
+		{"local:backup/vzdump-qemu-100-1999_01_01-00_00_00.vma", proto.CodeNotFound},
+		{"elsewhere:backup/vzdump-qemu-100.vma", proto.CodeNotAllowed},
+		{"local:iso/debian-13.0.0-amd64-netinst.iso", proto.CodeInvalidValue},
+		{"/var/lib/vz/dump/vzdump-qemu-100.vma", proto.CodeInvalidValue},
+	} {
+		if r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: tc.vol}); r.Code != tc.code {
+			t.Errorf("config of %s: %+v, want %s", tc.vol, r, tc.code)
+		}
+	}
+	if reads != before || len(f.changes()) != 0 {
+		t.Fatalf("refused reads went to Proxmox (%d) or changed something: %v", reads-before, f.changes())
 	}
 }
 
