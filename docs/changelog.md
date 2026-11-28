@@ -3,6 +3,12 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## Unreleased
+
+- Automations can act without AI, right on your Whombat, even when the internet is down: ask your assistant to shut
+  your servers down safely when the power goes out, restart a server or machine, or switch a light when Home Assistant
+  sees something change or your doorbell rings.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,

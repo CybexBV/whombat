@@ -178,6 +178,8 @@ How the split was made: `docs.md`.
 - `automation-chat.md` — automations made and changed by talking to the agent: plan cards, turning on, not now.
 - `automation-recipes.md` — recipes, GitHub issues, fixing bugs, Delete (*in part*).
 - `automation-list.md` — the Automations list at a glance.
+- `direct-automations.md` — automations that act without AI: the `run_action` step and its short list, Home Assistant
+  and UniFi Protect triggers, cooldowns, quiet windows, the UPS power cut and its ready-made automation.
 - `automation-run-review.md` — what run #9 taught us (*in part*).
 - `report-trackers.md` — customers' reports in a report tracker through automations, tracker drivers as plugins,
   and the bridge that moved the first tracker's automations and the database to the next migration chain.

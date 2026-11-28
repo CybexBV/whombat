@@ -843,7 +843,8 @@ published automation details read their definition and publisher from one versio
 
 - **Made by talking to the agent** (`automations/plans.ts`): in the person's Chat the agent proposes an automation, or a
   change to one, with `draft_automation` (a recipe or a definition; `automation_read` lists the person's automations, the
-  tracker connections and connected mailboxes a trigger can name, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
+  tracker connections, connected mailboxes, Home Assistant and Protect connections a trigger can name, the servers with
+  a UPS, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
   `automation_plan` card (`automation_plans`, one waiting per automation; a newer plan replaces it). The card's sections
   are written from the definition by core's `planSections`, and a change lists what differs from the live version.
   Turning a plan on publishes exactly its definition with the keys its steps need (`definitionGrants`); Not now sets it
@@ -943,6 +944,30 @@ published automation details read their definition and publisher from one versio
   a production runtime no update helper started (it names no release, and no manager rolls it back) have them on. A
   server that started before the box's release was recorded (offline at its first start) is restarted once it is, so it
   knows its release (`provisioning.nix`).
+- **Acting without AI** (`automations/direct-action.ts`, `steps/run-action.ts`, docs/decisions/direct-automations.md):
+  a `run_action` step does one action from core's short list (`directActionProblem`) through the person's own
+  connection with `executeConnectionCall`, as the burrow's assistant, from the box: a server's power through the
+  Servers connection (`server_power`, `guest_power`), Home Assistant through its `request` tool. The step checks its
+  plan (`planDirectAction`), asks on the approval card only when the person's own rules ask (`callTier` with the
+  plan's yes as the key; the approval guard renders the same proposal again before the yes runs), and is marked
+  `running` so `runExternal` calls outside any transaction: it reads first whether the thing is already so (a quiet
+  no-op), calls, and settles with one line (`directDoneLine`). After a crash it is done again, except a restart, which
+  is `uncertain`. A UPS power cut is a critical hub alert after 30 s (`hosts/internal/rules/health.go`), so the thing
+  trigger on `host.ups.on_battery` starts on it; such an automation with direct steps is claimed through a quiet window
+  (`claimIncidentTrigger`'s `safety`), and in any direct run `post_message` is skipped while the trigger's thing is kept
+  quiet and nothing ran yet. `automation_read` gives the UPS servers with core's `powerCutDefinition`.
+- **Smart home triggers** (`automations/home-triggers.ts`, `engine/home-waits.ts`): `SmartHomeTriggers` reads which
+  Home Assistant entities and states and which Protect events live automations name (`listenedHome`), keeps one
+  Home Assistant socket per such connection subscribed to those entity ids (`subscribe_entities`, `ha-socket.ts`) and
+  signs only changes into or out of a named state as `home.state_changed`; Protect's event stream
+  (`things/kinds/home/protect-events.ts`) hands it fresh sightings, signed once each as `protect.detected`. Both are
+  signed by the burrow's Smart home system principal (`home.noted`) and read by the trigger scan like any event. A
+  `home_state` trigger with `forMinutes` keeps a row in `automation_waits` (one per automation and entity) that any
+  later change of the entity ends; at its time the scan asks the socket for the state now and starts a run only when
+  it is still the trigger's (each minute for an hour while it can't tell). A cooldown (`cooldownOf`: the definition's
+  `limits.cooldownMinutes`, else 10 minutes for these triggers) makes a start within it start nothing. Until the
+  release a box would go back to knows `0044_direct_automations`, such automations aren't made or run and nothing is
+  followed (`directReady`); a session below minor 22 gets them as `older-apps.ts` says.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
