@@ -204,6 +204,13 @@
       "run": "scripts/ci/in-folder.sh hosts go vet -- {dirs}"
     },
     {
+      "name": "hosts-agent-windows",
+      "inFull": true,
+      "about": "The agent's Windows build (GOOS=windows, amd64 and arm64): its Windows-only files are checked nowhere else.",
+      "when": ["hosts/cmd/whombat-agent/**", "hosts/internal/agent/**", "hosts/internal/proto/**", "hosts/go.mod", "hosts/go.sum"],
+      "run": "cd hosts && make agent-windows-check GO=go"
+    },
+    {
       "name": "hosts-go-test",
       "inFull": true,
       "about": "The touched Go packages' tests of the hosts service; a changed test file outside a package (testdata) tests the package above it. The hub package itself runs on the build server: about a minute.",

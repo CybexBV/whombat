@@ -322,3 +322,66 @@ func TestExitCodes(t *testing.T) {
 		t.Fatalf("a wrong call exits %d", got)
 	}
 }
+
+// Windows builds join a manifest that signs none yet: the build is unsigned until the next signing, not broken.
+func TestWindowsNotSignedYet(t *testing.T) {
+	pk, priv, _ := ed25519.GenerateKey(nil)
+	dir, m := signedWith(t, pk, priv)
+	pub := base64.StdEncoding.EncodeToString(pk)
+	write(t, dir, prefix+"windows-amd64.exe", "agent for windows amd64")
+	write(t, dir, prefix+"windows-arm64.exe", "agent for windows arm64")
+	other, err := run(t, m, pub, m.Version, dir)
+	if err != nil || len(other) != 2 || !strings.Contains(other[0], "windows") {
+		t.Fatalf("other %v, err %v", other, err)
+	}
+
+	// Signed: a match.
+	for _, arch := range []string{"amd64", "arm64"} {
+		name := prefix + "windows-" + arch + ".exe"
+		b, _ := os.ReadFile(filepath.Join(dir, name))
+		sum := sha256.Sum256(b)
+		m.Files[name] = file{OS: "windows", Arch: arch, Size: int64(len(b)), SHA256: hex.EncodeToString(sum[:]),
+			Sig: base64.StdEncoding.EncodeToString(ed25519.Sign(priv, sum[:]))}
+	}
+	if other, err := run(t, m, pub, m.Version, dir); err != nil || len(other) != 0 {
+		t.Fatalf("signed: other %v, err %v", other, err)
+	}
+
+	// Once Windows is signed, a Windows build missing from the manifest is a problem again.
+	delete(m.Files, prefix+"windows-arm64.exe")
+	if _, err := run(t, m, pub, m.Version, dir); err == nil || !strings.Contains(err.Error(), "windows-arm64.exe is not in it") {
+		t.Fatalf("err %v", err)
+	}
+}
+
+func TestWindowsNames(t *testing.T) {
+	for name, want := range map[string][2]string{
+		prefix + "windows-amd64.exe": {"windows", "amd64"},
+		prefix + "windows-arm64.exe": {"windows", "arm64"},
+		prefix + "linux-arm64":       {"linux", "arm64"},
+	} {
+		if sys, arch, ok := osArch(name); !ok || sys != want[0] || arch != want[1] {
+			t.Errorf("%s: %s %s %v", name, sys, arch, ok)
+		}
+	}
+	for _, bad := range []string{prefix + "windows-amd64", prefix + "linux-amd64.exe", prefix + "windows-amd64.exe.new", prefix + "windows-.exe"} {
+		if _, _, ok := osArch(bad); ok {
+			t.Errorf("%s taken for an agent", bad)
+		}
+	}
+}
+
+// Agents of a new system follow a published manifest without them only under a later version.
+func TestAfterPublishedWithWindows(t *testing.T) {
+	pk, priv, _ := ed25519.GenerateKey(nil)
+	dir, m := signedWith(t, pk, priv)
+	pub := base64.StdEncoding.EncodeToString(pk)
+	write(t, dir, prefix+"windows-amd64.exe", "agent for windows amd64")
+	b, _ := json.Marshal(m)
+	if err := afterPublished(b, pub, m.Version, dir); err == nil {
+		t.Fatal("new agents under the published version")
+	}
+	if err := afterPublished(b, pub, "0.0.0-20261128120000.abcdef1", dir); err != nil {
+		t.Fatalf("a later version: %v", err)
+	}
+}

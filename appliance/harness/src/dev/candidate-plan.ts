@@ -580,12 +580,15 @@ export const PIN_CHECKS = ['runtime-pin', 'hosts-pin', 'hosts-agent-manifest'] a
 const AGENT_FILES = ['whombat-agent-linux-amd64', 'whombat-agent-linux-arm64'];
 /** What a pin with Macs (NX-515) signs besides: both macOS agents and Whombat Helper's zip. */
 const MAC_FILES = ['whombat-agent-darwin-amd64', 'whombat-agent-darwin-arm64', 'whombat-helper-macos.zip'];
+/** What a pin with Windows PCs (Whombat windows-servers.md) signs besides: both Windows agents. */
+const WINDOWS_FILES = ['whombat-agent-windows-amd64.exe', 'whombat-agent-windows-arm64.exe'];
 
 /**
  * What `dev/sign-agents` wrote to nix/packages/hosts/agent-manifest.json (rackoon-sign's manifest, NX-158): the agents'
  * version and the key's fingerprint, refused when it isn't for whombat-hosts `rev` (its version ends in the short rev,
  * nix/packages/hosts/default.nix) or doesn't sign both Linux agents (and both macOS agents when it signs one; the
- * helper's zip may be there too, NX-515). The build checks the sums and signatures.
+ * helper's zip may be there too, NX-515; both Windows agents when it signs one). The build checks the sums and
+ * signatures.
  */
 export function signedAgents(manifestJson: string, rev: string): { version: string; key: string } {
   const m = JSON.parse(manifestJson) as { version?: unknown; key?: unknown; files?: Record<string, unknown> };
@@ -598,10 +601,12 @@ export function signedAgents(manifestJson: string, rev: string): { version: stri
     throw new Error(`the agent manifest has no key fingerprint (${String(m.key)}): run dev/sign-agents`);
   const files = Object.keys(m.files ?? {}).sort();
   const macAgents = files.filter((f) => f.startsWith('whombat-agent-darwin-'));
+  const windowsAgents = files.filter((f) => f.startsWith('whombat-agent-windows-'));
   if (
     !AGENT_FILES.every((f) => files.includes(f)) ||
-    files.some((f) => !AGENT_FILES.includes(f) && !MAC_FILES.includes(f)) ||
-    (macAgents.length > 0 && macAgents.length !== 2)
+    files.some((f) => !AGENT_FILES.includes(f) && !MAC_FILES.includes(f) && !WINDOWS_FILES.includes(f)) ||
+    (macAgents.length > 0 && macAgents.length !== 2) ||
+    (windowsAgents.length > 0 && windowsAgents.length !== 2)
   )
     throw new Error(
       `the agent manifest signs ${files.join(', ') || 'nothing'}, not both agents: run dev/sign-agents`,

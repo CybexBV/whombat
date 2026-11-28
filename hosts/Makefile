@@ -8,7 +8,7 @@ PNPM    ?= mise exec -- pnpm
 LDFLAGS := -s -w -X main.version=$(VERSION)
 DIST    := dist
 
-.PHONY: visual visual-update all web agents agents-unsigned headless hub test test-go test-web lint lint-go ci clean dev-hub dev-web dev-fixtures deb deploy-dev
+.PHONY: visual visual-update all web agents agents-unsigned agent-windows-check headless hub test test-go test-web lint lint-go ci clean dev-hub dev-web dev-fixtures deb deploy-dev
 
 all: hub
 
@@ -16,14 +16,15 @@ all: hub
 web:
 	cd web && $(PNPM) install --frozen-lockfile && $(PNPM) build
 
-## agents: static agent binaries for Linux and macOS, amd64 and arm64, signed for self-update
+## agents: static agent binaries for Linux, macOS and Windows, amd64 and arm64, signed for self-update
 # The update key (cmd/rackoon-sign: $RACKOON_SIGNING_KEY or
 # ~/.config/rackoon/update-signing.key, created on first use, never in the
 # repository) is built into the agents; dist/agent/manifest.json carries
 # each binary's SHA-256 and signature.
-# AGENT_TARGETS are the agent builds: Linux and macOS (cgo-free), each for
-# amd64 and arm64.
-AGENT_TARGETS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64
+# AGENT_TARGETS are the agent builds: Linux, macOS and Windows (cgo-free),
+# each for amd64 and arm64. A Windows build's file ends in .exe.
+AGENT_TARGETS := linux-amd64 linux-arm64 darwin-amd64 darwin-arm64 windows-amd64 windows-arm64
+AGENT_FILES := $(foreach t,$(AGENT_TARGETS),whombat-agent-$(t)$(if $(filter windows-%,$(t)),.exe))
 
 agents:
 	mkdir -p $(DIST)/agent
@@ -32,10 +33,9 @@ agents:
 	for t in $(AGENT_TARGETS); do \
 		CGO_ENABLED=0 GOOS=$${t%-*} GOARCH=$${t#*-} $(GO) build -trimpath \
 			-ldflags "$(LDFLAGS) -X rackoon/internal/agent.UpdatePublicKey=$$KEY" \
-			-o $(DIST)/agent/whombat-agent-$$t ./cmd/whombat-agent; \
+			-o $(DIST)/agent/whombat-agent-$$t$$(case $$t in windows-*) echo .exe;; esac) ./cmd/whombat-agent; \
 	done
-	$(GO) run ./cmd/rackoon-sign manifest --version '$(VERSION)' --dir $(DIST)/agent \
-		$(addprefix whombat-agent-,$(AGENT_TARGETS))
+	$(GO) run ./cmd/rackoon-sign manifest --version '$(VERSION)' --dir $(DIST)/agent $(AGENT_FILES)
 
 ## agents-unsigned: the agent builds without an update key (self-update off),
 ## as the appliance's DEV image packages them
@@ -43,7 +43,7 @@ agents-unsigned:
 	mkdir -p $(DIST)/agent
 	for t in $(AGENT_TARGETS); do \
 		CGO_ENABLED=0 GOOS=$${t%-*} GOARCH=$${t#*-} $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
-			-o $(DIST)/agent/whombat-agent-$$t ./cmd/whombat-agent || exit 1; \
+			-o $(DIST)/agent/whombat-agent-$$t$$(case $$t in windows-*) echo .exe;; esac) ./cmd/whombat-agent || exit 1; \
 	done
 
 ## headless: the hub binary without the web UI (serve --headless, docs/WHOMBAT.md)
@@ -59,9 +59,16 @@ hub: web agents
 test: test-go test-web
 
 ## test-go: vet and the Go tests with the race detector (needs cgo: gcc)
-test-go:
+test-go: agent-windows-check
 	$(GO) vet ./...
 	CGO_ENABLED=1 $(GO) test -race ./...
+
+## agent-windows-check: the agent's Windows build vets and builds (its Windows-only files build nowhere else)
+agent-windows-check:
+	for a in amd64 arm64; do \
+		CGO_ENABLED=0 GOOS=windows GOARCH=$$a $(GO) vet ./cmd/whombat-agent ./internal/agent/winpc || exit 1; \
+		CGO_ENABLED=0 GOOS=windows GOARCH=$$a $(GO) build -o /dev/null ./cmd/whombat-agent || exit 1; \
+	done
 
 test-web:
 	cd web && $(PNPM) test

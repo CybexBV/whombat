@@ -800,6 +800,17 @@ describe('whombat-hosts with the candidate (--hosts, IN-314)', () => {
       ).toThrow(/not both agents/);
     });
 
+    it('takes both Windows agents beside them, never one alone', () => {
+      const windows = {
+        ...files,
+        'whombat-agent-windows-amd64.exe': {},
+        'whombat-agent-windows-arm64.exe': {},
+      };
+      expect(signedAgents(manifest({ files: windows }), H_NEW).key).toBe('40f47772ee26385e');
+      const { 'whombat-agent-windows-arm64.exe': _, ...oneWindows } = windows;
+      expect(() => signedAgents(manifest({ files: oneWindows }), H_NEW)).toThrow(/not both agents/);
+    });
+
     it('names the key in the IN row and the manifest check with the pins', () => {
       expect(candidateRow({ ...row, hosts: { ...hosts, agentKey: '40f47772ee26385e' } })).toContain(
         'key `40f47772ee26385e` (`dev/sign-agents`',
