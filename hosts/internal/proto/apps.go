@@ -45,7 +45,10 @@ const (
 	AppReasonRestarts  = "restarting" // it kept restarting
 	AppReasonUnhealthy = "unhealthy"  // its health check failed
 	AppReasonNoCLI     = "no_cli"     // neither `docker compose` nor docker-compose is there
-	AppReasonBackFail  = "back_failed"
+	// AppReasonComposeOld: this Compose can't be told not to pull, and the
+	// app's settings ask it to pull an image it has: nothing was changed.
+	AppReasonComposeOld = "compose_old"
+	AppReasonBackFail   = "back_failed"
 	// AppReasonChanged: the app isn't what the person said yes to any more
 	// (another image runs, its service or its Compose files changed, or
 	// another service shares its image): nothing was changed.

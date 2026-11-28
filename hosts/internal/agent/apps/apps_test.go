@@ -48,6 +48,12 @@ type fakeDocker struct {
 	upErrs    []error // one per `compose up`, in turn
 	onPull    func()
 	onUp      func()
+	// oldCompose: Compose from before `up --pull` (it refuses the flag);
+	// probeErr: asking it which flags it takes fails.
+	oldCompose bool
+	probeErr   error
+	// policies: service -> its pull_policy in the settings.
+	policies map[string]string
 }
 
 func composeLabels(service string) map[string]string {
@@ -71,9 +77,10 @@ func newFake() *fakeDocker {
 		},
 		conts: []*Container{{ID: "c1", Name: "immich_server", ImageID: "sha256:old", Ref: testRef,
 			Labels: composeLabels("immich-server"), Status: "running"}},
-		hashes:  map[string]string{},
-		written: map[string]string{},
-		down:    map[string]bool{},
+		hashes:   map[string]string{},
+		written:  map[string]string{},
+		down:     map[string]bool{},
+		policies: map[string]string{},
 	}
 }
 
@@ -181,7 +188,39 @@ func (f *fakeDocker) Untag(_ context.Context, ref string) error {
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, "untag "+ref)
 	delete(f.images, ref)
+	if strings.HasPrefix(ref, "sha256:") {
+		// By id: the image goes with the digests it was pulled by.
+		for k, id := range f.images {
+			if id == ref {
+				delete(f.images, k)
+			}
+		}
+	}
 	return nil
+}
+
+func (f *fakeDocker) UpPullNever(context.Context) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.calls = append(f.calls, "probe")
+	return !f.oldCompose, f.probeErr
+}
+
+// ImageUsed: a tag (not a pull's digest) names it, or a container runs it.
+func (f *fakeDocker) ImageUsed(_ context.Context, id string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for k, v := range f.images {
+		if v == id && !strings.Contains(k, "@") {
+			return true, nil
+		}
+	}
+	for _, c := range f.conts {
+		if c.ImageID == id {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (f *fakeDocker) ConfigHash(_ context.Context, p Project, service string) (string, error) {
@@ -229,6 +268,9 @@ func (f *fakeDocker) Config(_ context.Context, _ Project) ([]byte, error) {
 		if s := c.Labels[LabelService]; !seen[s] {
 			seen[s] = true
 			fmt.Fprintf(&b, "%s %s\n", s, f.hashNow(s))
+			if v, ok := f.policies[s]; ok {
+				fmt.Fprintf(&b, "    pull_policy: %s\n", v)
+			}
 		}
 	}
 	return []byte(b.String()), nil
@@ -240,6 +282,10 @@ func (f *fakeDocker) Compose(_ context.Context, p Project, _ io.Writer, args ...
 	if args[0] != "up" {
 		f.mu.Unlock()
 		return nil
+	}
+	if f.oldCompose && slices.Contains(args, "--pull") {
+		f.mu.Unlock()
+		return errors.New("unknown flag: --pull")
 	}
 	if len(f.upErrs) > 0 {
 		err := f.upErrs[0]
@@ -412,7 +458,7 @@ func TestUpdateWorks(t *testing.T) {
 		t.Fatalf("calls %v", f.calls)
 	}
 	// The previous image's own tag goes once the new one works.
-	if _, ok := f.images[BackupTag(testRef, "immich-server")]; ok {
+	if _, ok := f.images[BackupTag(testRef, "immich", "immich-server")]; ok {
 		t.Fatal("backup tag kept")
 	}
 }
@@ -641,7 +687,7 @@ func TestWayBackWrittenFirst(t *testing.T) {
 	}
 	p := seen.Pending
 	if p.OldID != "sha256:old" || p.NewID != "sha256:new" || p.Ref != testRef || !slices.Equal(p.Services, []string{"immich-server"}) ||
-		p.Backup != BackupTag(testRef, "immich-server") || p.Project.Dir != "/srv/immich" || len(p.Apps) != 1 {
+		p.Backup != BackupTag(testRef, "immich", "immich-server") || p.Project.Dir != "/srv/immich" || len(p.Apps) != 1 {
 		t.Fatalf("way back %+v", p)
 	}
 	// A stop after this point is finished naming the version it went to.
@@ -655,7 +701,7 @@ func TestResume(t *testing.T) {
 	pending := func(f *fakeDocker) *Pending {
 		p, _ := ProjectOf(f.app().Labels)
 		return &Pending{Project: p, Services: []string{"immich-server"}, Ref: testRef, OldID: "sha256:old", NewID: "sha256:new",
-			Backup: BackupTag(testRef, "immich-server"), Moved: true,
+			Backup: BackupTag(testRef, "immich", "immich-server"), Moved: true,
 			Apps: []Outcome{{App: "immich_server", Service: "immich-server", From: "v2.3.1", To: "v2.4.0"}}}
 	}
 	resume := func(t *testing.T, f *fakeDocker, prog *Progress, apps ...string) *TaskResult {
@@ -668,7 +714,7 @@ func TestResume(t *testing.T) {
 	}
 	replaced := func(f *fakeDocker) {
 		f.images[testRef] = "sha256:new"
-		f.images[BackupTag(testRef, "immich-server")] = "sha256:old"
+		f.images[BackupTag(testRef, "immich", "immich-server")] = "sha256:old"
 		f.app().ImageID = "sha256:new"
 	}
 
@@ -679,7 +725,7 @@ func TestResume(t *testing.T) {
 		if a := res.Apps[0]; res.Status != StatusOK || a.Status != proto.AppUpdated || a.To != "v2.4.0" {
 			t.Fatalf("%+v", res)
 		}
-		if _, ok := f.images[BackupTag(testRef, "immich-server")]; ok || len(f.called("pull ")) != 0 {
+		if _, ok := f.images[BackupTag(testRef, "immich", "immich-server")]; ok || len(f.called("pull ")) != 0 {
 			t.Fatalf("calls %v", f.calls)
 		}
 	})
@@ -819,7 +865,7 @@ func TestVersions(t *testing.T) {
 	if Major("16.4") != 16 || Major("release") != -1 {
 		t.Fatal("Major")
 	}
-	if got := BackupTag("localhost:5000/app:3", "web app"); got != "localhost:5000/app:whombat-previous-web-app" {
+	if got := BackupTag("localhost:5000/app:3", "shop", "web app"); got != "localhost:5000/app:whombat-previous-shop.web-app" {
 		t.Fatal(got)
 	}
 	if Repo("nginx@sha256:abc") != "nginx" || Tag("nginx") != "latest" {
@@ -1042,11 +1088,11 @@ func TestBindingNamesEverything(t *testing.T) {
 func TestResumeWaitsForDocker(t *testing.T) {
 	setup := func(f *fakeDocker) (*task, *Pending) {
 		f.images[testRef] = "sha256:new"
-		f.images[BackupTag(testRef, "immich-server")] = "sha256:old"
+		f.images[BackupTag(testRef, "immich", "immich-server")] = "sha256:old"
 		f.app().ImageID = "sha256:new"
 		p, _ := ProjectOf(f.app().Labels)
 		pend := &Pending{Project: p, Services: []string{"immich-server"}, Ref: testRef, OldID: "sha256:old", NewID: "sha256:new",
-			Backup: BackupTag(testRef, "immich-server"), Moved: true,
+			Backup: BackupTag(testRef, "immich", "immich-server"), Moved: true,
 			Apps: []Outcome{{App: "immich_server", Service: "immich-server", From: "v2.3.1", To: "v2.4.0"}}}
 		k := newTask(t, false)
 		if err := WriteProgress(k.dir, &Progress{Pending: pend}); err != nil {
@@ -1081,5 +1127,227 @@ func TestResumeWaitsForDocker(t *testing.T) {
 	}
 	if len(f.called("tag ")) != 0 || len(f.called("compose")) != 0 {
 		t.Fatalf("calls %v", f.calls)
+	}
+}
+
+// An older Compose can't be told not to pull: the update goes ahead only when
+// the settings don't ask it to pull an image it has, and is refused before
+// anything changes otherwise.
+func TestOldComposeAndPullPolicy(t *testing.T) {
+	for _, policy := range []string{"always", "daily", "every_12h", "build", `"always"`} {
+		t.Run(policy, func(t *testing.T) {
+			f := newFake()
+			f.oldCompose = true
+			f.policies["immich-server"] = policy
+			a := runTask(t, f, false).Apps[0]
+			if a.Status != proto.AppFailed || a.Reason != proto.AppReasonComposeOld {
+				t.Fatalf("%+v", a)
+			}
+			if len(f.called("pull ")) != 0 || len(f.called("tag ")) != 0 || len(f.called("compose up")) != 0 {
+				t.Fatalf("something changed: %v", f.calls)
+			}
+		})
+	}
+	// A policy that never pulls an image it has: asked again without --pull.
+	for _, policy := range []string{"missing", "never", "if_not_present"} {
+		f := newFake()
+		f.oldCompose = true
+		f.policies["immich-server"] = policy
+		if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppUpdated {
+			t.Fatalf("%s: %+v", policy, a)
+		}
+		if ups := f.called("compose up"); len(ups) != 2 || strings.Contains(ups[1], "--pull") {
+			t.Fatalf("%s: ups %v", policy, ups)
+		}
+	}
+	// A Compose that takes --pull never doesn't pull whatever the settings say.
+	f := newFake()
+	f.policies["immich-server"] = "always"
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppUpdated {
+		t.Fatalf("%+v", a)
+	}
+	// Asked once per task.
+	if n := len(f.called("probe")); n != 1 {
+		t.Fatalf("probed %d times", n)
+	}
+	// Not knowing which Compose it is, the settings decide.
+	f = newFake()
+	f.probeErr = errors.New("compose: exit status 1")
+	f.policies["immich-server"] = "always"
+	if a := runTask(t, f, false).Apps[0]; a.Reason != proto.AppReasonComposeOld || len(f.called("tag ")) != 0 {
+		t.Fatalf("%+v %v", a, f.calls)
+	}
+}
+
+// Going back after a restart, an older Compose that would pull isn't run:
+// the previous image keeps its own tag for a person.
+func TestOldComposeGoingBack(t *testing.T) {
+	f := newFake()
+	f.oldCompose = true
+	k := newTask(t, false)
+	settings := filepath.Join(k.dir, resolvedPrefix+"immich-immich-server.yaml")
+	if err := os.WriteFile(settings, []byte("immich-server "+hashOf("immich-server")+"\n    pull_policy: always\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	backup := BackupTag(testRef, "immich", "immich-server")
+	f.images[testRef] = "sha256:new"
+	f.images[backup] = "sha256:old"
+	f.app().ImageID = "sha256:new"
+	f.behaviour["sha256:new"] = Container{Status: "exited"}
+	pend := &Pending{Project: Project{Name: "immich", Service: "immich-server", Dir: "/srv/immich", Files: []string{settings}},
+		Services: []string{"immich-server"}, Ref: testRef, OldID: "sha256:old", NewID: "sha256:new", Backup: backup, Moved: true,
+		Apps: []Outcome{{App: "immich_server", Service: "immich-server", From: "v2.3.1", To: "v2.4.0"}}}
+	if err := WriteProgress(k.dir, &Progress{Pending: pend}); err != nil {
+		t.Fatal(err)
+	}
+	a := k.run(t, f).Apps[0]
+	if a.Status != proto.AppFailed || a.Reason != proto.AppReasonBackFail || !strings.Contains(a.Message, "newer Docker Compose") {
+		t.Fatalf("%+v", a)
+	}
+	for _, up := range f.called("compose up") {
+		if !strings.Contains(up, "--pull never") {
+			t.Fatalf("ran Compose without --pull never: %v", f.calls)
+		}
+	}
+	if f.images[backup] != "sha256:old" {
+		t.Fatal("the previous image lost its own tag")
+	}
+}
+
+// Two projects that run the same image keep a previous image each.
+func TestBackupTagPerProject(t *testing.T) {
+	ref := "ghcr.io/example/app:1"
+	if BackupTag(ref, "shop", "web") == BackupTag(ref, "blog", "web") {
+		t.Fatal("projects share a backup tag")
+	}
+	if BackupTag(ref, "a-b", "c") == BackupTag(ref, "a", "b-c") {
+		t.Fatal("two pairs read the same")
+	}
+	long := BackupTag(ref, strings.Repeat("p", 100), strings.Repeat("s", 100))
+	if tag := strings.TrimPrefix(long, Repo(ref)+":"); len(tag) != 128 {
+		t.Fatalf("tag of %d characters", len(tag))
+	}
+	f := newFake()
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppUpdated {
+		t.Fatalf("%+v", a)
+	}
+	if !slices.Contains(f.calls, "tag sha256:old "+Repo(testRef)+":whombat-previous-immich.immich-server") {
+		t.Fatalf("calls %v", f.calls)
+	}
+}
+
+// An image pulled for an update that doesn't run it goes again, unless
+// something else uses it.
+func TestPulledImageRemovedWhenUnused(t *testing.T) {
+	held := func() *fakeDocker {
+		f := newFake()
+		f.labels["sha256:new"] = map[string]string{LabelVersion: "v3.0.0"}
+		return f
+	}
+	f := held()
+	if a := runTask(t, f, true).Apps[0]; a.Status != proto.AppHeld {
+		t.Fatalf("%+v", a)
+	}
+	if !slices.Contains(f.calls, "untag sha256:new") {
+		t.Fatalf("held image kept: %v", f.calls)
+	}
+	// Held after pulling the tag: the tag names the running image again, and the pulled one goes.
+	f = held()
+	if a := newTask(t, true).bind(f, "").run(t, f).Apps[0]; a.Status != proto.AppHeld || f.images[testRef] != "sha256:old" {
+		t.Fatalf("%+v %v", a, f.images)
+	}
+	if !slices.Contains(f.calls, "untag sha256:new") {
+		t.Fatalf("held image kept: %v", f.calls)
+	}
+	// Another app on the server runs it already: it stays.
+	f = held()
+	f.conts = append(f.conts, &Container{ID: "c-other", Name: "other_app", ImageID: "sha256:new", Ref: testRef,
+		Labels: map[string]string{LabelProject: "other", LabelService: "web"}, Status: "running"})
+	if a := runTask(t, f, true, "immich_server").Apps[0]; a.Status != proto.AppHeld {
+		t.Fatalf("%+v", a)
+	}
+	if slices.Contains(f.calls, "untag sha256:new") {
+		t.Fatal("removed an image another container runs")
+	}
+	// Put back: the image that didn't start goes too.
+	f = newFake()
+	f.behaviour["sha256:new"] = Container{Status: "exited"}
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppRolledBack {
+		t.Fatalf("%+v", a)
+	}
+	if !slices.Contains(f.calls, "untag sha256:new") {
+		t.Fatalf("rolled-back image kept: %v", f.calls)
+	}
+	// Up to date: the image runs, nothing is removed.
+	f = newFake()
+	f.pulls[Repo(testRef)+"@"+newDigest] = "sha256:old"
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppCurrent || slices.Contains(f.calls, "untag sha256:old") {
+		t.Fatalf("%+v %v", a, f.calls)
+	}
+	// Updated: the new image runs and stays.
+	f = newFake()
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppUpdated || slices.Contains(f.calls, "untag sha256:new") {
+		t.Fatalf("%+v %v", a, f.calls)
+	}
+}
+
+// Two projects of the same name in different folders keep a note of their own files each.
+func TestOriginsPerFolder(t *testing.T) {
+	k := newTask(t, false)
+	f := newFake()
+	r := &Runner{Dir: k.dir, Docker: f, Origins: filepath.Join(filepath.Dir(k.dir), "projects")}
+	a := Project{Name: "immich", Service: "immich-server", Dir: "/srv/immich", Files: []string{"/srv/immich/compose.yaml"}}
+	b := Project{Name: "immich", Service: "immich-server", Dir: "/srv/other", Files: []string{"/srv/other/compose.yaml"}}
+	ra, err := r.resolve(context.Background(), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.resolve(context.Background(), b); err != nil {
+		t.Fatal(err)
+	}
+	// The first project's container, recreated from the copy: its own files are read back, not the other's.
+	labels := composeLabels("immich-server")
+	labels[LabelFiles] = ra.Files[0]
+	p, ok := r.projectOf(labels)
+	if !ok || !slices.Equal(p.Files, a.Files) {
+		t.Fatalf("files %v", p.Files)
+	}
+}
+
+// A stopped service that shares the image may not know the newer image's
+// digest: the update still pulls the one the running app was said yes to.
+func TestDigestFromAnyBoundApp(t *testing.T) {
+	f := newFake()
+	f.sibling("immich_ml", "immich-ml")
+	f.down["immich_ml"] = true
+	k := newTask(t, false, "immich_ml", "immich_server")
+	k.spec.Expect = []proto.AppExpect{expectOf(f.conts[1], ""), expectOf(f.app(), newDigest)}
+	if a := k.run(t, f).Apps[0]; a.Status != proto.AppUpdated {
+		t.Fatalf("%+v", a)
+	}
+	if got := f.called("pull "); !slices.Equal(got, []string{"pull " + Repo(testRef) + "@" + newDigest}) {
+		t.Fatalf("pulls %v", got)
+	}
+	// Said yes to with two different newer images: nothing is pulled.
+	f = newFake()
+	f.sibling("immich_ml", "immich-ml")
+	other := "sha256:" + strings.Repeat("a", 64)
+	k = newTask(t, false, "immich_server", "immich_ml")
+	k.spec.Expect = []proto.AppExpect{expectOf(f.app(), newDigest), expectOf(f.conts[1], other)}
+	if a := k.run(t, f).Apps[0]; a.Status != proto.AppFailed || a.Reason != proto.AppReasonChanged || len(f.called("pull ")) != 0 {
+		t.Fatalf("%+v %v", a, f.calls)
+	}
+}
+
+// Which Compose takes `up --pull never`, from the options its help lists.
+func TestUpTakesPull(t *testing.T) {
+	v2 := "Options:\n      --no-start                 Don't start the services after creating them\n" +
+		"      --pull string              Pull image before running (\"always\"|\"missing\"|\"never\") (default \"policy\")\n" +
+		"      --quiet-pull               Pull without printing progress information\n"
+	old := "Options:\n    -d, --detach               Detached mode\n" +
+		"    --quiet-pull               Pull without printing progress information\n" +
+		"    --no-build                 Don't build an image, even if it's missing.\n"
+	if !upTakesPull(v2) || upTakesPull(old) {
+		t.Fatal("upTakesPull")
 	}
 }
