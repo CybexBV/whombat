@@ -12,6 +12,7 @@ import { coreTranslator, coreTree, coreWords, type WordTree } from '../i18n/cata
 import { formatLocaleNumber } from '../i18n/format.js';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
+import { APP_UPDATE_MAX, HostAppResult, HostGuestApp } from './app-updates.js';
 import { JsonObject, Timestamp } from './common.js';
 import { ThingUptime } from './incidents.js';
 import { KeptQuiet, NoticeQuiet } from './quiet.js';
@@ -150,12 +151,17 @@ export const HOST_ASKS_FIRST_WORDS = hostAsksFirstWords('en');
  * Whether the Servers catalog's sensitive rules apply to a call on a server (SA-03, SA-06): always on `risky`; on
  * `never` only for `server_power` and `server_update` on the server this Whombat runs on (SWU-08, CT-504: an upgrade
  * there can restart Whombat's own database). `server_update`'s rule asks only for `install`, so Check never asks.
+ * `app_update` with `ask: true` asks everywhere too.
  */
 export function serverAsksApply(
   tool: string,
   server: { asksFirst?: HostAsksFirst | null; hostsThisWhombat?: boolean },
+  args?: Readonly<Record<string, unknown>>,
 ): boolean {
   if ((server.asksFirst ?? HOST_ASKS_FIRST_DEFAULT) !== 'never') return true;
+  // An app update that must ask (a database, a new major version) or that someone started with Update asks on every
+  // server (app-updates.md): `ask: true`.
+  if (tool === 'app_update' && args?.ask === true) return true;
   return (tool === 'server_power' || tool === 'server_update') && server.hostsThisWhombat === true;
 }
 
@@ -666,6 +672,8 @@ export const HostTask = z.object({
     .optional(),
   /** Set only when a package task ended early (`HOST_PACKAGE_TASK_CODES`: `busy`, `timeout`; CT-502). */
   code: z.string().max(64).optional(),
+  /** An app update's outcome per app once it ended (`app:<16 hex>`, `platform: host`; app-updates.md). */
+  apps: z.array(HostAppResult).optional(),
 });
 export type HostTask = z.infer<typeof HostTask>;
 
@@ -809,6 +817,11 @@ export const HostGuest = z.object({
    * Whombat's own containers from the person's lists by it. Absent on a hosts service that doesn't send them.
    */
   labels: z.record(z.string().max(100), z.string().max(200)).optional(),
+  /**
+   * A Docker container Docker Compose started, which Whombat can update and put back (app-updates.md): absent for one
+   * `docker run` started, and on every container of an agent older than app updates (`appUpdateState`).
+   */
+  app: HostGuestApp.optional(),
 });
 export type HostGuest = z.infer<typeof HostGuest>;
 
@@ -3003,6 +3016,11 @@ export const HOST_MANAGE_OPS = [
   /** The server's operating-system updates (0.98, CT-500): check for them, install them; `platform: host`. */
   'packages.check',
   'packages.install',
+  /**
+   * Docker Compose apps (app-updates.md): asks the person, through the approval card, to update these apps
+   * (`params.apps`: their guest ids, `params.snapshot`: a snapshot of the server first); answers `approvalNumber`.
+   */
+  'app.update',
 ] as const;
 export const HostManageOp = z.enum(HOST_MANAGE_OPS);
 export type HostManageOp = z.infer<typeof HostManageOp>;
@@ -3153,6 +3171,16 @@ export function hostSelfWords(locale?: string | null): { guestLabel: string; ser
  * an agent too old), `not_allowed` (TrueNAS, named packages on pacman), `busy` (a package task already running) and
  * `manage_disabled`.
  */
+/** `app.update`'s params: the apps (Docker guest ids) and whether to take a snapshot of the server first. */
+export const HostAppUpdateParams = z.object({
+  apps: z
+    .array(z.string().regex(/^docker:[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/))
+    .min(1)
+    .max(APP_UPDATE_MAX),
+  snapshot: z.boolean().optional(),
+});
+export type HostAppUpdateParams = z.infer<typeof HostAppUpdateParams>;
+
 export const HostManageRequest = z
   .object({
     op: HostManageOp,
@@ -3165,6 +3193,23 @@ export const HostManageRequest = z
     confirmName: z.string().max(100).optional(),
   })
   .superRefine((req, ctx) => {
+    if (req.op === 'app.update') {
+      if (req.guestId !== undefined)
+        ctx.addIssue({ code: 'custom', path: ['guestId'], message: 'Name the apps in params.apps.' });
+      if (req.platform !== undefined && req.platform !== 'host')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['platform'],
+          message: 'App updates run on the server itself.',
+        });
+      if (!HostAppUpdateParams.safeParse(req.params).success)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['params', 'apps'],
+          message: `Apps are 1 to ${APP_UPDATE_MAX} Docker guests (docker:name).`,
+        });
+      return;
+    }
     const packageOp = isHostPackageManageOp(req.op);
     if (!packageOp) {
       // `task.stop` stops a Check (`pkg:…`) with `platform: host`.
@@ -3213,6 +3258,8 @@ export const HostManageResult = z.object({
   newId: z.string().optional(),
   changes: z.array(HostConfigChange).optional(),
   auditId: z.string().optional(),
+  /** `app.update`: the approval that asks the person (the page opens it, `?approval=`). */
+  approvalNumber: z.number().int().positive().optional(),
 });
 export type HostManageResult = z.infer<typeof HostManageResult>;
 

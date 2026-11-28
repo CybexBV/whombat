@@ -15,6 +15,7 @@
  * `tools-guests.ts`, `tools-backups.ts`, `tools-host.ts` and `tools-updates.ts`, their shared pieces in `tools-shared.ts`.
  */
 import type { Adapter } from '../connections/adapters/types';
+import { APP_TOOL_ARGS, APP_TOOLS } from './tools-apps';
 import { BACKUP_PLACE_TOOL_ARGS, BACKUP_PLACE_TOOLS } from './tools-backup-places';
 import { BACKUP_TOOLS } from './tools-backups';
 import { GUEST_TOOLS } from './tools-guests';
@@ -141,6 +142,8 @@ export const MANAGE_TOOL_ARGS: Readonly<Record<string, readonly string[]>> = {
   libvirt_overview: ['server'],
   // The server's operating-system updates (0.98, server-updates.md SWU-08; tools-updates.ts).
   ...UPDATE_TOOL_ARGS,
+  // Docker Compose apps (app-updates.md; tools-apps.ts).
+  ...APP_TOOL_ARGS,
   // A Proxmox server's backups on a NAS (backup-places.md BPL-12; tools-backup-places.ts).
   ...BACKUP_PLACE_TOOL_ARGS,
   // A Mac's screen and apps (macos-servers.md; tools-macos.ts).
@@ -156,6 +159,7 @@ export const MANAGE_TOOLS: Adapter = {
   ...UNRAID_TOOLS,
   ...LIBVIRT_TOOLS,
   ...UPDATE_TOOLS,
+  ...APP_TOOLS,
   ...BACKUP_PLACE_TOOLS,
   ...MAC_TOOLS,
 };

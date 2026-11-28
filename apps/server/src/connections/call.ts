@@ -179,7 +179,7 @@ export function callTier(
   const ruled = isSensitiveCall(entry, tool.name, args, { access });
   // A server set not to ask (SA-06) quiets the catalog's rules for its calls.
   const servers = entry.id === SERVERS_CATALOG && server !== null;
-  const quiet = servers && !serverAsksApply(tool.name, server);
+  const quiet = servers && !serverAsksApply(tool.name, server, args);
   // A device action its profile marks sensitive always asks too (one-whombat-devices.md).
   const sensitive = (ruled && !quiet) || tool.origin === 'device-sensitive';
   const tier = accessTier(level, access, effectiveTier(held, toolTier, sensitive));
@@ -190,7 +190,7 @@ export function callTier(
     ruled &&
     tool.origin !== 'device-sensitive' &&
     accessTier(level, access, effectiveTier(held, toolTier, false)) === 'can' &&
-    !serverAsksApply(tool.name, { asksFirst: 'never', hostsThisWhombat: server.hostsThisWhombat })
+    !serverAsksApply(tool.name, { asksFirst: 'never', hostsThisWhombat: server.hostsThisWhombat }, args)
       ? { id: server.id, name: server.name }
       : null;
   return {
