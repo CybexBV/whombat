@@ -98,6 +98,17 @@ describe('a server’s changes', () => {
     ]);
   });
 
+  it('tells installed updates only when none are left waiting, not when the count only fell', () => {
+    const before = nextServerState(null, read({ updates: 12 }));
+    const refreshed = nextServerState(before, read({ updates: 9 }));
+    expect(diffServer(before, refreshed)).toEqual([]);
+    expect(
+      diffServer(refreshed, nextServerState(refreshed, read({ updates: 0 }))).map((d) => d.fact),
+    ).toEqual([{ k: 'packages', count: 9 }]);
+    const none = nextServerState(null, read({ updates: 0 }));
+    expect(diffServer(none, nextServerState(none, read({ updates: 0 })))).toEqual([]);
+  });
+
   it('doesn’t tell updates that appear, and tells a new system version', () => {
     const before = nextServerState(null, read({ updates: 0 }));
     const after = nextServerState(before, read({ updates: 5, os: 'Debian GNU/Linux 13.1' }));
@@ -143,5 +154,13 @@ describe('a burst of the same item', () => {
       count: 5,
     });
     expect(mergeFacts(a, { k: 'kernel', to: '6.12' })).toBeNull();
+  });
+
+  it('keeps two new images pulled under the same tag as one change', () => {
+    const pull = { k: 'image' as const, name: 'app', from: 'app:latest', to: 'app:latest' };
+    expect(mergeFacts(pull, pull)).toEqual(pull);
+    const tag = { k: 'image' as const, name: 'app', from: 'app:1', to: 'app:latest' };
+    expect(mergeFacts(tag, pull)).toEqual({ ...pull, from: 'app:1' });
+    expect(mergeFacts(tag, { ...tag, from: 'app:latest', to: 'app:1' })).toBe('gone');
   });
 });
