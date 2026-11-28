@@ -6,11 +6,14 @@
  * A thread is its first message (a top-level message of the room) and its replies, so a message belongs to the thread
  * `coalesce(thread_root_id, id)`.
  */
-import { and, eq, inArray, isNotNull, type SQL, sql } from 'drizzle-orm';
+import type { ChatThreadJob } from '@whombat/core';
+import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from 'drizzle-orm';
 import { activeCouncilThreads } from '../council/context';
 import type { Db } from '../db/client';
 import { dispatches, t3Watches } from '../db/schema/index';
 import { liveDelegationThreads } from '../delegate/commands';
+import { iso } from '../lib/time';
+import { jobEndOf } from '../t3code/handoff';
 
 /** The room the threads are in, and whose it is. */
 export interface ThreadRoom {
@@ -87,6 +90,60 @@ async function handedOverThreads(
       ),
     );
   return new Set(rows.flatMap((r) => (r.threadRootId ? [r.threadRootId] : [])));
+}
+
+/**
+ * How the latest job each thread handed to T3 Code ended (`ChatThread.job`), for threads whose person hasn't written
+ * there since: its row then says Done, Didn’t finish or Stopped. A council's or a checklist's threads are their cards'.
+ * A thread whose latest job still goes on, or that has none, isn't in the map.
+ */
+export async function endedJobs(
+  db: Db,
+  room: Pick<ThreadRoom, 'conversationId' | 'agentId' | 'personId'>,
+  rootIds: readonly string[],
+): Promise<Map<string, ChatThreadJob>> {
+  if (!rootIds.length) return new Map();
+  const [watches, written] = await Promise.all([
+    db
+      .select({
+        threadRootId: t3Watches.threadRootId,
+        state: t3Watches.state,
+        status: t3Watches.status,
+        prs: t3Watches.prs,
+        progress: t3Watches.progress,
+        runEndedAt: t3Watches.runEndedAt,
+      })
+      .from(t3Watches)
+      .where(
+        and(
+          eq(t3Watches.conversationId, room.conversationId),
+          eq(t3Watches.agentId, room.agentId),
+          inArray(t3Watches.threadRootId, [...rootIds]),
+          isNull(t3Watches.councilId),
+          isNull(t3Watches.delegationTaskId),
+        ),
+      )
+      .orderBy(desc(t3Watches.armedAt)),
+    db.execute<{ root_id: string; at: string | Date }>(sql`
+      select coalesce(thread_root_id, id) as root_id, max(created_at) as at from messages
+       where conversation_id = ${room.conversationId} and author_id = ${room.personId} and deleted_at is null
+         and ${among(sql`coalesce(thread_root_id, id)`, rootIds)}
+       group by 1`),
+  ]);
+  const lastWritten = new Map(written.map((r) => [r.root_id, new Date(r.at).getTime()]));
+  const out = new Map<string, ChatThreadJob>();
+  const seen = new Set<string>();
+  for (const w of watches) {
+    // Newest hand-over first: only each thread's latest job counts.
+    if (!w.threadRootId || seen.has(w.threadRootId)) continue;
+    seen.add(w.threadRootId);
+    const end = jobEndOf(w);
+    if (!end) continue;
+    const wrote = lastWritten.get(w.threadRootId);
+    if (wrote !== undefined && wrote > end.endedAt.getTime()) continue;
+    out.set(w.threadRootId, { outcome: end.outcome, endedAt: iso(end.endedAt) });
+  }
+  return out;
 }
 
 /**

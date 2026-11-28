@@ -5,6 +5,7 @@
  */
 
 import { newId } from '@whombat/core';
+import { and, eq } from 'drizzle-orm';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sendMessage } from '../commands/messages';
 import {
@@ -46,7 +47,14 @@ async function threads(place?: 'chat' | 'code') {
     headers: { cookie },
   });
   expect(res.statusCode).toBe(200);
-  return res.json().threads as { rootId: string; place?: string; code?: unknown; work?: unknown }[];
+  return res.json().threads as {
+    rootId: string;
+    place?: string;
+    code?: unknown;
+    work?: unknown;
+    handedOver?: boolean;
+    job?: { outcome: string; endedAt: string } | null;
+  }[];
 }
 
 async function place(rootId: string, body: Record<string, unknown>) {
@@ -251,5 +259,76 @@ describe('one Chat', () => {
       done: 0,
       working: 0,
     });
+  });
+
+  it('a thread says how its latest T3 Code job ended until the person writes again', async () => {
+    const rootId = await send('Fix the Settle button in Feedback.');
+    const connectionId = newId('connection');
+    await t.services.db.insert(catalogConnections).values({
+      id: connectionId,
+      catalogId: 't3code',
+      burrowId: t.burrowId,
+      label: 'T3 Code',
+      handle: 't3code-row-job',
+      transport: 'mcp' as never,
+      signIn: 'token' as never,
+      baseUrl: 'http://127.0.0.1:1',
+    });
+    // Its work starts after the person's question and ends later still.
+    const later = (minutes: number) => new Date(Date.now() + minutes * 60_000);
+    const armedAt = later(1);
+    const watch = {
+      burrowId: t.burrowId,
+      connectionId,
+      threadId: 'mcp:settle',
+      title: 'Dusty - Fix Settle',
+      conversationId: mine.dmId,
+      threadRootId: rootId,
+      agentId: mine.agentId,
+      armedAt,
+    };
+    const rowOf = async () => (await threads()).find((x) => x.rootId === rootId);
+    const where = (threadId: string) =>
+      and(eq(t3Watches.connectionId, connectionId), eq(t3Watches.threadId, threadId));
+
+    // At work: nothing ended.
+    await t.services.db.insert(t3Watches).values({ ...watch, status: 'running', runStartedAt: armedAt });
+    expect((await rowOf())?.job).toBeUndefined();
+
+    // Its run ended but it waits for a pull request's checks: not over yet.
+    const endedAt = later(5);
+    await t.services.db
+      .update(t3Watches)
+      .set({ status: 'completed', runEndedAt: endedAt, prs: ['#342'] })
+      .where(where('mcp:settle'));
+    expect((await rowOf())?.job).toBeUndefined();
+
+    // Done: the watch went quiet after its end.
+    await t.services.db.update(t3Watches).set({ state: 'idle', prs: [] }).where(where('mcp:settle'));
+    expect((await rowOf())?.job).toEqual({ outcome: 'completed', endedAt: endedAt.toISOString() });
+
+    // A newer job of the same thread that failed is the one that counts.
+    const failedAt = later(8);
+    await t.services.db.insert(t3Watches).values({
+      ...watch,
+      threadId: 'mcp:settle-2',
+      armedAt: later(6),
+      state: 'idle',
+      status: 'failed',
+      runEndedAt: failedAt,
+    });
+    expect((await rowOf())?.job).toMatchObject({ outcome: 'failed' });
+
+    // The person wrote after it ended: their question is the news now.
+    await t.services.db
+      .update(t3Watches)
+      .set({ runEndedAt: new Date(Date.now() - 1000) })
+      .where(where('mcp:settle-2'));
+    await t.commit(IDS.mara, sendMessage, {
+      conversationId: mine.dmId,
+      text: 'Try again?',
+      threadRootId: rootId,
+    });
+    expect((await rowOf())?.job).toBeUndefined();
   });
 });

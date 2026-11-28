@@ -5,7 +5,14 @@
  * thread loads. The rows themselves are the shared `inboxRows`. Pure; the screen is `screens/ChatInbox.tsx`.
  */
 import { type HumanTone, toneFor } from '@whombat/avatars';
-import { type InboxFilter, type InboxRow, inboxWords, newCountLabel, promptWords } from '@whombat/client';
+import {
+  type InboxFilter,
+  type InboxRow,
+  inboxWords,
+  newCountLabel,
+  promptWords,
+  rowStatusSpoken,
+} from '@whombat/client';
 import { CHAT_THREAD_TEXT_MAX, type ChatThread, type Message, type ThreadView } from '@whombat/core';
 import { mobileTranslator } from '../i18n/translate';
 import { settleCopy } from './threadSettle';
@@ -17,16 +24,25 @@ import { settleCopy } from './threadSettle';
  */
 export function inboxRowLabel(
   row: Pick<InboxRow, 'title' | 'who' | 'line' | 'when' | 'unread' | 'waiting' | 'working'> &
-    Partial<Pick<InboxRow, 'repoName'>>,
+    Partial<Pick<InboxRow, 'repoName' | 'status'>>,
   locale?: string,
 ): string {
   const words = inboxWords(locale);
-  const status = row.waiting
-    ? words.waitingForYou.toLowerCase()
-    : row.working
-      ? words.working.toLowerCase()
+  const status = row.status
+    ? rowStatusSpoken(row.status)
+    : row.waiting
+      ? words.waitingForYou.toLowerCase()
+      : row.working
+        ? words.working.toLowerCase()
+        : null;
+  // What T3 Code does now (or what it asks to approve) stands in for the newest reply, as on the row.
+  const line = row.status?.line
+    ? row.status.line
+    : row.line
+      ? row.who
+        ? `${row.who}: ${row.line}`
+        : row.line
       : null;
-  const line = row.line ? (row.who ? `${row.who}: ${row.line}` : row.line) : null;
   const repo =
     row.repoName && !row.title.toLocaleLowerCase().includes(row.repoName.toLocaleLowerCase())
       ? row.repoName
@@ -97,6 +113,8 @@ export function inboxEmpty(filter: InboxFilter, locale?: string): { title: strin
   const words = inboxWords(locale);
   if (filter === 'unread') return { title: words.nothingNew, hint: words.nothingNewHint };
   if (filter === 'waiting') return { title: words.nothingWaits, hint: null };
+  if (filter === 'working') return { title: words.nothingWorking, hint: null };
+  if (filter === 'done') return { title: words.nothingDone, hint: words.nothingDoneHint };
   return { title: words.allSettled, hint: words.allSettledHint };
 }
 

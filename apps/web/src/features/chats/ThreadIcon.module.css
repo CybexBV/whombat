@@ -50,7 +50,7 @@
   background: var(--chart1);
 }
 
-/* The assistant is at it: a ring turning once in 0.9 s on the bottom corner. */
+/* Where the thread stands, on the bottom corner: at work, a ring turning once in 0.9 s; the other marks stand still. */
 .working {
   position: absolute;
   right: -6px;
@@ -79,7 +79,7 @@
 }
 
 .arc {
-  stroke: var(--ink);
+  stroke: var(--ok);
   stroke-dasharray: 12 26;
   stroke-linecap: round;
 }
@@ -94,4 +94,44 @@
   .ring {
     animation: none;
   }
+}
+
+/* Something waits for the person: a filled dot in the waiting colour (chat-threads-cards.md CTC-03). */
+.waitingMark circle {
+  fill: var(--chart1);
+}
+
+/* Waiting for a pull request's checks, nothing to do: a quiet dashed ring. */
+.checksMark circle {
+  fill: none;
+  stroke: var(--mut);
+  stroke-width: 2;
+  stroke-dasharray: 2.4 2.3;
+}
+
+/* Done: a tick on a filled disc. */
+.doneMark circle {
+  fill: var(--ok);
+}
+
+.doneMark path {
+  fill: none;
+  stroke: var(--row-bg, var(--bg));
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Didn't finish: a ring with a bar, in the warning colour (never red). */
+.failedMark circle,
+.failedMark path {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Stopped: a square. */
+.stoppedMark rect {
+  fill: var(--mut);
 }

@@ -280,3 +280,17 @@ export function handoffOf(row: HandoffRow, now: Date): Handoff | null {
   if (status === 'waiting') return { ...base, state: 'finishing', asks: null };
   return AT_WORK.includes(status) ? { ...base, state: 'working', asks: null } : null;
 }
+
+/**
+ * How a watch's job ended, for its Whombat thread's row (`ChatThread.job`): its outcome and when, once T3 Code said its
+ * run is over and nothing it waits for goes on (no pull request's checks, no work it is still finishing). Null while it
+ * is at work, waits, or before T3 Code said.
+ */
+export function jobEndOf(
+  row: Pick<HandoffRow, 'state' | 'status' | 'prs' | 'progress' | 'runEndedAt'>,
+): { outcome: HandoffOutcome; endedAt: Date } | null {
+  const status = row.status as T3Status | null;
+  if (!status || !(FINISHED.includes(status) || status === 'idle') || !row.runEndedAt) return null;
+  if (row.state === 'watching' && (progressOf(row.progress).held || strings(row.prs).length)) return null;
+  return { outcome: outcomeOf(status), endedAt: row.runEndedAt };
+}

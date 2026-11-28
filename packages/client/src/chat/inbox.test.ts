@@ -1,4 +1,4 @@
-import type { ChatThread, Message } from '@whombat/core';
+import type { ChatThread, Handoff, Message } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
   INBOX_WORDS,
@@ -11,8 +11,12 @@ import {
   nextRootAfter,
   plainLinks,
   quietChoiceOf,
+  type RowStatusKind,
   repoLetter,
+  rowStatus,
+  rowStatusWords,
   rowStep,
+  sameRowStatus,
   splitRepoTitle,
 } from './inbox';
 import { rootTitle, threadOfMessage, threadPagesWithMessage } from './threads';
@@ -196,17 +200,27 @@ describe('a row’s icon, title and name', () => {
 });
 
 describe('filters and moving', () => {
+  const st = (kind: RowStatusKind) => ({ kind, words: kind, named: false, since: null, line: null });
   const rows = [
-    { rootId: 'a', unread: 2, waiting: false },
-    { rootId: 'b', unread: 0, waiting: true },
-    { rootId: 'c', unread: 0, waiting: false },
+    { rootId: 'a', unread: 2, waiting: false, status: null },
+    { rootId: 'b', unread: 0, waiting: true, status: st('waiting') },
+    { rootId: 'c', unread: 0, waiting: false, status: null },
+  ] as InboxRow[];
+  const stood = [
+    ...rows,
+    { rootId: 'd', unread: 0, waiting: false, status: st('working') },
+    { rootId: 'e', unread: 0, waiting: false, status: st('checks') },
+    { rootId: 'f', unread: 0, waiting: false, status: st('done') },
+    { rootId: 'g', unread: 0, waiting: false, status: st('failed') },
   ] as InboxRow[];
 
-  it('filters by unread and waiting and counts both', () => {
-    expect(inboxFiltered(rows, 'unread').map((r) => r.rootId)).toEqual(['a']);
-    expect(inboxFiltered(rows, 'waiting').map((r) => r.rootId)).toEqual(['b']);
-    expect(inboxFiltered(rows, 'all')).toBe(rows);
-    expect(inboxCounts(rows)).toEqual({ unread: 1, waiting: 1 });
+  it('filters by unread, waiting, working and done and counts each', () => {
+    expect(inboxFiltered(stood, 'unread').map((r) => r.rootId)).toEqual(['a']);
+    expect(inboxFiltered(stood, 'waiting').map((r) => r.rootId)).toEqual(['b']);
+    expect(inboxFiltered(stood, 'working').map((r) => r.rootId)).toEqual(['d', 'e']);
+    expect(inboxFiltered(stood, 'done').map((r) => r.rootId)).toEqual(['f', 'g']);
+    expect(inboxFiltered(stood, 'all')).toBe(stood);
+    expect(inboxCounts(stood)).toEqual({ unread: 1, waiting: 1, working: 2, done: 2 });
   });
 
   it('opens the next thread after a settle, else the one above', () => {
@@ -263,5 +277,102 @@ describe('settling by itself', () => {
     expect(quietChoiceOf(3).days).toBe(3);
     expect(quietChoiceOf(10).days).toBe(7);
     expect(plainLinks('see http://x.nl')).toBe('see x.nl');
+  });
+});
+
+describe('where a row stands', () => {
+  const ROOT = 'msg_a';
+  function handoff(over: Partial<Handoff> = {}): Handoff {
+    return {
+      id: 't3_1',
+      to: 't3code',
+      conversationId: 'cnv_chat',
+      rootId: ROOT,
+      agentId: AGENT,
+      title: 'Dusty - Fix Settle',
+      state: 'working',
+      since: '2026-11-14T11:16:00.000Z',
+      endedAt: null,
+      outcome: null,
+      steps: [
+        { text: 'Reading the code', detail: null, done: true },
+        { text: 'Running the tests', detail: null, done: false },
+      ],
+      asks: null,
+      pullRequests: [],
+      program: null,
+      url: null,
+      ...over,
+    } as Handoff;
+  }
+  const statusOf = (t: Partial<ChatThread>, handoffs: Handoff[] = [], live = false) =>
+    rowStatus(thread({ rootId: ROOT, ...t }), handoffs, { live, me: ME, agentName: 'Dusty' });
+
+  it('says nothing when nothing goes on and nothing ended', () => {
+    expect(statusOf({})).toBeNull();
+  });
+
+  it('puts what waits for the person first, T3 Code asking for their OK too', () => {
+    expect(statusOf({ waiting: true, working: true })?.kind).toBe('waiting');
+    const ok = statusOf({}, [handoff({ state: 'needs_ok', asks: 'push to main' })]);
+    expect(ok).toMatchObject({ kind: 'waiting', words: INBOX_WORDS.waitingForYou });
+    expect(ok?.line).toContain('push to main');
+  });
+
+  it('says who works on it: the assistant, or T3 Code with its clock and step', () => {
+    expect(statusOf({ working: true })).toMatchObject({ kind: 'working', line: null });
+    expect(statusOf({ working: true })?.words).toContain('Dusty');
+    expect(statusOf({}, [], true)?.kind).toBe('working');
+    const t3 = statusOf({ handedOver: true }, [handoff()]);
+    expect(t3).toMatchObject({ kind: 'working', line: 'Running the tests' });
+    expect(t3?.words).toContain('T3 Code');
+    expect(t3 && rowStatusWords(t3, now.getTime())).toMatch(/· 6m$/);
+    expect(statusOf({ handedOver: true })).toMatchObject({ kind: 'working', words: INBOX_WORDS.working });
+  });
+
+  it('waits for checks quietly', () => {
+    const s = statusOf({ handedOver: true }, [handoff({ state: 'checks', pullRequests: ['#342'] })]);
+    expect(s).toMatchObject({ kind: 'checks', words: INBOX_WORDS.waitingChecks, since: null });
+  });
+
+  it('says how the latest job ended, from the server or a hand-over that just ended', () => {
+    const job = { outcome: 'completed' as const, endedAt: '2026-11-14T10:00:00.000Z' };
+    expect(statusOf({ job })).toMatchObject({ kind: 'done', words: INBOX_WORDS.done });
+    expect(statusOf({ job: { ...job, outcome: 'failed' } })).toMatchObject({ kind: 'failed' });
+    expect(statusOf({ job: { ...job, outcome: 'stopped' } })).toMatchObject({ kind: 'stopped' });
+    const ended = handoff({ state: 'ended', outcome: 'failed', endedAt: '2026-11-14T11:00:00.000Z' });
+    expect(statusOf({ job }, [ended])?.kind).toBe('failed');
+  });
+
+  it('drops the end once the person wrote after it, and work going on wins over it', () => {
+    const job = { outcome: 'completed' as const, endedAt: '2026-11-14T10:00:00.000Z' };
+    expect(
+      statusOf({ job, last: { authorId: ME, text: 'And now?', at: '2026-11-14T10:05:00.000Z' } }),
+    ).toBeNull();
+    expect(
+      statusOf({ job, last: { authorId: AGENT, text: 'Done.', at: '2026-11-14T10:05:00.000Z' } })?.kind,
+    ).toBe('done');
+    expect(statusOf({ job, working: true })?.kind).toBe('working');
+  });
+
+  it('marks the row: waiting and working ones don’t settle, and T3 Code’s step stands in for the reply', () => {
+    const [row] = inboxRows([thread({ rootId: ROOT, handedOver: true })], new Map(), {
+      ...opts,
+      handoffs: [handoff()],
+    });
+    expect(row).toMatchObject({ working: true, settleable: false, waiting: false });
+    expect(row?.status?.line).toBe('Running the tests');
+    const [asks] = inboxRows([thread({ rootId: ROOT })], new Map(), {
+      ...opts,
+      handoffs: [handoff({ state: 'needs_ok' })],
+    });
+    expect(asks).toMatchObject({ waiting: true, settleable: false });
+  });
+
+  it('keeps a status that reads the same', () => {
+    const a = statusOf({ working: true });
+    expect(sameRowStatus(a, statusOf({ working: true }))).toBe(true);
+    expect(sameRowStatus(a, statusOf({ waiting: true }))).toBe(false);
+    expect(sameRowStatus(null, null)).toBe(true);
   });
 });

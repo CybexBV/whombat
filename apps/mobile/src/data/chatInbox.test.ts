@@ -60,6 +60,7 @@ function row(over: Partial<InboxRow> = {}): InboxRow {
     unread: 0,
     waiting: false,
     working: false,
+    status: null,
     settleable: true,
     markable: true,
     shownWho: null,
@@ -157,8 +158,9 @@ describe('the filters', () => {
     [['msg_b', 1]],
   );
 
-  it('counts the unread and the waiting rows and shows each filter’s', () => {
-    expect(inboxCounts(rows)).toEqual({ unread: 1, waiting: 1 });
+  it('counts the unread, waiting and working rows and shows each filter’s', () => {
+    expect(inboxCounts(rows)).toEqual({ unread: 1, waiting: 1, working: 1, done: 0 });
+    expect(inboxFiltered(rows, 'working').map((r) => r.rootId)).toEqual(['msg_c']);
     expect(inboxFiltered(rows, 'unread').map((r) => r.rootId)).toEqual(['msg_b']);
     expect(inboxFiltered(rows, 'waiting').map((r) => r.rootId)).toEqual(['msg_a']);
   });
@@ -167,6 +169,8 @@ describe('the filters', () => {
     expect(inboxEmpty('all')).toEqual({ title: INBOX_WORDS.allSettled, hint: INBOX_WORDS.allSettledHint });
     expect(inboxEmpty('unread').title).toBe(INBOX_WORDS.nothingNew);
     expect(inboxEmpty('waiting')).toEqual({ title: INBOX_WORDS.nothingWaits, hint: null });
+    expect(inboxEmpty('working').title).toBe(INBOX_WORDS.nothingWorking);
+    expect(inboxEmpty('done').title).toBe(INBOX_WORDS.nothingDone);
   });
 });
 

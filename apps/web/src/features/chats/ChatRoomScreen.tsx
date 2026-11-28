@@ -8,6 +8,7 @@ import {
   nextRootAfter,
   type InboxRow as Row,
   rowStep,
+  sameRowStatus,
 } from '@whombat/client';
 import {
   useChatRooms,
@@ -17,6 +18,7 @@ import {
   useThreadUnread,
 } from '@whombat/client/react';
 import { type ChatRoom, shortNameOf } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { ArrowLeft, Check, ChevronRight, SquarePen } from 'lucide-react';
 import { type MouseEvent, type UIEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOptionalAppServices } from '../../app/providers';
@@ -24,6 +26,7 @@ import { useSearchUpdate } from '../../app/routing/navigation';
 import type { RoomSearch } from '../../app/routing/search';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, SkeletonRows } from '../../components/ListState';
+import { useWebI18n } from '../../i18n/provider';
 import { CHAT_WORDS, INBOX_WORDS, SETTLE_WORDS } from '../../i18n/shared';
 import { NotificationsOffer } from '../../push/NotificationsOffer';
 import { LiveAgentFace } from '../agent/LiveAgentFace';
@@ -51,7 +54,9 @@ export interface ChatRoomScreenProps {
 
 /** Two rows that read the same. */
 function sameRow(a: Row, b: Row): boolean {
-  return (Object.keys(b) as (keyof Row)[]).every((k) => a[k] === b[k]);
+  return (Object.keys(b) as (keyof Row)[]).every((k) =>
+    k === 'status' ? sameRowStatus(a.status, b.status) : a[k] === b[k],
+  );
 }
 
 /** How close to the list's end the next page is asked for. */
@@ -76,6 +81,7 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
   const ref = rooms[room];
   const conversationId = ref?.id ?? null;
   const { words, agent: assistant } = useTheAgent(burrow);
+  const { tag: uiLocale } = useWebI18n();
   const threads = useChatThreads(burrow, room, {
     conversationId: conversationId ?? undefined,
     enabled: !!ref,
@@ -97,17 +103,9 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
   // Feedback opens from Chat's head (it has no sidebar row of its own), with its unread count.
   const feedback = room === 'chat' ? rooms.feedback : null;
   // Work that still goes on from a thread: the assistant's own turn as it happens (before the list says so), a run,
-  // or what it handed to T3 Code. Such a thread shows Working and doesn't settle.
+  // or what it handed to T3 Code, which each row says (`InboxRow.status`). Such a thread doesn't settle.
   const handoffs = useHandoffs(burrow, conversationId ?? undefined);
   const liveWork = useThreadWork(burrow, conversationId ?? undefined);
-  const busy = useMemo(
-    () =>
-      new Set([
-        ...threads.threads.filter((t) => t.handedOver).map((t) => t.rootId),
-        ...handoffs.flatMap((h) => (h.rootId && h.state !== 'ended' ? [h.rootId] : [])),
-      ]),
-    [threads.threads, handoffs],
-  );
   const known = !threads.isLoading && !threads.error;
   const agentId = assistant?.id ?? null;
   // A row that didn't change keeps its object, so its memoized line isn't drawn again on every realtime event.
@@ -124,21 +122,38 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
       now,
       timeZone,
       openRootId: openId,
+      locale: uiLocale,
+      handoffs,
+      // The assistant's own live turn or a run there; T3 Code's work comes from `handoffs`.
+      live: (rootId) => {
+        const work = liveWork(rootId);
+        return !!work && work.by !== 't3code';
+      },
     });
     const before = lastRows.current;
     const next = new Map<string, Row>();
-    const out = made.map((r) => {
-      const working = r.working || busy.has(r.rootId) || !!liveWork(r.rootId);
-      const settleable = r.settleable && !busy.has(r.rootId) && !working;
-      const row = { ...r, working, settleable };
-      const was = before.get(r.rootId);
+    const out = made.map((row) => {
+      const was = before.get(row.rootId);
       const kept = was && sameRow(was, row) ? was : row;
-      next.set(r.rootId, kept);
+      next.set(row.rootId, kept);
       return kept;
     });
     lastRows.current = next;
     return out;
-  }, [listed, unread, me?.id, agentId, words.name, lookup, now, timeZone, openId, busy, liveWork]);
+  }, [
+    listed,
+    unread,
+    me?.id,
+    agentId,
+    words.name,
+    lookup,
+    now,
+    timeZone,
+    openId,
+    uiLocale,
+    handoffs,
+    liveWork,
+  ]);
 
   const [filter, setFilter] = useState<InboxFilter>('all');
   const shown = useMemo(() => inboxFiltered(rows, filter), [rows, filter]);
@@ -400,13 +415,27 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
       ? { title: INBOX_WORDS.nothingNew, hint: INBOX_WORDS.nothingNewHint }
       : filter === 'waiting'
         ? { title: INBOX_WORDS.nothingWaits, hint: `${words.name} will put questions here.` }
-        : never
-          ? { title: null, hint: room === 'chat' ? words.chatEmpty : CHAT_WORDS.feedbackEmpty }
-          : { title: INBOX_WORDS.allSettled, hint: INBOX_WORDS.allSettledHint };
-  const filters: { key: InboxFilter; label: string; n: number; tone?: 'new' | 'waiting' }[] = [
+        : filter === 'working'
+          ? {
+              title: INBOX_WORDS.nothingWorking,
+              hint: interpolate(INBOX_WORDS.nothingWorkingHint, { assistant: words.name }),
+            }
+          : filter === 'done'
+            ? { title: INBOX_WORDS.nothingDone, hint: INBOX_WORDS.nothingDoneHint }
+            : never
+              ? { title: null, hint: room === 'chat' ? words.chatEmpty : CHAT_WORDS.feedbackEmpty }
+              : { title: INBOX_WORDS.allSettled, hint: INBOX_WORDS.allSettledHint };
+  const filters: {
+    key: InboxFilter;
+    label: string;
+    n: number;
+    tone?: 'new' | 'waiting' | 'working' | 'done';
+  }[] = [
     { key: 'all', label: INBOX_WORDS.all, n: 0 },
-    { key: 'unread', label: INBOX_WORDS.unread, n: counts.unread, tone: 'new' },
     { key: 'waiting', label: INBOX_WORDS.waiting, n: counts.waiting, tone: 'waiting' },
+    { key: 'working', label: INBOX_WORDS.working, n: counts.working, tone: 'working' },
+    { key: 'done', label: INBOX_WORDS.done, n: counts.done, tone: 'done' },
+    { key: 'unread', label: INBOX_WORDS.unread, n: counts.unread, tone: 'new' },
   ];
   // The new chat shows beside the list while no thread is open, and in the list's place when it was asked for.
   const freshShown = split ? !openId : fresh;
@@ -511,6 +540,7 @@ export function ChatRoomScreen({ burrow, room }: ChatRoomScreenProps) {
                   onSettle={rowSettle}
                   onMarkUnread={rowUnread}
                   onMarkRead={rowRead}
+                  nowMs={now}
                 />
               ))}
             </ul>

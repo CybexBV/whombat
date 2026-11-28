@@ -22,11 +22,15 @@ import {
   inboxFiltered,
   inboxRows,
   inboxWords,
+  type RowStatus,
+  rowStatusWords,
+  sameRowStatus,
   settleWords,
 } from '@whombat/client';
 import { queryKeys } from '@whombat/client/query';
 import {
   useChatThreads,
+  useHandoffs,
   useMarkThreadUnread,
   useReadThread,
   useThreadUnread,
@@ -34,7 +38,7 @@ import {
 } from '@whombat/client/react';
 import { api, type ChatRoom, type ConversationLink, type ThreadView } from '@whombat/core';
 import { memo, type ReactNode, useCallback, useMemo, useState } from 'react';
-import { AccessibilityInfo, FlatList, Platform, RefreshControl, View } from 'react-native';
+import { AccessibilityInfo, FlatList, Platform, RefreshControl, ScrollView, View } from 'react-native';
 import { useBurrowBase, useNow } from '../data/BurrowProvider';
 import {
   type InboxActionId,
@@ -55,6 +59,7 @@ import { showToast } from '../data/toast';
 import { useAgentWords } from '../data/useAgent';
 import { usePrefetchThread } from '../data/useThreadOpening';
 import { useSettleThread } from '../data/useThreadSettle';
+import { useThreadWork } from '../data/useThreadWork';
 import { useWebUrl } from '../data/useWebUrl';
 import { useI18n, useMobileT } from '../i18n';
 import { useManaged } from '../managed/context';
@@ -126,6 +131,9 @@ export function ChatInbox({
   const readThread = useReadThread(slug);
   const prefetch = usePrefetchThread(slug);
   const [filter, setFilter] = useState<InboxFilter>('all');
+  // What the assistant handed to T3 Code from each thread, and its own work as it happens: each row says where it stands.
+  const handoffs = useHandoffs(slug, conversationId);
+  const liveWork = useThreadWork(slug, conversationId, true, people);
 
   // The thread open beside the list (two pages) is being read: it never shows as new.
   const openRootId =
@@ -143,8 +151,26 @@ export function ChatInbox({
         timeZone,
         openRootId,
         locale: rawLocale,
+        handoffs,
+        // The assistant's own live turn or a run there; T3 Code's work comes from `handoffs`.
+        live: (rootId) => {
+          const work = liveWork(rootId);
+          return !!work && work.by !== 't3code';
+        },
       }),
-    [threads.threads, unread, me.id, people, words.Name, now, timeZone, openRootId, rawLocale],
+    [
+      threads.threads,
+      unread,
+      me.id,
+      people,
+      words.Name,
+      now,
+      timeZone,
+      openRootId,
+      rawLocale,
+      handoffs,
+      liveWork,
+    ],
   );
   const counts = inboxCounts(rows);
   const shown = inboxFiltered(rows, filter);
@@ -247,6 +273,7 @@ export function ChatInbox({
         onPressIn={prefetch}
         onAct={act}
         onMenu={(rootId, spec) => setMenuFor({ rootId, spec })}
+        nowMs={now.getTime()}
       />
     );
   };
@@ -331,9 +358,10 @@ export function ChatInbox({
 }
 
 /**
- * All · Unread n · Waiting n as light chips (30dp, padded to 44 for the finger), the chosen one on `sf2`; a number only
- * when there is one, Unread's blue and Waiting's in the warning's ink. At the end of the row a quiet “Settled ›” opens
- * the room's settled threads. A hairline under the row.
+ * All · Waiting n · Working n · Done n · Unread n as light chips (30dp, padded to 44 for the finger), the chosen one on
+ * `sf2`, scrolling sideways when the phone is too narrow for them; a number only when there is one, Waiting's in the
+ * warning's ink, Working's in ink, Done's green and Unread's blue. At the end of the row a quiet “Settled ›” opens the
+ * room's settled threads. A hairline under the row.
  */
 function FilterBar({
   filter,
@@ -342,7 +370,7 @@ function FilterBar({
   onSettled,
 }: {
   filter: InboxFilter;
-  counts: { unread: number; waiting: number };
+  counts: { unread: number; waiting: number; working: number; done: number };
   onChange: (f: InboxFilter) => void;
   onSettled: () => void;
 }) {
@@ -352,8 +380,10 @@ function FilterBar({
   const theme = useTheme();
   const items: { value: InboxFilter; label: string; n: number | null; tone: string }[] = [
     { value: 'all', label: inboxWordsHere.all, n: null, tone: theme.colors.mut },
-    { value: 'unread', label: inboxWordsHere.unread, n: counts.unread, tone: theme.chart.chart1 },
     { value: 'waiting', label: inboxWordsHere.waiting, n: counts.waiting, tone: theme.colors.warnText },
+    { value: 'working', label: inboxWordsHere.working, n: counts.working, tone: theme.colors.ink2 },
+    { value: 'done', label: inboxWordsHere.done, n: counts.done, tone: theme.colors.okText },
+    { value: 'unread', label: inboxWordsHere.unread, n: counts.unread, tone: theme.chart.chart1 },
   ];
   return (
     <View
@@ -369,10 +399,13 @@ function FilterBar({
         borderBottomColor: theme.colors.line,
       }}
     >
-      <View
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
         accessibilityRole="tablist"
         accessibilityLabel={inboxWordsHere.show}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}
+        style={{ flexShrink: 1 }}
+        contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
       >
         {items.map((it) => {
           const on = it.value === filter;
@@ -390,8 +423,8 @@ function FilterBar({
                 minHeight: 30,
                 flexDirection: 'row',
                 alignItems: 'center',
-                gap: 6,
-                paddingHorizontal: 12,
+                gap: 5,
+                paddingHorizontal: 10,
                 borderRadius: 15,
                 backgroundColor: on ? theme.colors.sf2 : 'transparent',
               }}
@@ -412,7 +445,7 @@ function FilterBar({
             </Touchable>
           );
         })}
-      </View>
+      </ScrollView>
       <Touchable
         onPress={onSettled}
         accessibilityRole="button"
@@ -451,12 +484,15 @@ interface InboxRowProps {
   onPressIn: (rootId: string) => void;
   onAct: (rootId: string, id: InboxActionId) => void;
   onMenu: (rootId: string, spec: NativeMenuSpec) => void;
+  /** The clock for a T3 Code job's minutes. */
+  nowMs: number;
 }
 
 /**
  * One thread's row: 64dp at least, as tall as its words. The icon (40, its state on its corners), then the title (one
  * line, a repository's name at its end quieter) and the time in mono, and under them up to two lines of the newest reply
- * with “Waiting for you” in front when something waits, and the count of what is new. Something new: the title bold
+ * (or what T3 Code does now) with where the thread stands in front (“Waiting for you”, “T3 Code is working · 6m”,
+ * “Done”), and the count of what is new. Something new: the title bold
  * in ink, the time and count blue, the reply in ink2; read: the title medium in ink2, the reply muted. The hairline
  * under it starts where the words do. The whole row is the button; swiped left it settles, right it is marked unread
  * or read; held, its menu.
@@ -471,11 +507,15 @@ const InboxRowView = memo(function InboxRowView({
   onPressIn,
   onAct,
   onMenu,
+  nowMs,
 }: InboxRowProps) {
   const { rawLocale } = useI18n();
   const inboxWordsHere = inboxWords(rawLocale);
   const theme = useTheme();
   const isNew = row.unread > 0;
+  // What T3 Code does now (or what it asks to approve) stands in for the newest reply.
+  const line = row.status?.line ?? row.line;
+  const shownWho = row.status?.line ? null : row.shownWho;
   const trailing = useMemo<SwipeAction[]>(
     () =>
       swipe.settle
@@ -541,7 +581,7 @@ const InboxRowView = memo(function InboxRowView({
       }}
     >
       <View style={{ width: THREAD_ICON, marginTop: 12, marginRight: ICON_GAP }}>
-        <ThreadIcon row={row} fresh={isNew} working={row.working} />
+        <ThreadIcon row={row} fresh={isNew} status={row.status?.kind ?? null} />
       </View>
       <View
         style={{
@@ -579,7 +619,7 @@ const InboxRowView = memo(function InboxRowView({
             {row.when}
           </Text>
         </View>
-        {row.waiting || row.line ? (
+        {row.status || line ? (
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginTop: 3 }}>
             <Text
               size={13}
@@ -588,16 +628,16 @@ const InboxRowView = memo(function InboxRowView({
               numberOfLines={2}
               style={{ flex: 1, minWidth: 0 }}
             >
-              {row.waiting ? <WaitingChip /> : null}
-              {row.waiting && row.line ? ' ' : null}
-              {row.shownWho && row.line ? (
+              {row.status ? <StatusChip status={row.status} nowMs={nowMs} /> : null}
+              {row.status && line ? ' ' : null}
+              {shownWho && line ? (
                 <Text
                   size={13}
                   weight={600}
                   color={isNew ? theme.colors.ink2 : theme.colors.mut}
-                >{`${row.shownWho}: `}</Text>
+                >{`${shownWho}: `}</Text>
               ) : null}
-              {row.line}
+              {line}
             </Text>
             {isNew ? <NewCount n={row.unread} /> : null}
           </View>
@@ -625,7 +665,7 @@ const InboxRowView = memo(function InboxRowView({
 function sameRow(a: InboxRowProps, b: InboxRowProps): boolean {
   const keys = Object.keys(a.row) as (keyof InboxRow)[];
   return (
-    keys.every((k) => a.row[k] === b.row[k]) &&
+    keys.every((k) => (k === 'status' ? sameRowStatus(a.row.status, b.row.status) : a.row[k] === b.row[k])) &&
     a.swipe.settle === b.swipe.settle &&
     a.swipe.mark === b.swipe.mark &&
     a.marksAway === b.marksAway &&
@@ -634,18 +674,28 @@ function sameRow(a: InboxRowProps, b: InboxRowProps): boolean {
     a.actions.every((x, i) => x.id === b.actions[i]?.id) &&
     a.onOpen === b.onOpen &&
     a.onPressIn === b.onPressIn &&
-    a.onAct === b.onAct
+    a.onAct === b.onAct &&
+    // Only a T3 Code job's clock follows the time.
+    (a.row.status?.since == null || a.nowMs === b.nowMs)
   );
 }
 
 /**
- * “Waiting for you” at the start of the reply's words, which wrap under it: `warnText` 12/600 on `sf2`, 19dp, 6 round.
+ * Where the thread stands at the start of the reply's words, which wrap under it, on `sf2`, 19dp, 6 round: “Waiting for
+ * you” and “Didn’t finish” in `warnText` 600, “Done” in `okText` 600, work in `ink2` 500, checks and Stopped in `mut`.
  * The row's label says it.
  */
-function WaitingChip() {
-  const { rawLocale } = useI18n();
-  const inboxWordsHere = inboxWords(rawLocale);
+function StatusChip({ status, nowMs }: { status: RowStatus; nowMs: number }) {
   const theme = useTheme();
+  const loud = status.kind === 'waiting' || status.kind === 'failed' || status.kind === 'done';
+  const color =
+    status.kind === 'waiting' || status.kind === 'failed'
+      ? theme.colors.warnText
+      : status.kind === 'done'
+        ? theme.colors.okText
+        : status.kind === 'working'
+          ? theme.colors.ink2
+          : theme.colors.mut;
   return (
     <View
       style={{
@@ -657,8 +707,8 @@ function WaitingChip() {
         transform: [{ translateY: 4 }],
       }}
     >
-      <Text size={12} weight={600} color={theme.colors.warnText}>
-        {inboxWordsHere.waitingForYou}
+      <Text size={12} weight={loud ? 600 : 500} color={color} numberOfLines={1}>
+        {rowStatusWords(status, nowMs)}
       </Text>
     </View>
   );
