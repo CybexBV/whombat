@@ -72,15 +72,14 @@ import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
 import { outsidersTurn } from '../runtime/person';
+import type { Services } from '../services';
 import { trackerConnectionRow } from '../trackers/connection';
 import { driverIdOf, noDriverText, recipeWordsOf } from '../trackers/drivers';
 import { stopRunRequests } from '../trackers/features';
 import { scopeReport, type TrackerRunItem, TrackerRunItemSchema, trackerItemScope } from '../trackers/items';
 import { nextContinueStepId, unlandedReason } from '../trackers/unlanded';
 import { automationAgent, publisherCheck } from './authority';
-import { planDirectAction } from './direct-action';
 import { GitHubItem, githubItemScope, itemRef, sampleTrigger } from './github-items';
-import { smartHomeTriggersFor } from './home-triggers';
 import { postRunNotice } from './notice';
 import { republishPlanCards } from './plan-cards';
 import { createAutomationPrincipal } from './principal';
@@ -99,6 +98,14 @@ import {
 } from './store';
 import { type AgainMark, resetOutput, resetStepsFrom } from './tries';
 import { hasWebhookTrigger, NO_WEBHOOK_TRIGGER_TEXT, refuseWebhookTrigger } from './webhook-trigger';
+
+/**
+ * Follows the Home Assistant entities live automations name now. Loaded when needed, as `direct-action.ts` is: both reach
+ * the connection modules, which reach these commands, so a static import would be a cycle.
+ */
+function followSmartHome(services: Services): void {
+  void import('./home-triggers').then((m) => m.smartHomeTriggersFor(services).tick()).catch(() => {});
+}
 
 export const webhookSecretAad = (automationId: string) => `automation:${automationId}:webhook`;
 
@@ -208,6 +215,7 @@ export async function referenceProblems(
     if (s.kind === 'run_action') {
       // Something only out of reach now (a server's agent, a sign-in) doesn't stop it being drafted: it says so when
       // it runs.
+      const { planDirectAction } = await import('./direct-action');
       const plan = await planDirectAction(ctx.tx, ctx.services, ctx.burrow.id, s);
       if (!plan.ok && (plan.fatal || plan.gone)) problems.push(`Step “${s.id}”: ${plan.reason}`);
       else if (plan.ok && s.thing.startsWith('server:') && !plan.server)
@@ -605,7 +613,7 @@ export async function publishVersion(
     // A Find My connection an automation listens to reads at least every 15 minutes from now on, or no longer does.
     if (touchesFindMy) findMyBackgroundFor(services).nudge();
     // Home Assistant's entities it names are followed from now on, or no longer are.
-    if (touchesHome) void smartHomeTriggersFor(services).tick();
+    if (touchesHome) followSmartHome(services);
   });
   return n;
 }
@@ -989,7 +997,7 @@ export const setAutomationEnabled = defineCommand({
         services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
-        if (watchesHome) void smartHomeTriggersFor(services).tick();
+        if (watchesHome) followSmartHome(services);
       });
       return { automationId: row.id };
     }
@@ -1026,7 +1034,7 @@ export const setAutomationEnabled = defineCommand({
         if (input.enabled) services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
-        if (watchesHome) void smartHomeTriggersFor(services).tick();
+        if (watchesHome) followSmartHome(services);
       });
     }
     return { automationId: row.id };
@@ -1376,7 +1384,7 @@ export async function removeAutomation(
   ctx.after(async () => {
     services.mailTriggers.nudge();
     findMyBackgroundFor(services).nudge();
-    void smartHomeTriggersFor(services).tick();
+    followSmartHome(services);
   });
   return active.length;
 }

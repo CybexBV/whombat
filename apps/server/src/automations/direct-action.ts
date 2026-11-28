@@ -30,11 +30,9 @@ import { thePerson } from '../domain/the-person';
 import { callServerOf, SERVERS_CATALOG } from '../hosts/asks';
 import { hostsFor } from '../hosts/service';
 import type { Services } from '../services';
-import { getJson } from '../things/kinds/read';
 import { clock } from '../things/words';
 import { automationAgent, publisherCheck } from './authority';
 import type { LeasedRun } from './engine/step-ops';
-import { stepRoomsCheck } from './steps';
 import type { AutomationStepRow } from './store';
 
 type RunActionStep = Extract<AutomationStep, { kind: 'run_action' }>;
@@ -180,6 +178,8 @@ async function alreadySo(
     if (kind === 'entity' && step.target && (step.action === 'turn_on' || step.action === 'turn_off')) {
       const domain = entityDomain(step.target);
       if (domain === 'scene' || domain === 'script') return null;
+      // Loaded here, as `steps.ts` is below: the connection modules reach this one through the automation commands.
+      const { getJson } = await import('../things/kinds/read');
       const state = rec(
         await getJson(services, plan.conn, plan.conn.label, `/api/states/${step.target}`),
       ).state;
@@ -248,6 +248,8 @@ export async function runDirectAction(
   const db = services.db;
   const who = await publisherCheck(db, run.burrowId, run.publishedById);
   if (!who.ok) return void (await cannot(lease, row, step, who.reason, true));
+  // Loaded here: `steps.ts` reaches this module through its step handlers, so a static import would be a cycle.
+  const { stepRoomsCheck } = await import('./steps');
   const rooms = await stepRoomsCheck(db, run, row.idx, who.publisher);
   if (!rooms.ok) return void (await cannot(lease, row, step, rooms.reason, true));
   const out = row.output as { approvalId?: string; callId?: string; target?: string };
