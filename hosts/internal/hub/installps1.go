@@ -102,8 +102,22 @@ func windowsLine(origin, hubURL, sum, token, control string) string {
 // identity, as install.sh --uninstall does).
 const WindowsUninstallLine = `& "$env:ProgramFiles\Whombat\whombat-agent.exe" uninstall`
 
-// psString quotes s for a single-quoted PowerShell string.
-func psString(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+// psString quotes s for a single-quoted PowerShell string. PowerShell ends
+// one at the typographic single quotes ‘ ’ ‚ ‛ as well as at ', so each is
+// doubled.
+func psString(s string) string {
+	var b strings.Builder
+	b.WriteByte('\'')
+	for _, r := range s {
+		switch r {
+		case '\'', '\u2018', '\u2019', '\u201a', '\u201b':
+			b.WriteRune(r)
+		}
+		b.WriteRune(r)
+	}
+	b.WriteByte('\'')
+	return b.String()
+}
 
 var installPS1Tmpl = template.Must(template.New("install.ps1").Parse(`# Whombat agent installer for Windows, from Whombat's hosts service.
 # Whombat's Add a server gives the line that runs it in PowerShell opened as

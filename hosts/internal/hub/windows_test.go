@@ -156,6 +156,10 @@ func TestWindowsLineQuotes(t *testing.T) {
 	if !strings.Contains(line, "-Token 'to''ken'") || strings.Contains(line, "-Control") {
 		t.Errorf("line %s", line)
 	}
+	// PowerShell ends a single-quoted string at ‘ ’ ‚ ‛ too.
+	if got := psString("a‘b’c‚d‛e"); got != "'a‘‘b’’c‚‚d‛‛e'" {
+		t.Errorf("psString = %s", got)
+	}
 }
 
 // Windows PowerShell can switch its certificate check off only for the whole

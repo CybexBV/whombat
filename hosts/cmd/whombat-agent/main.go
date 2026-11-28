@@ -77,6 +77,7 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	ownWrites()
 	var err error
 	switch os.Args[1] {
 	case "enroll":

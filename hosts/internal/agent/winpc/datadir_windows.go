@@ -3,28 +3,40 @@ package winpc
 import (
 	"os"
 	"runtime"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// SecureDataDir creates top (%ProgramData%\Whombat) as the agent's own, or
-// takes it over with everything in it (datadir.go says why and how). It
-// runs as an administrator or as the service (LocalSystem).
-func SecureDataDir(top string) error {
-	// Backup and restore let the agent open, read and change what someone
-	// else owns and shut it out of; take-ownership lets it become the owner.
-	// Administrators and SYSTEM hold them, switched off until asked for.
-	return withPrivileges([]string{"SeBackupPrivilege", "SeRestorePrivilege", "SeTakeOwnershipPrivilege"}, func() error {
-		return secureTree(winTree{}, top)
+// PrepareDataDir is what the agent does on Windows before it reads or
+// writes its folders (datadir.go says why and how): the settings folder
+// dir and the state folder must be in top (%ProgramData%\Whombat); top is
+// created as the agent's own, or taken over, with whatever someone else
+// could have written in it moved aside; then the state folder dir's
+// agent.toml names (stateOf, when stateDir is "") must be in top too. It
+// runs as an administrator or as the service (LocalSystem), and returns
+// what it moved aside.
+func PrepareDataDir(top, dir, stateDir string, stateOf func(dir string) (string, bool)) ([]Moved, error) {
+	var moved []Moved
+	// Backup and restore let the agent open, read, change and move what
+	// someone else owns and shut it out of; take-ownership lets it become
+	// the owner. Administrators and SYSTEM hold them, switched off until
+	// asked for.
+	err := withPrivileges([]string{"SeBackupPrivilege", "SeRestorePrivilege", "SeTakeOwnershipPrivilege"}, func() error {
+		var err error
+		moved, err = prepareDataDir(winTree{}, top, time.Now().Format("20060102-150405"), dir, stateDir, stateOf)
+		return err
 	})
+	return moved, err
 }
 
 // The agent's access lists: SYSTEM and the administrators, full control,
 // protected from what the folder above would pass down. A folder passes
-// its list on to what is made inside it.
+// its list on to what is made inside it, and is made with the
+// administrators as its owner.
 const (
-	dirSDDL  = "D:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
+	dirSDDL  = "O:BAD:P(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"
 	fileSDDL = "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
 )
 
@@ -96,6 +108,22 @@ func (winTree) Open(path string) (treeObject, error) {
 		return nil, err
 	}
 	return winObject(h), nil
+}
+
+// SetAside moves the file or folder itself: MoveFileEx renames a link,
+// never what it points to. Without MOVEFILE_REPLACE_EXISTING it fails when
+// to is taken (fs.ErrExist), and without MOVEFILE_COPY_ALLOWED it never
+// copies.
+func (winTree) SetAside(path, to string) error {
+	from, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	dst, err := windows.UTF16PtrFromString(to)
+	if err != nil {
+		return err
+	}
+	return windows.MoveFileEx(from, dst, 0)
 }
 
 func (winTree) List(dir string) ([]string, error) {

@@ -87,3 +87,6 @@ func stopSignals() []os.Signal { return []os.Signal{os.Interrupt, syscall.SIGTER
 
 // prepareDirs: install.sh makes the agent's folders root's.
 func prepareDirs(string, string) error { return nil }
+
+// ownWrites: what root makes is root's.
+func ownWrites() {}

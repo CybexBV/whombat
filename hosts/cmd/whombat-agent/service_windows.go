@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
@@ -32,21 +33,52 @@ func asRoot(cmd string) string {
 		agentCommand + strings.TrimPrefix(cmd, "whombat-agent")
 }
 
-// prepareDirs creates %ProgramData%\Whombat as the agent's own, or takes it
-// over with everything in it, before the agent reads or writes anything
-// there; it fails when something in it can't be made the agent's (a link
-// to another place, say). Folders elsewhere (given with --config-dir) are
-// the person's.
+// prepareDirs keeps the agent to %ProgramData%\Whombat, the one folder it
+// keeps safe, before it reads or writes anything there: its settings
+// folder (dir) and its state folder (stateDir, or the one dir's agent.toml
+// names) must be in it, and the folder is made the agent's own, with
+// whatever someone else could have written moved aside (winpc.PrepareDataDir).
+// The person hears what was moved: on the screen, and in Windows'
+// Application log for the service.
 func prepareDirs(dir, stateDir string) error {
-	top := agent.WindowsDataDir
-	under := func(p string) bool {
-		rel, err := filepath.Rel(top, p)
-		return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	moved, err := winpc.PrepareDataDir(agent.WindowsDataDir, dir, stateDir, configuredStateDir)
+	for _, m := range moved {
+		msg := fmt.Sprintf("Someone else could change %s, so the Whombat agent moved it to %s and doesn't use it.", m.From, m.To)
+		fmt.Fprintln(os.Stderr, msg)
+		eventLog(windows.EVENTLOG_WARNING_TYPE, msg)
 	}
-	if !under(dir) && (stateDir == "" || !under(stateDir)) {
-		return nil
+	return err
+}
+
+// configuredStateDir is the state folder dir's agent.toml names.
+func configuredStateDir(dir string) (string, bool) {
+	cfg, err := agent.LoadConfig(dir)
+	if err != nil {
+		return "", false
 	}
-	return winpc.SecureDataDir(top)
+	return cfg.StateDir, true
+}
+
+// ownWrites makes the administrators the owner of every file and folder
+// this process makes. The agent trusts only what SYSTEM or the
+// administrators own (winpc), and where Windows gives what an
+// administrator makes to that administrator's own account instead (its
+// policy “Default owner for objects created by members of the
+// Administrators group”), the settings `policy set` writes would otherwise
+// be moved aside at the service's next start. Without administrator
+// rights it changes nothing.
+func ownWrites() {
+	var tok windows.Token
+	if err := windows.OpenProcessToken(windows.CurrentProcess(), windows.TOKEN_ADJUST_DEFAULT|windows.TOKEN_QUERY, &tok); err != nil {
+		return
+	}
+	defer tok.Close()
+	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
+	if err != nil {
+		return
+	}
+	owner := struct{ Owner *windows.SID }{admins} // TOKEN_OWNER
+	_ = windows.SetTokenInformation(tok, windows.TokenOwner, (*byte)(unsafe.Pointer(&owner)), uint32(unsafe.Sizeof(owner)))
 }
 
 // openService opens the agent's service; nil, nil when there is none.
@@ -353,19 +385,41 @@ func cmdUninstall(args []string) error {
 }
 
 // removeProgram removes the agent's program folder. The running
-// executable can't be deleted, but it can move: to Windows' own temporary
-// folder, from where it goes at the next restart.
+// executable can't be deleted, but it can move (programAside), from where
+// it goes at the next restart. When it can't move either, it and its
+// folder go at the next restart, and the rest now.
 func removeProgram(exe string) error {
 	dir := filepath.Dir(exe)
 	if !strings.EqualFold(filepath.Base(dir), "Whombat") {
 		// Not install.ps1's folder: leave the person's own place alone.
 		return nil
 	}
-	tmp := filepath.Join(os.Getenv("SystemRoot"), "Temp", fmt.Sprintf("whombat-agent-%d.exe", time.Now().UnixNano()))
-	if err := os.Rename(exe, tmp); err == nil {
-		if p, err := windows.UTF16PtrFromString(tmp); err == nil {
-			_ = windows.MoveFileEx(p, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+	name := fmt.Sprintf("whombat-agent-%d.exe", time.Now().UnixNano())
+	for _, to := range programAside(exe, os.Getenv("SystemRoot"), name) {
+		if err := os.Rename(exe, to); err == nil {
+			deleteAtRestart(to)
+			return os.RemoveAll(dir)
 		}
 	}
-	return os.RemoveAll(dir)
+	ents, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range ents {
+		if p := filepath.Join(dir, e.Name()); !strings.EqualFold(p, exe) {
+			if err := os.RemoveAll(p); err != nil {
+				return err
+			}
+		}
+	}
+	deleteAtRestart(exe)
+	deleteAtRestart(dir) // after exe: Windows deletes in the order asked
+	return nil
+}
+
+// deleteAtRestart has Windows delete path when it next starts.
+func deleteAtRestart(path string) {
+	if p, err := windows.UTF16PtrFromString(path); err == nil {
+		_ = windows.MoveFileEx(p, nil, windows.MOVEFILE_DELAY_UNTIL_REBOOT)
+	}
 }
