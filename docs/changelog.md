@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Does it really work? Nextcloud, Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant pages can test whether
   the service really works, by opening a file, your newest photo or document, a library's newest item or a sensor's
