@@ -6,12 +6,16 @@
  * sorts by it. A search and a filter (`?q=`, `?state=`; tags still match the search), the console (Start for a stopped
  * guest) and a ⋯ menu per row (power, Snapshots…, History…, Open), tick boxes on hover with the bulk bar with
  * power on, Create with Manage on (VM and container on Proxmox, instance on Incus), and Proxmox's templates
- * under the table. A row's name opens the guest.
+ * under the table. A row's name opens the guest. A Docker Compose app with a newer image says so under its name and
+ * shows Update, which asks through the approval card (Whombat app-updates.md).
  */
 
 import { BrandMark } from '@whombat/brand/react';
 import {
   actionAcceptedText,
+  appUpdateRow,
+  appUpdatesNote,
+  appUpdateWords,
   type BulkGuest,
   detailGuests,
   filterGuests,
@@ -30,9 +34,11 @@ import {
 } from '@whombat/client/hosts';
 import { useHostsChange } from '@whombat/client/hosts/react';
 import { api } from '@whombat/core/contracts';
-import type { HostGuest } from '@whombat/core/domain';
+import { agentReportsApps, type HostGuest } from '@whombat/core/domain';
+import { interpolate } from '@whombat/core/i18n';
 import { Box, House, Monitor, Power, Search, SquareTerminal } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { Button } from '../../../components/Button';
 import { cx } from '../../../components/cx';
 import { Icon } from '../../../components/Icon';
 import { SegmentedControl } from '../../../components/SegmentedControl';
@@ -43,6 +49,7 @@ import type { CreateKind } from '../manage/CreateGuestDialog';
 import { CreateMenu } from '../manage/CreateMenu';
 import { GuestRowMenu } from '../manage/GuestRowMenu';
 import { TemplatesList } from '../manage/TemplatesList';
+import { useAppUpdate, useAppUpdatesOn } from '../manage/useAppUpdate';
 import { Card, Dot, Empty, useChangeRunner } from '../parts';
 import { useThingSearch } from '../search';
 import { TemporaryRow } from '../TemporaryRow';
@@ -125,6 +132,10 @@ export function GuestsTab({
   const chosen = pickable.filter((g) => picked.has(g.id));
   const allChosen = pickable.length > 0 && chosen.length === pickable.length;
   const items: BulkGuest[] = chosen.map((g) => ({ server: serverId, guest: g, power: true }));
+  // App updates: whether this server's helper reports Compose apps, and the list's one note about them.
+  const appsOn = useAppUpdatesOn();
+  const apps = { on: appsOn, agentHasApps: agentReportsApps(every), manage, locale };
+  const appsNote = appsOn ? appUpdatesNote(every, locale) : null;
   const toggle = (id: string, on: boolean) =>
     setPicked((s) => {
       const n = new Set(s);
@@ -190,6 +201,7 @@ export function GuestsTab({
           Sorted by <b>{GUEST_SORT_WORDS[sort.key]}</b> · click a column to sort
         </span>
       </div>
+      {appsNote ? <p className={gs.appsNote}>{appsNote}</p> : null}
       {powerOk ? <BulkBar burrow={burrow} items={items} onClear={() => setPicked(new Set())} /> : null}
       {list.length === 0 ? (
         <Empty>{all.length ? 'Nothing matches that.' : 'Nothing runs on this server.'}</Empty>
@@ -238,6 +250,7 @@ export function GuestsTab({
                 selected={picked.has(g.id)}
                 onSelect={(on) => toggle(g.id, on)}
                 extras={extras}
+                apps={apps}
               />
             ))}
           </tbody>
@@ -276,6 +289,7 @@ function GuestRow({
   selected,
   onSelect,
   extras,
+  apps,
 }: {
   burrow: string;
   serverId: string;
@@ -285,6 +299,7 @@ function GuestRow({
   selected: boolean;
   onSelect: (on: boolean) => void;
   extras?: GuestsTabExtras;
+  apps: { on: boolean; agentHasApps: boolean; manage: boolean; locale?: string };
 }) {
   const [, set] = useThingSearch();
   const con = consoleOk && hasConsole(g);
@@ -297,6 +312,9 @@ function GuestRow({
   const sub = guestSubline(g);
   const cpu = guestCpu(g);
   const mem = guestMemory(g);
+  const app = apps.on
+    ? appUpdateRow(g, { ...apps, now: Date.now() })
+    : { line: null, tone: 'plain' as const, update: false, asks: null };
   return (
     <tr className={cx(gs.row, stopped && gs.stopped)}>
       {powerOk ? (
@@ -328,6 +346,11 @@ function GuestRow({
               ) : null}
             </div>
             <div className={sub.note ? gs.note : gs.sub}>{sub.text}</div>
+            {app.line ? (
+              <div className={app.tone === 'note' ? gs.note : app.tone === 'bad' ? gs.bad : gs.sub}>
+                {app.line}
+              </div>
+            ) : null}
           </div>
         </div>
       </td>
@@ -369,6 +392,15 @@ function GuestRow({
       <td className={gs.toolsCell}>
         <span className={gs.tools}>
           {extras?.tools?.(g)}
+          {app.update ? (
+            <AppUpdateButton
+              burrow={burrow}
+              serverId={serverId}
+              guest={g}
+              asks={app.asks}
+              locale={apps.locale}
+            />
+          ) : null}
           {start ? (
             <StartButton burrow={burrow} serverId={serverId} guest={g} />
           ) : con ? (
@@ -393,6 +425,35 @@ function GuestRow({
         </span>
       </td>
     </tr>
+  );
+}
+
+/** Update an app: the approval card asks, and opens here; its title says why it asks first, when it does. */
+function AppUpdateButton({
+  burrow,
+  serverId,
+  guest: g,
+  asks,
+  locale,
+}: {
+  burrow: string;
+  serverId: string;
+  guest: HostGuest;
+  asks: string | null;
+  locale?: string;
+}) {
+  const { ask, busy } = useAppUpdate(burrow, serverId);
+  const w = appUpdateWords(locale);
+  return (
+    <Button
+      size="sm"
+      disabled={busy}
+      aria-label={interpolate(w.updateName, { name: g.name })}
+      title={asks ?? undefined}
+      onClick={() => void ask([g.id])}
+    >
+      {w.update}
+    </Button>
   );
 }
 

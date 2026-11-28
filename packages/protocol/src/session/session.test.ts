@@ -23,6 +23,7 @@ import {
 } from './operations.js';
 import {
   ACCOUNT_PAGES_MINOR,
+  APP_UPDATES_MINOR,
   BACKGROUND_MODEL_MINOR,
   DISK_USAGE_MINOR,
   EXPOSURE_MINOR,
@@ -104,6 +105,7 @@ describe('version negotiation', () => {
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
     expect(EXPOSURE_MINOR).toBe(22);
+    expect(APP_UPDATES_MINOR).toBe(22);
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });

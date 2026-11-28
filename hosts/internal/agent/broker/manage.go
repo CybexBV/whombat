@@ -50,6 +50,9 @@ func (b *Broker) Manage(ctx context.Context, req proto.ManageRequest) proto.Mana
 	if resp, ok := b.unraidManage(ctx, req); ok {
 		return resp // unRAID, its tasks, and the Docker / libvirt guest ops (unraid_manage.go)
 	}
+	if resp, ok := b.appsManage(ctx, req); ok {
+		return resp // app updates and their tasks (app_tasks.go)
+	}
 	if resp, ok := b.packagesManage(req); ok {
 		return resp // package updates and their tasks (pkg_tasks.go)
 	}

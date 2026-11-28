@@ -238,9 +238,9 @@ describe('the Servers tools on QEMU/KVM (CT-371, 0.84.0)', () => {
   it('adds libvirt_overview and widens the others', () => {
     // 0.85 (CT-378) adds server_add: 51; 0.98 (CT-505) server_updates and server_update: 53; backup places
     // (backup-places.md BPL-12) backup_place_nfs and proxmox_storage_add: 55; Macs (macos-servers.md) mac_screen and
-    // mac_ui: 57; what fills a disk, server_disk_usage: 58.
-    expect(SERVERS_TOOLS).toHaveLength(58);
-    expect(servers().tools).toHaveLength(58);
+    // mac_ui: 57; what fills a disk, server_disk_usage: 58; Compose app updates, app_updates and app_update: 60.
+    expect(SERVERS_TOOLS).toHaveLength(60);
+    expect(servers().tools).toHaveLength(60);
     const overview = tool('libvirt_overview');
     expect(overview?.access).toBe('read');
     expect(schema('libvirt_overview').safeParse({ server: 'kvm-lab' }).success).toBe(true);

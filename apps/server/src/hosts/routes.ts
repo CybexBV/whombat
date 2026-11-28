@@ -5,6 +5,7 @@
  * confirmations passed through, and is then signed with `hosts.change` and recorded for Done recently (`commands.ts`). Only the oldest burrow sees servers
  * (ONE-DH02); without the service every route but `hosts.status` answers 503 `hosts_unavailable`.
  */
+
 import {
   api,
   HOST_CONTROL_LEVEL_DEFAULT,
@@ -38,6 +39,7 @@ import { sshDestination } from '../vault/ssh';
 import { entryCount, ownEntry, serverRows, vaultSecretAad } from '../vault/store';
 import { agentUpdatesFor } from './agent-signing';
 import { AGENT_UPDATE_TEXT, agentRowUpdate, startedState, toAgentSettings } from './agent-updates';
+import { askAppUpdate } from './app-ask';
 import { setServerAsks } from './asks';
 import { serverAsksOf } from './asks-store';
 import { HOSTS_API, type HostsActor, HostsUnavailable, networksOf, poolsOf, seg } from './client';
@@ -774,6 +776,13 @@ export const MANAGE_ROUTES: Record<HostManageRequest['op'], ManageRoute> = {
     path: (s) => `${S(s)}/packages/install`,
     body: ['packages', 'confirm'],
   },
+  // Never sent as it is: the route asks through the approval card first (`askAppUpdate`), and the yes runs app_update.
+  'app.update': {
+    method: 'POST',
+    guest: false,
+    path: (s) => `${S(s)}/apps/update`,
+    body: ['apps', 'snapshot'],
+  },
 };
 
 /** A param the op's route doesn't pass is refused, naming it (PX-08: dropping it silently changed the outcome). */
@@ -1423,6 +1432,18 @@ export const hostsRoutes: RouteDef[] = [
     const g = await guard(ctx, { manage: true });
     const { serverId } = ctx.params;
     const req = ctx.body as HostManageRequest;
+    // Update on a page asks through the approval card, as the assistant's call does (app-updates.md).
+    if (req.op === 'app.update') {
+      const params = req.params as { apps: string[]; snapshot?: boolean };
+      return askAppUpdate(ctx.services, {
+        burrowId: ctx.access.burrow.id,
+        personId: g.person.id,
+        serverId,
+        apps: params.apps,
+        // Unsaid: a snapshot first whenever the server is a Proxmox guest Whombat watches; the card says so.
+        ...(typeof params.snapshot === 'boolean' ? { snapshot: params.snapshot } : {}),
+      });
+    }
     const call = manageCall(serverId, req);
     // A restore (or an Incus backup's delete) names its guest in the request or in its params (the web's).
     const guestId =

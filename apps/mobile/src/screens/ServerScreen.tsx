@@ -34,6 +34,8 @@ import {
   thingRenameTarget,
 } from '@whombat/client';
 import {
+  appUpdateRow,
+  appUpdatesNote,
   detailGuests,
   findMyWords,
   guestsWord,
@@ -73,10 +75,17 @@ import {
   useSetWatchLimit,
   useThingWatch,
 } from '@whombat/client/react';
-import { type ChatSubject, type HostGuest, type HostSeriesRange, thingId } from '@whombat/core';
+import {
+  agentReportsApps,
+  type ChatSubject,
+  type HostGuest,
+  type HostSeriesRange,
+  thingId,
+} from '@whombat/core';
 import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
+import { useAppUpdatesOn } from '../data/appUpdates';
 import { useBurrowBase, useNow, useNowLabel } from '../data/BurrowProvider';
 import { rangeOptions } from '../data/dashboard';
 import { parseMonitoringPick, serverMoreMenu } from '../data/monitoring';
@@ -231,6 +240,12 @@ export function ServerScreen({
     [guests.data, showTemporary, rawLocale],
   );
   const rows = list.rows;
+  // Compose apps say under their name when an update waits or how the last one went (app-updates.md); Update is on
+  // the app's own screen.
+  const appsOn = useAppUpdatesOn();
+  const allGuests = guests.data?.guests ?? [];
+  const appsHere = { agentHasApps: agentReportsApps(allGuests), manage: false, locale: rawLocale };
+  const appsNote = appsOn ? appUpdatesNote(allGuests, rawLocale) : null;
   const unraidOp = useUnraidOp(serverId, shown);
   const keep = useKeepQuiet(slug, thing, { name: shown, timeZone, note: quietNote(showToast) });
   const hold = keepsQuiet && d ? holdView(d, rawLocale) : null;
@@ -660,7 +675,11 @@ export function ServerScreen({
                       // The name comes first and isn't cut (CN-08, AP-2562): a long one takes a second line.
                       titleLines={2}
                       titleAfter={g.kind.id}
-                      line={g.meta || null}
+                      line={
+                        [g.meta, appsOn ? appUpdateRow(g.guest, { ...appsHere, now }).line : null]
+                          .filter(Boolean)
+                          .join(' · ') || null
+                      }
                       badge={g.self ? <ToneBadge text={selfGuestChip(rawLocale)} tone="brand" /> : undefined}
                       trailing={
                         // Running is the dot alone; any other state says its word too (AP-1753, AP-1810).
@@ -693,6 +712,7 @@ export function ServerScreen({
                     />
                   ) : null}
                 </OneCard>
+                {appsNote ? <QuietText>{appsNote}</QuietText> : null}
               </>
             )}
           </>

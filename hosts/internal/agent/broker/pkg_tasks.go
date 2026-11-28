@@ -659,7 +659,10 @@ func (b *Broker) packagesManage(req proto.ManageRequest) (proto.ManageResponse, 
 		}
 		return proto.ManageResponse{OK: true}, true
 	case proto.OpTaskList:
-		return proto.ManageResponse{OK: true, Tasks: p.list()}, true
+		// The host's tasks: package tasks and app updates, newest first.
+		tasks := append(p.list(), b.appUpdates().list()...)
+		sort.SliceStable(tasks, func(i, j int) bool { return tasks[i].Started.After(tasks[j].Started) })
+		return proto.ManageResponse{OK: true, Tasks: tasks}, true
 	}
 	op := pkgs.OpCheck
 	if req.Op == proto.OpPackagesInstall {

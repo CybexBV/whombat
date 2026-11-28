@@ -18,7 +18,8 @@
 // runs it through systemd-run to replace its own executable. So is
 // `whombat-agent package-task --dir DIR`: one package check or install, in
 // a transient unit (or its own session without systemd) that outlives the
-// agent.
+// agent, and `whombat-agent app-task --dir DIR`: one update of Docker Compose
+// apps, the same way.
 package main
 
 import (
@@ -108,6 +109,8 @@ func main() {
 		err = cmdDiagnoseTest(os.Args[2:])
 	case "package-task":
 		err = cmdPackageTask(os.Args[2:])
+	case "app-task":
+		err = cmdAppTask(os.Args[2:])
 	case "update-install":
 		err = cmdUpdateInstall(os.Args[2:])
 	case "screen":
@@ -237,6 +240,7 @@ func cmdRun(args []string) error {
 		br := broker.NewBroker(cfg, rt.Inventory, log)
 		br.OnUnraidChange = rt.RefreshUnraid
 		br.OnPackageChange = rt.RefreshPackages
+		br.OnAppChange = rt.RefreshApps
 		rt.Broker = br
 		rt.Diagnostics = diagnose.New(br.Inspect, log)
 		rt.DiskUsage = diskusage.New(rt.Inventory, log)

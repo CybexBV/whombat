@@ -1,5 +1,6 @@
 import type { MessageCatalog } from '@whombat/core/i18n';
 import { HOSTS_ACTIONS_WORDS } from './actions';
+import { HOSTS_APP_UPDATES_WORDS } from './appUpdates';
 import { CONN_DRAFT_WORDS, CONN_FORM_WORDS, CONN_SETUP_WORDS } from './connectForm';
 import {
   CONN_ACCOUNT_KEYS_WORDS,
@@ -49,6 +50,7 @@ export const CONNECTIONS_HOSTS_AREAS: readonly MessageArea[] = [
   HOSTS_TEMPORARY_WORDS,
   HOSTS_REPOINT_WORDS,
   HOSTS_UPDATES_WORDS,
+  HOSTS_APP_UPDATES_WORDS,
   HOSTS_DASHBOARD_RANGE_WORDS,
   HOSTS_FIND_MY_WORDS,
   HOSTS_FIND_MY_TIMELINE_WORDS,

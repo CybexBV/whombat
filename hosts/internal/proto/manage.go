@@ -181,7 +181,7 @@ type ManageRequest struct {
 	Template          string `cbor:"template,omitempty" json:"template,omitempty"`               // appliance template name
 
 	// Tasks.
-	Task     string `cbor:"task,omitempty" json:"task,omitempty"`           // PVE UPID, "incus:<operation uuid>", "unraid:…", "libvirt:…", "pkg:…"
+	Task     string `cbor:"task,omitempty" json:"task,omitempty"`           // PVE UPID, "incus:<operation uuid>", "unraid:…", "libvirt:…", "pkg:…", "app:…"
 	LogStart int    `cbor:"log_start,omitempty" json:"log_start,omitempty"` // first log line to return; -1: none
 
 	// Firewall.
@@ -246,6 +246,12 @@ type ManageRequest struct {
 	// packages.install: only these packages (empty: every waiting update;
 	// packages.go).
 	Packages []string `cbor:"packages,omitempty" json:"packages,omitempty"`
+
+	// app.update (apps.go): the containers to update (their names, at most
+	// AppsMax); HoldMajor leaves an app as it is when the new image turns
+	// out to be a new major version (a run nobody looked at).
+	Apps      []string `cbor:"apps,omitempty" json:"apps,omitempty"`
+	HoldMajor bool     `cbor:"hold_major,omitempty" json:"hold_major,omitempty"`
 
 	// Backup places (backupplace.go): the place operations' values, and
 	// storage.add's storage. The hub builds them from its own bodies.
@@ -542,6 +548,8 @@ type TaskStatus struct {
 	NewID string `cbor:"new_id,omitempty" json:"new_id,omitempty"`
 	// Packages: what an ended package task did (packages.go).
 	Packages *PackageResult `cbor:"packages,omitempty" json:"packages,omitempty"`
+	// Apps: what an ended app task did, app by app (apps.go).
+	Apps []AppResult `cbor:"apps,omitempty" json:"apps,omitempty"`
 	// Code: why an ended task didn't do its work, as a refusal code
 	// (TaskCodeBusy, TaskCodeTimeout); package tasks only.
 	Code string `cbor:"code,omitempty" json:"code,omitempty"`

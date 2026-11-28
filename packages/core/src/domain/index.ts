@@ -3,6 +3,7 @@ export * from '../ids.js';
 export * from './account.js';
 export * from './activity.js';
 export * from './agent.js';
+export * from './app-updates.js';
 export * from './approval.js';
 export * from './audit.js';
 export * from './automation.js';

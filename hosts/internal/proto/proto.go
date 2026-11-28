@@ -420,6 +420,9 @@ type Guest struct {
 	// (label whombat.service=1): Whombat leaves it out of what people see.
 	WhombatService  bool  `cbor:"wb_svc,omitempty"`
 	UpdateAvailable *bool `cbor:"update,omitempty"` // the registry has a newer image for the tag
+	// App: the container is a Docker Compose app this agent can update
+	// (apps.go); nil for other containers and from older agents.
+	App *GuestApp `cbor:"app,omitempty"`
 
 	// unRAID (unraid.go): Autostart for Docker on unRAID (dockerMan's
 	// autostart list) and libvirt (everywhere); WebUI is a container's web

@@ -224,7 +224,7 @@ func TestImageUpdates(t *testing.T) {
 		{imageCand{"nginx@sha256:abc", "sha256:n"}, nil, false, false},
 		{imageCand{"registry.lan/team/missing:2", "sha256:m"}, nil, true, true},
 	} {
-		update, remote, err := u.check(ctx, c.cand)
+		update, remote, _, err := u.check(ctx, c.cand)
 		if (update == nil) != (c.update == nil) || (update != nil && *update != *c.update) || remote != c.remote || (err != nil) != c.err {
 			t.Errorf("%s: update=%v remote=%v err=%v", c.cand.Ref, update, remote, err)
 		}
@@ -253,10 +253,10 @@ func TestImageUpdaterRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := u.results()
-	if r := res["nginx:stable-alpine@sha256:n"]; r == nil || !*r {
+	if r := res["nginx:stable-alpine@sha256:n"].update; r == nil || !*r {
 		t.Errorf("nginx: %v", r)
 	}
-	if r := res["ghcr.io/org/app:v1@sha256:a"]; r == nil || *r {
+	if r := res["ghcr.io/org/app:v1@sha256:a"].update; r == nil || *r {
 		t.Errorf("app: %v", r)
 	}
 	// Checked images wait 12 hours; duplicates are checked once.

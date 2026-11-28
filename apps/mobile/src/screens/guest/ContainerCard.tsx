@@ -2,15 +2,20 @@
  * A Docker container of an Unraid server or a libvirt VM on its Summary (Whombat incus-unraid.md IU-05, IU-09;
  * incus-unraid-mobile.md AP-1630, AP-1631): whether an update is ready with Update (asked: it restarts on the new
  * version; Docker on Unraid with a dockerMan template), the autostart switch (done at once), and the link to its web
- * page. The switch and Update need the server's Manage switch; this Whombat itself never shows them.
+ * page. The switch and Update need the server's Manage switch; this Whombat itself never shows them. A Docker Compose
+ * app on any server (Whombat app-updates.md) says whether an update waits, why it asks first, and how its last update
+ * went, with Update, which asks through the approval card and opens it.
  */
 
-import { unraidChangeWords } from '@whombat/client/hosts';
+import { appUpdateRow, appUpdateWords, unraidChangeWords } from '@whombat/client/hosts';
 import { containerView, selfAllowsOp } from '@whombat/client/hosts/mobile';
 import type { HostGuestDetail } from '@whombat/core';
+import { interpolate } from '@whombat/core/i18n';
 import { useState } from 'react';
 import { Linking, View } from 'react-native';
+import { useAppUpdate, useAppUpdatesOn } from '../../data/appUpdates';
 import { useI18n, useMobileT } from '../../i18n';
+import { useAppNavigation } from '../../navigation/hooks';
 import { Text } from '../../theme/Text';
 import { useTheme } from '../../theme/theme';
 import { OneCard } from '../../ui/assistant';
@@ -40,8 +45,23 @@ export function ContainerCard({
   const { send, busy } = useManageChange(serverId);
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  if (!v) return null;
+  const navigation = useAppNavigation();
+  const appUpdate = useAppUpdate(serverId);
+  const appsOn = useAppUpdatesOn();
+  const app =
+    appsOn && g.platform === 'docker' && g.self !== true
+      ? appUpdateRow(g, { agentHasApps: !!g.app, manage: canChange, now: Date.now(), locale: rawLocale })
+      : null;
+  const appWords = appUpdateWords(rawLocale);
+  if (!v && !app?.line) return null;
   const autostartOk = canChange && selfAllowsOp(g, 'guest.autostart');
+  // A Compose app updates through Whombat's own update, not dockerMan's.
+  const unraidUpdate = v?.updateText && !g.app ? v.updateText : null;
+  const askUpdate = () =>
+    void appUpdate.ask([g.id]).then((o) => {
+      if ('approval' in o) navigation.navigate('Approval', { number: o.approval, back: g.name });
+      else setError(o.error || null);
+    });
   const toggle = (on: boolean) =>
     void send({
       op: 'guest.autostart',
@@ -54,11 +74,28 @@ export function ContainerCard({
     <OneCard
       label={g.platform === 'docker' ? tMobile('screens.container') : tMobile('screens.virtual-machine')}
     >
-      {v.updateText ? (
+      {app?.line ? (
         <SettingLine
           first
+          label={appWords.title}
+          value={app.line}
+          sub={app.asks}
+          action={
+            app.update ? (
+              <RowAction
+                label={appWords.update}
+                spoken={interpolate(appWords.updateName, { name: g.name })}
+                onPress={appUpdate.busy ? () => undefined : askUpdate}
+              />
+            ) : null
+          }
+        />
+      ) : null}
+      {v && unraidUpdate ? (
+        <SettingLine
+          first={!app?.line}
           label={tClient('hosts.agentUpdates.title')}
-          value={v.updateText}
+          value={unraidUpdate}
           sub={g.updateAvailable && !v.canUpdate ? tMobile('screens2.container.noTemplate') : null}
           action={
             canChange && v.canUpdate ? (
@@ -71,12 +108,12 @@ export function ContainerCard({
           }
         />
       ) : null}
-      {v.autostart !== null ? (
+      {v && v.autostart !== null ? (
         autostartOk ? (
           <View
             style={{
               paddingHorizontal: 14,
-              borderTopWidth: v.updateText ? 1 : 0,
+              borderTopWidth: unraidUpdate || app?.line ? 1 : 0,
               borderTopColor: theme.colors.line,
             }}
           >
@@ -84,13 +121,13 @@ export function ContainerCard({
           </View>
         ) : (
           <SettingLine
-            first={!v.updateText}
+            first={!unraidUpdate && !app?.line}
             label={v.autostartLabel}
             value={tMobile(v.autostart ? 'screens2.common.yes' : 'screens2.common.no')}
           />
         )
       ) : null}
-      {v.webUi ? (
+      {v?.webUi ? (
         <Touchable
           onPress={() => void Linking.openURL(v.webUi ?? '')}
           feedback="wash"

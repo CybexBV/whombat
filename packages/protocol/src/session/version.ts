@@ -92,7 +92,9 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
  * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md); minor 22
- * is Open to the internet (`things.exposure`, Whombat internet-exposure.md).
+ * is the look-after release: Open to the internet (`things.exposure`, Whombat internet-exposure.md) and app updates: a
+ * Docker container's `app` (what Whombat knows about updating it as a Compose app), an ended task's `apps`, the
+ * `hosts.manage` op `app.update` and its answer's `approvalNumber` (Whombat app-updates.md).
  */
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
 
@@ -107,6 +109,12 @@ export const EXPOSURE_MINOR = 22;
  * requests). Clients omit `locale` from strict claim bodies when talking to an older box.
  */
 export const LOCALE_MINOR = 21;
+
+/**
+ * Session protocol minor (major 5) where a box updates Docker Compose apps: `hosts.manage` takes `app.update` and
+ * answers with the approval card's number. An app shows Update only to a box at this minor or later.
+ */
+export const APP_UPDATES_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with more news: up to `NEWS_SOURCES_MAX` sources (an older app takes twelve),

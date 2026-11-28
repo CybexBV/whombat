@@ -204,6 +204,36 @@ describe('a care plan per kind of server (care-plan.md)', () => {
     expect(steps[1]?.text).toBe('Tell you when apps have updates');
   });
 
+  it('a server with Docker Compose apps: their updates on Sunday night, as an automation (app-updates.md)', () => {
+    const steps = careSteps(
+      facts({
+        server: { id: 'thetitan', name: 'thetitan', platform: 'standard', self: false },
+        guests: [
+          { id: 'docker:plex', name: 'plex', platform: 'docker' },
+          { id: 'docker:immich_server', name: 'immich_server', platform: 'docker', project: 'immich' },
+        ],
+      }),
+      W,
+    );
+    expect(steps.map((s) => s.id)).toEqual(['updates', 'apps']);
+    expect(steps[1]).toMatchObject({ automation: 'apps' });
+    expect(steps[1]?.text).toContain('Sunday night');
+    expect(steps[1]?.text).toContain(W.start);
+    // Turned on already: not offered again.
+    expect(
+      careSteps(
+        facts({
+          server: { id: 'thetitan', name: 'thetitan', platform: 'standard', self: false },
+          guests: [
+            { id: 'docker:immich_server', name: 'immich_server', platform: 'docker', project: 'immich' },
+          ],
+          has: { apps: true, updates: true },
+        }),
+        W,
+      ),
+    ).toEqual([]);
+  });
+
   it('Unraid keeps its own updates; the server this Whombat runs on asks for its own', () => {
     expect(
       careSteps(facts({ server: { id: 'blackbox', name: 'blackbox', platform: 'unraid', self: false } }), W),
@@ -283,6 +313,20 @@ describe('the automations a care plan turns on', () => {
     const prompt = step?.kind === 'dispatch_agent' ? step.prompt : '';
     expect(prompt).not.toContain('server_power reboot');
     expect(prompt).toContain('Never restart');
+  });
+
+  it('updates Compose apps on Sunday night at the start of the quiet hours, asking about the rest', () => {
+    const a = careAutomation('apps', base);
+    expect(validateDefinition(a.definition, Date.parse('2026-10-30T12:00:00Z')).problems).toEqual([]);
+    // 03:00 starts the night from Sunday to Monday; 23:00 starts on Sunday itself.
+    expect(a.definition.triggers[0]).toMatchObject({ schedule: { expr: '0 3 * * 1' }, missed: 'skip' });
+    const late = careAutomation('apps', { ...base, window: { start: '23:00', end: '01:00' } });
+    expect(late.definition.triggers[0]).toMatchObject({ schedule: { expr: '0 23 * * 0' } });
+    const step = a.definition.steps[0];
+    const prompt = step?.kind === 'dispatch_agent' ? step.prompt : '';
+    for (const fact of ['app_updates', 'app_update', 'hold_major', 'ask true', 'pve-01'])
+      expect(prompt).toContain(fact);
+    expect(a.name).toContain('pve-01');
   });
 
   it('backs up QEMU/KVM machines on Sundays an hour before the quiet hours', () => {

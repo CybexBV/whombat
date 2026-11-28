@@ -15,6 +15,10 @@ them once they have been tried on Beta.
 - When something new opens to the internet, Whombat tells you once and asks whether it’s meant. Press This is meant
   and it won’t point it out again.
 - Ask your agent “what can the internet reach?” and it answers from the same list.
+- Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
+  page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back
+  by itself when the new one doesn’t start. A database or a new major version always asks, and says why.
+- A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
 
 ## 27 November 2026
 

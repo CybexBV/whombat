@@ -167,6 +167,8 @@ How the split was made: `docs.md`.
 - `overview-arranged.md` — the Overview arranged by the person: one layout per Whombat, Arrange as a mode with a gear on each tile (what it shows, its time span, its size, its place, Remove), the summary card with four chosen figures, Today, tiles read as the desk's widgets.
 - `../app/decisions/phone-refresh-asks.md`, `../app/decisions/phone-refresh-status.md` — the 2026-11-05 phone refresh from the phone-app design council: approvals, screen readers, Inbox and Chat; status, Overview, headers, back and service page heads.
 - `handle-it.md` — the assistant looks into every line of a thing, offers one plan with Go ahead, and asks in plain words.
+- `app-updates.md` — Docker Compose app updates with automatic rollback, asked through the approval card, and the care
+  plan's Sunday-night app updates.
 - `care-plan.md` — a care plan when a server is added (one yes for backups and updates), quiet hours for changes, automation
   ideas from what is connected.
 - `plain-words.md` — everything a person reads in the word list (your Whombat, Whombat’s helper, machines, apps), three

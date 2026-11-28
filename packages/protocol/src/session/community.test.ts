@@ -44,7 +44,13 @@ import {
   TailscaleLoginServer,
   tailscaleLoginUrlTrusted,
 } from './tailscale.js';
-import { EXPOSURE_MINOR, LOCALE_MINOR, SESSION_PROTOCOL, T3_REVIEW_MORE_ROUNDS_MINOR } from './version.js';
+import {
+  APP_UPDATES_MINOR,
+  EXPOSURE_MINOR,
+  LOCALE_MINOR,
+  SESSION_PROTOCOL,
+  T3_REVIEW_MORE_ROUNDS_MINOR,
+} from './version.js';
 
 const BOX = '12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH';
 const SECRET = 'Zm9vYmFyYmF6cXV4cXV1eDEyMzQ';
@@ -81,6 +87,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
     expect(EXPOSURE_MINOR).toBe(22);
+    expect(APP_UPDATES_MINOR).toBe(22);
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

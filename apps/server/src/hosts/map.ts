@@ -527,7 +527,39 @@ export function toHostGuest(raw: unknown, serverId: string, serverOnline?: boole
     webUi:
       platform === 'docker' && (typeof g.web_ui === 'string' || g.web_ui === null) ? g.web_ui : undefined,
     template: platform === 'docker' ? optBool(g.template) : undefined,
+    // A Compose app Whombat can update (app-updates.md); only agents that can say so.
+    app: platform === 'docker' ? toGuestApp(g.app) : undefined,
   }) as HostGuest;
+}
+
+/** A Compose app's update state (`app`), or undefined when the hosts service sends none. */
+export function toGuestApp(raw: unknown): HostGuest['app'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const a = obj(raw);
+  const service = str(a.service);
+  if (!service) return undefined;
+  const short = (v: unknown, n: number) => {
+    const t = str(v);
+    return t ? t.slice(0, n) : null;
+  };
+  const last = a.last && typeof a.last === 'object' ? obj(a.last) : null;
+  return {
+    service: service.slice(0, 200),
+    version: short(a.version, 64),
+    newVersion: short(a.new_version, 64),
+    blocked: short(a.blocked, 32),
+    updating: a.updating === true,
+    last:
+      last && str(last.status)
+        ? {
+            status: (str(last.status) as string).slice(0, 32),
+            reason: short(last.reason, 32),
+            from: short(last.from, 64),
+            to: short(last.to, 64),
+            at: ts(last.at),
+          }
+        : null,
+  };
 }
 
 function workload(raw: unknown, serverId: string): HostPlatformWorkload {
@@ -686,7 +718,33 @@ export function toHostTask(raw: unknown): HostTask {
     // A package task (0.98, server-updates.md SWU-04): why it ended early, and what it did once it ended.
     code: str(t.code) || undefined,
     packages: toPackagesResult(t.packages),
+    // An app update (app-updates.md): each app's outcome once it ended.
+    apps: toAppResults(t.apps),
   }) as HostTask;
+}
+
+/** An app task's outcomes, or undefined on another task or while it runs. */
+function toAppResults(raw: unknown): HostTask['apps'] {
+  if (!Array.isArray(raw)) return undefined;
+  const clip = (v: unknown, n: number) => {
+    const t = str(v);
+    return t ? t.slice(0, n) : undefined;
+  };
+  return raw
+    .map((x) => obj(x))
+    .filter((x) => str(x.app) && str(x.status))
+    .slice(0, 20)
+    .map((x) =>
+      defined({
+        app: (str(x.app) as string).slice(0, 200),
+        service: clip(x.service, 200),
+        status: (str(x.status) as string).slice(0, 32),
+        reason: clip(x.reason, 32),
+        from: clip(x.from, 64),
+        to: clip(x.to, 64),
+        message: clip(x.message, 500),
+      }),
+    ) as HostTask['apps'];
 }
 
 /** A package task's result (`installed`, `kept_back`, `warning`), or undefined while it runs or on another task. */
