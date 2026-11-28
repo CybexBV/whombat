@@ -39,7 +39,7 @@ import { eligibleGuests, nextTestAt } from './plan';
 import { betterProtection, provenProtection } from './protection';
 
 const VIEW_MS = 60_000;
-/** Guests whose backups are read one by one (no job names them) in one build; the rest wait for the next. */
+/** Machines whose own backup lists are read in one build (each kept until its newest backup changes); the rest wait. */
 const BACKUP_READS_MAX = 20;
 
 /** Connected services that keep data of their own (photos, documents, files, a smart home's history, backups). */
@@ -525,7 +525,8 @@ export async function buildProtectedView(services: Services, burrowId: string): 
     if (c.status !== 'active') continue;
     const at = (c.glance as { machine?: { serverId: string; guestId: string | null; name: string } } | null)
       ?.machine;
-    const machine = at ? provenProtection(machines.get(`${at.serverId}\n${at.guestId ?? ''}`)) : undefined;
+    const machine = at ? machines.get(`${at.serverId}\n${at.guestId ?? ''}`) : undefined;
+    // A kept fact may be from before the rule that copied needs a backup that worked; the machines' are read now.
     const ownFact = provenProtection(c.protection as StoredProtection | null);
     const best = betterProtection(ownFact, machine ?? null);
     const via = best && best === machine && best !== ownFact ? (at?.name ?? null) : null;
