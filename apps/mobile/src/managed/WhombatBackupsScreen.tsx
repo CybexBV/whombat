@@ -55,6 +55,7 @@ import { navigateTo } from '../navigation/hooks';
 import type { RootStackParamList } from '../navigation/routes';
 import { BackBar, LargeTitle, Screen } from '../ui/headers';
 import { Button, ErrorState, Loading } from '../ui/primitives';
+import { ProtectedLink } from '../ui/protectedLink';
 import { useBottomRoom } from '../ui/screenBottom';
 import { BackupDestinationForm, backupErrorText, savedNotes } from './BackupDestination';
 import { BackupOffsiteCard } from './BackupOffsite';
@@ -376,6 +377,7 @@ function ManagedBackups({ route, navigation }: Props) {
                 />
               </Card>
               {later}
+              <ProtectedLink inset={0} onPress={() => navigation.navigate('Protected')} />
               <BackupFileCard onOpen={() => navigation.navigate('BackupFile')} />
             </BackupsParts>
           </View>
@@ -471,6 +473,7 @@ function ManagedBackups({ route, navigation }: Props) {
             </Card>
           ) : null}
 
+          <ProtectedLink inset={0} onPress={() => navigation.navigate('Protected')} />
           <BackupFileCard onOpen={() => navigation.navigate('BackupFile')} />
         </View>
       </ScrollView>

@@ -70,6 +70,7 @@ export * from './place-zones.js';
 export * from './plan.js';
 export * from './principal.js';
 export * from './prompts.js';
+export * from './protected.js';
 export * from './providers.js';
 export * from './ps5.js';
 export * from './quiet.js';

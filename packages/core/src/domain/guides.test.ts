@@ -362,6 +362,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'watch_status',
       // What changed on a thing, read-only (Whombat outside-changes.md).
       'what_changed',
+      // Where everything's data is kept and the restore tests, read-only (Whombat backup-trust.md).
+      'whats_protected',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
       // The person's reports to the Whombat Team, without the team's words.

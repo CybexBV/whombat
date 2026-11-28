@@ -17,7 +17,12 @@ import {
   pendingLines,
 } from '@whombat/client/hosts/mobile';
 import { useHostGuestMetrics } from '@whombat/client/hosts/react';
-import type { HostGuestConfig, HostGuestDetail } from '@whombat/core';
+import {
+  type HostGuestConfig,
+  type HostGuestDetail,
+  restoreTestLabel,
+  restoreTestVerdict,
+} from '@whombat/core';
 import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import type { HostReadout } from '../../data/hostStatus';
@@ -176,6 +181,7 @@ export function GuestSummary({
             </View>
           </View>
           {backup.job ? <SettingLine label={tMobile('screens.backup-job')} value={backup.job} /> : null}
+          {g.restoreTest ? <RestoreTestLine result={g.restoreTest} now={now} timeZone={timeZone} /> : null}
           {canChange ? (
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, padding: 14, paddingTop: 4 }}>
               <View style={{ flexGrow: 1, flexBasis: '45%' }}>
@@ -265,6 +271,46 @@ function HintLine({
       {action ? (
         <RowAction label={action.label} spoken={action.label} onPress={() => onWayOut(action.to)} />
       ) : null}
+    </View>
+  );
+}
+
+/** The newest restore test of its backup (backup-trust.md): whether a copy of it really started, and when. */
+function RestoreTestLine({
+  result,
+  now,
+  timeZone,
+}: {
+  result: NonNullable<HostGuestDetail['restoreTest']>;
+  now: number;
+  timeZone: string;
+}) {
+  const { rawLocale } = useI18n();
+  const theme = useTheme();
+  const label = restoreTestLabel(rawLocale);
+  const verdict = restoreTestVerdict(result, new Date(now), timeZone, rawLocale);
+  const text = verdict.charAt(0).toLocaleUpperCase(rawLocale) + verdict.slice(1);
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${text}`}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+      }}
+    >
+      <Dot tone={result.outcome === 'worked' ? 'ok' : result.outcome === 'failed' ? 'bad' : 'warn'} />
+      <View style={{ flex: 1, gap: 2 }}>
+        <Text size={12.5} color={theme.colors.mut}>
+          {label}
+        </Text>
+        <Text size={15} weight={500}>
+          {text}
+        </Text>
+      </View>
     </View>
   );
 }

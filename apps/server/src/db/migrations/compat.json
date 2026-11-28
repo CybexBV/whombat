@@ -297,6 +297,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "Automations that act without AI wait out a Home Assistant entity's state (docs/decisions/direct-automations.md): one new table, automation_waits (automation_id, key, burrow_id, version, event_id, due_at, first_due_at). The release before it never reads it; an automation that uses it is held back on that release, as the release gate holds every newer automation."
+    },
+    "0048_restore_tests": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Backups you can trust (docs/decisions/backup-trust.md): two new tables, restore_test_servers (the person's restore test switch per Proxmox server) and restore_tests (one row per test, moved step by step), and one nullable jsonb column on catalog_connections (protection, what a connection's own backups are). The release before it reads and writes past them; a test it leaves half done is finished and its copy deleted when this release runs again."
     }
   }
 }

@@ -222,6 +222,10 @@ export const DOMAIN_MESSAGES = splitPairs({
     'Update your apps on Sunday night at {time}',
     'Zondagnacht om {time} je apps bijwerken',
   ],
+  'carePlan.step.restoreTest': [
+    'Test one machine’s backup every week in the quiet hours',
+    'Elke week in de stille uren de back-up van één machine testen',
+  ],
   'carePlan.step.appsTell': [
     'Tell you when apps have updates',
     'Je laten weten wanneer er updates voor je apps zijn',

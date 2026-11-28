@@ -49,6 +49,7 @@ export * from './quiet';
 export * from './quiet-windows';
 export * from './repo-manager';
 export * from './repo-setup';
+export * from './restore-tests';
 export * from './schedules';
 export * from './server-asks';
 export * from './server-cares';

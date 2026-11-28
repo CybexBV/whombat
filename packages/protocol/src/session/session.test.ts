@@ -36,6 +36,7 @@ import {
   OFFSITE_MINOR,
   ONEPASSWORD_SYNC_MINOR,
   OUTSIDE_CHANGES_MINOR,
+  PROTECTED_MINOR,
   protocolAtLeast,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
@@ -107,6 +108,7 @@ describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
     expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: EXPOSURE_MINOR });
     expect(AUTOMATIONS_WITHOUT_AI_MINOR).toBe(22);
+    expect(PROTECTED_MINOR).toBe(22);
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
     expect(EXPOSURE_MINOR).toBe(22);

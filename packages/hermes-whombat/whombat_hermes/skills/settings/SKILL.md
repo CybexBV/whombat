@@ -43,6 +43,9 @@ exactly as their own tap would. Four tools:
 
 ### Backups
 - Not backed up yet: `whombat_backup` proposes and sets a place (its own tool).
+- “What would I lose if pve-01 broke?”, “is plex backed up?”: `whats_protected` (its own tool) says where every
+  thing's newest copy is. Restore tests of a Proxmox server's machines: `settings_change` `restoreTests.set`
+  (`{serverId, on, guests?}`) or `restoreTests.run` to test one now; both ask first.
 - Already backed up, and they want it elsewhere or want a backup now: `settings_find` “backup”; moving the destination
   always asks.
 - They lost or deleted something (“bring back yesterday’s chat about the roof”): `backup_bring_back` `find` with
@@ -94,7 +97,7 @@ Your own keys and approvals are theirs: `settings_open` `agent.may` and say what
 - `connections` Settings → Connections: your accounts (Google, Microsoft, mail), apps and services, and what needs you there
 - `overview` Overview: every server and service with its own page: how it is doing, what Whombat watches, its settings
 
-### This Whombat (the box), and its news and weather — `references/this-whombat.md` (131 settings)
+### This Whombat (the box), and its news and weather — `references/this-whombat.md` (134 settings)
 - `appliance.overview` Settings → This Whombat → Overview: how the box is doing, its network and Wi-Fi, Tailscale, Bluetooth, voice typing and mail
 - `appliance.backups` Settings → This Whombat → Backups: where the box backs up, when, and backup files
 - `appliance.screen` Settings → This Whombat → Screen: the box’s screen and other screens: what they show, the lock, night and Talk

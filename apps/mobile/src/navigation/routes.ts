@@ -273,6 +273,8 @@ export type RootStackParamList = {
   /** Everything I did (home-redesign-mobile.md AP-2261): every change the assistant made, `whombat://done`. */
   /** `back`: the page it was opened from, else the page under it (`backWordUnder`). */
   Done: { back?: string } | undefined;
+  /** What's protected (backup-trust.md): what holds data and where its copies are, `whombat://protected`. */
+  Protected: { back?: string } | undefined;
   /**
    * A Needs you item by id, as a page: with two pages a row opens it on the right page instead of its sheet
    * (docs/app/decisions/iphone-duo.md), and a push or a link about it lands on it (`whombat://needs-you/<id>`, NYL-09).
@@ -582,6 +584,8 @@ export const LINKING_SCREENS = {
   Thing: 'things/:thingId',
   // Everything I did (AP-2261): the web's `/done`.
   Done: 'done',
+  // What's protected and restore tests (backup-trust.md): the web's `/protected`.
+  Protected: 'protected',
   // Reports to the Whombat Team (team-reports.md): the web's `/reports`, `/reports/new` and `/reports/<reportId>`.
   TeamReports: 'reports',
   TeamReportNew: 'reports/new',

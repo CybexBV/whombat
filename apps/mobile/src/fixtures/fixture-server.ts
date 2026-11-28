@@ -28,6 +28,7 @@
  * Pure TypeScript over `fetch` / `Request` / `Response`, so it is unit-tested in Node.
  */
 import type { EventFrame, Realtime, RealtimeStatus, ResyncSignal } from '@whombat/client';
+import { createFakeProtected, type ProtectedFakeKind } from '@whombat/client/protected/fake';
 import { createSkillLibraryWorld } from '@whombat/client/skill-library/fixtures';
 import { createWorkFixtures } from '@whombat/client/work-fixtures';
 import {
@@ -128,6 +129,11 @@ export interface FixtureServerOptions {
    * `EXPO_PUBLIC_WHOMBAT_PROMPTS=not_connected` or `unreachable` without its projects, `older` a Whombat from before them.
    */
   prompts?: Omit<PromptFixtureOptions, 'now'>;
+  /**
+   * What's protected (`@whombat/client/protected/fake`, backup-trust.md): `tested` by default, so the demo shows pve-02's
+   * restore tests on with their results on the machines' pages; `calm` starts them off.
+   */
+  protected?: ProtectedFakeKind;
 }
 
 /** The prompts' world from `EXPO_PUBLIC_WHOMBAT_PROMPTS` (not_connected, unreachable, older). */
@@ -418,6 +424,9 @@ export function createFixtureServer(options: FixtureServerOptions): FixtureServe
 
   const capabilities = createCapabilityFixtures({ now });
 
+  // What's protected and restore tests (backup-trust.md): the same world as the web's fixture mode.
+  const protectedWorld = createFakeProtected({ kind: options.protected ?? 'tested', now: now().getTime() });
+
   async function forward(path: string, init: RequestInit | undefined): Promise<Response> {
     return inner(`http://fixtures.whombat.local${API_BASE}${path}`, init);
   }
@@ -646,6 +655,11 @@ export function createFixtureServer(options: FixtureServerOptions): FixtureServe
     const capability = capabilities.handle(id, params, typeof init?.body === 'string' ? init.body : null);
     if (capability) return capability;
 
+    const protectedAnswer = id
+      ? protectedWorld.call(id, { params, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+      : null;
+    if (protectedAnswer) return json(protectedAnswer.body, protectedAnswer.status);
+
     if (id?.startsWith('plans.') || id === 'activity.list' || id === 'work.overview') {
       const supervised = await work.handle(new Request(url.toString(), init));
       if (supervised) return supervised;
@@ -669,6 +683,13 @@ export function createFixtureServer(options: FixtureServerOptions): FixtureServe
     if (settle && id === 'messages.list' && res.ok && !url.searchParams.has('before'))
       data = withSettleMessages(params.conversationId ?? '', data as MessagePage);
     if (res.ok) data = capabilities.after(id, data);
+    if (id === 'hosts.getGuest' && res.ok) {
+      const result = protectedWorld.guestResult(
+        params.serverId ?? '',
+        decodeURIComponent(params.guestId ?? ''),
+      );
+      if (result) data = { ...(data as object), restoreTest: result };
+    }
     if (assistant && res.ok) data = assistant.after(id, data);
     return json(restamp(swapApproval(data, approval), stamps), res.status);
   }

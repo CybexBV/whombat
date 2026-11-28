@@ -1645,6 +1645,20 @@ Setup and operation: `docs/github.md`.
   the server is kept quiet while it runs. `app_updates` gives the assistant the same facts; the care plan's `apps`
   automation runs it on Sunday night with `hold_major`. The web's apps list and a service's page (when it runs in a
   Compose container) and the phone's list and app screen draw it from `@whombat/client/hosts` (`appUpdateRow`).
+- **What's protected and restore tests** (`apps/server/src/backup-trust/`, [backup-trust.md](docs/decisions/backup-trust.md)):
+  `protected.get` builds one row per thing that holds data from what Whombat already reads — Proxmox backup jobs and
+  each machine's backups (a Backup Server or shared storage is a copy elsewhere), Incus snapshots and QEMU/KVM backups
+  (same machine), the box's backup status (with its off-site copy when the status has one) and each connection's own
+  backup facts (`catalog_connections.protection`, written by the health pass from what its kind reads; a service
+  without them takes its machine's from `glance.machine`) — cached a minute. Restore tests are a home job every minute
+  (`runner.ts`): per Proxmox server switched on (`restore_test_servers`), once a week in the quiet hours it picks the
+  machine whose turn it is and walks a `restore_tests` row through its steps, each a `restoreTest.step` commit as the
+  agent: restore the newest backup to a free id in 990000–990999 through the hosts service's restore route, set every
+  network card `link_down=1`, rename and tag it and read that back, start it, wait until it runs (and its guest agent
+  answers), then stop and delete it. Passes never overlap; strays left by an interruption are swept by range and name
+  or tag. The newest failed verdict per machine is a `restore_test.failed` hint in the hosts list while tests are on;
+  a machine's page carries its newest result (`HostGuestDetail.restoreTest`). The assistant reads it with
+  `whats_protected`.
 - **The Vault** (`apps/server/src/vault/`): the person's logins, API keys and SSH keys for the agent, secrets sealed
   and write-only. Each entry has one switch for the agent (`vault_entries.agent_on_at`, with an API's variable and an
   SSH key's servers beside it); `vault.giveKey` and `vault.takeKey` set it. An entry switched on reaches the agent only

@@ -308,6 +308,8 @@ How the split was made: `docs.md`.
 - `backup-passkey.md` — the passkey as the key to the backups: arming in one touch, locking again, the copy next to the backups (the place's kit user), bring back from the account or the network, the paper copy, the Inbox's ask.
 - `backup-places.md` — a NAS or server that keeps this Whombat's backups: the backup app, cleanup, places, moving, by hand.
 - `offsite-copy.md` — a copy of the backups somewhere else: the second place (an S3 bucket), the copy after each backup, its key, bringing a Whombat back from it, the Backups page and the Inbox.
+- `backup-trust.md` — What's protected (everything that holds data and where its copy is) and weekly restore tests of
+  Proxmox machines on a copy with its network off.
 
 ## Server internals
 

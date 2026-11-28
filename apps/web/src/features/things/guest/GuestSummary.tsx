@@ -32,7 +32,13 @@ import {
   timeTicks,
 } from '@whombat/client/hosts';
 import { useHostGuestMetrics } from '@whombat/client/hosts/react';
-import type { HostGuestDetail, HostSeriesRange, HostServerDetail } from '@whombat/core/domain';
+import {
+  type HostGuestDetail,
+  type HostSeriesRange,
+  type HostServerDetail,
+  restoreTestLabel,
+  restoreTestVerdict,
+} from '@whombat/core/domain';
 import { AlertTriangle, Info } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { Button } from '../../../components/Button';
@@ -492,6 +498,21 @@ function Details({
           </button>
         ) : undefined,
     });
+  // The newest restore test of its backup (backup-trust.md): whether a copy of it really started.
+  if (g.restoreTest) {
+    const verdict = restoreTestVerdict(g.restoreTest, new Date(now), timeZone ?? 'UTC', currentLocale());
+    facts.push({
+      id: 'restoreTest',
+      k: restoreTestLabel(currentLocale()),
+      // One span, so a long reason wraps beside its dot rather than under it.
+      v: (
+        <span className={wb.wbFactGrow}>
+          {verdict.charAt(0).toLocaleUpperCase(currentLocale()) + verdict.slice(1)}
+        </span>
+      ),
+      tone: g.restoreTest.outcome === 'worked' ? 'ok' : g.restoreTest.outcome === 'failed' ? 'bad' : 'warn',
+    });
+  }
   if (g.snapshots != null)
     facts.push({
       id: 'snapshots',

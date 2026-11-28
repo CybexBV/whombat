@@ -104,7 +104,8 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * windows-servers.md); the copy of
  * the backups somewhere else: `backup.offsite`, `backup.setOffsite`, `backup.removeOffsite`, `backup.copyOffsite`, the
  * backup summary's `offsite`, the recovery material's `offsite` (sent only to a session at minor 22 or later, which
- * reads it) and `backup.adopt`'s `from` (Whombat offsite-copy.md).
+ * reads it) and `backup.adopt`'s `from` (Whombat offsite-copy.md); What's protected and restore tests (`protected.get`,
+ * `restoreTests.*`, a guest's `restoreTest`; Whombat backup-trust.md).
  */
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
 
@@ -139,6 +140,12 @@ export const WINDOWS_MINOR = 22;
  * box at this minor or later.
  */
 export const OFFSITE_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with What's protected and restore tests (`protected.get`, `restoreTests.*`, a guest's
+ * `restoreTest`): an app asks those ops only of a box at this minor or later.
+ */
+export const PROTECTED_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

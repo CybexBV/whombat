@@ -38,6 +38,13 @@ them once they have been tried on Beta.
   shows BitLocker and waiting Windows updates, and can restart it. Installing updates stays yours, in Windows Update.
 - In Dutch, Whombat now also says how an app update went, a new server’s care plan and what an automation that acts
   without AI did. On a phone, that automation’s line on its run page shows whole instead of being cut off.
+- New page: What’s protected. It lists everything that holds data (your Whombat, servers, machines and services like
+  Home Assistant) and says whether a copy is on another machine, only on the same machine, or not backed up as far
+  as Whombat can see. Open it under Servers or Settings → This Whombat → Backups, and ask your assistant to set up
+  backups for anything that isn’t safe yet.
+- Whombat can test your Proxmox backups: once a week in the quiet hours it restores one machine’s backup as a copy with
+  its network off, checks that it starts, and deletes it again. Your real machine isn’t touched. Turn on “Test my
+  backups” on the What’s protected page; the result shows on the machine’s page.
 
 ## 27 November 2026
 

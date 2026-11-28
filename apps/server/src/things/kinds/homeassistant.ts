@@ -23,6 +23,7 @@ import type {
   ThingPageRow,
   ThingPageTab,
 } from '@whombat/core';
+import { haProtection } from '../../backup-trust/protection';
 import type { CatalogConnectionRow } from '../../connections/types';
 import { startOfLocalDay } from '../../home/time';
 import type { ConnectionGlance } from '../../home/types';
@@ -127,6 +128,8 @@ export interface HaBackup {
   automatic: boolean;
   /** Kept on Home Assistant's own disk (`backup.local`, `hassio.local`; every backup before 2025.1). */
   local: boolean;
+  /** The other places it went (`cloud.cloud`, `hassio.nas_backups`): copies off Home Assistant's machine. */
+  elsewhere?: string[];
 }
 
 export interface HaAddon {
@@ -283,6 +286,7 @@ function backupsOf(raw: unknown): HaBackup[] {
         sizeBytes,
         automatic: b.with_automatic_settings === true,
         local: agentIds.length === 0 || agentIds.some((a) => a.endsWith('.local')),
+        elsewhere: agentIds.filter((a) => !a.endsWith('.local')),
       };
     });
 }
@@ -1745,5 +1749,6 @@ export async function homeAssistantSeen(
     skipped: haSkipped(s),
     machine: (m) => haMachine(m, s.supervisor),
     tracked: { version: s.version ?? null },
+    protection: haProtection(s.backups?.map((b) => ({ at: b.at, elsewhere: b.elsewhere ?? [] })) ?? null),
   };
 }

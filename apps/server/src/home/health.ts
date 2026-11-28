@@ -45,7 +45,7 @@ import { credentialFor } from '../connections/credentials';
 import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
 import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
-import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
+import { burrows, catalogConnections, type StoredProtection, thingCauses } from '../db/schema/index';
 import { exposureSeen } from '../exposure/lines';
 import { burrowLocale } from '../i18n/locale';
 import { sideBySide } from '../lib/side-by-side';
@@ -309,6 +309,8 @@ export async function checkConnectionHealth(
   let skipped: Skipped = [];
   // What the kind's read tells the change log, when it read.
   let tracked: TrackedFacts | undefined;
+  // Where the service's own backups keep its data, when its kind read it this pass (What's protected).
+  let protection: StoredProtection | undefined;
   const answered = (outcome: 'offline' | 'error') =>
     genericNotices(
       {
@@ -395,6 +397,7 @@ export async function checkConnectionHealth(
         skipped = (check) => !check.startsWith('conn.');
       } else {
         Object.assign(points, seen?.points ?? {});
+        protection = seen?.protection;
         glance = {
           status: 'ok',
           ...(seen?.glance.line ? { line: seen.glance.line } : {}),
@@ -514,7 +517,7 @@ export async function checkConnectionHealth(
   await services.pipeline.transact(row.burrowId, async (session) => {
     const [updated] = await session.tx
       .update(catalogConnections)
-      .set({ glance, glanceAt: now, checkedAt: now })
+      .set({ glance, glanceAt: now, checkedAt: now, ...(protection ? { protection } : {}) })
       .where(
         and(
           eq(catalogConnections.id, row.id),

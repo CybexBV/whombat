@@ -147,6 +147,11 @@ export const BOX_SETTINGS = {
   'changeWindow.get': read('appliance.about', 'Read the quiet hours for updates and restarts'),
   'changeWindow.set': ask('appliance.about', 'Change the quiet hours for updates and restarts'),
 
+  // What's protected (backup-trust.md): a read; restore tests touch the person's servers, so each is their yes.
+  'protected.get': read('appliance.backups', 'Read what’s protected and where its copies are'),
+  'restoreTests.set': ask('appliance.backups', 'Turn weekly restore tests of a server’s machines on or off'),
+  'restoreTests.run': ask('appliance.backups', 'Test a machine’s backup now'),
+
   // Someone at the screen asks to unlock it: only the person answers that.
   'desk.answerUnlock': never('appliance.screen', 'Answer a request to unlock the screen'),
   'desk.get': read('appliance.screen', 'Read how the box’s screen is set up'),

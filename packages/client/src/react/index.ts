@@ -23,6 +23,7 @@ export * from './looksAhead';
 export * from './monitoring';
 export * from './mutations';
 export * from './overview';
+export * from './protected';
 export * from './queries';
 export * from './quiet';
 export * from './realtime';
