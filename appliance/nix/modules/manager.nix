@@ -39,7 +39,7 @@ let
     else
       lib.attrNames (builtins.fromJSON (builtins.readFile hcfg.tufRoot)).signed.keys;
   # ONE-05 (LNK-25): how many root keys sign the pinned root's successor. A production image pins a root that needs
-  # two, unless it is the interim root of one online key named for the time before the key ceremony.
+  # two.
   rootRole = f: (builtins.fromJSON (builtins.readFile f)).signed.roles.root;
   pinnedRootOk =
     hcfg.tufRoot == null
@@ -48,8 +48,7 @@ let
         r = rootRole hcfg.tufRoot;
       in
       r.threshold >= 2 && lib.length r.keyids >= r.threshold
-    )
-    || (hcfg.interimRoot != null && builtins.readFile hcfg.tufRoot == builtins.readFile hcfg.interimRoot);
+    );
 
   managerConfig = json.generate "manager.json" (
     lib.recursiveUpdate ({
@@ -316,15 +315,6 @@ in
         /etc/whombat/tuf/root.json). A rotated root reaches devices through TUF itself.
       '';
     };
-    interimRoot = mkOption {
-      type = types.nullOr types.path;
-      default = null;
-      description = ''
-        The one root of a single online key a production image may pin (ONE-05): the GitHub repository's start until
-        the key ceremony. Every other root a production image pins needs two of its root keys; once the ceremony's root
-        is pinned, this no longer matches and the rule holds.
-      '';
-    };
     extraSettings = mkOption {
       type = json.type;
       default = { };
@@ -365,7 +355,7 @@ in
           assertion = config.whombat.environment != "prod" || pinnedRootOk;
           message = "whombat.helper.tufRoot: a production image pins a root whose successor needs two root keys (ONE-05, LNK-25); this one needs ${
             toString (rootRole hcfg.tufRoot).threshold
-          } and isn't whombat.helper.interimRoot";
+          }";
         }
         {
           # Channels exist only in the GitHub repository, and its top-level targets list no release (LNK-20, LNK-24):

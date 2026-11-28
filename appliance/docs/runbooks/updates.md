@@ -1,8 +1,7 @@
 # Appliance updates: operating the manager (development)
 
-> Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> Commands written `dev/<name>` run as `node harness/src/dev/<name>.ts`, after `pnpm install --frozen-lockfile` in
+> `harness/`.
 
 ## Components
 
@@ -18,9 +17,9 @@
 
 ## Looking at an appliance
 
-A DEV Whombat runs these through `dev/devbox shell` (NX-143; as root, so the status command as the manager's own user:
-`runuser -u whombat-manager -- whombat-manager --config /etc/whombat/manager.json status`); a production box has no
-shell (NX-10).
+These run as root through remote help's command line, when the owner allows “Look and fix” (the status command as the
+manager's own user: `runuser -u whombat-manager -- whombat-manager --config /etc/whombat/manager.json status`); a box
+has no other shell (NX-10).
 
 ```
 whombat-manager --config /etc/whombat/manager.json status        # state, current, known-good, candidate, explanation
@@ -74,7 +73,7 @@ candidate must carry this fix (every host release built after MG-57). A candidat
 back by boot counting to the old host, whose helper and manager are the old ones: on a box from before MG-57 its
 rollback to a runtime-only known-good fails (`not_assigned`) and retries for ever; the box runs its old host with the
 **candidate's runtime profile** (switched before the reboot) and takes no further update until repaired. So the first
-host release to such a box is one proven to boot from that exact release (upgrade gate 1, the DEV box), and preferably
+host release to such a box is one proven to boot from that exact release (upgrade gate 1), and preferably
 one that keeps the box's runtime, so even a failed boot leaves it serving on its known-good runtime.
 
 ## Development repository and assignments
@@ -211,11 +210,11 @@ garbage. **When:** once per update, in the step that records it Healthy, right a
 `whombat-store-gc.scope` with CPUWeight and IOWeight 10 and nice 19, bounded to 30 minutes. No update step runs
 meanwhile, so nothing is staged while the store is collected (a staged closure is no GC root until it is activated);
 nothing is collected after a rollback, on a timer or by the recovery manager. A failure is a warning; the next update
-tries again. The first collection on a box that never collected deletes everything older releases left behind (John's
-DEV box held 1,441 store paths, 7.4 GB, on 2026-10-07) and may take a few minutes; later ones delete what the previous
+tries again. The first collection on a box that never collected deletes everything older releases left behind (one box
+held 1,441 store paths, 7.4 GB, on 2026-10-07) and may take a few minutes; later ones delete what the previous
 release left, in seconds.
 
-On a box (DEV: `dev/devbox shell`, NX-143):
+On a box (as root, through remote help):
 
 ```
 journalctl -u whombat-manager | grep -E 'staging pruned|runtime generations|collecting the store|store collected'
@@ -232,7 +231,7 @@ df -h /
 | `pruning runtime generations failed; collecting the store anyway` / `collecting the store failed; the update is done` | the helper's journal says why; nothing else depends on it, the next update tries again |
 
 A box whose `/` is already too full to import an update (`Failed no_space` at Verified) never reaches Healthy, so it
-never collects by itself. On a DEV box, by hand: `nix-env --profile /nix/var/nix/profiles/whombat-runtime
+never collects by itself. On the box, by hand: `nix-env --profile /nix/var/nix/profiles/whombat-runtime
 --list-generations`, then `--delete-generations <n>…` for generations that aren't current and whose store path is the
 `runtime.runtime` of none of the helper's records (`runtime.current`, `runtime.previous`, `host.current`,
 `host.previous`, `host.pending` in its state file), then `nix-store --gc`. Never `nix-collect-garbage -d` or
@@ -259,7 +258,7 @@ sorts before the plain release. So every `0.2.0-…` manager compares **below** 
 indexes, and `0.2.0-…` < `0.3.0-0` < `0.3.0-0.dev` < `0.3.0-<commit time>.<rev>` < `0.3.0`.
 
 **The transition (2026-09-28).** Every version in the field before it had core `0.1.0` (runtimes `0.1.0-<rev>`,
-managers `0.1.0`; the dev stack's manager `0.0.0-dev+<commit>`). Every new one has core `0.2.0` and compares newer
+managers `0.1.0`; the harness's development manager `0.0.0-dev+<commit>`). Every new one has core `0.2.0` and compares newer
 whatever follows the `-`, so the first release of the new scheme installs on every box and needs no
 `allowDowngradeFrom` (proven over every recorded release: `helper/pkg/trust/transition_test.go`). A release build
 stops while the Whombat pin's package.json is below 0.2.0 (“release runtimes need 0.2.0 or later”): move the pin.
@@ -276,9 +275,10 @@ than the highest one any published release of the family carries; versions with 
 Check before a 20-minute build (no keys needed; `release/ship build` runs it first):
 
 ```
-tufrepo check-newer --tuple tuple.json --metadata-url https://updates.whombat.com/metadata/ --root manifest/prod/tuf-root.json --env prod
+tufrepo check-newer --tuple tuple.json --metadata-url https://releases.whombat.com/ --root manifest/prod/tuf-root.json \
+    --channel development
 tufrepo check-newer --id whombat-dev-20260929.1 --host-version whombat-dev-20260929.1 --runtime-version 0.2.0-… --manager-version 0.2.0-… \
-    --dir ~/.whombat-stack-dev/env/manager/tuf
+    --dir /tmp/devrepo
 ```
 
 It prints what it verified (the root chain, timestamp → snapshot → targets) — and, without `--root`, that it trusted
@@ -436,7 +436,7 @@ journalctl -u whombat-manager | grep clients:
 Withdrawing a version (a bad client) is a new channel without it: devices that still have the previous version switch
 back to it without a download; the previous version always stays on disk, older ones for at least 24 h.
 
-Development repository (the dev instance's is `~/.whombat-stack-dev/env/manager/tuf`, served as `updates.whombat.com`):
+A development repository (the harness's loopback environment keeps its own):
 
 ```
 go run ./release-tools/cmd/tufrepo add-clients-role --dir D [--key-file K]   # once; without --key-file a dev key in D/keys
@@ -475,7 +475,6 @@ redirect, and the account `CybexHQ` must stay Cybex's.
 | take old releases away | first `tufrepo gh-unlist --dir <clone> --keep <id>,… --dry-run`: what each channel stops listing and what would then leave GitHub. Then the same without `--dry-run`: each channel's role is signed with its own online key and pushed, nothing uploaded or deleted; a channel's newest release must be kept. When releases.whombat.com serves the new roles, `tufrepo gh-prune --dir <clone>` (`--dry-run` first) deletes each unlisted release's GitHub release and tag and every blob no listed release names; it holds the publish lock, refuses beside an unfinished publish and checks that GitHub has every file the listed releases need before deleting anything. Only when no box is in the middle of an update from an old release (a box rolls back only to a release some channel lists) and the old installers are off the download site (a box installed from one finds its release in no channel and doesn't start) |
 | the client channel | `tufrepo gh-clients --dir <clone>` after the channel publisher signed it |
 | freshness | the whombat-releases workflow re-signs snapshot and timestamp every 6 h and on each push (3 days); an issue opens 30 days before a role expires |
-| set up from DEV's repository | the bridge procedure below |
 
 **Channel role versions must never go backward.** Every box records the highest verified TUF role version it has applied
 per channel (`ChannelVersions` in the manager journal) and refuses metadata for that channel with a lower, zero, or
@@ -492,109 +491,8 @@ signed strictly above them (`gh-continue --version-gap` advances `targets`, `sna
 roles).
 
 A box on the GitHub repository verifies it in folders of its own: the manager's `tuf/github/cache` and
-`tuf/github/mirror` under `/persist/manager`, the helper's `/var/lib/whombat-update-helper/tuf-github` (UP-X35). The
-continued root gives timestamp and snapshot new keys, so the old repository's chain stays where the earlier manager and
-helper keep it (`tuf/cache`, `tuf/mirror`, the helper's `tuf`): a bridge that rolls back still takes DEV control's next
-assignment, and the GitHub folders keep the continued chain for the next move forward.
-
-### The bridge: moving DEV's boxes to the GitHub repository (LNK-50)
-
-Once, in this order, never skipping a step; this is the procedure, and the maintainers' runbook (whombat-ops
-`runbooks/appliance/dev-instance.md`, “The move to GitHub”) gives Cybex's exact commands under the same numbers. The rule
-behind every step: **no box is offered a release it can't roll back from.** A box's rollback from the bridge goes only to
-a release the GitHub repository lists (UP-X32), so the release each box runs when it takes the bridge must be among the
-carried ones, and nothing may move a box between the record and the bridge. DEV control offers a box the release of an
-open rollout whose waves reach its cohort, else the newest **completed** rollout's, whatever its cohort: a rollout that
-completes offers its release to every box (UP-X41).
-
-1. **Freeze, under the candidates' lock**: whombat-ops `bin/candidate --freeze "the move to GitHub"`. It waits for a
-   candidate that is running, writes `~/.config/whombat/candidate-freeze`, stops DEV's open rollouts, waits until every
-   DEV box is settled (steady, heard from, not behind the release control offers every box) and records each box's
-   release in the file (`release <device> <id>` lines). Exit 1: a box didn't settle; the freeze stays, the move waits,
-   run it again. From now on a candidate that rolls out refuses, checked at its start, again once it holds the lock and
-   again right before it publishes; `release/ship publish-dev` refuses every `--waves` but `rehearsal`.
-2. **Land on `main`, in order**: whombat-ops, the relay, control, the appliance, Whombat; fast-forward each
-   main checkout on the machine that runs the candidate (the freeze lives in the new `bin/candidate` and the harness, and
-   every later step uses `main`). Not before step 1: appliance `main` makes every `--host` candidate the bridge.
-3. **Control and the relay with Link on DEV, pinned explicitly**: `WB_MGD_LINK_LABELS_PER_DAY=2` in the stack's
-   environment, then a candidate with `--api <control's main> --relay <the relay's main> --no-rollout` (runtime-only on
-   the boxes' host; no box is offered it). Check before going on: migration 0029 applied once and comped every DEV box
-   that existed (`dev/panel ops link <device>`: `enabled`, a `comp`), control runs with `LINK_LABELS_PER_DAY=2`, Home's own
-   address answers, remote help reaches Home (`support <box> status`).
-4. **Build the bridge**, a host release from appliance `main` (never a reused host: it has no channels), published
-   through the old address without a rollout, naming the same `--api` and `--relay` so its candidate pins them:
-   `--minor --host --no-rollout --api … --relay …`. Nothing on GitHub; no box is offered it.
-5. **Record each box's running tuple again**: the freeze file's `release` lines, checked against each box now (a box's
-   own update status: support's `updates`, `dev/devbox update-status`). They must agree; if not, back to step 1.
-6. **Continue the repository** on a copy of DEV's, into the publisher's clone, with a **permanent keys directory** on the
-   machine that publishes (the candidate's): `tufrepo gh-continue --from <copy> --out <clone> --keys-dir <permanent,
-   0700> --offline-keys-dir <offline> --carry <every box's release>,<the bridge>`. The clone's `state.json` records the
-   keys directory's absolute path and every later publish loads the keys from exactly there: don't move it (if it must
-   move, change `state.json` with it), back it up at once (losing it loses the only keys of the new root and development
-   role: bridged boxes could never be signed an update again), never into a repository. `continue.json`:
-   `carriedReleases` names every box's release and the bridge.
-7. **The repository on GitHub**: the snapshot and timestamp keys into the Actions secrets, then `tufrepo gh-init --dir
-   <clone> --remote …`: it uploads and checks every file the metadata names (the carried releases, the AI clients) before
-   it pushes the metadata; then `tufrepo gh-clients --dir <clone>` (the clients role's files and role), and the AI client
-   job publishes into the clone from now on (`release-tools/clients/latest-tested`, `WB_CLIENTS_GITHUB`).
-8. **The workflow's first run** (workflow_dispatch), green.
-9. **Pages checked with the boxes' trust root**: `https://releases.whombat.com/timestamp.json` fresh; the snapshot
-   version from the timestamp, the development version from that snapshot, and those exact files verified against the
-   root the boxes pin: development lists every carried release, `clients` lists the AI clients. No tool verifies the
-   signatures of the downloaded chain against that root yet: the commands check versions, lengths and names, and the
-   VM's first refresh (step 10) is the first real signature check, before Home's.
-10. **The rehearsal on a temporary DEV box VM** (only with the owner's go-ahead; when there is none, say so: the first
-    box then is the first box-level run of all of this). **It can't run yet**: every box set up since own addresses
-    starts with its own address only and is claimed only on a page it serves, while `dev/devbox` claims through the
-    relay (`claim_here_unavailable`); until `dev/devbox` claims on the box's own page, the VM stops after its
-    registration. The machine running it must also let the lease's VM network reach the internet (DHCP, DNS, out).
-    Under a managed lease; installed **where the first real box is**
-    (`dev/devbox create --release <its release>`: a runtime-only release installs its host's ISO and DEV control then
-    brings the VM to it, refused unless that is the release control offers every box); claimed (the old manager's
-    claim), **then** comped at DEV control (`dev/panel ops comp <vm device> …`; a box made after the control deploy gets
-    no migration comp, and without Link the new manager sends no progress and the smoke's client ticket is refused),
-    **then** the bridge, through `release/ship publish-dev <bridge> --waves rehearsal` (the internal cohort only, held a
-    week so it can't complete; stopped at the end whatever happened, the stop checked; the VM is the only internal
-    device). Three passes, in order:
-    - **a bridge that fails after it refreshed from GitHub, and rolls back**: once the VM's manager journal shows its
-      first refresh from `releases.whombat.com`, its runtime is kept down until the verify deadline (`systemctl mask
-      --runtime --now whombat-server` in the box; the mask goes with the reboot). The box rolls back to its carried
-      release, `publish-dev` reports it and stops the rollout. Back on the carried release, Healthy, by the box's own word;
-    - **a legacy assignment after that rollback**: the failed attempt cleared at DEV control (`POST
-      /v1/operator/devices/<vm>/retry {"release":"<bridge twin>","reason":"rehearsal"}`), the same `publish-dev …
-      --waves rehearsal` again: the old manager and helper stage DEV control's assignment from the old repository
-      (UP-X35), and this time the bridge passes: Healthy and blessed **by the box's own word** (`dev/devbox
-      update-status`: past the bridge a box with Link sends support heartbeats, not status reports, so control's device
-      record keeps its old release), refreshing from `releases.whombat.com` (no `metadata_stale`), its own address, the
-      smoke;
-    - **a runtime-only release through GitHub**: a release on the bridge's host published into the Development channel
-      only (`release/ship build <id> --reuse-host <bridge's prod id>`, then `tufrepo gh-publish` of its twin; no rollout,
-      DEV control never hears of it), which the VM installs, Healthy. It is development's newest from then on, so the
-      first real box takes it right after the bridge: that is part of the plan, and its checks come after both.
-    Then `dev/devbox destroy` (refused while a rollout to the internal cohort is open), the lease released and checked.
-11. **Before the first real box**: its release now is one of `carriedReleases` (its own word, not control's record); a
-    way in that doesn't depend on the bridge works (the local network or Tailscale, tested now), and its local recovery
-    is ready (someone at the box, its recovery menu).
-12. **The box**: the bridge's twin through DEV control, all at once, with no other rollout open. It reboots into the
-    bridge, then takes the GitHub runtime-only release (step 10). Check: Healthy and blessed by its own word, refreshing
-    from `releases.whombat.com`, its own address, remote help, `bringBack: ready`, a push to the owner's phones. Then the
-    next box the same way.
-13. **Lift the freeze** once every box runs the bridge (or a release after it), blessed: remove the file. From then on a
-    candidate whose host has channels publishes into the GitHub Development channel first (a failure stops it), then
-    DEV control's rollout, which a box with channels doesn't read.
-
-Keep the carried releases listed in development until every DEV box is past the bridge; a box that missed the bridge
-keeps the old address.
-
-**If the move stops**, at any step: **keep the freeze**. While the bridge is DEV's newest release, a lifted freeze lets
-the next ordinary candidate reuse the bridge's host and roll it out to every box: never lift it then, or every candidate
-until the move ends runs with `--reuse-host <the host the boxes run>`. A rollout that may be open (a `publish-dev` killed
-between Healthy and its stop, a rehearsal) is stopped by hand at once (`POST /v1/operator/rollouts/<id>/stop`) and its
-state read back as `stopped`. Before step 6 nothing has changed for any box: stop there. After step 7 the repository on
-GitHub stays (no box reads it before its bridge). A rehearsal that failed: the VM is destroyed and the lease released,
-and the real box doesn't move until the cause is fixed and the rehearsal passes. A real box that took the bridge and is
-locally healthy but unreachable (no own address, no remote help): don't send another release; reach it the
-independent way (step 11), and bring it back with the recovery menu or a signed forward repair through GitHub.
+`tuf/github/mirror` under `/persist/manager`, the helper's `/var/lib/whombat-update-helper/tuf-github` (UP-X35), apart
+from the folders an earlier repository's chain is kept in (`tuf/cache`, `tuf/mirror`, the helper's `tuf`).
 
 ### A publish that stopped
 
@@ -635,9 +533,9 @@ and token: `release/github/whombat-releases/SETUP.md`.
 
 ## One environment (Whombat ONE-01…ONE-06; NX-522, MG-176)
 
-Every box runs the Whombat image (`prod-instance.nix`): production, the GitHub repository, Production by default. The
-image still knows the development environment so Home (environment file `dev`, identity env `local`) keeps working
-until it moves; a box in that environment keeps Beta by itself (the channel bridge records `development` once).
+Every box runs the Whombat image (`prod-instance.nix`): production, its one environment, the GitHub repository,
+Production by default. The image pins production's root and client channel keys (`manifest/prod/`) and doesn't build
+without them.
 
 ### The key ceremony (ONE-05, UP-X42)
 
@@ -660,8 +558,8 @@ ls ~/.config/whombat/releases-keys                        # clients-0, developme
 # The workflow runs on the push; then (a minute or two):
 curl -sf https://releases.whombat.com/4.root.json | jq '.signed.roles.root.threshold'   # 2
 git -C "$WHOMBAT_RELEASES_DIR" pull -q && $T gh-rotate --dir "$WHOMBAT_RELEASES_DIR" --check   # done true
-# Boxes walk to it from the root they pin: check from the oldest one an image pins.
-$T check-newer --metadata-url https://releases.whombat.com/ --root manifest/dev-instance/tuf-root.json \
+# Boxes walk to it from the root they pin: check from the one the image pins.
+$T check-newer --metadata-url https://releases.whombat.com/ --root manifest/prod/tuf-root.json \
   --channel development --id whombat-YYYYMMDD.N --host-version whombat-YYYYMMDD.N --runtime-version 0 --manager-version 0
 ```
 
@@ -669,12 +567,11 @@ The last command verifies the chain and the Beta role (its answer about the made
 
 1. The image pins the new root: `cp "$WHOMBAT_RELEASES_DIR/metadata/4.root.json" manifest/prod/tuf-root.json`, committed
    (the flake check `self-installed-config` then requires two root keys: NX-522).
-2. The AI client channel for production boxes, right before Home moves (Home's clients refuse it until then):
+2. The AI client channel for production boxes:
    `$T gh-clients-env --dir "$WHOMBAT_RELEASES_DIR" --env prod`, `go run ./release-tools/cmd/clientchannel publish
    --repo "$WHOMBAT_RELEASES_DIR"` (re-signs the same bundles for env prod), `$T gh-clients --dir
    "$WHOMBAT_RELEASES_DIR"`, `$T clients-keys --dir "$WHOMBAT_RELEASES_DIR" --out manifest/prod/client-channel-keys.json`
-   (env prod), committed. The client job publishes into the clone directly from then on (mirroring DEV's channel stops:
-   its env is local).
+   (env prod), committed. The client job publishes into the clone directly.
 3. The online production key's backup on The Titan (ONE-05): `~/.config/whombat/releases-keys/production-0.json`, 0600,
    in the same folder there.
 4. John copies `~/.config/whombat/releases-ceremony/` (README.txt names every file and key id) to his offline media,
@@ -691,93 +588,6 @@ folder and run it again. Rehearsed with throwaway keys (`release-tools/devtuf/ro
 `release-tools/ghpublish/ghpublish_test.go`; the scripts in the A1 and A2 reports): the chain from the pre-ceremony
 root, the workflow's re-signing, promotion with the online production key, a later root of one key refused and never
 cached (UP-X46), the push refused and run again, a ceremony stopped while signing and carried on.
-
-### Moving Home to production (ONE-06)
-
-When production runs Link (control, relay and the door for `*.whombat.app`), the key ceremony is done and its root
-and the env prod client keys are in the image (“The key ceremony” below), and Home runs that image. Keep the
-development stack running until John is signed in at Home's new address: until then `environment undo` takes Home back.
-As root on Home (its console, or remote help: that session ends with the reboot), in order. A root shell has
-`whombat-manager` on its PATH; a transient unit (`systemd-run`) has none: there, use
-`/run/current-system/sw/bin/whombat-manager` (the boot's own units name its store path).
-
-```sh
-# 0. Before: a backup (Settings → Backups → Back up now), and check where the box is.
-jq -r .default /etc/whombat/environments.json                          # prod: the Whombat image
-whombat-manager environment show | jq -r .name                         # dev
-jq -r '.deviceId, .env, .applianceRoute' /persist/identity/device.json # wb-…, local, rt_jw3bs1kz18n4hkj8hm65q1fxb4
-ls /persist/identity/registration.json 2>/dev/null || echo none        # none: DEV control registered Home (2026-10-20)
-jq -r .channel /var/lib/whombat-update-helper/channel.json             # development (Beta)
-jq -r '.signed.roles.root.threshold' /etc/whombat/tuf/root.json        # 2: the rotated root is pinned
-jq -r .env /etc/whombat/tuf/client-channel-keys.json                   # prod
-stat -c '%d %n' /persist /persist/manager /persist/environment-moves 2>/dev/null
-                                       # two numbers: /persist/manager is a subvolume of its own (MG-179), expected
-btrfs subvolume list /persist | grep -w manager                        # ID … path manager
-df -h /persist                                                         # room for a copy of manager/link and own-address
-# 1. Stop the manager and move. Home's identity, which DEV control made, becomes its own (MG-178): the same device id
-#    and keys, route `local`, env prod, and a kept registration signed for prod.
-systemctl stop whombat-manager
-whombat-manager environment set prod      # says: moves from dev to prod; its identity … is now its own
-# 2. Have Link start by itself at the next start (the box's own registration, no session needed): the screen then
-#    shows the Link code.
-whombat-manager reach link
-# 3. Check, then start everything in the new environment.
-jq -r '.deviceId, .env, .applianceRoute' /persist/identity/device.json # the same wb-…, prod, local
-jq -r .env /persist/identity/registration.json                         # prod
-jq -c . /persist/whombat/environment.json                              # {"v":1,"env":"prod"}
-ls /persist/environment-moves/                                         # <time>-dev: before/, new/, the old Link and address state
-test ! -e /persist/environment-moves/pending && echo done              # no move under way
-systemctl reboot
-```
-
-The move is all or nothing (MG-177): it checks the keys, the registration, every folder it writes to and the room for
-its copies before it changes anything, keeps what was there in its folder (the Link and own-address state copied there,
-checked, then removed from the manager's subvolume, MG-179), and undoes itself when a step fails (it says “the move stopped and
-was undone”: fix the cause, run it again). One that stopped (power, a crash) is finished at the next boot by
-`whombat-environment-move.service`, before anything reads the environment, or by running `environment set prod` again;
-one that can't be finished then is undone. When it can be neither (the disk refuses writes), the boot holds the manager
-and everything that reads the environment, says why on the console and in the journal (`journalctl -u
-whombat-environment-move`), and keeps the move's record: fix the cause, then `whombat-manager environment recover` and
-reboot. Home never starts half moved.
-
-After it starts: `whombat-manager environment show | jq -r '.name, .controlUrl'` says prod and `https://api.whombat.com`,
-and Home's screen shows a Link code with `app.whombat.com/link`. Then John, in order:
-
-1. **Link.** On a computer or phone, open `app.whombat.com/link`, sign in with his production account (the e-mail's
-   sign-in link; the first time it makes the account) and enter the code from Home's screen. Link starts; at
-   admin.whombat.com his account gets free time, forever (ONE-09). Within minutes Home has its address,
-   `<label>.whombat.app`: app.whombat.com lists Home with **Open**.
-2. **Sign in at the new address.** **Open** (or the address) shows Home's page. Home is claimed, so it asks how this
-   device gets in: **Use its screen**. Six letters appear on Home's screen; type them. The browser is in John's own
-   account, with everything as it was: the owner, members, conversations, automations, files and servers.
-3. **A box passkey** for the new address, on that browser: Settings → This Whombat → Devices → Add a passkey. From then on the
-   browser signs in without the screen. Box passkeys belong to the address: the ones made at the DEV address and the
-   ones made at dev.whombat.com don't work any more (they stay listed until removed).
-4. **Phones.** The production app (TestFlight on the iPhone, the APK on Android, `--env prod`). Add Home with a device
-   link from the signed-in browser (Settings → This Whombat → Devices → Add a device: the link or its QR code), or with the screen's
-   letters. Phone notifications come back once the phone is signed in (its token goes to production control).
-5. **Other people and old devices.** Members join the same way (a device link John sends, or the screen's letters).
-   Settings → This Whombat → Devices still lists the old browsers and the DEV apps: remove them.
-6. **Remote help** is granted again in Settings, with a help code (production's rules: no Forever grant).
-7. **Check**: Settings → This Whombat → Updates says Beta; Servers shows every server reporting; an automation runs.
-   Anything outside that called the old address (`<label>.dev.whombat.app`: a webhook, a bookmark, a shared link) is
-   pointed at the new one.
-
-Nothing on the disk is lost: the device id, its keys, the database, the files, the servers' hub and the backups stay.
-What stops: the DEV address and its certificate, sessions and passkeys made for dev.whombat.com or the DEV address, the
-DEV phone apps' way in, and remote help's grant. **Lockout**: until step 2 works, Home is reached only at its screen
-(and on Tailscale when that is on). If Link doesn't start (no code on the screen: `journalctl -u whombat-manager | grep
--i link`; `device_exists` means production control already knows Home's serial or keys), undo while DEV still runs:
-`systemctl stop whombat-manager && whombat-manager environment undo && systemctl reboot` puts the identity (route and
-env), the registration, the environment file and DEV's Link and address state back as they were.
-
-### The cleanup release (after Home's move)
-
-One commit, its own release: `nix/profiles/environments.nix` loses `dev`; `manifest/dev-instance/` goes;
-`prod-instance.nix` loses the channel bridge, `whombat.helper.interimRoot` and the `manifest/dev-instance` fallbacks (so
-`manifest/prod/tuf-root.json` and `client-channel-keys.json` are required); the flake check `self-installed-config`
-follows. Before it: `whombat-manager environment show | jq -r .name` says prod on every box that had `dev` (a box still
-on `dev` would resolve to nothing and run without Link).
 
 ## Tests
 
@@ -801,7 +611,7 @@ Store retention (UP-X18, UP-X19): `helper/internal/ops` `TestPruneRuntimeGenerat
 each Healthy update and only then, before a queued update is staged, failures as warnings, at most once per update
 across crashes, the watchdog fed while waiting). The fake activator
 collects by reachability from its profiles' generations, the booted system and the references of NAR imports (a profile
-the dev stack seeded without a generation link becomes generation 1 at the first switch), so every manager test (the
+the harness seeded without a generation link becomes generation 1 at the first switch), so every manager test (the
 crash matrices too) collects after each update.
 
 Versions and ordering: `helper/pkg/trust/transition_test.go` (every recorded release; `testdata/field-versions.json`),

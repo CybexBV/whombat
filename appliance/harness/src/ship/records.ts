@@ -1,17 +1,18 @@
 /**
- * The release pipeline's records (UP-C1, IN-96, IN-115): each stage of `release/ship` writes one JSON file next to the
- * PROD release (`~/.cache/whombat-releases/<id>/`) and chains it to the record(s) it follows by their sha256. Two
- * branches follow build.json and run in parallel; promote.json joins them:
+ * The release pipeline's records (UP-C1, IN-96, IN-115): `release/ship build` and `validate` each write one JSON file
+ * next to the PROD release (`~/.cache/whombat-releases/<id>/`) and chain it to the record(s) it follows by their
+ * sha256. Older release folders also hold dev-soak.json and promote.json, from the DEV soak and the deploy.sh
+ * promotion; they are read and verified with the rest:
  *
  *   build.json ─┬─ gates.json → upgrade-gates.json ─┬─ promote.json
  *               └─ dev-soak.json ────────────────────┘
  *
  * Every record carries `chain: {stage, releaseId, twin, after, alsoAfter?, ok, complete, at}`: `after` (and
  * `alsoAfter`, promote.json's second parent) name the records it follows, file and sha256 (null for build.json); `ok`
- * whether what ran passed, `complete` whether nothing was skipped (a PROD promotion needs every record complete; DEV
- * takes an incomplete one, IN-96). A stage refuses to run when a record it follows is missing, names another release,
- * doesn't match the file (another build), or failed. Records of the single line before IN-115 (dev-soak.json after
- * upgrade-gates.json) still verify. Hashed, not signed: the operator's machine is trusted (UP-C1).
+ * whether what ran passed, `complete` whether nothing was skipped. A stage refuses to run when a record it follows is
+ * missing, names another release, doesn't match the file (another build), or failed. Records of the single line before
+ * IN-115 (dev-soak.json after upgrade-gates.json) still verify. Hashed, not signed: the operator's machine is trusted
+ * (UP-C1).
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -37,7 +38,7 @@ export const STAGE_COMMAND: Record<Stage, string> = {
   promote: 'release/ship promote-prod',
 };
 
-/** The records each stage follows (IN-115): validate's branch and publish-dev's both start at build.json. */
+/** The records each stage follows (IN-115): validate's branch and the DEV soak's both start at build.json. */
 export const AFTER: Record<Stage, readonly Stage[]> = {
   build: [],
   gates: ['build'],

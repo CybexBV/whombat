@@ -9,7 +9,7 @@ pnpm install --frozen-lockfile --store-dir /srv/whombat-ci/cache/pnpm
 pnpm build:web
 pnpm build:web:hosted
 pnpm build:widget
-WHOMBAT_CONTROL_URL=https://api-dev.whombat.com pnpm build:embed
+WHOMBAT_CONTROL_URL=https://api.whombat.com pnpm build:embed
 pnpm --filter @whombat/web exec playwright install chromium
 # One Playwright process starts each selected project's server once and shares a total budget of four workers.
 # Project names already distinguish test artifact folders; a single invocation never clears another run's output.

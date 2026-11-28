@@ -7,9 +7,9 @@ commit a version was published from.
 | What | Built by | From |
 |---|---|---|
 | The box's own page (the page browsers open on its local-network address or Tailscale name; Whombat hermes-engine.md HE-50, direct-connection.md DC-08; hermes-engine-app.md AP-5327) | the appliance's Nix runtime package, `pnpm --filter @whombat/web build:prod` (`VITE_WHOMBAT_TARGET=box`, no fixtures) | the Whombat commit the appliance pins |
-| The hosted app (app.whombat.com, dev.whombat.com): `pnpm build:web:hosted` | control's deploy (`infra/hetzner/deploy.sh`) | the newest `app-vX.Y.Z` tag, or a ref you name |
-| The Feedback widget's embed tree: `pnpm build:embed --control-url …` | control's deploy, the appliance's dev stack | the same |
-| The Android APK: `pnpm --filter @whombat/mobile publish:apk --env dev\|prod --dir <control's DOWNLOADS_DIR>` | by hand on the build machine (release key, Firebase config) | a checkout of the published commit |
+| The hosted app (app.whombat.com): `pnpm build:web:hosted` | control's deploy (`infra/hetzner/deploy.sh`) | the newest `app-vX.Y.Z` tag, or a ref you name |
+| The Feedback widget's embed tree: `pnpm build:embed --control-url …` | control's deploy | the same |
+| The Android APK: `pnpm --filter @whombat/mobile publish:apk --dir <control's DOWNLOADS_DIR>` | by hand on the build machine (release key, Firebase config) | a checkout of the published commit |
 | The iOS app | a Mac (`apps/mobile/README.md` “iOS”) | a copy of a checkout |
 
 ## Releasing a version

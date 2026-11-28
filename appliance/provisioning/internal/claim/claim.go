@@ -87,14 +87,13 @@ func NewRecoveryKey(r io.Reader) (string, error) {
 	return sb.String(), nil
 }
 
-// URLBase returns the hosted UI claim page for an environment.
+// URLBase returns the hosted UI claim page for an environment: production's hosted UI is the only one, so a test
+// image ("dev") points there too.
 func URLBase(env string) (string, error) {
 	switch env {
 	case "local":
 		return "http://localhost:5190/claim", nil
-	case "dev":
-		return "https://dev.whombat.com/claim", nil
-	case "prod":
+	case "dev", "prod":
 		return "https://app.whombat.com/claim", nil
 	}
 	return "", errors.New("unknown environment")

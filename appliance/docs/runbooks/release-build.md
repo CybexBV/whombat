@@ -1,8 +1,8 @@
 # Building and publishing a release of the Whombat image
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 For whoever ships a Whombat image or update for the self-installed platform, dedicated machines and VMs
 (`self-installed`, PI-01…PI-14, PI-18, PI-21…PI-23; before PI-22 `proxmox-vm` and `release/build-proxmox`).
@@ -11,7 +11,7 @@ Decisions: `nixos.md` NX-66…NX-70; publishing on production `prod-image.md` PI
 `install.md`.
 
 **Releases come through `release/ship build` (UP-C1, UP-X45):** it runs `release/build prod` for the one Whombat
-image (ONE-02; there is no DEV twin since ONE-01), checks it newer than Beta and records everything around it. The
+image (ONE-02), checks it newer than Beta and records everything around it. The
 maintainers' `candidate` runs it and publishes the release to Beta; their `promote` moves it to Production (IN-835). Run
 `release/build` by hand only for a custody rollback (the maintainers' `shipping.md` “A bad release”). Mail automations
 reach a box one release after the release that brings them: they come on once the release the box would go back to
@@ -28,7 +28,7 @@ host's ISO, the box updates itself).
 
 **Release ids (NX-67, PI-23, ONE-04):** `whombat-YYYYMMDD.N` (UTC day of the build, `N` counting from 1 that day),
 Beta and Production alike: a channel is which role lists a release, not its id. An id is never reused: TUF refuses a
-second tuple under a published id. The DEV image's `whombat-dev-YYYYMMDD.N` ids stay published; boxes and the GitHub
+second tuple under a published id. The earlier `whombat-dev-YYYYMMDD.N` ids stay published; boxes and the GitHub
 repository order both families by day and number alone (LNK-22), so a new id must sort after every `whombat-dev-…` of
 its day too (`N` above theirs: `nextReleaseId`, harness/src/dev/candidate-plan.ts). The ids before PI-23,
 `pve-YYYYMMDD.N` and `pve-dev-YYYYMMDD.N`, stay published and sort before every `whombat-…` id; nothing signs a `pve-…`
@@ -41,7 +41,7 @@ id any more.
 
 ## Build (any machine with Nix and the Whombat source credentials; no keys)
 
-From a **clean commit** of the appliance (prod refuses a dirty tree; the DEV image is gone, ONE-02):
+From a **clean commit** of the appliance (prod refuses a dirty tree; ONE-02):
 
 ```sh
 TMPDIR=~/.cache/wb-tmp release/build prod whombat-20260927.1

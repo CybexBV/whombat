@@ -1,6 +1,6 @@
 /**
  * Serves the Feedback widget's embed tree (whombat-app `build:embed`: `_headers` + `embed/v1/…`, Whombat FD-31,
- * FD-46) on loopback for the embed origin (`embed.whombat.com` through the tunnel on the dev instance, IN-54): files
+ * FD-46) on loopback for the embed origin (IN-54): files
  * only, with their content types and every `_headers` block that matches the path; 404 for anything that isn't a file
  * (no index, no fallback, never `_headers` itself); GET and HEAD only.
  *

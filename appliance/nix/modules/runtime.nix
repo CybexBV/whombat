@@ -61,20 +61,10 @@ let
   // lib.optionalAttrs (cfg.embedUrl != null) { WHOMBAT_EMBED_URL = cfg.embedUrl; }
   // cfg.environment;
 
-  # The hosted UI's origin per environment (NX-30, NX-31); a local image uses the dev hosted UI.
-  appUrlDefaults = {
-    dev = "https://dev.whombat.com";
-    prod = "https://app.whombat.com";
-    local = "https://dev.whombat.com";
-  };
-
-  # The Feedback widget's origin per environment (FD-31, NX-127): production's is embed.whombat.com (HZ-03), the dev
-  # instance's embed-dev.whombat.com (IN-57); a local image uses the dev one, like its hosted UI.
-  embedUrlDefaults = {
-    dev = "https://embed-dev.whombat.com";
-    prod = "https://embed.whombat.com";
-    local = "https://embed-dev.whombat.com";
-  };
+  # The hosted UI's origin (NX-30, NX-31) and the Feedback widget's (FD-31, NX-127, HZ-03): production's, the only
+  # hosted ones, whatever the image's environment.
+  appUrlDefault = "https://app.whombat.com";
+  embedUrlDefault = "https://embed.whombat.com";
 
   hardening = {
     NoNewPrivileges = true;
@@ -160,11 +150,9 @@ in
     };
     appUrl = mkOption {
       type = types.nullOr types.str;
-      default = if linkPossible then appUrlDefaults.${config.whombat.environment} else null;
-      defaultText = lib.literalExpression ''
-        null on an image without Whombat Link (whombat.link.possible), else
-        { dev = "https://dev.whombat.com"; prod = "https://app.whombat.com"; local = "https://dev.whombat.com"; }.''${config.whombat.environment}'';
-      example = "https://dev.whombat.com";
+      default = if linkPossible then appUrlDefault else null;
+      defaultText = lib.literalExpression ''null on an image without Whombat Link (whombat.link.possible), else "https://app.whombat.com"'';
+      example = "https://app.whombat.com";
       description = ''
         Origin of the hosted Whombat UI for this environment (WHOMBAT_APP_URL, runtime MR-45): links the
         server writes (run notices, burrow addresses, invites) are <appUrl>/appliances/<device id>/…. An
@@ -175,9 +163,8 @@ in
     embedUrl = mkOption {
       type = types.nullOr types.str;
       # The Feedback drop is relayed by control: none on an image without Whombat Link.
-      default = if linkPossible then embedUrlDefaults.${config.whombat.environment} else null;
-      defaultText = lib.literalExpression ''
-        { dev = "https://embed-dev.whombat.com"; prod = "https://embed.whombat.com"; local = "https://embed-dev.whombat.com"; }.''${config.whombat.environment}'';
+      default = if linkPossible then embedUrlDefault else null;
+      defaultText = lib.literalExpression ''null on an image without Whombat Link (whombat.link.possible), else "https://embed.whombat.com"'';
       example = "https://embed.whombat.com";
       description = ''
         Origin that serves the Whombat Feedback widget (WHOMBAT_EMBED_URL, Whombat FD-31): website snippets load

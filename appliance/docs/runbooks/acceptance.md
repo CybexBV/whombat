@@ -1,8 +1,8 @@
 # Validation suite and acceptance demonstration (W3-INT)
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 ## `harness/validate` — the main validation suite
 
@@ -48,7 +48,7 @@ Steps:
 
    Full fresh pinned local runs default to three environments: the baseline files in their existing order,
    updates (`i-updates`) and Whombat Link's plan (`l-link`) independently. Private homes/containers use suffixes
-   `-scenarios-1/2`, and every service port is shifted by **+200/+300** (keep both ranges free; +100 is the DEV stack, +400 live agents).
+   `-scenarios-1/2`, and every service port is shifted by **+200/+300** (keep both ranges free; +400 is live agents).
    Each isolated report is validated and included in the parent report; its environment is purged afterwards.
    `--scenario-jobs 1` runs all files serially; `2` isolates updates only. Partial, live, public and reused
    environments stay serial. See `docs/decisions/ci-speed.md` for coverage and evidence rules.

@@ -3,7 +3,7 @@
 // internal group “Whombat” gets every build, and an iPhone with TestFlight's automatic updates installs it by itself.
 // A production build also joins the external group “Public” (the public link's testers), without a review request.
 //
-//   pnpm --filter @whombat/mobile publish:ios [--env prod|dev] [--rev <commit>]   # production unless --env dev
+//   pnpm --filter @whombat/mobile publish:ios [--env prod] [--rev <commit>]   # production
 //   … --setup    only the signing keychain, the group and its testers (on the Mac)
 //   … --check    archives and signs, uploads nothing: Apple's side accepts new capabilities or extensions
 //
@@ -81,15 +81,13 @@ const flag = (name, fallback) => {
 };
 
 const ENVIRONMENTS = {
-  dev: { control: 'https://api-dev.whombat.com', ui: 'https://dev.whombat.com' },
   prod: { control: 'https://api.whombat.com', ui: 'https://app.whombat.com' },
 };
 const setup = args.includes('--setup');
 const check = args.includes('--check');
-// Production is the only environment (Whombat one-environment.md); `dev` stays only until the move to production is
-// done, and goes with DEV.
+// Production is the only environment (Whombat one-environment.md).
 const envName = flag('env', 'prod');
-if (!setup && !ENVIRONMENTS[envName]) throw new Error('--env must be prod (the default) or dev');
+if (!setup && !ENVIRONMENTS[envName]) throw new Error('--env must be prod (the default)');
 
 const TEAM = '4R8P9MTF9T';
 const BUNDLE = 'com.whombat.mobile';

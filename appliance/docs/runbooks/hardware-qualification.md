@@ -143,7 +143,7 @@ The generic settings; the platforms below give each one's names.
 | Platform | Status | Settings |
 |---|---|---|
 | Proxmox VE 9 | **NOT RUN** (PI-09's target; the rows below need a Proxmox VE 9 host) | `qm create` in install.md §5: `--machine q35 --bios ovmf`, EFI disk `efitype=4m,pre-enrolled-keys=0`, no `tpmstate0`, `virtio-scsi-single` with `discard=on,iothread=1,ssd=1`, `--cpu host`, `--balloon 0`, `virtio,bridge=vmbr0`, `--watchdog model=i6300esb,action=reset`, `--agent enabled=1`, display *Default*, `--onboot 1` |
-| Incus | **NOT RUN** as a qualification. The image runs in Incus VMs every day: the DEV box (`dev/devbox`, IN-94) and John's box (NX-88), with the graphical installer and console | install.md §5: q35 with OVMF and the host CPU model, `security.secureboot=false`, no `tpm` device, root disk 128 GiB on virtio-scsi, `limits.cpu=4`, `limits.memory=8GiB`, `raw.qemu=-device i6300esb -action watchdog=reset`, `boot.autostart=true`; NIC on `incusbr0` (NAT) or macvlan on the host's NIC. No QEMU guest agent (Incus's own agent isn't in the image), so PQ-04 and PQ-05's fs-freeze don't apply |
+| Incus | **NOT RUN** as a qualification. The image runs in Incus VMs every day (John's box, NX-88), with the graphical installer and console | install.md §5: q35 with OVMF and the host CPU model, `security.secureboot=false`, no `tpm` device, root disk 128 GiB on virtio-scsi, `limits.cpu=4`, `limits.memory=8GiB`, `raw.qemu=-device i6300esb -action watchdog=reset`, `boot.autostart=true`; NIC on `incusbr0` (NAT) or macvlan on the host's NIC. No QEMU guest agent (Incus's own agent isn't in the image), so PQ-04 and PQ-05's fs-freeze don't apply |
 | libvirt, others | **NOT RUN**, untested | the generic table |
 
 ### Procedures

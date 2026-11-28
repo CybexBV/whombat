@@ -1,9 +1,8 @@
 /**
- * Release ids (NX-67, PI-23): production `whombat-YYYYMMDD.N`, the dev instance `whombat-dev-YYYYMMDD.N` (UTC day of
- * the build, `N` from 1). The ids before PI-23, `pve-YYYYMMDD.N` and `pve-dev-YYYYMMDD.N` (generation 0), are read and
- * ordered but never made: every `whombat-…` id sorts after every `pve-…` id of its environment, as the helper's
- * `CompareVersions` orders host versions ("whombat" after "pve"). A PROD candidate's DEV twin (UP-C1) is
- * `whombat-dev-<the same day>.<the first N free on DEV>`.
+ * Release ids (NX-67, PI-23): `whombat-YYYYMMDD.N` (UTC day of the build, `N` from 1). The DEV twins' ids that Beta
+ * and old release folders still hold, `whombat-dev-YYYYMMDD.N`, and the ids before PI-23, `pve-YYYYMMDD.N` and
+ * `pve-dev-YYYYMMDD.N` (generation 0), are read and ordered but never made: every `whombat-…` id sorts after every
+ * `pve-…` id of its environment, as the helper's `CompareVersions` orders host versions ("whombat" after "pve").
  */
 export interface ReleaseId {
   id: string;
@@ -55,30 +54,6 @@ export function newProdId(id: string): ReleaseId {
 export function compareIds(a: ReleaseId, b: ReleaseId): number {
   if (a.gen !== b.gen) return a.gen - b.gen;
   return a.day < b.day ? -1 : a.day > b.day ? 1 : a.n - b.n;
-}
-
-/**
- * The twin's id: `whombat-dev-<the PROD id's day>.<the highest N DEV has that day + 1>` among `taken` (ids published on
- * DEV, registered with its control, or built here). Not the first free N: TUF signs a DEV release only when its id
- * sorts after the family's newest (MG-50), so a gap below the newest is never usable. When DEV already has a release of
- * a later day than the PROD id, no id of that day sorts after it: refused, naming `--twin`. DEV's `pve-dev-…` ids are
- * all older (PI-23).
- */
-export function twinIdFor(prod: ReleaseId, taken: Iterable<string>): string {
-  let max = 0;
-  let newest: ReleaseId | null = null;
-  for (const t of taken) {
-    const r = parseReleaseId(t);
-    if (r?.env !== 'dev') continue;
-    if (!newest || compareIds(r, newest) > 0) newest = r;
-    if (r.gen === prod.gen && r.day === prod.day) max = Math.max(max, r.n);
-  }
-  if (newest && newest.gen === prod.gen && newest.day > prod.day)
-    throw new Error(
-      `DEV already has ${newest.id}, of a later day than ${prod.id}: no whombat-dev-${prod.day}.N sorts after it (MG-50). Build ${prod.id}'s twin under a later day with --twin whombat-dev-${newest.day}.${newest.n + 1}, or use a PROD id of that day`,
-    );
-  if (max >= 9999) throw new Error(`no dev release id left on ${prod.day}`);
-  return `${prod.gen === 1 ? 'whombat' : 'pve'}-dev-${prod.day}.${max + 1}`;
 }
 
 /** The newest id of `env` strictly older than `than`, among `ids`. */

@@ -12,8 +12,8 @@
 #   ended (NX-418).
 # - The socket is systemd's: 0660 root:whombat-support, a group of the runtime server and the manager only; the service
 #   also checks the peer's uid (the server everything, the manager the state only, root everything).
-# - The CA is the image's (`whombat.support.caKeys` → /etc/whombat/support-ca.pub): the DEV CA in images for the dev
-#   instance, the prod CA in prod images once it exists (RH-10); none, and remote help isn't available (NX-416).
+# - The CA is the image's (`whombat.support.caKeys` → /etc/whombat/support-ca.pub): the prod CA in prod images (RH-10);
+#   none, and remote help isn't available (NX-416). A refused CA (refused-support-ca.pub) never.
 {
   config,
   lib,
@@ -26,7 +26,7 @@ let
   ids = config.whombat.ids;
   socket = "/run/whombat-support/api.sock";
   caFile = "/etc/whombat/support-ca.pub";
-  devCa = ../../manifest/dev-instance/support-ca.pub;
+  refusedCa = ./refused-support-ca.pub;
   # The key lines of a CA file (`ssh-ed25519 <base64> …`), by their key.
   keysOf =
     f:
@@ -55,8 +55,8 @@ in
       description = ''
         The Whombat support CA's public keys (OpenSSH lines, `ssh-ed25519 <base64> [comment]`), installed as
         ${caFile}: certificates signed by them, for this device, are the only way in (RH-05). Null, or a file without a
-        key, and remote help isn't available here. DEV images pin manifest/dev-instance/support-ca.pub, prod images
-        manifest/prod/support-ca.pub once it exists; prod never pins the DEV CA (NX-416).
+        key, and remote help isn't available here. Prod images pin manifest/prod/support-ca.pub; prod never pins a
+        refused CA (refused-support-ca.pub, NX-416).
       '';
     };
     socket = mkOption {
@@ -77,14 +77,14 @@ in
         message = "whombat.support (remote help) needs Whombat Link: no environment of this image has a control";
       }
       {
-        # DEV keys can never open a customer's box (RH-05): not the DEV file, nor any key in it.
+        # A refused CA can never open a customer's box (RH-05): not its file, nor any key in it.
         assertion =
           !(
             config.whombat.environment == "prod"
             && cfg.caKeys != null
-            && (cfg.caKeys == devCa || lib.any (k: lib.elem k (keysOf devCa)) (keysOf cfg.caKeys))
+            && (cfg.caKeys == refusedCa || lib.any (k: lib.elem k (keysOf refusedCa)) (keysOf cfg.caKeys))
           );
-        message = "whombat.support.caKeys: a prod image never pins the DEV support CA (manifest/dev-instance/support-ca.pub)";
+        message = "whombat.support.caKeys: a prod image never pins a refused support CA (nix/modules/refused-support-ca.pub)";
       }
     ];
 

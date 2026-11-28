@@ -19,7 +19,7 @@ const SECOND_LEVEL = new Set(['co', 'com', 'net', 'org', 'gov', 'edu', 'ac', 'or
 
 /**
  * The consent screen's authorized domain for a host: Google wants the registrable (“top private”) domain,
- * so `dev.whombat.com` → `whombat.com` and `app.example.co.uk` → `example.co.uk`. IPs and single-label
+ * so `app.whombat.com` → `whombat.com` and `app.example.co.uk` → `example.co.uk`. IPs and single-label
  * hosts (`localhost`) are returned as they are (Google needs no authorized domain for them).
  */
 export function authorizedDomainOf(host: string): string {

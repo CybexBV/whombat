@@ -32,7 +32,7 @@ async function main(): Promise<void> {
       await validate(ctx, { prodId: id, ...a.validate });
       return;
     case 'status':
-      return status(ctx, a.status);
+      return status(ctx);
     case 'iso':
       await shipIso(ctx, { prodId: id });
       return;

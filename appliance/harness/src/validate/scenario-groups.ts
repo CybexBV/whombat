@@ -32,7 +32,7 @@ export function scenarioEnv(
   slot: number,
 ): Record<string, string> {
   if (!Number.isInteger(slot) || slot < 1 || slot > 2) throw new Error('scenario slot must be 1 or 2');
-  const shift = (slot + 1) * 100; // +100 is the DEV stack's, +400 the live-agent environment's.
+  const shift = (slot + 1) * 100; // +400 is the live-agent environment's.
   const names = PORT_VARIABLES;
   return {
     WB_MGD_HOME: `${base.home}-scenarios-${slot}`,
@@ -68,7 +68,7 @@ export const PORT_VARIABLES: Record<keyof typeof ports, string> = {
 
 /**
  * The ports of `env` (a `scenarioEnv`) that something already listens on, as `NAME=port` (IN-131). A shifted
- * environment can land on a port another service of this machine holds (the DEV box's QEMU monitor on 5801 is
+ * environment can land on a port another service of this machine holds (a VM's QEMU monitor on 5801 is
  * CONTROL_ADMIN_PORT 5501 + 300); its control would then exit at start and the suite fail without saying why.
  */
 export async function busyPorts(

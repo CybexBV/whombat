@@ -5,7 +5,7 @@
  *
  * The environment's runtime runs with `WHOMBAT_GOOGLE=fake` for this file (IN-49): when it doesn't, the scenario
  * switches it, restarts the runtime and puts the previous setting back afterwards. It never does that on a public
- * instance (dev.whombat.com runs real Google): there it is blocked unless the instance already runs the fake.
+ * environment (one that runs real Google): there it is blocked unless the instance already runs the fake.
  *
  * In the person's Chat the agent starts the email guide (`start_guide`, AG-01; the harness takes the runner's place
  * for that one turn, IN-64), after a Google connection an earlier run left is removed, so the guide begins with the
