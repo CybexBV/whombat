@@ -165,9 +165,17 @@ export function directActionText(step: RunActionStep, locale?: string | null): s
   return coreTranslator(locale).t(actionKey(step, 'do'), wordsOf(step));
 }
 
-/** “Runs on this Whombat right away, without AI”: under each direct step on the plan card and the page. */
-export function directActionDetail(locale?: string | null): string {
-  return coreTranslator(locale).t('direct.detail');
+/**
+ * “Runs on this Whombat right away, without AI”: under each direct step on the plan card and the page. A scene or a
+ * script an automation saved before says it asks each time, as it does.
+ */
+export function directActionDetail(
+  locale?: string | null,
+  step?: Pick<RunActionStep, 'thing' | 'target'>,
+): string {
+  return coreTranslator(locale).t(
+    step && directActionAsksEachTime(step) ? 'direct.detailAsks' : 'direct.detail',
+  );
 }
 
 /** How a direct action came out: it ran (and what the thing does now), or the thing was already so. */

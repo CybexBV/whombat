@@ -8380,6 +8380,7 @@
   "core:device.tier.can": "e686c7689ecbe473",
   "core:device.tier.off": "40d10af1dd7919f8",
   "core:direct.detail": "368e0b22b90f2d0a",
+  "core:direct.detailAsks": "a78a3237fae4494c",
   "core:direct.did.restartHome": "2464ab41392129ef",
   "core:direct.did.restartMachine": "7460ab0151dd9fb3",
   "core:direct.did.restartServer": "2464ab41392129ef",

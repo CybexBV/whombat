@@ -420,6 +420,10 @@ export const AUTOMATION_VIEWS = splitPairs({
     'Runs on this Whombat right away, without AI',
     'Draait meteen op deze Whombat, zonder AI',
   ],
+  'direct.detailAsks': [
+    'Asks you each time, then runs on this Whombat without AI',
+    'Vraagt het je elke keer en draait dan op deze Whombat, zonder AI',
+  ],
   'direct.do.restartServer': ['Restart {thing}', '{thing} herstarten'],
   'direct.do.shutDownServer': ['Shut down {thing}', '{thing} uitzetten'],
   'direct.do.startMachine': ['Start {target} on {thing}', '{target} op {thing} starten'],

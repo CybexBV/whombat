@@ -17,6 +17,7 @@ import {
   DIRECT_COOLDOWN_DEFAULT_MINUTES,
   DIRECT_NOT_ALLOWED,
   directActionAsksEachTime,
+  directActionDetail,
   directActionProblem,
   directActionRepeatable,
   directActionText,
@@ -113,6 +114,14 @@ describe('the run_action step', () => {
     // The safety words still refuse it.
     expect(directActionProblem(home('script.unlock_front_door'), null, { saved: true })).toMatch(/ask/);
     expect(directActionProblem(home('script.disarm_alarm'), null, { saved: true })).not.toBeNull();
+    // Its page says it asks.
+    expect(directActionDetail(null, home('script.good_night'))).not.toBe(
+      directActionDetail(null, home('light.porch')),
+    );
+    expect(directActionDetail('nl-NL', home('script.good_night'))).not.toBe(
+      directActionDetail(null, home('script.good_night')),
+    );
+    expect(directActionDetail(null, home('light.porch'))).toBe(directActionDetail());
   });
 
   it('never unlocks, opens or disarms, whatever it is called', () => {
