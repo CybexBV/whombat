@@ -397,8 +397,13 @@ describe('lookTurnLines (Whombat look-research.md LR-05…LR-08)', () => {
   });
 
   it('names service_test when Whombat’s own test of the service failed, and only then', () => {
-    expect(lookTurnLines(woken('look', { ...look, check: 'works.test' })).join('\n')).toContain('service_test');
-    const among = { ...look, lines: [{ title: 'Disk full' }, { title: 'Photos don’t open', check: 'works.test' }] };
+    expect(lookTurnLines(woken('look', { ...look, check: 'works.test' })).join('\n')).toContain(
+      'service_test',
+    );
+    const among = {
+      ...look,
+      lines: [{ title: 'Disk full' }, { title: 'Photos don’t open', check: 'works.test' }],
+    };
     expect(lookTurnLines(woken('look', among)).join('\n')).toContain('service_test');
     expect(lookTurnLines(woken('look')).join('\n')).not.toContain('service_test');
   });
