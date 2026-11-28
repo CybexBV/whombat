@@ -42,6 +42,21 @@ describe('which images are databases', () => {
       'redis:7-alpine',
       'valkey/valkey:8',
       'mongo:7',
+      // Vector and search stores, queues and object stores keep data an update can change too.
+      'qdrant/qdrant:v1.12',
+      'cr.weaviate.io/semitechnologies/weaviate:1.27',
+      'chromadb/chroma:0.5',
+      'rabbitmq:3-management',
+      'minio/minio:latest',
+      'confluentinc/cp-kafka:7.7',
+      'bitnami/kafka:3',
+      'getmeili/meilisearch:v1.11',
+      // A database's name as a word of a longer one.
+      'ghcr.io/tensorchord/vchord-postgres:pg17-v0.3.0',
+      'linuxserver/mariadb:latest',
+      'bitnami/mongodb:7.0',
+      'mysql8:latest',
+      'mcr.microsoft.com/mssql/server:2022-latest',
     ])
       expect(isDatabaseImage(db), db).toBe(true);
     for (const plain of [
@@ -49,6 +64,10 @@ describe('which images are databases', () => {
       'nextcloud:29',
       'redis-commander:latest',
       'pgadmin4',
+      'prometheuscommunity/postgres-exporter:v0.15',
+      'mongo-express:1',
+      'redislabs/redisinsight:2',
+      'ghcr.io/example/server:1',
     ])
       expect(isDatabaseImage(plain), plain).toBe(false);
   });

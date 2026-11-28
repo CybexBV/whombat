@@ -249,9 +249,12 @@ type ManageRequest struct {
 
 	// app.update (apps.go): the containers to update (their names, at most
 	// AppsMax); HoldMajor leaves an app as it is when the new image turns
-	// out to be a new major version (a run nobody looked at).
-	Apps      []string `cbor:"apps,omitempty" json:"apps,omitempty"`
-	HoldMajor bool     `cbor:"hold_major,omitempty" json:"hold_major,omitempty"`
+	// out to be a new major version, or either version isn't known (a run
+	// nobody said yes to a new major version for); AppExpect: what was
+	// checked of each app, which the update must still find.
+	Apps      []string    `cbor:"apps,omitempty" json:"apps,omitempty"`
+	HoldMajor bool        `cbor:"hold_major,omitempty" json:"hold_major,omitempty"`
+	AppExpect []AppExpect `cbor:"app_expect,omitempty" json:"expect,omitempty"`
 
 	// Backup places (backupplace.go): the place operations' values, and
 	// storage.add's storage. The hub builds them from its own bodies.

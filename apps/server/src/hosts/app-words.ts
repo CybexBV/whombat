@@ -51,7 +51,8 @@ export function appCardNote(args: Args): string | null {
       'It’s a database: its update can change its data, and putting the old version back can’t undo that.',
     );
   if (reasons.includes('major')) parts.push('This is a new major version, which can change how it works.');
-  if (reasons.includes('version_unknown')) parts.push('The new version isn’t known before it’s downloaded.');
+  if (reasons.includes('version_unknown') && !reasons.includes('major'))
+    parts.push('I can’t tell its version numbers, so this may be a new major version.');
   if (args.snapshot === true) parts.push('I take a snapshot of the server first.');
   parts.push('If it doesn’t start, I put the previous version back.');
   return parts.join(' ');
@@ -92,6 +93,10 @@ export function appOutcomeLine(
           return to ? t('hosts.apps.backFailed', { to }) : t('hosts.apps.backFailedUnknown');
         case 'timeout':
           return t('hosts.apps.timeout');
+        case 'changed':
+          return t('hosts.apps.changed');
+        case 'interrupted':
+          return t('hosts.apps.interrupted');
         default:
           return t('hosts.apps.failed');
       }

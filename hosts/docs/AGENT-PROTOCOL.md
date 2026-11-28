@@ -1038,12 +1038,19 @@ HS-360…HS-372).
 
 - **Manage op** `app.update` (`Platform: "host"` or empty;
   `ManageRequest.Apps` (`apps`) names up to 10 containers,
-  `ManageRequest.HoldMajor` (`hold_major`) leaves a new major version
-  alone). It answers with a task `app:<16 hex>` that runs outside the agent
-  and survives an agent restart; `task.status` takes `app:` ids, `task.list`
+  `ManageRequest.HoldMajor` (`hold_major`) leaves a new major version, or
+  one whose version isn't known, alone; `ManageRequest.AppExpect`
+  (`app_expect`: `[{app, svc, image_id, digest?, cfg_hash?}]`) is what the
+  yes was for, and the agent updates an app only while it is still so).
+  It answers with a task `app:<16 hex>` that runs outside the agent and
+  survives an agent restart (an update the server cut short is finished or
+  undone when the agent runs again); `task.status` takes `app:` ids, `task.list`
   with `Platform: "host"` lists them with the package tasks.
 - **TaskStatus** gains `Apps` (`apps`: `[{app, svc, status, reason, from,
-  to, msg}]`) once an app task ended.
+  to, msg}]`) once an app task ended; reasons include `changed` (not what
+  the yes was for) and `interrupted` (cut short, nothing changed).
 - **Report**: a Docker `Guest` gains `App` (`app`: `{svc, ver, new_ver,
-  blocked, busy, last: {status, reason, from, to, finished}}`) for a
+  new_dg, cfg_hash, blocked, busy, last: {status, reason, from, to,
+  finished}}`; `new_dg` the newer image's registry digest, `cfg_hash`
+  Compose's hash of the service's settings) for a
   container Compose started. Agents older than this never send it.

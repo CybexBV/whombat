@@ -33,12 +33,16 @@ import (
 // unit outlives the agent) or, without systemd, in its own session. The
 // runner writes result.json last. One app task at a time; tasks are kept a
 // day after they end, each container's last outcome (last.json) for good.
+// A runner that stopped without a result after it started replacing apps
+// (the server restarted) is started again, at most appResumesMax times, to
+// keep or put back the update it was making.
 
 const (
 	appTaskKeep   = 24 * time.Hour
 	appUnitPrefix = "whombat-app-"
 	appLastFile   = "last.json"
 	appLastMax    = 200
+	appResumesMax = 2
 )
 
 var appTaskIDRe = regexp.MustCompile(`^app:([0-9a-f]{16})$`)
@@ -168,8 +172,19 @@ func (p *appTasks) readLocked(dir string) (appTask, bool) {
 	if t.res, _ = apps.ReadResult(dir); t.res != nil {
 		return t, true
 	}
+	// The runner stopped part-way: started again, it finishes the update it
+	// was making (kept when the app runs, put back when it doesn't).
+	prog, _ := apps.ReadProgress(dir)
+	if prog != nil && spec.Resumes < appResumesMax {
+		if err := p.resumeLocked(&t); err == nil {
+			return t, true
+		}
+	}
 	res := &apps.TaskResult{Status: apps.StatusFailed, Finished: p.now().UTC(), Apps: []apps.Outcome{},
 		Message: "The server may have restarted while it ran."}
+	if prog != nil {
+		res.Apps = settledOutcomes(spec, prog)
+	}
 	if err := apps.WriteResult(dir, res); err == nil {
 		t.res, _ = apps.ReadResult(dir)
 	}
@@ -180,17 +195,82 @@ func (p *appTasks) readLocked(dir string) (appTask, bool) {
 }
 
 func (p *appTasks) runningLocked(t appTask) bool {
+	started, limit := t.spec.Started, apps.Limit(len(t.spec.Apps))
+	if t.spec.Resumes > 0 {
+		started, limit = t.spec.Resumed, apps.PerAppLimit
+	}
 	switch {
 	case t.spec.Unit != "":
 		active, err := p.unitActive(t.spec.Unit)
 		if err != nil {
-			return p.now().Sub(t.spec.Started) < apps.Limit(len(t.spec.Apps))+pkgUnitSlack
+			return p.now().Sub(started) < limit+pkgUnitSlack
 		}
 		return active
 	case t.spec.PID > 0:
 		return p.alive(t.spec.PID, t.dir)
 	}
-	return p.now().Sub(t.spec.Started) < time.Minute
+	return p.now().Sub(started) < time.Minute
+}
+
+// resumeLocked starts the runner of a task again (a unit of its own) to
+// finish the update it was making.
+func (p *appTasks) resumeLocked(t *appTask) error {
+	exe, err := p.exe()
+	if err != nil {
+		return err
+	}
+	spec := *t.spec
+	spec.Resumes++
+	spec.Resumed = p.now().UTC()
+	spec.Unit, spec.PID = "", 0
+	argv := []string{exe, "app-task", "--dir", t.dir}
+	if p.systemd() {
+		spec.Unit = fmt.Sprintf("%s%s-%d.service", appUnitPrefix, strings.TrimPrefix(spec.ID, proto.AppTaskPrefix), spec.Resumes)
+		if err := apps.WriteSpec(t.dir, &spec); err != nil {
+			return err
+		}
+		if err := p.systemdRun(appUnitArgv(spec.Unit, 1, argv)); err != nil {
+			return err
+		}
+	} else {
+		if err := apps.WriteSpec(t.dir, &spec); err != nil {
+			return err
+		}
+		pid, err := p.spawn(argv)
+		if err != nil {
+			return err
+		}
+		spec.PID = pid
+		if err := apps.WriteSpec(t.dir, &spec); err != nil {
+			return err
+		}
+	}
+	t.spec = &spec
+	return nil
+}
+
+// settledOutcomes are the outcomes of a task that stopped part-way and
+// couldn't be finished: what ended, the update being made (its image keeps
+// its own tag, so a person can go back by hand) and the apps not reached.
+func settledOutcomes(spec *apps.TaskSpec, prog *apps.Progress) []apps.Outcome {
+	out := append([]apps.Outcome{}, prog.Done...)
+	seen := map[string]bool{}
+	for _, o := range out {
+		seen[o.App] = true
+	}
+	if pend := prog.Pending; pend != nil {
+		for _, o := range pend.Apps {
+			o.Status, o.Reason = proto.AppFailed, proto.AppReasonBackFail
+			out = append(out, o)
+			seen[o.App] = true
+		}
+	}
+	for _, n := range spec.Apps {
+		if !seen[n] {
+			out = append(out, apps.Outcome{App: n, Status: proto.AppFailed, Reason: proto.AppReasonInterrupted})
+		}
+	}
+	return out
 }
 
 // recordLocked keeps an ended task's outcome per container (newer wins).
@@ -270,8 +350,9 @@ func (p *appTasks) watchLocked() {
 	}()
 }
 
-// start starts a task updating the named containers.
-func (p *appTasks) start(names []string, holdMajor bool) (string, error) {
+// start starts a task updating the named containers, while each is what
+// expect says.
+func (p *appTasks) start(names []string, holdMajor bool, expect []proto.AppExpect) (string, error) {
 	p.mu.Lock()
 	p.loadLocked()
 	for _, t := range p.scanLocked() {
@@ -294,7 +375,7 @@ func (p *appTasks) start(names []string, holdMajor bool) (string, error) {
 		p.mu.Unlock()
 		return "", codeErr(CodePlatformError, "The agent can’t keep the update’s log: "+err.Error())
 	}
-	spec := &apps.TaskSpec{ID: id, Apps: names, HoldMajor: holdMajor, Started: p.now().UTC()}
+	spec := &apps.TaskSpec{ID: id, Apps: names, HoldMajor: holdMajor, Expect: expect, Started: p.now().UTC()}
 	argv := []string{exe, "app-task", "--dir", dir}
 	fail := func(err error) (string, error) {
 		_ = os.RemoveAll(dir)
@@ -489,7 +570,11 @@ func (b *Broker) appsManage(ctx context.Context, req proto.ManageRequest) (proto
 	if err != nil {
 		return fail(err)
 	}
-	id, err := p.start(names, req.HoldMajor)
+	expect, err := appExpect(names, req.AppExpect)
+	if err != nil {
+		return fail(err)
+	}
+	id, err := p.start(names, req.HoldMajor, expect)
 	if err != nil {
 		return fail(err)
 	}
@@ -535,6 +620,36 @@ func (b *Broker) appNames(names []string) ([]string, error) {
 		if !slices.Contains(out, n) {
 			out = append(out, n)
 		}
+	}
+	return out, nil
+}
+
+// appExpect checks what was said yes to: one entry per app at most, for
+// apps the request names, in the shapes Docker and Compose use.
+func appExpect(names []string, in []proto.AppExpect) ([]proto.AppExpect, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > proto.AppsMax {
+		return nil, invalidField("expect", fmt.Sprintf("At most %d apps at once.", proto.AppsMax))
+	}
+	seen := map[string]bool{}
+	out := make([]proto.AppExpect, 0, len(in))
+	for _, e := range in {
+		switch {
+		case !slices.Contains(names, e.App) || seen[e.App]:
+			return nil, invalidField("expect", "Say once what was checked of each app the update names.")
+		case !apps.ValidName(e.Service):
+			return nil, invalidField("expect", fmt.Sprintf("%q is not a Compose service.", truncateText(e.Service, 64)))
+		case !apps.ValidDigest(e.ImageID):
+			return nil, invalidField("expect", "image_id is the image's id (sha256:…).")
+		case e.Digest != "" && !apps.ValidDigest(e.Digest):
+			return nil, invalidField("expect", "digest is the registry's digest of the newer image (sha256:…).")
+		case e.ConfigHash != "" && !apps.ValidConfigHash(e.ConfigHash):
+			return nil, invalidField("expect", "config_hash is Compose's hash of the service.")
+		}
+		seen[e.App] = true
+		out = append(out, e)
 	}
 	return out, nil
 }

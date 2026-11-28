@@ -1744,19 +1744,20 @@ has `package_task` while one runs and `package_last` after
 (`docs/CONTRACT.md`).
 
 **Docker Compose app updates** (`docs/MANAGE.md` 2.11; Whombat
-`app-updates.md`). Pull a Compose app's image, recreate its service, and
-put the previous image back when it doesn't come up. One app task at a
+`app-updates.md`). Pull exactly the image the person said yes to,
+recreate the app's service (and the project's other services running the
+same image), and put the previous image back when it doesn't come up. One app task at a
 time per server; the manage switches as for the other routes; audited as
 `manage.requested` / `manage.finished` (details add `apps`, `hold_major`,
 and at the end `apps_result`).
 
 | Route | Op | Role | Reauth | Body | Success |
 |---|---|---|---|---|---|
-| `POST …/apps/update` | `app.update` | admin | yes | `apps` (Docker guest ids `docker:<name>` or container names, at most 10), `hold_major` (optional), `confirm` (required) | 202 `{ok, task: {id}, audit_id}` |
+| `POST …/apps/update` | `app.update` | admin | yes | `apps` (Docker guest ids `docker:<name>` or container names, at most 10), `hold_major` (optional), `expect` (optional: `[{app, service, image_id, digest?, config_hash?}]`, at most one per app named: what the yes was for), `confirm` (required) | 202 `{ok, task: {id}, audit_id}` |
 | `GET …/tasks/app:{hex}?platform=host&log_start=N` | `task.status` | operator | | | 200, `apps` once ended |
 
 Refusals: 400 `confirm_required`, 400 `invalid_value`
-(`field_errors.apps`), 404 `guest_not_found`, 409 `not_compose` (a
+(`field_errors.apps`, `field_errors.expect`), 404 `guest_not_found`, 409 `not_compose` (a
 container `docker run` started), 409 `app_pinned` / `app_no_files`, 409
 `busy` (being updated), 409 `agent_outdated` (the server reports Compose
 projects but no apps: its agent is older and updates itself); the agent's
@@ -1764,7 +1765,8 @@ projects but no apps: its agent is older and updates itself); the agent's
 of a Compose app has `app` (`GET …/guests`):
 
 ```json
-{"service": "immich-server", "version": "2.3.0", "new_version": "2.4.0", "blocked": null, "updating": false,
+{"service": "immich-server", "version": "2.3.0", "new_version": "2.4.0", "new_digest": "sha256:…", "config_hash": "9f2c…",
+ "blocked": null, "updating": false,
  "last": {"status": "rolled_back", "reason": "stopped", "from": "2.2.1", "to": "2.3.0", "at": "2026-11-20T03:00:00Z"}}
 ```
 

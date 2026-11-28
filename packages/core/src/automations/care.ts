@@ -67,8 +67,8 @@ function vmBackupPrompt(input: CareAutomationInput): string {
 }
 
 /**
- * The apps' updates: a database's or a new major version's never run unattended. They become one question the person
- * answers in the morning (Yes, tonight · No); `hold_major` keeps an app whose new version turns out to be a major one.
+ * The apps' updates: a database's, a new major version's or an unknown version's never run unattended. They become one question the person
+ * answers in the morning (Yes, tonight · No); `hold_major` keeps an app whose new version turns out to be a major one or can't be told.
  */
 function appsPrompt(input: CareAutomationInput): string {
   const { server } = input;
@@ -76,7 +76,7 @@ function appsPrompt(input: CareAutomationInput): string {
     `The weekly app updates of the server ${server.id}.`,
     `Read app_updates for ${server.id}. When no app has an update, say so in one short sentence and stop.`,
     'Update the apps that don’t ask first with one app_update call with hold_major true, and wait until it ends (server_tasks).',
-    'Then, if any app asks first (asksFirst: a database or a new major version), call app_update once more for just those, with ask true and the reasons app_updates gave: the person gets one question for them.',
+    'Then, if any app asks first (asksFirst: a database, a new major version or a version it can’t tell), call app_update once more for just those, with ask true and the reasons app_updates gave: the person gets one question for them.',
     'When app_updates says the server needs a newer helper, say it gets it by itself and stop.',
     'Tell the person in one or two plain sentences what you updated, what went back, and what waits for their yes, with no image names.',
   ].join(' ');

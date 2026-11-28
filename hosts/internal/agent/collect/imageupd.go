@@ -65,10 +65,11 @@ type imageCheck struct {
 }
 
 // imageResult is a checked image's result: whether the registry has a
-// newer image, and that image's version when known.
+// newer image, and that image's version and digest when known.
 type imageResult struct {
 	update  *bool
 	version string
+	digest  string
 }
 
 func newImageUpdater(toggle toggleFn, c *collector) *imageUpdater {
@@ -99,7 +100,7 @@ func (u *imageUpdater) results() map[string]imageResult {
 	for k, v := range u.checked {
 		r := imageResult{update: copyPtr(v.update)}
 		if v.update != nil && *v.update {
-			r.version = v.version
+			r.version, r.digest = v.version, v.remote
 		}
 		out[k] = r
 	}

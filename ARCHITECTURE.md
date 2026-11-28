@@ -1638,18 +1638,23 @@ Setup and operation: `docs/github.md`.
   known once. An older server's research is offered the same steps when its lines are missing backups or updates.
 - **Docker Compose app updates** (`hosts/internal/agent/apps`, `apps/server/src/hosts/tools-apps.ts`, `app-ask.ts`,
   [app-updates.md](docs/decisions/app-updates.md)): Whombat's helper reports each container Compose started as an app
-  (`HostGuest.app`: its service, its version and the newer image's, `pinned`, whether an update runs, the last one) and
-  runs an update as one host task (`app:<id>`): it tags the running image `…:whombat-previous-<service>`, pulls the
-  service's image, recreates only that service and watches it run (healthy when it has a health check) for 30 seconds,
-  and when it doesn't come up tags the previous image back and recreates it without pulling. The hub starts it
+  (`HostGuest.app`: its service, its version and the newer image's, the newer image's digest, Compose's hash of the
+  service's settings, `pinned`, whether an update runs, the last one) and runs an update as one host task
+  (`app:<id>`): it checks the service, its image and that hash are what the yes was for (`expect`), tags the running
+  image `…:whombat-previous-<service>`, writes down the way back (`progress.json`), pulls exactly the checked digest,
+  tags it as the service's image, recreates the service and every one of the project that shares its image with
+  `up --no-deps --pull never --no-build` and watches them run (healthy when they have a health check) for 30 seconds;
+  when they don't come up it tags the previous image back and recreates them the same way. A runner the server
+  stopped part-way is started again by the agent and finishes the update or goes back. The hub starts it
   (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task (`HostTask.apps`).
   Every update asks through the approval card: the assistant's `app_update` asks like a container update, and always
-  for a database's or a new major version's (`ask: true`, `serverAsksApply`), refusing them without a yes whose
-  reasons cover them; a page's Update (`hosts.manage` op `app.update`) commits that same call for the person in their
-  Chat and opens its card (`approvalNumber`), with a snapshot first when the server is a Proxmox guest Whombat watches
-  (`proxmoxGuestOf`). The followed task posts one plain line per app (`appsOutcomeText`), Done recently records it and
+  for a database's, a new major version's or an unknown version's (`ask: true`, `serverAsksApply`), refusing them
+  without a yes whose reasons cover them; `connection_call` writes what was checked into the call when it's asked
+  for (`bindAppUpdateArgs`), and a run whose apps changed since is refused. A page's Update (`hosts.manage` op
+  `app.update`) commits that same call for the person in their Chat and opens its card (`approvalNumber`), with a
+  snapshot first when the server is a Proxmox guest Whombat watches (`proxmoxGuestOf`). The followed task posts one plain line per app (`appsOutcomeText`), Done recently records it and
   the server is kept quiet while it runs. `app_updates` gives the assistant the same facts; the care plan's `apps`
-  automation runs it on Sunday night with `hold_major`. The web's apps list and a service's page (when it runs in a
+  automation runs it on Sunday night with `hold_major` (on for every run whose yes didn't cover a major version). The web's apps list and a service's page (when it runs in a
   Compose container) and the phone's list and app screen draw it from `@whombat/client/hosts` (`appUpdateRow`).
 - **What's protected and restore tests** (`apps/server/src/backup-trust/`, [backup-trust.md](docs/decisions/backup-trust.md)):
   `protected.get` builds one row per thing that holds data from what Whombat already reads — Proxmox backup jobs and

@@ -1408,7 +1408,18 @@ describe('Docker Compose app updates (app-updates.md)', () => {
     console: { available: false },
     project: 'stack',
     update_available: true,
-    app: { service: name, version, new_version: next, blocked: null, updating: false, last: null },
+    // The image it runs, the newer one's digest and Compose's hash of its settings: what a yes is bound to.
+    image_id: `sha256:${name.charCodeAt(0).toString(16).repeat(32)}`,
+    app: {
+      service: name,
+      version,
+      new_version: next,
+      blocked: null,
+      updating: false,
+      last: null,
+      new_digest: `sha256:${'e'.repeat(64)}`,
+      config_hash: 'c0ffee',
+    },
   });
   const apps = [
     guest('traefik', 'traefik:v3.1', 'v3.1.2', 'v3.2.0'),
@@ -1459,17 +1470,64 @@ describe('Docker Compose app updates (app-updates.md)', () => {
       () => fake.calls('POST', '/api/v1/servers/basalt/apps/update')[before],
       10_000,
     );
-    expect(sent.body).toMatchObject({ apps: ['docker:redis'], confirm: true });
+    expect(sent.body).toMatchObject({
+      apps: ['docker:redis'],
+      confirm: true,
+      expect: [
+        {
+          app: 'docker:redis',
+          service: 'redis',
+          image_id: apps[1]?.image_id,
+          digest: `sha256:${'e'.repeat(64)}`,
+          config_hash: 'c0ffee',
+        },
+      ],
+    });
     expect(sent.role).toBe('admin');
+  });
+
+  it('refuses a yes when the app runs another image by then, and sends nothing', async () => {
+    const before = fake.calls('POST', '/api/v1/servers/basalt/apps/update').length;
+    const res = await as('POST', '/servers/basalt/manage', {
+      op: 'app.update',
+      platform: 'host',
+      params: { apps: ['docker:redis'] },
+    });
+    const number = res.body.approvalNumber as number;
+    const redis = apps[1] as { image_id: string };
+    const was = redis.image_id;
+    redis.image_id = `sha256:${'9'.repeat(64)}`;
+    try {
+      expect((await t.commit(IDS.mara, decideApproval, { number, decision: 'approve' })).status).toBe('ok');
+      // A refused run ends failed (only a run that worked gets executedAt).
+      const run = await waitFor(async () => {
+        const [row] = await t.services.db.select().from(approvals).where(eq(approvals.number, number));
+        return row && row.execution.state !== 'idle' && row.execution.state !== 'running' ? row : null;
+      }, 10_000);
+      expect(run.execution.state).toBe('failed');
+      expect(run.executedAt).toBeNull();
+      expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update')).toHaveLength(before);
+    } finally {
+      redis.image_id = was;
+    }
   });
 
   it('lets the assistant update a plain app where the server doesn’t ask, never a database without a yes', async () => {
     expect((await as('PATCH', '/servers/basalt', { asksFirst: 'never' })).status).toBe(200);
     const before = fake.calls('POST', '/api/v1/servers/basalt/apps/update').length;
-    const plain = await call('app_update', { server: 'basalt', apps: ['traefik'] });
+    // What the agent says it checked is replaced by what Whombat reads itself.
+    const plain = await call('app_update', {
+      server: 'basalt',
+      apps: ['traefik'],
+      expect: [
+        { app: 'docker:traefik', service: 'traefik', imageId: `sha256:${'0'.repeat(64)}`, image: 'x' },
+      ],
+    });
     expect(plain.status).toBe('ok');
     expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update').at(-1)?.body).toMatchObject({
       apps: ['docker:traefik'],
+      hold_major: true,
+      expect: [{ app: 'docker:traefik', image_id: apps[0]?.image_id, digest: `sha256:${'e'.repeat(64)}` }],
     });
     const db = await call('app_update', { server: 'basalt', apps: ['redis'] });
     expect(db.content ?? db.message ?? '').toContain('asks_first');
