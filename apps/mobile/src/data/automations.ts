@@ -233,7 +233,7 @@ export interface RunStepView {
   tone: Tone;
   /** The agent's answer or the step's outcome, shortened; a condition's story (AP-1011). */
   body: string | null;
-  /** How many lines of `body` show: a condition's story whole (0: no limit), anything else two. */
+  /** How many lines of `body` show: a condition's story and an action's line whole (0: no limit), anything else two. */
   bodyLines: number;
   /** An agent step's assessment: shown instead of `body` (AP-1010). */
   assessment: RunStepAssessment | null;
@@ -446,7 +446,8 @@ export function runSteps(run: AutomationRun, words?: TrackerWords, locale?: stri
       state: state.label,
       tone: state.tone,
       body,
-      bodyLines: story ? 0 : 2,
+      // A condition's story and an action's one line show whole: a cut-off line would hide what happened.
+      bodyLines: story || s.kind === 'run_action' ? 0 : 2,
       assessment,
       error: s.error,
       approvalNumber: s.approvalNumber,

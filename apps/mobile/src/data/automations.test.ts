@@ -318,6 +318,15 @@ describe('a run in plain words (AP-1010…AP-1014)', () => {
     expect(plain?.accessibilityLabel).toBe('Assess, done. ACTIONABLE: 2.');
   });
 
+  it('shows an action’s line whole, however long', () => {
+    const line =
+      'Couldn’t shut down nas-01: Whombat’s server monitoring isn’t answering right now. It usually comes back by itself.';
+    const [action] = runSteps(
+      _run([_step({ kind: 'run_action', name: 'Shut down nas-01', output: { text: line, summary: line } })]),
+    );
+    expect(action).toMatchObject({ body: line, bodyLines: 0 });
+  });
+
   it('tells a recipe’s check as its story, whole, and never shows a condition’s expression', () => {
     const check = (output: AutomationRunStep['output'], over: Partial<AutomationRunStep> = {}) =>
       _step({

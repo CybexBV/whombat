@@ -29,6 +29,8 @@ import { burrows, catalogConnections, connectionTools } from '../db/schema/index
 import { thePerson } from '../domain/the-person';
 import { callServerOf, SERVERS_CATALOG } from '../hosts/asks';
 import { hostsFor } from '../hosts/service';
+import { isEnglish, tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
 import type { Services } from '../services';
 import { clock } from '../things/words';
 import { automationAgent, publisherCheck } from './authority';
@@ -89,17 +91,22 @@ export function directCall(step: RunActionStep): { tool: string; args: Record<st
 
 const idOf = (thing: string) => thing.slice(thing.indexOf(':') + 1);
 
-/** How the step would run now: the connection, the tool, the call, and whether the person's rules ask. */
+/**
+ * How the step would run now: the connection, the tool, the call, and whether the person's rules ask. Why it can't is
+ * said in `locale` (English when none): it is the step's line on the run page.
+ */
 export async function planDirectAction(
   db: Db | Tx,
   services: Services,
   burrowId: string,
   step: RunActionStep,
+  locale?: string | null,
 ): Promise<DirectPlan> {
-  const problem = directActionProblem(step);
+  const t = (key: Parameters<typeof tServer>[1], vars?: Record<string, string>) => tServer(locale, key, vars);
+  const problem = directActionProblem(step, locale);
   if (problem) return { ok: false, reason: problem, fatal: true };
   const call = directCall(step);
-  if (!call) return { ok: false, reason: 'This can’t be done directly.', fatal: true };
+  if (!call) return { ok: false, reason: t('automations.direct.cantDirect'), fatal: true };
   const onServer = step.thing.startsWith('server:');
   const [conn] = await db
     .select()
@@ -113,33 +120,55 @@ export async function planDirectAction(
     return {
       ok: false,
       reason: onServer
-        ? `Whombat can’t reach ${step.thingName}: no servers are connected.`
-        : `${step.thingName} isn’t connected any more.`,
+        ? t('automations.direct.noServers', { name: step.thingName })
+        : t('automations.direct.gone', { name: step.thingName }),
       fatal: false,
       gone: true,
     };
   if (!onServer && conn.catalogId !== 'homeassistant')
-    return { ok: false, reason: 'Only Home Assistant can be acted on directly this way.', fatal: true };
+    return { ok: false, reason: t('automations.direct.onlyHome'), fatal: true };
   if (conn.status !== 'active')
     return {
       ok: false,
-      reason: onServer ? `Whombat can’t reach your servers just now.` : needsReauthText(conn),
+      reason: onServer
+        ? t('automations.direct.serversAway')
+        : isEnglish(locale)
+          ? needsReauthText(conn)
+          : t('automations.direct.signIn', { name: conn.label }),
       fatal: false,
     };
   const entry = catalogEntry(conn.catalogId);
   if (!entry)
-    return { ok: false, reason: `${conn.label} isn’t connected any more.`, fatal: false, gone: true };
+    return {
+      ok: false,
+      reason: t('automations.direct.gone', { name: conn.label }),
+      fatal: false,
+      gone: true,
+    };
   const [tool] = await db
     .select()
     .from(connectionTools)
     .where(and(eq(connectionTools.connectionId, conn.id), eq(connectionTools.name, call.tool)));
-  if (!tool) return { ok: false, reason: `${conn.label} can’t do that.`, fatal: false, gone: true };
+  if (!tool)
+    return {
+      ok: false,
+      reason: t('automations.direct.cantDo', { name: conn.label }),
+      fatal: false,
+      gone: true,
+    };
   const server = await callServerOf(db, services, burrowId, conn.catalogId, call.args);
   // The plan's yes is the key: what still asks is what the person set to ask, and the catalog's own rules.
   const decided = callTier(entry, tool, call.args, 'can', conn.access, server);
-  if (decided.lookOnly) return { ok: false, reason: lookOnlyText(conn.label), fatal: false };
+  if (decided.lookOnly)
+    return {
+      ok: false,
+      reason: isEnglish(locale)
+        ? lookOnlyText(conn.label)
+        : t('automations.direct.lookOnly', { name: conn.label }),
+      fatal: false,
+    };
   if (decided.toolTier === 'off' || decided.tier === 'off')
-    return { ok: false, reason: `${conn.label} is set not to do this.`, fatal: false };
+    return { ok: false, reason: t('automations.direct.setNot', { name: conn.label }), fatal: false };
   return {
     ok: true,
     conn,
@@ -152,6 +181,8 @@ export async function planDirectAction(
 }
 
 /* Already so ------------------------------------------------------------------------------------------------------------ */
+
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const rec = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
@@ -231,8 +262,6 @@ function cannot(
   });
 }
 
-const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
-
 /**
  * A `run_action` step marked `running` (outside any transaction): its plan checked again, the quiet no-op when the
  * thing is already so, then the call, and the step settled with its one line (“Shut down nas-01 at 21:14 — it’s
@@ -246,6 +275,9 @@ export async function runDirectAction(
 ): Promise<void> {
   const { services, run } = lease;
   const db = services.db;
+  // The step's line is read on the run page and in the person's messages: in their language.
+  const locale = await burrowLocale(services, run.burrowId);
+  const t = (key: Parameters<typeof tServer>[1], vars?: Record<string, string>) => tServer(locale, key, vars);
   const who = await publisherCheck(db, run.burrowId, run.publishedById);
   if (!who.ok) return void (await cannot(lease, row, step, who.reason, true));
   // Loaded here: `steps.ts` reaches this module through its step handlers, so a static import would be a cycle.
@@ -253,13 +285,13 @@ export async function runDirectAction(
   const rooms = await stepRoomsCheck(db, run, row.idx, who.publisher);
   if (!rooms.ok) return void (await cannot(lease, row, step, rooms.reason, true));
   const out = row.output as { approvalId?: string; callId?: string; target?: string };
-  const plan = await planDirectAction(db, services, run.burrowId, step);
+  const plan = await planDirectAction(db, services, run.burrowId, step, locale);
   if (!plan.ok) return void (await cannot(lease, row, step, plan.reason, plan.fatal));
   // A call the person's rules ask for runs only with the yes this attempt got.
   if (plan.asks && !out.approvalId)
     return void (await lease.commit({ op: 'settle', idx: row.idx, state: 'pending', from: ['running'] }));
   const agent = await automationAgent(db, run.burrowId);
-  if (!agent) return void (await cannot(lease, row, step, 'The assistant isn’t available.', false));
+  if (!agent) return void (await cannot(lease, row, step, t('automations.direct.noAssistant'), false));
   const [burrow] = await db
     .select({ timeZone: burrows.timeZone })
     .from(burrows)
@@ -268,7 +300,7 @@ export async function runDirectAction(
 
   const already = await alreadySo(services, plan, step);
   if (already) {
-    const line = directDoneLine(step, already, at());
+    const line = directDoneLine(step, already, at(), locale);
     await lease.commit({
       op: 'settle',
       idx: row.idx,
@@ -292,7 +324,7 @@ export async function runDirectAction(
     conversationId: run.conversationId,
     personId: person?.id ?? null,
     threadRootId: run.threadRootId,
-    change: directActionText(step),
+    change: directActionText(step, locale),
     approvalId: out.approvalId ?? null,
     target: out.target ?? callTarget(plan.conn),
   });
@@ -305,9 +337,14 @@ export async function runDirectAction(
       res.kind === 'failed'
         ? res.message
         : status
-          ? `${plan.conn.label} answered with an error (HTTP ${status}).`
-          : `${plan.conn.label} said it couldn’t do it.`;
-    const line = `Couldn’t ${lowerFirst(directActionText(step))}: ${reason}`;
+          ? t('automations.direct.httpError', { name: plan.conn.label, status: String(status) })
+          : t('automations.direct.saidNo', { name: plan.conn.label });
+    const what = directActionText(step, locale);
+    // English says it mid-sentence (“Couldn’t shut down nas-01”); Dutch starts with the thing's name.
+    const line = t('automations.direct.failed', {
+      what: isEnglish(locale) ? lowerFirst(what) : what,
+      reason,
+    });
     await lease.commit({
       op: 'settle',
       idx: row.idx,
@@ -319,7 +356,7 @@ export async function runDirectAction(
             ? 'skipped'
             : 'failed',
       error: (timedOut && step.action === 'restart'
-        ? `${reason} It may or may not have restarted. Check, then say what happened.`
+        ? t('automations.direct.maybeRestarted', { reason })
         : line
       ).slice(0, 1000),
       output: { ran: false, text: line.slice(0, 500), summary: line.slice(0, 500) },
@@ -330,7 +367,7 @@ export async function runDirectAction(
   const outcome: DirectOutcome = (directTargetKind(step) === 'machine' && res.kind === 'ok'
     ? machineNoop(step, res.output.structured, res.output.content)
     : null) ?? { kind: 'done', result: RESULT[step.action] ?? null };
-  const line = directDoneLine(step, outcome, at());
+  const line = directDoneLine(step, outcome, at(), locale);
   await lease.commit({
     op: 'settle',
     idx: row.idx,

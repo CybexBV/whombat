@@ -343,3 +343,41 @@ describe('the automations a care plan turns on', () => {
     expect(step?.kind === 'dispatch_agent' ? step.prompt : '').toContain('libvirt:win11');
   });
 });
+
+describe('a care plan in Dutch', () => {
+  it('says every step’s line in Dutch, with names and times as they are, and keeps the assistant’s steps English', () => {
+    const server = { id: 'pve-01', name: 'pve-01', platform: 'proxmox' as const, self: false };
+    const all = facts({
+      server,
+      guests: [
+        ...pve(3),
+        { id: 'incus:web', name: 'web', platform: 'incus' },
+        { id: 'libvirt:win', name: 'win', platform: 'libvirt' },
+        { id: 'docker:immich', name: 'immich', platform: 'docker', project: 'immich' },
+      ],
+      backupStorages: [{ id: 'pbs-01', type: 'pbs' }],
+    });
+    const en = careSteps(all, W);
+    const nl = careSteps(all, W, 'nl-NL');
+    expect(nl.map((s) => s.id)).toEqual(en.map((s) => s.id));
+    expect(nl.map((s) => s.id)).toEqual(['backup', 'snapshots', 'vm_backup', 'updates', 'apps']);
+    nl.forEach((s, i) => {
+      expect(s.text).not.toBe(en[i]?.text);
+      expect(s.step).toBe(en[i]?.step);
+    });
+    expect(nl[0]?.text).toContain('alle 3 machines');
+    expect(nl[0]?.text).toContain('pbs-01');
+    expect(nl[0]?.text).toContain('02:00');
+    expect(nl[1]?.text).toContain('web');
+    expect(nl[2]?.text).toContain('win');
+    expect(nl[4]?.text).toContain('03:00');
+    const self = careSteps(facts({ server: { ...server, self: true } }), W, 'nl-NL');
+    expect(self[0]?.text).toContain('vragen');
+    const tell = careSteps(
+      facts({ server, guests: [{ id: 'docker:plex', name: 'plex', platform: 'docker' }] }),
+      W,
+      'nl-NL',
+    ).find((s) => s.id === 'apps');
+    expect(tell?.text).toContain('laten weten');
+  });
+});

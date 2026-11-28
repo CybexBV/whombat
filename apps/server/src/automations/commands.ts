@@ -64,6 +64,7 @@ import { briefAgent } from '../domain/agent-brief';
 import { postMessage } from '../domain/messages';
 import { findMyBackgroundFor } from '../hosts/findmy-background';
 import { findMyConnectionRow } from '../hosts/findmy-connection';
+import { burrowLocale } from '../i18n/locale';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { checkOutboundUrl } from '../lib/outbound';
 import { newSecret } from '../lib/secrets';
@@ -216,7 +217,14 @@ export async function referenceProblems(
       // Something only out of reach now (a server's agent, a sign-in) doesn't stop it being drafted: it says so when
       // it runs.
       const { planDirectAction } = await import('./direct-action');
-      const plan = await planDirectAction(ctx.tx, ctx.services, ctx.burrow.id, s);
+      // Why it can't be a step reaches the person through the assistant: in their language.
+      const plan = await planDirectAction(
+        ctx.tx,
+        ctx.services,
+        ctx.burrow.id,
+        s,
+        await burrowLocale(ctx.services, ctx.burrow.id),
+      );
       if (!plan.ok && (plan.fatal || plan.gone)) problems.push(`Step “${s.id}”: ${plan.reason}`);
       else if (plan.ok && s.thing.startsWith('server:') && !plan.server)
         problems.push(`Step “${s.id}”: there is no server ${s.thingName} on this Whombat.`);

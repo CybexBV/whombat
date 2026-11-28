@@ -9,6 +9,7 @@ import type { ApprovalRow } from '../../approvals/engine';
 import type { ApplyContext } from '../../commit/types';
 import type { Db } from '../../db/client';
 import { automationRunSteps } from '../../db/schema/index';
+import { burrowLocale } from '../../i18n/locale';
 import { loadAgentRow, loadPrincipalRow } from '../../read/principals';
 import { trackerWords } from '../../trackers/connection';
 import { trackerReplyPlan } from '../../trackers/reply';
@@ -186,7 +187,13 @@ export async function approvalGuard(ctx: ApplyContext, row: ApprovalRow): Promis
   }
   if (step.kind === 'run_action' && row.command?.name === CONTINUE_STEP) {
     // A person lets it act without AI where their settings ask: the same action on the same thing, which can still run.
-    const plan = await planDirectAction(ctx.tx, ctx.services, run.burrowId, step);
+    const plan = await planDirectAction(
+      ctx.tx,
+      ctx.services,
+      run.burrowId,
+      step,
+      await burrowLocale(ctx.services, run.burrowId),
+    );
     if (!plan.ok) {
       await mark('blocked');
       return plan.reason;

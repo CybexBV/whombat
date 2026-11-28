@@ -13,6 +13,7 @@ import { burrows, serverCares } from '../db/schema/index';
 import { screenText } from '../desk/glance';
 import { thePerson } from '../domain/the-person';
 import { hostsFor } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import { agentRuntimeOf, loadAgentRow, type PrincipalRow } from '../read/principals';
 import { providerReadiness } from '../runtime/readiness';
 import type { Services } from '../services';
@@ -78,7 +79,7 @@ export async function careBurrow(
   const facts = await careFactsOf(services, burrowId, next).catch(() => null);
   // Not read this time: tried again on the next pass.
   if (!facts) return null;
-  const steps = careStepRows(facts, changeWindowOf(burrow));
+  const steps = careStepRows(facts, changeWindowOf(burrow), await burrowLocale(services, burrowId));
   const self = next.hostsThisWhombat === true;
   if (!steps.length) {
     await services.pipeline.commit(careKnown, { server: next.id, self }, as);

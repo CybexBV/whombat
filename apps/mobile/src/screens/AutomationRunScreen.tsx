@@ -235,7 +235,7 @@ function StepRow({
       meta={s.state}
       trailing={<StatusDot color={toneColor(theme, s.tone)} label={s.state} />}
       body={s.error ?? s.body}
-      bodyLines={s.error ? 2 : s.bodyLines}
+      bodyLines={s.error && s.bodyLines !== 0 ? 2 : s.bodyLines}
       accessibilityLabel={s.accessibilityLabel}
       {...(open ? { onPress: open } : {})}
     >

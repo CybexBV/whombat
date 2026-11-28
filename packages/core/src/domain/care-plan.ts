@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import { coreWords } from '../i18n/catalog.js';
+import { type CoreTranslator, coreTranslator, coreWords } from '../i18n/catalog.js';
 import { plural } from '../text/format.js';
 import type { HostGuest, HostServerPlatform } from './hosts.js';
 import { LOOK_FIX_STEP_MAX, LOOK_PLAN_STEP_MAX, LOOK_PLAN_STEPS_MAX } from './look-research.js';
@@ -213,9 +213,9 @@ export function careThingKey(key: string): string | null {
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** “the 6 machines”, “web”: what a step covers, by name when there is one. */
-function machines(names: readonly string[], all = false): string {
+function machines(tr: CoreTranslator, names: readonly string[], all = false): string {
   if (names.length === 1) return names[0] as string;
-  return `${all ? 'all ' : 'the '}${plural(names.length, 'machine')}`;
+  return tr.tp(all ? 'carePlan.machines.all' : 'carePlan.machines.the', names.length, { n: names.length });
 }
 
 /** A guest's name for the person: its name, never its number. */
@@ -271,9 +271,11 @@ export function nasShareName(serverId: string): string {
  *   apps that are safe to update by themselves, the others asked as one question; containers `docker run` started:
  *   the person hears when they have updates.
  *
- * Temporary machines are never in it; steps already in place (`has`) are left out.
+ * Temporary machines are never in it; steps already in place (`has`) are left out. Each step's line is in `locale`
+ * (English when none); what the assistant does stays English.
  */
-export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
+export function careSteps(facts: CareFacts, window: ChangeWindow, locale?: string | null): CareStep[] {
+  const tr = coreTranslator(locale);
   const { server } = facts;
   const has = facts.has ?? {};
   const kept = facts.guests.filter((g) => !isTemporaryGuest(g));
@@ -299,7 +301,11 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
     const job = `backup_job_set create on ${server.id}: schedule "${at}", storage "${storage}", keep {"last": 7}, ${which}`;
     out.push({
       id: 'backup',
-      text: `Back up ${machines(names, true)} every night at ${at} to ${nas ? nas.name : storage}, keeping a week`,
+      text: tr.t('carePlan.step.backup', {
+        machines: machines(tr, names, true),
+        at,
+        place: nas ? nas.name : storage,
+      }),
       step: nas
         ? `backup_place_nfs on ${nas.serverId}, name "${nasShareName(server.id)}", clients ${JSON.stringify(server.addresses)}; proxmox_storage_add on ${server.id}, storage "${storage}" with its nfs_server and export; then ${job}.`
         : `${job}. Check backup_jobs lists it.`,
@@ -310,7 +316,7 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (incus.length && !has.snapshots) {
     out.push({
       id: 'snapshots',
-      text: `Take a snapshot of ${machines(incus.map(nameOf))} every day at ${at}, keeping a week`,
+      text: tr.t('carePlan.step.snapshots', { machines: machines(tr, incus.map(nameOf)), at }),
       step: `For each of ${incus.map((g) => g.id).join(', ')} on ${server.id}: guest_config (for its digest), then guest_config_set with set {"snapshots.schedule": "${cronAt(at)}", "snapshots.expiry": "7d"}.`,
     });
   }
@@ -319,7 +325,7 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (vms.length && !has.vm_backup) {
     out.push({
       id: 'vm_backup',
-      text: `Back up ${machines(vms.map(nameOf))} every Sunday at ${at}`,
+      text: tr.t('carePlan.step.vmBackup', { machines: machines(tr, vms.map(nameOf)), at }),
       step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
       automation: 'vm_backup',
       guests: vms.map((g) => g.id),
@@ -333,9 +339,7 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (!ownUpdates && !has.updates) {
     out.push({
       id: 'updates',
-      text: server.self
-        ? `Ask you on Sundays at ${window.start} before installing its updates`
-        : `Install system updates on Sundays at ${window.start} and restart if needed`,
+      text: tr.t(server.self ? 'carePlan.step.updatesAsk' : 'carePlan.step.updates', { time: window.start }),
       step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
       automation: 'updates',
     });
@@ -347,14 +351,14 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (compose && !has.apps) {
     out.push({
       id: 'apps',
-      text: `Update your apps on Sunday night at ${window.start}`,
+      text: tr.t('carePlan.step.apps', { time: window.start }),
       step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
       automation: 'apps',
     });
   } else if (docker.length && !has.apps) {
     out.push({
       id: 'apps',
-      text: 'Tell you when apps have updates',
+      text: tr.t('carePlan.step.appsTell'),
       step: 'Nothing to set up: Whombat’s helper checks the apps for updates and they show on the server’s page.',
     });
   }

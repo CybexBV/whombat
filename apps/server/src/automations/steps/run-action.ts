@@ -4,6 +4,8 @@ import { eq } from 'drizzle-orm';
 import { callTarget } from '../../connections/call-target';
 import type { Db, Tx } from '../../db/client';
 import { automationRuns, automations } from '../../db/schema/index';
+import { tServer } from '../../i18n/catalog';
+import { burrowLocale } from '../../i18n/locale';
 import { planDirectAction } from '../direct-action';
 import type { AutomationRunRow } from '../store';
 import { CONTINUE_STEP, requestStepApproval } from './approval';
@@ -53,7 +55,9 @@ export async function executeRunAction({
 }: StepExecution<'run_action'>): Promise<void> {
   const tx = ctx.tx;
   const previous = (steps[idx]?.output ?? {}) as JsonObject;
-  const plan = await planDirectAction(tx, ctx.services, run.burrowId, step);
+  // What the run page says is in the person's language; the approval's own words stay as the guard renders them again.
+  const locale = await burrowLocale(ctx.services, run.burrowId);
+  const plan = await planDirectAction(tx, ctx.services, run.burrowId, step, locale);
   if (!plan.ok) {
     if (plan.fatal || step.otherwise === 'fail') return block(ctx, run, idx, plan.reason);
     return skipStep(ctx, run, idx, base, plan.reason, {
@@ -93,7 +97,14 @@ export async function executeRunAction({
       tx,
       run.id,
       idx,
-      { ...base, state: 'waiting', approvalId: approval.id, inputSummary: `Asked you first: ${what}` },
+      {
+        ...base,
+        state: 'waiting',
+        approvalId: approval.id,
+        inputSummary: tServer(locale, 'automations.direct.askedFirst', {
+          what: directActionText(step, locale),
+        }),
+      },
       ctx.now,
     );
     await tx
@@ -109,7 +120,7 @@ export async function executeRunAction({
     {
       ...base,
       state: 'running',
-      inputSummary: what,
+      inputSummary: directActionText(step, locale),
       output: {
         ...(yes ? { approvalId: yes, approvalAttempt: attempt } : {}),
         callId: randomUUID(),

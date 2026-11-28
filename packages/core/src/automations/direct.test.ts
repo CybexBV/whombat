@@ -15,6 +15,7 @@ import { AUTOMATION_AUTHORING_GUIDE } from './authoring.js';
 import {
   cooldownOf,
   DIRECT_COOLDOWN_DEFAULT_MINUTES,
+  DIRECT_NOT_ALLOWED,
   directActionProblem,
   directActionRepeatable,
   directActionText,
@@ -139,6 +140,29 @@ describe('the run_action step', () => {
     expect(noop).toContain('nas-01');
     expect(noop).not.toBe(done);
     expect(directActionText(step({}), 'nl')).not.toBe(directActionText(step({})));
+  });
+
+  it('says why it can’t be a step, and how it went, in Dutch for a Dutch reader', () => {
+    const problems = [
+      step({ thing: 'device:printer' }),
+      step({ action: 'start' }),
+      step({ thing: `connection:${HA}`, target: 'not an entity', action: 'turn_on' }),
+      step({ thing: `connection:${HA}`, target: 'lock.front_door', action: 'turn_on' }),
+      step({ thing: `connection:${HA}`, target: 'scene.movie_night', action: 'turn_off' }),
+    ];
+    for (const s of problems) {
+      const en = directActionProblem(s);
+      const nl = directActionProblem(s, 'nl-NL');
+      expect(nl).not.toBeNull();
+      expect(nl).not.toBe(en);
+    }
+    expect(directActionProblem(step({ action: 'start' }))).toBe(DIRECT_NOT_ALLOWED);
+    const done = directDoneLine(step({}), { kind: 'done', result: 'switching_off' }, '21:14', 'nl-NL');
+    expect(done).toContain('nas-01');
+    expect(done).toContain('21:14');
+    expect(done).toContain(' om ');
+    const noop = directDoneLine(step({}), { kind: 'noop', already: 'off' }, '21:14', 'nl-NL');
+    expect(noop).toContain('niets gedaan');
   });
 
   it('runs again after a crash unless doing it twice would do it twice', () => {
