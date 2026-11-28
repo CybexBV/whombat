@@ -26,7 +26,9 @@ import {
 } from '@whombat/core';
 import { and, eq } from 'drizzle-orm';
 import { callTier, executeConnectionCall, needsReauthText } from '../connections/call';
+import { externalEffect } from '../commit/scope';
 import { callTarget } from '../connections/call-target';
+import { jsonOf, signedConnectionFetch } from '../connections/http';
 import { limitsProblem } from '../connections/limits';
 import type { CatalogConnectionRow } from '../connections/types';
 import type { Db, Tx } from '../db/client';
@@ -83,6 +85,43 @@ export function withNames(step: RunActionStep, names: DirectNames): RunActionSte
 const rec = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
+/** How long reading an entity's name may take: it is read while a plan is made or a step starts. */
+const NAME_READ_MS = 5_000;
+
+/**
+ * Home Assistant's own name for an entity (its `friendly_name`), `missing` when Home Assistant says it has no such
+ * entity, or null when it can't be read just now (a short wait: the id stands in for it then).
+ */
+async function entityName(
+  services: Services,
+  conn: CatalogConnectionRow,
+  entity: string,
+): Promise<string | 'missing' | null> {
+  try {
+    const res = await externalEffect(
+      'things.read',
+      () =>
+        signedConnectionFetch(
+          services,
+          conn,
+          {
+            method: 'GET',
+            url: `${conn.baseUrl.replace(/\/+$/, '')}/api/states/${entity}`,
+            headers: { Accept: 'application/json' },
+          },
+          { deadlineMs: NAME_READ_MS, maxBytes: 256 * 1024 },
+        ),
+      { idempotent: true },
+    );
+    if (res.status === 404) return 'missing';
+    if (res.status < 200 || res.status >= 300) return null;
+    const friendly = rec(rec(jsonOf(res)).attributes).friendly_name;
+    return typeof friendly === 'string' && friendly.trim() ? friendly.trim().slice(0, 120) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * The names of what a step acts on as Whombat knows them now: the server's (as its pages call it), its machine's from
  * the hosts service's list, Home Assistant's label and the entity's own friendly name. The names the assistant wrote
@@ -99,17 +138,9 @@ async function directNames(
   const kind = directTargetKind(step);
   if (kind === 'home' || kind === 'entity') {
     if (kind === 'home' || !step.target) return { thingName: conn.label };
-    // Loaded here, as `alreadySo` does: the connection modules reach this one through the automation commands.
-    const { getJson, ReadProblem } = await import('../things/kinds/read');
-    try {
-      const state = rec(await getJson(services, conn, conn.label, `/api/states/${step.target}`));
-      const friendly = rec(state.attributes).friendly_name;
-      return typeof friendly === 'string' && friendly.trim()
-        ? { thingName: conn.label, targetName: friendly.trim().slice(0, 120) }
-        : { thingName: conn.label };
-    } catch (err) {
-      return err instanceof ReadProblem && err.httpStatus === 404 ? 'missing' : { thingName: conn.label };
-    }
+    const name = await entityName(services, conn, step.target);
+    if (name === 'missing') return 'missing';
+    return name ? { thingName: conn.label, targetName: name } : { thingName: conn.label };
   }
   const thingName = server?.name ?? idOf(step.thing);
   if (kind !== 'machine' || !step.target) return { thingName };
