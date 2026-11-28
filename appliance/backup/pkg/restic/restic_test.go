@@ -170,3 +170,21 @@ func TestTuningFlags(t *testing.T) {
 		t.Fatalf("flags nobody asked for: %s", argv)
 	}
 }
+
+// Forget over named hosts passes each as --host (restic keeps any of them); Forget names none.
+func TestForgetHosts(t *testing.T) {
+	bin, argvFile, _ := fakeRestic(t, "", 0)
+	r := Repo{Binary: bin, Repository: "/r", PasswordFile: "/pw"}
+	if _, err := r.ForgetHosts(context.Background(), "t", []string{"apl-a", "apl-b"}, []string{"--keep-last", "3"}); err != nil {
+		t.Fatal(err)
+	}
+	if argv := read(t, argvFile); !strings.Contains(argv, "--host\napl-a\n--host\napl-b\n--keep-last\n3\n") {
+		t.Fatalf("forget for two hosts: %s", argv)
+	}
+	if _, err := r.Forget(context.Background(), "t", []string{"--keep-last", "3"}); err != nil {
+		t.Fatal(err)
+	}
+	if argv := read(t, argvFile); strings.Contains(argv, "--host") {
+		t.Fatalf("forget named a host: %s", argv)
+	}
+}

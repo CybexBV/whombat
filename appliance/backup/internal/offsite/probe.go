@@ -85,7 +85,7 @@ var (
 	prefixRe = regexp.MustCompile(`^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$`)
 )
 
-// ParseS3 reads "s3:https://host[:port]/bucket[/folder]" (the form the backup service takes, BK-18).
+// ParseS3 reads "s3:https://host[:port]/bucket[/folder]" (the form the backup service takes for any bucket).
 func ParseS3(repo string) (S3Location, error) {
 	u, err := url.Parse(strings.TrimPrefix(repo, "s3:"))
 	if !strings.HasPrefix(repo, "s3:") || err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" ||
