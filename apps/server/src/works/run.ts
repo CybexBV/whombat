@@ -119,7 +119,9 @@ export async function worksPass(
   timeZone: string,
   fetch?: TestFetch,
 ): Promise<WorksPass> {
-  if (!hasServiceTest(row.catalogId) || !quiet) return { lines: [], skipped: !!quiet };
+  if (!hasServiceTest(row.catalogId)) return { lines: [], skipped: false };
+  // What it watches couldn't be read: whether the test is on is unknown, so an Ignore of its line doesn't end.
+  if (!quiet) return { lines: [], skipped: true };
   if (!checkWatched(quiet, SERVICE_TEST_CHECK)) return { lines: [], skipped: false };
   // Kept quiet or down because of something else: the service is left alone until that ends.
   if (holdOf(quiet, now)) return { lines: [], skipped: true };

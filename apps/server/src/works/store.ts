@@ -50,7 +50,7 @@ export async function lastChangedAt(
   return last?.at ?? null;
 }
 
-/** Keeps a run's result, and lets the connection's runs older than 30 days go. */
+/** Keeps a run's result, and lets runs older than 30 days go. */
 export async function recordRun(
   services: Services,
   row: Pick<CatalogConnectionRow, 'id' | 'burrowId'>,
@@ -71,11 +71,12 @@ export async function recordRun(
   };
   const { result } = await services.pipeline.transact(row.burrowId, async (session) => {
     const [made] = await session.tx.insert(serviceTestRuns).values(values).returning();
+    // Every connection's old runs go, also those of a test nobody runs any more.
     await session.tx
       .delete(serviceTestRuns)
       .where(
         and(
-          eq(serviceTestRuns.connectionId, row.id),
+          eq(serviceTestRuns.burrowId, row.burrowId),
           lt(serviceTestRuns.at, new Date(run.at.getTime() - RUNS_KEEP_MS)),
         ),
       );
