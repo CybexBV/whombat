@@ -80,6 +80,9 @@ func setLevel(dir string, explicit bool, level string, noReload bool) error {
 	if !explicit && !isRoot() {
 		return fmt.Errorf("this changes the agent's own settings, so run it as %s", asRoot("whombat-agent policy set "+level))
 	}
+	if err := takeOver(dir); err != nil {
+		return err
+	}
 	if _, err := agent.LoadConfig(dir); err != nil {
 		return notEnrolled(dir, err)
 	}
@@ -126,6 +129,9 @@ func cmdHub(args []string) error {
 		return nil
 	}
 	if err != nil {
+		return err
+	}
+	if err := takeOver(dir); err != nil {
 		return err
 	}
 	cfg, err := agent.LoadConfig(dir)
@@ -179,6 +185,11 @@ func cmdWhoami(args []string) error {
 	if *dir == "" {
 		*dir = agent.ResolveConfigDir()
 	}
+	// An identity someone else could have written is moved aside here, so
+	// install.ps1 enrolls this PC afresh instead of keeping it.
+	if err := takeOver(*dir); err != nil {
+		return err
+	}
 	id, pin, err := agent.Whoami(*dir)
 	if err != nil {
 		return notEnrolled(*dir, err)
@@ -218,6 +229,9 @@ func cmdSwitch(name string, on bool, args []string) error {
 	// agent; another directory's file permissions decide for themselves.
 	if !explicit && !isRoot() {
 		return fmt.Errorf("this changes the agent's own settings, so run it as %s", asRoot("whombat-agent "+name+" "+strings.Join(names, " ")))
+	}
+	if err := takeOver(dir); err != nil {
+		return err
 	}
 	before, err := agent.LoadConfig(dir)
 	if err != nil {
@@ -327,6 +341,9 @@ func cmdPolicy(args []string) error {
 	}
 	if len(names) > 0 {
 		return fmt.Errorf("policy takes no switches (to change one: whombat-agent allow %s)", names[0])
+	}
+	if err := takeOver(dir); err != nil {
+		return err
 	}
 	cfg, err := agent.LoadConfig(dir)
 	if err != nil {

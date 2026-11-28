@@ -50,6 +50,20 @@ func prepareDirs(dir, stateDir string) error {
 	return err
 }
 
+// secureDataDir makes the agent's folder its own (prepareDirs) before a
+// command run as an administrator reads or writes the settings in dir:
+// install.ps1 runs whoami, hub and policy set elevated before the service
+// is installed, so a folder someone made in advance would otherwise be
+// read and written as theirs. Without administrator rights it changes
+// nothing: such a command can't read the agent's folder once it is
+// secured, and in one that isn't it reads only what its user could anyway.
+func secureDataDir(dir string) error {
+	if !isRoot() {
+		return nil
+	}
+	return prepareDirs(dir, "")
+}
+
 // configuredStateDir is the state folder dir's agent.toml names.
 func configuredStateDir(dir string) (string, bool) {
 	cfg, err := agent.LoadConfig(dir)
@@ -357,6 +371,12 @@ func cmdUninstall(args []string) error {
 	fs.Parse(args)
 	if !isRoot() {
 		return fmt.Errorf("this removes the agent, so run it as %s", asRoot("whombat-agent uninstall"))
+	}
+	// Deleting in a folder someone else could change could follow a link of
+	// theirs to anywhere: make it the agent's own first, before anything
+	// is removed, so a refusal leaves the agent there to run this again.
+	if err := takeOver(agent.DefaultConfigDir); err != nil {
+		return err
 	}
 	if _, err := removeService(); err != nil {
 		return err
