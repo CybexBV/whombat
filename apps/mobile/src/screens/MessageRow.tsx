@@ -69,7 +69,6 @@ import { JobResultMessage } from '../ui/jobResult';
 import { LookPlanCard } from '../ui/lookPlanCard';
 import {
   EditedMark,
-  LinkPreviews,
   PinnedMark,
   ReactionRow,
   Tombstone,
@@ -819,7 +818,6 @@ export const MessageRow = memo(function MessageRow({
       {item.edited && !item.showAuthor ? <EditedMark /> : null}
       {/* What a thread in Chat is about (AP-2459). */}
       {item.subject ? <SubjectChip subject={item.subject} /> : null}
-      <LinkPreviews cards={item.previews} />
       {/* A report's screenshots open with its details (RR-05). */}
       {item.report && !isOpen(id) ? null : (
         <MessageAttachmentsView attachments={item.attachments} access={env.access} files={env.files} />

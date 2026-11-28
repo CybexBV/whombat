@@ -251,13 +251,11 @@ export const conversationEndpoints = {
     id: 'conversations.update',
     method: 'PATCH',
     path: '/burrows/:burrow/conversations/:conversationId',
-    summary: 'Change a conversation’s topic, or turn its link previews on or off.',
+    summary: 'Change a conversation’s topic.',
     params: BC,
     /** Only the fields sent change. */
     body: z.object({
       topic: z.string().max(280).optional(),
-      /** 0.74 (CT-330): link previews in this conversation on or off (people who are members). */
-      linkPreviews: z.boolean().optional(),
     }),
     response: ConversationDetail,
   }),

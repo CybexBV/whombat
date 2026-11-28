@@ -149,18 +149,6 @@ describe('editing', () => {
     expect((await row(id))?.mentions).toEqual([IDS.dusty]);
   });
 
-  it('clears previews of links that are gone', async () => {
-    const id = await post(IDS.mara, 'The build is green https://example.com/build');
-    await t.services.db
-      .update(messages)
-      .set({
-        previews: [{ url: 'https://example.com/build', title: 'Build', description: null, siteName: null }],
-      })
-      .where(eq(messages.id, id));
-    await edit(id, 'The build is green');
-    expect((await row(id))?.previews).toBeNull();
-  });
-
   it('keeps stale words out of the agent’s sessions and shows the current words in its context', async () => {
     const id = await post(IDS.mara, '@Dusty use the old VAT table');
     // A turn that saw the words ran in a Hermes session: the edit forgets it (HE-S119).

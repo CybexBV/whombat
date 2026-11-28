@@ -74,15 +74,6 @@ export function essentialsMessages(): Message[] {
       createdAt: T('11:26'),
       editedAt: T('11:28'),
       text: 'Heads-up: the template review moved to Thursday. Typeset’s notes on templates are worth a read first: https://typeset.dev/docs/templates',
-      previews: [
-        {
-          url: 'https://typeset.dev/docs/templates',
-          title: 'Templates · Typeset docs',
-          description:
-            'Build invoice layouts from reusable blocks: headers, line tables and totals, with number formatting per locale.',
-          siteName: 'Typeset',
-        },
-      ],
       reactions: [
         { value: '👍', count: 1, mine: false, principalIds: [AGENT.id] },
         { value: '🎉', count: 1, mine: true, principalIds: [mara.id] },
@@ -280,7 +271,6 @@ export function createEssentialsFixtures(options: EssentialsFixtureOptions = {})
               text: '',
               attachments: [],
               card: null,
-              previews: [],
               reactions: [],
               pinnedAt: null,
               pinnedById: null,

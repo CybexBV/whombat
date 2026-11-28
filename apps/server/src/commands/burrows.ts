@@ -176,8 +176,6 @@ export async function createBurrow(
 const renameOrZone = z.object({
   name: BurrowName.optional(),
   timeZone: z.string().min(1).optional(),
-  /** Link previews under messages (CT-174; docs/decisions/essentials-conversations.md EC-21). */
-  linkPreviews: z.boolean().optional(),
 });
 
 async function rename(ctx: ApplyContext, input: z.output<typeof renameOrZone>) {
@@ -198,10 +196,6 @@ async function rename(ctx: ApplyContext, input: z.output<typeof renameOrZone>) {
     set.timeZone = input.timeZone;
     texts.push(`Set this Whombat’s time zone to ${input.timeZone}`);
   }
-  if (input.linkPreviews !== undefined && input.linkPreviews !== (ctx.burrow.linkPreviews !== false)) {
-    set.linkPreviews = input.linkPreviews;
-    texts.push(input.linkPreviews ? 'Turned link previews on' : 'Turned link previews off');
-  }
   if (texts.length === 0) return;
   const [row] = await ctx.tx.update(burrows).set(set).where(eq(burrows.id, ctx.burrow.id)).returning();
   const event = await ctx.emit({
@@ -212,7 +206,6 @@ async function rename(ctx: ApplyContext, input: z.output<typeof renameOrZone>) {
     payload: {
       name: input.name ?? null,
       timeZone: input.timeZone ?? null,
-      ...(set.linkPreviews !== undefined ? { linkPreviews: set.linkPreviews } : {}),
     },
   });
   if (row) {

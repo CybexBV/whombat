@@ -161,7 +161,6 @@ export async function buildApp({ services, logger }: AppDeps) {
     closeSchedules(services);
     closeVoiceTyping(services);
     services.usage.close();
-    services.linkPreviews.close();
     await services.housekeeping.close();
     services.files.close();
     await closeConnections(services);

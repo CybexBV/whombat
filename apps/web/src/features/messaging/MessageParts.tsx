@@ -1,6 +1,6 @@
 /**
  * Pieces a message row and a thread reply share (docs/decisions/essentials-messages.md): the hover toolbar, reaction
- * pills, “(edited)”, the pin marker, the tombstone, link previews, what the Vault took and the inline editor.
+ * pills, “(edited)”, the pin marker, the tombstone, what the Vault took and the inline editor.
  */
 import { Link } from '@tanstack/react-router';
 import { composerText, vaultSavedRows } from '@whombat/client';
@@ -8,7 +8,6 @@ import {
   emojiByChar,
   formatClock,
   formatReaction,
-  type LinkPreview,
   MESSAGE_DELETED_TEXT,
   MESSAGE_EDITED_LABEL,
   type MentionTarget,
@@ -18,15 +17,7 @@ import {
   shortNameOf,
 } from '@whombat/core';
 import { CircleCheck, Lock } from 'lucide-react';
-import {
-  createContext,
-  type KeyboardEvent,
-  type MouseEvent,
-  useContext,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type KeyboardEvent, type MouseEvent, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { cx } from '../../components/cx';
 import { Icon } from '../../components/Icon';
@@ -214,45 +205,6 @@ export function DeletedAvatar({ size }: { size: 32 | 40 }) {
     <span className={styles.deletedAvatar} style={{ width: size, height: size }} aria-hidden="true">
       <Icon name="delete" size={size === 40 ? 18 : 15} />
     </span>
-  );
-}
-
-/* Link previews --------------------------------------------------------------------------------------------- */
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
-}
-
-/**
- * Whether the conversation around shows link previews (Whombat EC-23, CT-330; AP-1101): its room and thread pane say
- * so from `conversationLinkPreviewsOn`; off hides the cards its messages already have.
- */
-export const LinkPreviewsShown = createContext(true);
-
-/**
- * Compact cards under a message for its links (CT-174; AP-446): the site (or the host), the title as the link, and
- * two lines of description. No images. The link opens in a new tab without the opener or a referrer. None where the
- * conversation has them off (`LinkPreviewsShown`).
- */
-export function LinkPreviews({ previews }: { previews: readonly LinkPreview[] | undefined }) {
-  const shown = useContext(LinkPreviewsShown);
-  if (!shown || !previews?.length) return null;
-  return (
-    <div className={styles.previews}>
-      {previews.map((p) => (
-        <div key={p.url} className={styles.preview} data-link-preview="">
-          <span className={styles.previewSite}>{p.siteName || hostOf(p.url)}</span>
-          <a className={styles.previewTitle} href={p.url} target="_blank" rel="noopener noreferrer">
-            {p.title}
-          </a>
-          {p.description && <span className={styles.previewDescription}>{p.description}</span>}
-        </div>
-      ))}
-    </div>
   );
 }
 

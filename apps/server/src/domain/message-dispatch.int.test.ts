@@ -107,7 +107,6 @@ describe('durable message dispatch', () => {
     const [saved] = await t.services.db.select().from(messages).where(eq(messages.id, messageId));
     expect(saved).toMatchObject({ outsidersRun: true, more: null, suggestions: [], asks: false });
     expect(posted.result.dispatches).toEqual([]);
-    expect(await t.services.linkPreviews.linksOf(messageId)).toBeNull();
 
     // A message saved by an older runtime may still have these offers in storage.
     await t.services.pipeline.transact(t.burrowId, ({ tx }) =>

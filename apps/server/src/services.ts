@@ -44,7 +44,6 @@ import { type Clock, systemClock } from './lib/time';
 import { BoxMail } from './mail/box';
 import { createMailer, type Mailer } from './mail/mailer';
 import { MailTriggerService } from './mail-triggers/index';
-import { LinkPreviewService } from './previews/service';
 import { PushSender } from './push/sender';
 import { RealtimeBus } from './realtime/bus';
 import { TypingService } from './realtime/typing';
@@ -107,8 +106,6 @@ export interface Services {
   google: GoogleServices;
   /** Attachment bytes, limits and the orphan sweep (docs/decisions/bp-attachments.md). */
   files: AttachmentFiles;
-  /** Link previews under messages, fetched after posting (docs/decisions/essentials-conversations.md EC-17). */
-  linkPreviews: LinkPreviewService;
   /** Supervised automations: triggers, schedules and durable runs (docs/decisions/bp-automations.md). */
   automations: AutomationEngine;
   /** Whombat Feedback: intake limits, the assessment worker and retention (docs/decisions/feedback.md). */
@@ -219,7 +216,6 @@ export function createServices(deps: ServiceDeps): Services {
     () => services.boxMail.outgoing(),
   );
   services.files = new AttachmentFiles(services);
-  services.linkPreviews = new LinkPreviewService(services);
   services.pipeline = new Pipeline(services);
   registerCommands(services.pipeline);
   services.approvals = new ApprovalEngine(services);

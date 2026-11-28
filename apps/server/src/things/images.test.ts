@@ -25,6 +25,7 @@ import {
   servedPicture,
   thingImage,
   useImageFetcherForTests,
+  webUrlProblem,
 } from './images';
 
 const custody = new KeyCustody(Buffer.alloc(32, 7).toString('base64'));
@@ -303,5 +304,18 @@ describe('the memory cache', () => {
       ),
     ).toBeTruthy();
     expect(loads).toBe(1);
+  });
+});
+
+describe('webUrlProblem', () => {
+  it('takes http and https on their standard ports only', () => {
+    expect(webUrlProblem('https://example.com/a')).toBeNull();
+    expect(webUrlProblem('http://example.com:80/a')).toBeNull();
+    expect(webUrlProblem('https://example.com:443/a')).toBeNull();
+    expect(webUrlProblem('https://example.com:8443/a')).toMatch(/8443/);
+    expect(webUrlProblem('http://example.com:443/a')).toMatch(/443/);
+    expect(webUrlProblem('ftp://example.com/a')).toMatch(/ftp/);
+    expect(webUrlProblem('https://user:pw@example.com/')).toMatch(/credentials/);
+    expect(webUrlProblem('nonsense')).not.toBeNull();
   });
 });

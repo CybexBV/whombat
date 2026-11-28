@@ -123,7 +123,7 @@ import { type CouncilItem, councilItem } from './council';
 import { type DelegationItem, delegationItem } from './delegation';
 import { type FeatureRequestCardView, featureDeciderName, featureRequestItem } from './featureRequest';
 import { approvalContext, type ViewContext } from './people';
-import { type PreviewCard, previewCards, type ReactionPill, reactionPills } from './reactions';
+import { type ReactionPill, reactionPills } from './reactions';
 import { type TurnFailedView, turnFailedView } from './turns';
 import { type VaultSavedRow, vaultSavedRows } from './vaultSaved';
 
@@ -502,8 +502,6 @@ export interface ChatItem {
   pinned: boolean;
   /** Reactions as pills under the message (AP-507). */
   reactions: ReactionPill[];
-  /** Compact cards for the links in it (CT-174, AP-508). */
-  previews: PreviewCard[];
   /**
    * “Saved to your Vault · Plex” under it once Whombat blanked a secret in it (contracts 0.112 `Message.vaultSaved`,
    * vault-self-serve.md VS-07; AP-4037), each opening its entry; empty on every other message.
@@ -932,8 +930,7 @@ export function chatItems(
    */
   /**
    * `readUpTo` / `moreAbove`: where the viewer had read when the conversation opened and whether older pages are still to
-   * come, for the “New” line (MX-05, `firstUnreadId`). `previews`: the conversation shows link previews (Whombat EC-23,
-   * `conversationLinkPreviewsOn`; true when absent): off leaves out the cards its messages already have (AP-1102).
+   * come, for the “New” line (MX-05, `firstUnreadId`).
    * `everyAuthor`: each message has its author line, also after one by the same author (a threaded room, where every
    * top-level message is a thread of its own: chat-channel.md AP-2453). `ranOn`: the Chat room, where the agent's reply
    * says what answered it (chat-runtime-android.md AP-2725…); `switches` draws the divider when that changed (in a
@@ -943,7 +940,6 @@ export function chatItems(
     authors: boolean;
     ranOn?: { switches: boolean; view?: Pick<ChatRuntimeView, 'providers'> | null } | null;
     everyAuthor?: boolean;
-    previews?: boolean;
     threads?: boolean;
     retry?: boolean;
     readUpTo?: string | null;
@@ -1035,7 +1031,6 @@ export function chatItems(
         edited: false,
         pinned: false,
         reactions: [],
-        previews: [],
         vaultSaved: [],
         turnFailed: null,
         display: null,
@@ -1107,7 +1102,6 @@ export function chatItems(
       edited: m.editedAt !== null && m.editedAt !== undefined,
       pinned: Boolean(m.pinnedAt),
       reactions: reactionPills(m.reactions, ctx.locale),
-      previews: options.previews === false ? [] : previewCards(m.previews, ctx.locale),
       vaultSaved: vaultSavedRows(m.vaultSaved, ctx.locale),
       turnFailed: failed,
       display: m.card ? cardDisplayHere(m.card, inThread) : null,

@@ -57,7 +57,6 @@ import { mentionTargets, publishUnread, unreadKey, wouldWakeAgent } from '../dom
 import { indexMessage } from '../domain/search-index';
 import { publishFilesChanged } from '../files/space-commands';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
-import { previewUrls } from '../previews/extract';
 import { type ConversationRow, loadConversationRow } from '../read/conversations';
 import { loadMessages, type MessageRow } from '../read/messages';
 
@@ -140,9 +139,6 @@ export const editMessage = defineCommand({
 
     const mentions = resolveMentions(text, targets).filter((m) => m !== ctx.actor.id);
     const added = addedMentions(row.mentions, mentions);
-    // Previews of links still in the text stay; new links are fetched after the commit.
-    const links = new Set(previewUrls(text));
-    const previews = (row.previews ?? []).filter((p) => links.has(p.url));
     // A lapsed licence refuses a person's edit that would wake an agent, as it refuses such a send (LC-10).
     const wakes = targets.filter((t) => t.kind === 'agent' && added.includes(t.id)).map((t) => t.id);
     if (ctx.services.licence.lapsed && wakes.length && (await wouldWakeAgent(ctx, conversation, text)))
@@ -153,7 +149,6 @@ export const editMessage = defineCommand({
       .set({
         text,
         mentions,
-        previews: previews.length ? previews : null,
         editedAt: ctx.now,
       })
       .where(eq(messages.id, row.id))
@@ -189,7 +184,6 @@ export const editMessage = defineCommand({
       await indexMessage(services.db, row.id);
       if (row.threadRootId) await indexMessage(services.db, row.threadRootId);
     });
-    ctx.after(async () => services.linkPreviews.schedule(row.id));
     // A newly mentioned agent is woken once, like a send; never twice for the same message (CT-173). Agents are never
     // in a direct conversation, and only members are woken (enqueueDispatches), so a mention there wakes nobody.
     if (wakes.length)

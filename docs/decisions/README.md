@@ -124,7 +124,7 @@ How the split was made: `docs.md`.
 - `thread-unread.md` — which threads of Chat and Feedback have something new: a marker per thread, a dot, the badge.
 - `channel-threads.md` — the agent answers a top-level message in a thread under it (*in part*).
 - `channel-clear.md` — *in part*: clearing keeps threads with work in progress (Clear chats reuses it).
-- `essentials-conversations.md` — edit and delete, pins, link previews (*in part*: channels are gone).
+- `essentials-conversations.md` — edit and delete, pins, no link cards (*in part*: channels are gone).
 - `essentials-people.md` — notification levels, Do not disturb, quiet hours, email digests (*in part*).
 - `notifications.md` — push through control, the box's own transports, live activities (*in part*).
 - `push-words.md` — what a security push says and opens; a remote help visit is told in the Chat, not pushed.

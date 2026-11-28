@@ -156,16 +156,16 @@ export type MessageMore = z.infer<typeof MessageMore>;
 export const MessageProvenance = z.enum(['feedback_assessment', 'feedback_handoff']);
 export type MessageProvenance = z.infer<typeof MessageProvenance>;
 
-/** Most link previews under one message (0.26, CT-174). */
+/** Most link previews earlier versions stored under one message (0.26, CT-174). */
 export const LINK_PREVIEWS_MAX = 3;
 export const LINK_PREVIEW_TITLE_MAX = 200;
 export const LINK_PREVIEW_DESCRIPTION_MAX = 300;
 export const LINK_PREVIEW_SITE_NAME_MAX = 100;
 
 /**
- * A compact card under a message for a link in its text (0.26, CT-174): the page's `og:title` or `<title>`,
- * `og:description` and `og:site_name`. No images (CSP and privacy). The server fetches it after posting and sends
- * `message.updated`; a failed fetch leaves no preview.
+ * A page's title and description that earlier versions stored under a message for a link in its text (0.26, CT-174;
+ * `messages.previews`). Chat shows links in the text only, so nothing shows these; the type stays so stored rows and
+ * backup files keep their shape.
  */
 export const LinkPreview = z.object({
   /** The link as written in the message: http or https only. */
@@ -175,33 +175,6 @@ export const LinkPreview = z.object({
   siteName: z.string().max(LINK_PREVIEW_SITE_NAME_MAX).nullable(),
 });
 export type LinkPreview = z.infer<typeof LinkPreview>;
-
-function previewField(value: string | null | undefined, max: number): string | null {
-  const v = (value ?? '').replace(/\s+/g, ' ').trim();
-  if (!v) return null;
-  return v.length > max ? `${v.slice(0, max - 1).trimEnd()}…` : v;
-}
-
-/**
- * A link preview as the schema takes it, from what a page said (whitespace collapsed, each field cut to its limit with
- * `…`), or null when the page has no title or the URL isn't http(s).
- */
-export function normalizeLinkPreview(raw: {
-  url: string;
-  title?: string | null;
-  description?: string | null;
-  siteName?: string | null;
-}): LinkPreview | null {
-  const title = previewField(raw.title, LINK_PREVIEW_TITLE_MAX);
-  if (!title || !/^https?:\/\//i.test(raw.url) || raw.url.length > 2048) return null;
-  const parsed = LinkPreview.safeParse({
-    url: raw.url,
-    title,
-    description: previewField(raw.description, LINK_PREVIEW_DESCRIPTION_MAX),
-    siteName: previewField(raw.siteName, LINK_PREVIEW_SITE_NAME_MAX),
-  });
-  return parsed.success ? parsed.data : null;
-}
 
 /**
  * What a secret in a message reads as once the Vault has it (0.112.0, CT-783; Whombat vault-self-serve.md VS-07): six
@@ -286,8 +259,6 @@ export const Message = z.object({
   /** When a member pinned it (0.26, CT-174); absent or null when it isn't pinned. */
   pinnedAt: Timestamp.nullable().optional(),
   pinnedById: PrincipalId.nullable().optional(),
-  /** Link previews under the message (0.26, CT-174), at most three, in the order the links appear. */
-  previews: z.array(LinkPreview).max(LINK_PREVIEWS_MAX).optional(),
   /**
    * What the thread is about (0.93, CT-440; Whombat chat-channel.md CHT-05): a server, a connection or a device, set on
    * a thread's first message in Chat only (`chats.start` with a subject), shown as a chip on it. Absent or null

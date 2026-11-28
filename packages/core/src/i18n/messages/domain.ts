@@ -413,17 +413,6 @@ export const DOMAIN_MESSAGES = splitPairs({
   'notify.level.all': ['All', 'Alles'],
   'notify.level.mentions': ['Mentions', 'Vermeldingen'],
   'notify.level.none': ['Nothing', 'Niets'],
-  'linkPreviews.label': ['Link previews', 'Linkvoorbeelden'],
-  'linkPreviews.hint': [
-    'Show a card with the page’s title under links posted here.',
-    'Toon een kaart met de titel van de pagina onder links die hier worden geplaatst.',
-  ],
-  'linkPreviews.on': ['Link previews are on here.', 'Linkvoorbeelden staan hier aan.'],
-  'linkPreviews.off': ['Link previews are off here.', 'Linkvoorbeelden staan hier uit.'],
-  'linkPreviews.burrowOff': [
-    'Link previews are off for the whole burrow.',
-    'Linkvoorbeelden staan uit voor de hele burcht.',
-  ],
   'device.tier.off': ['Off', 'Uit'],
   'device.tier.ask': ['Ask me', 'Vraag het mij'],
   'device.tier.can': ['Allowed', 'Toegestaan'],

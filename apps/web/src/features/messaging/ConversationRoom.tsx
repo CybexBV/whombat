@@ -6,7 +6,6 @@ import {
   type ConversationDetail,
   type ConversationKind,
   canAskForMore,
-  conversationLinkPreviewsOn,
   type Message,
   type Principal,
   type Reaction,
@@ -30,7 +29,7 @@ import styles from './ConversationRoom.module.css';
 import { DeliveryState } from './DeliveryState';
 import { draftKey, readDraft, useDraft } from './drafts';
 import { MessageList } from './MessageList';
-import { LinkPreviewsShown, MessageEditor } from './MessageParts';
+import { MessageEditor } from './MessageParts';
 import { MoreDetail } from './MoreDetail';
 import { useMessageUrl } from './messageLink';
 import { leaveConversation, usePendingDeletes } from './pendingDeletes';
@@ -565,139 +564,136 @@ export function ConversationRoom({
   const commandTool = !skillState.known || skills.length > 0 || !!offer.prompts;
 
   return (
-    // A channel with link previews off hides the cards its messages already have (EC-23; AP-1101).
-    <LinkPreviewsShown.Provider value={conversationLinkPreviewsOn(detail.conversation)}>
-      <CardLookContext.Provider value={look}>
-        <section
-          className={styles.room}
-          data-screen={screen}
-          data-look={look === 'chat' ? 'chat' : undefined}
-          aria-label={label}
-          {...drop.handlers}
-        >
-          {drop.dragging && (
-            <div className={styles.dropZone} aria-hidden="true">
-              <p>Drop files to attach them</p>
-            </div>
-          )}
-          {header}
-          {tabs}
-          <div className={styles.scrollArea}>
-            <div
-              ref={scrollRef}
-              id={scrollId}
-              className={styles.scroll}
-              onScroll={onScroll}
-              data-conversation-scroll=""
-            >
-              {body ?? (
-                <RanOnMarkedProvider burrow={burrow} enabled={look === 'chat'}>
-                  <MessageList
-                    messages={messages}
-                    lookup={lookup}
-                    timeZone={timeZone}
-                    now={now}
-                    renderCard={renderCard}
-                    renderAfter={renderAfter}
-                    onReact={onReact}
-                    threadHref={threadHref}
-                    onOpenThread={openThread}
-                    onMenu={actions.onMenu}
-                    menuOpenId={actions.menuOpenId}
-                    onReplyInThread={replyInThread}
-                    pickerOpenId={actions.pickerOpenId}
-                    look={look}
-                    meId={me?.id ?? null}
-                    threaded={threadedList}
-                    renderEditor={renderEditor}
-                    typing={typing}
-                    typingAction={typingAction}
-                    threadWork={threadWork}
-                    unreadFrom={unreadFrom}
-                    after={room.loading ? null : footer}
-                    empty={
-                      !room.loading && renderEmpty
-                        ? renderEmpty((text) => {
-                            setDraft(text);
-                            setFocusKey(Date.now());
-                          })
-                        : null
-                    }
-                    before={
-                      room.hasOlder ? (
-                        <button
-                          type="button"
-                          className={styles.older}
-                          disabled={room.loadingOlder}
-                          onClick={() => void room.loadOlder()}
-                        >
-                          {room.loadingOlder ? 'Loading…' : 'Load earlier messages'}
-                        </button>
-                      ) : null
-                    }
-                  />
-                </RanOnMarkedProvider>
-              )}
-            </div>
-            {unseen && !body && (
-              <button type="button" className={styles.newPill} onClick={toUnseen} data-new-messages="">
-                {NEW_MESSAGES_PILL}
-              </button>
+    <CardLookContext.Provider value={look}>
+      <section
+        className={styles.room}
+        data-screen={screen}
+        data-look={look === 'chat' ? 'chat' : undefined}
+        aria-label={label}
+        {...drop.handlers}
+      >
+        {drop.dragging && (
+          <div className={styles.dropZone} aria-hidden="true">
+            <p>Drop files to attach them</p>
+          </div>
+        )}
+        {header}
+        {tabs}
+        <div className={styles.scrollArea}>
+          <div
+            ref={scrollRef}
+            id={scrollId}
+            className={styles.scroll}
+            onScroll={onScroll}
+            data-conversation-scroll=""
+          >
+            {body ?? (
+              <RanOnMarkedProvider burrow={burrow} enabled={look === 'chat'}>
+                <MessageList
+                  messages={messages}
+                  lookup={lookup}
+                  timeZone={timeZone}
+                  now={now}
+                  renderCard={renderCard}
+                  renderAfter={renderAfter}
+                  onReact={onReact}
+                  threadHref={threadHref}
+                  onOpenThread={openThread}
+                  onMenu={actions.onMenu}
+                  menuOpenId={actions.menuOpenId}
+                  onReplyInThread={replyInThread}
+                  pickerOpenId={actions.pickerOpenId}
+                  look={look}
+                  meId={me?.id ?? null}
+                  threaded={threadedList}
+                  renderEditor={renderEditor}
+                  typing={typing}
+                  typingAction={typingAction}
+                  threadWork={threadWork}
+                  unreadFrom={unreadFrom}
+                  after={room.loading ? null : footer}
+                  empty={
+                    !room.loading && renderEmpty
+                      ? renderEmpty((text) => {
+                          setDraft(text);
+                          setFocusKey(Date.now());
+                        })
+                      : null
+                  }
+                  before={
+                    room.hasOlder ? (
+                      <button
+                        type="button"
+                        className={styles.older}
+                        disabled={room.loadingOlder}
+                        onClick={() => void room.loadOlder()}
+                      >
+                        {room.loadingOlder ? 'Loading…' : 'Load earlier messages'}
+                      </button>
+                    ) : null
+                  }
+                />
+              </RanOnMarkedProvider>
             )}
           </div>
-          {actions.elements}
-          {saveAsPrompt.element}
-          <CreatePlanModal
-            burrow={burrow}
-            conversationId={conversationId}
-            open={planOpen}
-            onOpenChange={setPlanOpen}
-            source={planFrom}
-            onCreated={(plan) =>
-              void updateSearch((s) => ({
-                ...s,
-                plan: plan.id,
-                step: undefined,
-                thread: undefined,
-                plans: undefined,
-              }))
-            }
-          />
-          {!composer
-            ? null
-            : (readOnly ?? (
-                <Composer
-                  placeholder={placeholder}
-                  value={draft}
-                  onValueChange={(v) => {
-                    setDraft(v);
-                    if (sender.notice) sender.clearNotice();
-                    if (offer.notice) offer.clearNotice();
-                    if (!skillsAsked && v.startsWith('/')) setSkillsAsked(true);
-                  }}
-                  onSubmit={(text) => void submit(text)}
-                  mentionables={mentionables ?? mentionList}
-                  viewerId={me?.id}
-                  commandTool={commandTool}
-                  onPickFiles={uploads.pick}
-                  attachments={uploads.attachments}
-                  onRemoveAttachment={uploads.remove}
-                  onRetryAttachment={uploads.retry}
-                  notice={sender.notice ?? offer.notice ?? draftNote?.(draft) ?? null}
-                  focusKey={focusKey}
-                  skills={skills}
-                  prompts={offer.prompts}
-                  hint={composerHint}
-                  onEditLast={() => actions.editLast(messages)}
-                  variant={look === 'chat' ? 'chat' : 'composer'}
-                  runtimeTool={threaded?.runtimeTool ?? null}
-                  burrow={burrow}
-                  voiceKey={`room:${conversationId}`}
-                />
-              ))}
-        </section>
-      </CardLookContext.Provider>
-    </LinkPreviewsShown.Provider>
+          {unseen && !body && (
+            <button type="button" className={styles.newPill} onClick={toUnseen} data-new-messages="">
+              {NEW_MESSAGES_PILL}
+            </button>
+          )}
+        </div>
+        {actions.elements}
+        {saveAsPrompt.element}
+        <CreatePlanModal
+          burrow={burrow}
+          conversationId={conversationId}
+          open={planOpen}
+          onOpenChange={setPlanOpen}
+          source={planFrom}
+          onCreated={(plan) =>
+            void updateSearch((s) => ({
+              ...s,
+              plan: plan.id,
+              step: undefined,
+              thread: undefined,
+              plans: undefined,
+            }))
+          }
+        />
+        {!composer
+          ? null
+          : (readOnly ?? (
+              <Composer
+                placeholder={placeholder}
+                value={draft}
+                onValueChange={(v) => {
+                  setDraft(v);
+                  if (sender.notice) sender.clearNotice();
+                  if (offer.notice) offer.clearNotice();
+                  if (!skillsAsked && v.startsWith('/')) setSkillsAsked(true);
+                }}
+                onSubmit={(text) => void submit(text)}
+                mentionables={mentionables ?? mentionList}
+                viewerId={me?.id}
+                commandTool={commandTool}
+                onPickFiles={uploads.pick}
+                attachments={uploads.attachments}
+                onRemoveAttachment={uploads.remove}
+                onRetryAttachment={uploads.retry}
+                notice={sender.notice ?? offer.notice ?? draftNote?.(draft) ?? null}
+                focusKey={focusKey}
+                skills={skills}
+                prompts={offer.prompts}
+                hint={composerHint}
+                onEditLast={() => actions.editLast(messages)}
+                variant={look === 'chat' ? 'chat' : 'composer'}
+                runtimeTool={threaded?.runtimeTool ?? null}
+                burrow={burrow}
+                voiceKey={`room:${conversationId}`}
+              />
+            ))}
+      </section>
+    </CardLookContext.Provider>
   );
 }
 

@@ -88,7 +88,6 @@ import {
   type ChatThread,
   canAskForMore,
   conversationLink,
-  conversationLinkPreviewsOn,
   type Message,
   replySuggestions,
   suggestionMessage,
@@ -780,8 +779,6 @@ export function ChatView({
     [chatRoom, threadRootId, runtimeView],
   );
   const moreAbove = !threadRootId && !fresh && history.hasNextPage;
-  // A room with link previews off hides them, in its threads too (EC-23; AP-1102).
-  const showPreviews = conversationLinkPreviewsOn(roomConversation);
   // A room's top level: every message is a thread of its own, each with its author line (AP-2453).
   const roomTop = !!threaded && !threadRootId;
   // biome-ignore lint/correctness/useExhaustiveDependencies: `today` rebuilds it when the day turns, reading the clock then
@@ -796,7 +793,6 @@ export function ChatView({
           threads: !threadRootId,
           readUpTo: fresh ? null : threadRootId ? newFrom : (readPoint?.id ?? null),
           moreAbove,
-          previews: showPreviews,
           ranOn,
         },
       ),
@@ -814,7 +810,6 @@ export function ChatView({
       readPoint,
       newFrom,
       moreAbove,
-      showPreviews,
       ranOn,
       fresh,
     ],

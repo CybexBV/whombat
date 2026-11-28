@@ -1,46 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  ChatThread,
-  Conversation,
-  conversationLinkPreviewsOn,
-  LINK_PREVIEWS_COPY,
-  threadPreview,
-} from './conversation.js';
-
-describe('link previews per conversation (CT-330)', () => {
-  it('are on unless the conversation or its burrow has them off', () => {
-    expect(conversationLinkPreviewsOn({})).toBe(true);
-    expect(conversationLinkPreviewsOn(null)).toBe(true);
-    expect(conversationLinkPreviewsOn({ linkPreviews: true }, { linkPreviews: true })).toBe(true);
-    expect(conversationLinkPreviewsOn({ linkPreviews: false })).toBe(false);
-    expect(conversationLinkPreviewsOn({}, { linkPreviews: false })).toBe(false);
-  });
-
-  it('is optional on a conversation, so an older server’s conversation still parses', () => {
-    const base = {
-      id: 'cnv_dm-mara',
-      burrowId: 'bur_hq',
-      kind: 'dm',
-      slug: 'dm-mara',
-      title: 'Chat',
-      topic: '',
-      memberIds: [],
-      actions: [],
-      prNumber: null,
-      repoId: null,
-      dmPersonId: 'prn_mara',
-      createdAt: '2026-10-10T12:00:00.000Z',
-      lastMessageAt: null,
-    };
-    expect(Conversation.parse(base).linkPreviews).toBeUndefined();
-    expect(Conversation.parse({ ...base, linkPreviews: false }).linkPreviews).toBe(false);
-  });
-
-  it('says it in plain words', () => {
-    expect(LINK_PREVIEWS_COPY.label).toBe('Link previews');
-    expect(LINK_PREVIEWS_COPY.hint).not.toMatch(/[`{}]/);
-  });
-});
+import { ChatThread, threadPreview } from './conversation.js';
 
 describe('a list row’s preview of a message', () => {
   it('reads a link as its words and a bare address without its scheme', () => {

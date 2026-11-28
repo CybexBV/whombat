@@ -85,7 +85,7 @@ const FILES: Record<string, number> = {
   'src/ui/sheet.tsx': 1,
   'src/ui/messageMenu.tsx': 4,
   // + “Saved to your Vault · Plex” under a message (vault-self-serve.md AP-4037): a 32dp line, padded.
-  'src/ui/messageParts.tsx': 4,
+  'src/ui/messageParts.tsx': 3,
   'src/screens/ConversationMenu.tsx': 3,
   'src/screens/ConversationScreen.tsx': 0,
   // Share to… (AP-715): rows, buttons and the upload chips' own audited sites only.

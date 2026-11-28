@@ -41,7 +41,6 @@ import { PREVIEW_MAX_SOURCE_PIXELS } from '../files/previews';
 import { sniffBuffer } from '../files/sniff';
 import type { KeyCustody } from '../keys/custody';
 import { isPublicAddress, OutboundError, type OutboundPolicy, outboundRequest } from '../lib/outbound';
-import { PREVIEW_USER_AGENT, previewUrlProblem } from '../previews/fetch';
 import type { Services } from '../services';
 
 /** How long a ref is good for at least (SD-06). */
@@ -73,6 +72,26 @@ export const IMAGE_FAILED_KEEP_MS = 60_000;
 
 /** TMDB's poster host and size (Seerr's posters, SD-21). */
 export const TMDB_IMAGE_BASE = 'https://image.tmdb.org/t/p/w342';
+/** How Whombat names itself when it fetches a picture from the web. */
+const IMAGE_USER_AGENT = 'WhombatLinkPreview/1.0 (+https://whombat.com)';
+
+/**
+ * Why a picture's URL may not be fetched (checked before anything connects), or null: `http:` and `https:` on their
+ * standard ports only, no credentials. `allowPrivate` (tests) lifts the port rule as it does the address rules.
+ */
+export function webUrlProblem(raw: string, allowPrivate = false): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return 'not a URL';
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return `${url.protocol} is not fetched`;
+  if (url.username || url.password) return 'credentials in the URL';
+  // `URL.port` is empty for the scheme's default port (80 for http, 443 for https).
+  if (!allowPrivate && url.port !== '') return `port ${url.port} is not a standard web port`;
+  return null;
+}
 
 export type ImageSource = 'c' | 't';
 export type ImageType = (typeof THING_IMAGE_TYPES)[number];
@@ -311,12 +330,12 @@ export async function fromTmdb(
 ): Promise<Buffer | null> {
   if (imagePathProblem('t', path)) return null;
   const url = `${TMDB_IMAGE_BASE}${path}`;
-  if (previewUrlProblem(url, options.allowPrivate)) return null;
+  if (webUrlProblem(url, options.allowPrivate)) return null;
   const res = await outboundRequest(
     url,
     {
       method: 'GET',
-      headers: { accept: 'image/webp,image/png,image/jpeg', 'user-agent': PREVIEW_USER_AGENT },
+      headers: { accept: 'image/webp,image/png,image/jpeg', 'user-agent': IMAGE_USER_AGENT },
     },
     tmdbPolicy(options),
   );

@@ -334,12 +334,6 @@ export const ConfigSchema = z
      */
     WHOMBAT_FEEDBACK: z.enum(['on', 'off']).default('on'),
     /**
-     * Link previews under messages (docs/decisions/essentials-conversations.md EC-21): `on` fetches the pages messages
-     * link to (public addresses only), `off` never does. Default `on`, `off` in tests. The person also turns them off
-     * per burrow (`Burrow.linkPreviews`).
-     */
-    WHOMBAT_LINK_PREVIEWS: z.enum(['on', 'off']).optional(),
-    /**
      * Whombat checks its own way out every minute: its router, name lookups and the
      * internet. `on` in production; a development box and tests never probe the internet unless it is `on`.
      */
@@ -503,7 +497,6 @@ export const ConfigSchema = z
       cfg.WHOMBAT_APP_URL ??
       (cfg.NODE_ENV === 'production' || cfg.WHOMBAT_EDITION === 'community' ? undefined : DEV_APP_URL),
     WHOMBAT_GOOGLE: cfg.WHOMBAT_GOOGLE ?? (cfg.NODE_ENV === 'test' || cfg.WHOMBAT_DEMO ? 'fake' : 'real'),
-    WHOMBAT_LINK_PREVIEWS: cfg.WHOMBAT_LINK_PREVIEWS ?? (cfg.NODE_ENV === 'test' ? 'off' : 'on'),
     WHOMBAT_WAY_OUT: cfg.WHOMBAT_WAY_OUT ?? (cfg.NODE_ENV === 'production' ? 'on' : 'off'),
     /** Where the database is: `url` (DATABASE_URL) or `dev`. */
     DATABASE_SOURCE: (cfg.DATABASE_URL ? 'url' : 'dev') as 'url' | 'dev',
