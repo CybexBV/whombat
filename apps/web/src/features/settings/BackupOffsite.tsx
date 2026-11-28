@@ -198,10 +198,8 @@ function OffsiteRows({
         </Button>
       </div>
       {view.rows.map((row) => (
-        <div key={row.label} className={styles.row}>
-          <div className={styles.rowMain}>
-            <span className={styles.rowMeta}>{row.label}</span>
-          </div>
+        <div key={row.label} className={os.detail}>
+          <span>{row.label}</span>
           <span className={os.value}>{row.value}</span>
         </div>
       ))}
