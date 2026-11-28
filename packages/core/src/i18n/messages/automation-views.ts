@@ -461,6 +461,26 @@ export const AUTOMATION_VIEWS = splitPairs({
     '{name} was already stopped at {time}, so nothing was done.',
     '{name} was om {time} al gestopt, dus er is niets gedaan.',
   ],
+  'direct.problem.kind': [
+    'Only a server, one of its machines or Home Assistant can be acted on directly.',
+    'Alleen een server, een van zijn machines of Home Assistant kan direct worden aangestuurd.',
+  ],
+  'direct.problem.notAllowed': [
+    'Whombat only restarts, shuts down, starts or stops servers and their machines, restarts Home Assistant, switches lights, switches and fans on or off and runs scenes and scripts on its own. Deleting, unlocking, disarming, opening, restoring and updating always need you, so they can’t be a step.',
+    'Whombat doet zelf alleen dit: servers en hun machines herstarten, uitzetten, starten of stoppen, Home Assistant herstarten, lampen, schakelaars en ventilatoren aan- of uitzetten en scènes en scripts starten. Verwijderen, ontgrendelen, uitschakelen, openen, terugzetten en bijwerken hebben altijd jou nodig, dus dat kan geen stap zijn.',
+  ],
+  'direct.problem.entity': [
+    'target: a Home Assistant entity id such as light.porch.',
+    'target: een entity-id van Home Assistant, zoals light.porch.',
+  ],
+  'direct.problem.sensitive': [
+    'Locks, alarms, gates and doors always ask you, so they can’t be a step that runs on its own.',
+    'Sloten, alarmen, hekken en deuren vragen het altijd aan jou, dus ze kunnen geen stap zijn die vanzelf draait.',
+  ],
+  'direct.problem.startOnly': [
+    'A scene or a script can only be started.',
+    'Een scène of een script kan alleen worden gestart.',
+  ],
   'flow.mark.withoutAi': ['Without AI', 'Zonder AI'],
 
   // A Find My trigger

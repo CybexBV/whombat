@@ -1,9 +1,11 @@
 /**
  * App updates in words (app-updates.md): the approval card's ask and what it adds before the yes, and the one plain line
  * when the update ended (“immich_server is updated to 2.4.”, “immich_server 2.4 didn’t start, so I put 2.3 back.”).
- * Pure; English, said in the reader's language by the server's phrasebook (`phrase.apps.*`).
+ * Pure. The line at the end is said in the reader's language (`hosts.apps.*`); the card's ask and note stay English,
+ * like the rest of a Servers call's approval card.
  */
 import { type HostAppResult, versionWords } from '@whombat/core';
+import { tpServer, tServer } from '../i18n/catalog';
 
 type Args = Readonly<Record<string, unknown>>;
 
@@ -20,12 +22,13 @@ export function appNames(args: Args): string[] {
     );
 }
 
-/** “immich_server”, “immich_server and immich_ml”, “3 apps”. */
-export function appListWords(names: readonly string[]): string {
-  if (names.length === 0) return 'the apps';
+/** “immich_server”, “immich_server and immich_ml”, “3 apps”; in `locale` (English when none). */
+export function appListWords(names: readonly string[], locale?: string | null): string {
+  if (names.length === 0) return tServer(locale, 'hosts.apps.list.none');
   if (names.length === 1) return names[0] as string;
-  if (names.length === 2) return `${names[0]} and ${names[1]}`;
-  return `${names.length} apps`;
+  if (names.length === 2)
+    return tServer(locale, 'hosts.apps.list.two', { first: names[0] as string, second: names[1] as string });
+  return tpServer(locale, 'hosts.apps.list.many', names.length, { n: names.length });
 }
 
 /** The card's ask and the running line. */
@@ -56,58 +59,57 @@ export function appCardNote(args: Args): string | null {
 
 const v = (x: string | null | undefined) => versionWords(x ?? null);
 
-/** One app's outcome in one sentence. */
+/** One app's outcome in one sentence, in `locale` (English when none). */
 export function appOutcomeLine(
   r: Pick<HostAppResult, 'app' | 'status' | 'reason' | 'from' | 'to'>,
   server: string,
+  locale?: string | null,
 ): string {
-  const app = r.app;
+  const t = (key: Parameters<typeof tServer>[1], vars: Record<string, string> = {}) =>
+    tServer(locale, key, { app: r.app, server, ...vars });
   const from = v(r.from);
   const to = v(r.to);
   switch (r.status) {
     case 'updated':
-      return to && to !== from ? `${app} is updated to ${to}.` : `${app} is updated.`;
+      return to && to !== from ? t('hosts.apps.updatedTo', { to }) : t('hosts.apps.updated');
     case 'current':
-      return `${app} was already up to date.`;
+      return t('hosts.apps.current');
     case 'held':
-      return to && from
-        ? `${app} ${to} is a new major version, so I left ${from} running for you to decide.`
-        : `${app}’s update is a new major version, so I left it as it was for you to decide.`;
+      return to && from ? t('hosts.apps.held', { to, from }) : t('hosts.apps.heldUnknown');
     case 'rolled_back':
-      return to && from
-        ? `${app} ${to} didn’t start, so I put ${from} back.`
-        : `${app}’s update didn’t start, so I put the previous version back.`;
+      return to && from ? t('hosts.apps.rolledBack', { to, from }) : t('hosts.apps.rolledBackUnknown');
     default:
       switch (r.reason) {
         case 'pull':
-          return `I couldn’t download ${app}’s update.`;
+          return t('hosts.apps.pull');
         case 'no_files':
-          return `I couldn’t update ${app}: its Compose files aren’t where it was started from any more.`;
+          return t('hosts.apps.noFiles');
         case 'no_cli':
-          return `I couldn’t update ${app}: Docker Compose isn’t installed on ${server}.`;
+          return t('hosts.apps.noCli');
         case 'gone':
-          return `${app} isn’t on ${server} any more.`;
+          return t('hosts.apps.gone');
         case 'back_failed':
-          return `${app}${to ? ` ${to}` : ''} didn’t start, and putting the previous version back didn’t work either: it needs a look.`;
+          return to ? t('hosts.apps.backFailed', { to }) : t('hosts.apps.backFailedUnknown');
         case 'timeout':
-          return `There wasn’t time left to update ${app}.`;
+          return t('hosts.apps.timeout');
         default:
-          return `I couldn’t update ${app}.`;
+          return t('hosts.apps.failed');
       }
   }
 }
 
 /**
- * The line when an app update ended: each app's sentence (at most four, then how many more), or null when the task
- * didn't say (the caller keeps its own words).
+ * The line when an app update ended: each app's sentence (at most four, then how many more), in `locale`, or null when
+ * the task didn't say (the caller keeps its own words).
  */
 export function appsOutcomeText(
   results: readonly HostAppResult[] | null | undefined,
   server: string,
+  locale?: string | null,
 ): string | null {
   if (!results?.length) return null;
-  const lines = results.slice(0, 4).map((r) => appOutcomeLine(r, server));
+  const lines = results.slice(0, 4).map((r) => appOutcomeLine(r, server, locale));
   const more = results.length - 4;
-  if (more > 0) lines.push(more === 1 ? 'And 1 more.' : `And ${more} more.`);
+  if (more > 0) lines.push(tpServer(locale, 'hosts.apps.more', more, { n: more }));
   return lines.join(' ');
 }

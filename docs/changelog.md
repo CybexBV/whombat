@@ -32,6 +32,8 @@ them once they have been tried on Beta.
 - Add a Windows PC as a server: choose Windows PC in Add a server and paste the line into PowerShell opened as
   administrator. Whombat watches its processor, memory, drives and network, says whether its virus protection is on,
   shows BitLocker and waiting Windows updates, and can restart it. Installing updates stays yours, in Windows Update.
+- In Dutch, Whombat now also says how an app update went, a new server’s care plan and what an automation that acts
+  without AI did. On a phone, that automation’s line on its run page shows whole instead of being cut off.
 
 ## 27 November 2026
 

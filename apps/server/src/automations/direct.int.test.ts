@@ -18,6 +18,7 @@ import {
 import { and, eq } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
+import { updatePreferences } from '../commands/account';
 import { decideApproval } from '../commands/approvals';
 import { syncTools } from '../connections/sync';
 import { approvals, automationWaits, incidents, quietWindows, vaultNetworks } from '../db/schema/index';
@@ -25,6 +26,7 @@ import { serversPrincipal } from '../hosts/principal';
 import { ensureServersConnection } from '../hosts/provision';
 import { FakeHostsService } from '../hosts/testing/fake';
 import { incidentsPass } from '../incidents/store';
+import { personAccountId } from '../read/principals';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { useVaultNetForTests } from '../vault/net';
@@ -189,6 +191,22 @@ describe('a run_action step', () => {
     expect(step(run, 'off').output).toMatchObject({ ran: false, noop: true });
     expect(String((step(run, 'off').output as Json).text)).toContain('marble');
     expect(actions('marble')).toHaveLength(0);
+  });
+
+  it('says its line in Dutch for a person who reads Dutch', async () => {
+    const accountId = await personAccountId(w.services.db);
+    if (!accountId) throw new Error('missing the person’s account');
+    await updatePreferences(w.services, accountId, { locale: 'nl-NL' });
+    try {
+      const id = await w.publish(definition([shutDown('marble'), tell('{{steps.off.text}}')]));
+      const run = await runNow(id);
+      const text = String((step(run, 'off').output as Json).text);
+      expect(text).toContain('marble');
+      expect(text).toContain('niets gedaan');
+      expect(step(run, 'off').inputSummary).toContain('uitzetten');
+    } finally {
+      await updatePreferences(w.services, accountId, { locale: null });
+    }
   });
 
   it('asks before shutting down the server this Whombat runs on, and acts only on the yes', async () => {

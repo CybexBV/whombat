@@ -18,6 +18,7 @@
  */
 
 import { TASK_RESULT_MAX, type TaskEndState, taskLostText } from '@whombat/core';
+import { burrowLocale } from '../i18n/locale';
 import type { Services } from '../services';
 import { appsOutcomeText } from './app-words';
 import { HOSTS_API, seg } from './client';
@@ -420,7 +421,9 @@ async function appsAfter(services: Services, task: FollowedTask): Promise<TaskAf
     })
     .then((raw) => toHostTask(raw))
     .catch(() => null);
-  const text = appsOutcomeText(done?.apps, task.words.server ?? task.serverName);
+  // Said in the person's language: the card and Done recently keep these words as they are.
+  const locale = await burrowLocale(services, task.burrowId);
+  const text = appsOutcomeText(done?.apps, task.words.server ?? task.serverName, locale);
   return text ? { text } : null;
 }
 

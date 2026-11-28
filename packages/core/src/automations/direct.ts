@@ -59,31 +59,29 @@ const ALLOWED: Record<DirectTargetKind, readonly DirectAction[]> = {
 };
 
 /** The words for what never runs as a direct step, said back to the assistant (and so to the person). */
-export const DIRECT_NOT_ALLOWED =
-  'Whombat only restarts, shuts down, starts or stops servers and their machines, restarts Home Assistant, switches lights, switches and fans on or off and runs scenes and scripts on its own. Deleting, unlocking, disarming, opening, restoring and updating always need you, so they can’t be a step.';
+export const DIRECT_NOT_ALLOWED = coreTranslator('en').t('direct.problem.notAllowed');
 
 /**
- * Why a `run_action` step can't be a step (plain words), or null. Checks the shape only: the server checks that the
- * connection is Home Assistant and that the thing is still there.
+ * Why a `run_action` step can't be a step (plain words, in `locale`; English when none), or null. Checks the shape
+ * only: the server checks that the connection is Home Assistant and that the thing is still there.
  */
-export function directActionProblem(step: RunActionStep): string | null {
+export function directActionProblem(step: RunActionStep, locale?: string | null): string | null {
+  const tr = coreTranslator(locale);
   const kind = directTargetKind(step);
-  if (!kind) return 'Only a server, one of its machines or Home Assistant can be acted on directly.';
-  if (!ALLOWED[kind].includes(step.action)) return DIRECT_NOT_ALLOWED;
+  if (!kind) return tr.t('direct.problem.kind');
+  if (!ALLOWED[kind].includes(step.action)) return tr.t('direct.problem.notAllowed');
   if (kind !== 'entity') return null;
   const entity = (step.target ?? '').toLowerCase();
-  if (!/^[a-z0-9_]{1,64}\.[a-z0-9_]{1,128}$/.test(entity))
-    return 'target: a Home Assistant entity id such as light.porch.';
+  if (!/^[a-z0-9_]{1,64}\.[a-z0-9_]{1,128}$/.test(entity)) return tr.t('direct.problem.entity');
   const domain = entityDomain(entity);
   if (
     SENSITIVE_DOMAIN.test(domain) ||
     SENSITIVE_WORDS.test(entity) ||
     SENSITIVE_WORDS.test(step.targetName ?? '')
   )
-    return 'Locks, alarms, gates and doors always ask you, so they can’t be a step that runs on its own.';
-  if (STARTED.has(domain))
-    return step.action === 'turn_on' ? null : 'A scene or a script can only be started.';
-  if (!SWITCHED.has(domain)) return DIRECT_NOT_ALLOWED;
+    return tr.t('direct.problem.sensitive');
+  if (STARTED.has(domain)) return step.action === 'turn_on' ? null : tr.t('direct.problem.startOnly');
+  if (!SWITCHED.has(domain)) return tr.t('direct.problem.notAllowed');
   return null;
 }
 

@@ -81,6 +81,37 @@ describe('the line when an app update ended', () => {
     expect(appsOutcomeText([], 'nas')).toBeNull();
   });
 
+  it('says each line in Dutch for a Dutch reader, with the names and versions as they are', () => {
+    const back = appOutcomeLine(
+      { app: 'Immich', status: 'rolled_back', from: '2.3', to: '2.4' },
+      'nas',
+      'nl-NL',
+    );
+    expect(back).toContain('Immich 2.4');
+    expect(back).toContain('2.3');
+    expect(back).toContain('teruggezet');
+    const lines = [
+      { app: 'a', status: 'updated', from: '1', to: '2' },
+      { app: 'b', status: 'current' },
+      { app: 'c', status: 'held', from: '1.9', to: '2.0' },
+      { app: 'd', status: 'failed', reason: 'pull' },
+      { app: 'e', status: 'failed', reason: 'no_files' },
+      { app: 'f', status: 'failed', reason: 'no_cli' },
+      { app: 'g', status: 'failed', reason: 'gone' },
+      { app: 'h', status: 'failed', reason: 'back_failed', to: '2' },
+      { app: 'i', status: 'failed', reason: 'timeout' },
+      { app: 'j', status: 'failed' },
+    ];
+    for (const r of lines) {
+      const nl = appOutcomeLine(r, 'nas', 'nl-NL');
+      expect(nl).toContain(r.app);
+      expect(nl).not.toBe(appOutcomeLine(r, 'nas'));
+      expect(nl).not.toMatch(/\b(I|is updated|didn’t|couldn’t)\b/);
+    }
+    const many = Array.from({ length: 6 }, (_, i) => ({ app: `app${i}`, status: 'current' }));
+    expect(appsOutcomeText(many, 'nas', 'nl-NL')).toContain('En nog 2');
+  });
+
   it('is followed with the apps’ outcome', () => {
     const words = serversTaskWords(
       'app_update',
@@ -147,5 +178,16 @@ describe('what Dusty reads and the card must say', () => {
     expect(appAskRefusal([guest('web', { app: app({ blocked: 'pinned' }) })], ['docker:web'])).toContain(
       'pinned',
     );
+  });
+
+  it('refuses in Dutch for a Dutch reader', () => {
+    expect(appAskRefusal([guest('web')], ['docker:gone'], 'nl-NL')).toContain('niet meer');
+    const pinned = appAskRefusal(
+      [guest('web', { app: app({ blocked: 'pinned' }) })],
+      ['docker:web'],
+      'nl-NL',
+    );
+    expect(pinned).toContain('web');
+    expect(pinned).not.toContain('pinned');
   });
 });

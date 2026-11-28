@@ -22,6 +22,8 @@ import {
 import { callTarget } from '../connections/call-target';
 import { catalogConnections, connectionTools } from '../db/schema/index';
 import { personalDmId } from '../domain/personal-dm';
+import { tServer } from '../i18n/catalog';
+import { burrowLocale } from '../i18n/locale';
 import { ApiError } from '../lib/errors';
 import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
@@ -31,17 +33,21 @@ import { arr, obj, toHostGuest } from './map';
 import { HOSTS_TEXT, hostsFor, WHOMBAT_ACTOR } from './service';
 import { cardReasons, proxmoxGuestOf } from './tools-apps';
 
-/** Why the page's Update can't ask, in the person's words; null when it can. */
-export function appAskRefusal(guests: readonly HostGuest[], wanted: readonly string[]): string | null {
+/** Why the page's Update can't ask, in the person's words and `locale` (English when none); null when it can. */
+export function appAskRefusal(
+  guests: readonly HostGuest[],
+  wanted: readonly string[],
+  locale?: string | null,
+): string | null {
   const hasApps = agentReportsApps(guests);
   for (const id of wanted) {
     const g = guests.find((x) => x.id === id);
-    if (!g) return 'That app isn’t on this server any more.';
+    if (!g) return tServer(locale, 'hosts.apps.refuse.gone');
     const state = appUpdateState(g, hasApps);
-    if (state === 'outdated') return 'This server needs Whombat’s newer helper first. It gets it by itself.';
-    if (state === 'none') return 'Whombat can update apps started with Docker Compose.';
-    if (state === 'blocked') return `${g.name}’s image is pinned to one exact version.`;
-    if (state === 'updating') return `${g.name} is being updated right now.`;
+    if (state === 'outdated') return tServer(locale, 'hosts.apps.refuse.outdated');
+    if (state === 'none') return tServer(locale, 'hosts.apps.refuse.none');
+    if (state === 'blocked') return tServer(locale, 'hosts.apps.refuse.blocked', { app: g.name });
+    if (state === 'updating') return tServer(locale, 'hosts.apps.refuse.updating', { app: g.name });
   }
   return null;
 }
@@ -53,8 +59,10 @@ export async function askAppUpdate(
 ): Promise<HostManageResult> {
   const { db } = services;
   const apps = [...new Set(input.apps)].slice(0, APP_UPDATE_MAX);
+  // The person reads why it can't ask on the page, in their language.
+  const locale = await burrowLocale(services, input.burrowId);
   const agent = await loadAgentRow(db, input.burrowId);
-  if (!agent) throw new ApiError('conflict', 'Your assistant isn’t set up yet.');
+  if (!agent) throw new ApiError('conflict', tServer(locale, 'hosts.apps.refuse.noAssistant'));
   const [row] = await db
     .select()
     .from(catalogConnections)
@@ -70,14 +78,14 @@ export async function askAppUpdate(
     .select()
     .from(connectionTools)
     .where(and(eq(connectionTools.connectionId, row.id), eq(connectionTools.name, 'app_update')));
-  if (!toolRow) throw new ApiError('conflict', 'Updating apps isn’t switched on for your assistant.');
+  if (!toolRow) throw new ApiError('conflict', tServer(locale, 'hosts.apps.refuse.off'));
   const page = await hostsFor(services).call<unknown>({
     path: `${HOSTS_API}/servers/${seg(input.serverId)}/guests`,
     query: { platform: 'docker', limit: 500 },
     actor: WHOMBAT_ACTOR,
   });
   const guests = arr(obj(page).guests).map((g) => toHostGuest(g, input.serverId));
-  const refused = appAskRefusal(guests, apps);
+  const refused = appAskRefusal(guests, apps, locale);
   if (refused) throw new ApiError('conflict', refused);
   const picked = guests.filter((g) => apps.includes(g.id));
   const reasons = cardReasons(picked);

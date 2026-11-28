@@ -26,6 +26,7 @@ import {
 import { HOSTS_API, seg } from '../hosts/client';
 import { arr, guestsOfDetail, obj, str, toHostServerDetail } from '../hosts/map';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import type { Services } from '../services';
 import { changeWindowOf } from './window';
 
@@ -150,9 +151,16 @@ export function backupStoragesOf(raw: unknown): { id: string; type: string }[] {
   });
 }
 
-/** The care steps as a research keeps them (`look_researches.care`): Whombat's words, its automation's recipe. */
-export function careStepRows(facts: CareFacts, window: ChangeWindow): LookPlanStepRow[] {
-  return careSteps(facts, window).map((s) => ({
+/**
+ * The care steps as a research keeps them (`look_researches.care`): Whombat's words, in the person's `locale`, and its
+ * automation's recipe.
+ */
+export function careStepRows(
+  facts: CareFacts,
+  window: ChangeWindow,
+  locale?: string | null,
+): LookPlanStepRow[] {
+  return careSteps(facts, window, locale).map((s) => ({
     text: s.text,
     step: s.step,
     care: s.id,
@@ -188,6 +196,10 @@ export async function careOfferFor(
     })
     .from(burrows)
     .where(eq(burrows.id, burrowId));
-  const steps = careStepRows(await careFactsOf(services, burrowId, row), changeWindowOf(burrow));
+  const steps = careStepRows(
+    await careFactsOf(services, burrowId, row),
+    changeWindowOf(burrow),
+    await burrowLocale(services, burrowId),
+  );
   return steps.length ? { new: false, steps } : null;
 }
