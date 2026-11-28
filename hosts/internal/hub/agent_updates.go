@@ -38,7 +38,7 @@ type agentManifest struct {
 // manifestFile is one signed file: an agent build, or Whombat Helper's zip
 // (helperZip: os darwin, arch universal, its own version).
 type manifestFile struct {
-	OS      string `json:"os"` // "darwin" for a macOS build; "" = linux
+	OS      string `json:"os"` // "darwin" for a macOS build, "windows" for a Windows one; "" = linux
 	Arch    string `json:"arch"`
 	Version string `json:"version"` // the helper's
 	Size    int64  `json:"size"`
@@ -165,9 +165,14 @@ func updateReason(st *model.ServerState, m *agentManifest) (code, reason string)
 	case cmp > 0:
 		return updNewer, "This agent is newer than the hub's build."
 	}
-	if r.Agent.OS == "darwin" {
+	switch r.Agent.OS {
+	case "darwin":
 		if _, _, ok := m.build(r); !ok {
 			return updNoBuild, "The hub has no macOS build of the agent for this Mac."
+		}
+	case "windows":
+		if _, _, ok := m.build(r); !ok {
+			return updNoBuild, "The hub has no Windows build of the agent for this PC."
 		}
 	}
 	return "", ""

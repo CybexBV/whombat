@@ -33,6 +33,21 @@ type Handle = (req: HostsFixtureRequest) => HostsFixtureAnswer | null;
 /** Reads a state is held for before the next one. */
 const HOLD = 2;
 const WHOMBAT_AGENTS = '10.100.1.5:8443';
+
+/** A Windows PC's PowerShell line as the hosts service makes it (its installer's SHA-256 is made up). */
+function windowsLine(token: string, control: string): string {
+  return (
+    `$u='https://${WHOMBAT_AGENTS}';$s='3f9a1c27d84e6b05a2c9e7f1d3b8a6045e2c7d9f1a3b5c8e0d2f4a6b8c0e1f3a';` +
+    "$o=@{};$d=$PSVersionTable.PSEdition -ne 'Core';" +
+    'if($d){$p=[Net.ServicePointManager]::SecurityProtocol;$c=[Net.ServicePointManager]::ServerCertificateValidationCallback;' +
+    '[Net.ServicePointManager]::SecurityProtocol=3072;[Net.ServicePointManager]::ServerCertificateValidationCallback={$true}}else{$o.SkipCertificateCheck=$true};' +
+    'try{$b=(Invoke-WebRequest -UseBasicParsing -DisableKeepAlive @o "$u/install.ps1").RawContentStream.ToArray()}' +
+    'finally{if($d){[Net.ServicePointManager]::SecurityProtocol=$p;[Net.ServicePointManager]::ServerCertificateValidationCallback=$c}};' +
+    "if((-join([Security.Cryptography.SHA256]::Create().ComputeHash($b)|%{$_.ToString('x2')})) -ne $s)" +
+    "{'whombat-agent: the installer did not match. Copy the line from Whombat again.'}" +
+    `else{&([scriptblock]::Create([Text.Encoding]::UTF8.GetString($b))) -Origin $u -Hub 'https://${WHOMBAT_AGENTS}' -Token '${token}' -Control '${control}'}`
+  );
+}
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 /** A well-formed SHA256 fingerprint per address (the mock's for pve-03). */
@@ -294,6 +309,7 @@ export function withSi(base: Handle, ctx: { world: HostsFixtureWorld; now: numbe
         body: {
           ...made,
           installCommand: `curl -fsSL --pinnedpubkey 'sha256//Xq3mVb9kQe2s0hWc8oT4uY1pZr7aLd5nJf6gBi0Ck2E=' https://${WHOMBAT_AGENTS}/install.sh | sudo sh -s -- --token ${token} --control ${control}`,
+          installCommandWindows: windowsLine(token, control),
           control,
           preApproved: true,
         },

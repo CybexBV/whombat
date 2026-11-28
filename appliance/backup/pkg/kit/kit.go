@@ -62,6 +62,24 @@ type Material struct {
 	// material trusts their backups too, each only up to its cut-off. Absent in older materials and on a box that was
 	// never brought back.
 	Adopted []Adopted `json:"adopted,omitempty"`
+	// Offsite is the second place, where the box keeps a copy of its backups (an S3-compatible bucket the person owns):
+	// a restic repository of its own with the same password. Bringing the box back uses it when the main place is
+	// gone. Absent in older materials and when there is no second place.
+	Offsite *Offsite `json:"offsite,omitempty"`
+}
+
+// Offsite is the second place's section of the material: where the copy is and the key that reaches it.
+type Offsite struct {
+	// Provider names the storage the person chose ("b2", "r2", "hetzner", "aws" or "s3").
+	Provider          string `json:"provider"`
+	Repository        string `json:"repository"` // s3:https://host/bucket/folder
+	S3AccessKeyID     string `json:"s3AccessKeyId,omitempty"`
+	S3SecretAccessKey string `json:"s3SecretAccessKey,omitempty"`
+	S3Region          string `json:"s3Region,omitempty"`
+	RepositoryID      string `json:"repositoryId"`
+	// Head is the newest of the box's checkpoints that was in the copy when the material was fetched (the copy follows
+	// the main place, so it may be older than the material's own Head).
+	Head *Head `json:"head,omitempty"`
 }
 
 // Adopted is an earlier Whombat's manifest key and its cut-off. Once one of its backups was brought back onto another
@@ -145,6 +163,9 @@ func (m *Material) Validate() error {
 	if err := m.validateAdopted(); err != nil {
 		return err
 	}
+	if err := m.Offsite.validate(); err != nil {
+		return err
+	}
 	// Completeness per kind (BK-18, BK-19): the kit alone must reach the repository from another machine.
 	switch {
 	case strings.HasPrefix(m.Repository, "s3:"):
@@ -191,6 +212,43 @@ func (m *Material) validateAdopted() error {
 		}
 	}
 	return nil
+}
+
+var provider = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
+
+func (o *Offsite) validate() error {
+	if o == nil {
+		return nil
+	}
+	switch {
+	case !provider.MatchString(o.Provider):
+		return errors.New("backup material: offsite: provider")
+	case o.Repository == "" || strings.Contains(o.Repository, "@"):
+		return errors.New("backup material: offsite: a repository without credentials in it")
+	case strings.HasPrefix(o.Repository, "s3:") && (o.S3AccessKeyID == "" || o.S3SecretAccessKey == ""):
+		return errors.New("backup material: offsite: an S3 place needs s3AccessKeyId and s3SecretAccessKey")
+	case !strings.HasPrefix(o.Repository, "s3:") && !filepath.IsAbs(o.Repository):
+		return errors.New("backup material: offsite: the place is an s3: repository")
+	case o.Head != nil && (o.Head.Seq < 0 || o.Head.Seq > maxSeq || !sha256Hex.MatchString(o.Head.ManifestSHA256)):
+		return errors.New("backup material: offsite: head")
+	}
+	return nil
+}
+
+// FromOffsite is the material as read from the second place: the same password, keys and earlier Whombats, the copy's
+// repository, credentials and newest checkpoint. Nil when the material names no second place.
+func (m *Material) FromOffsite() *Material {
+	o := m.Offsite
+	if o == nil {
+		return nil
+	}
+	c := *m
+	c.Repository, c.RepositoryID, c.Head = o.Repository, o.RepositoryID, o.Head
+	c.RESTUser, c.RESTPassword = "", ""
+	c.SFTPUser, c.SFTPPrivateKey, c.SFTPHostKey = "", "", ""
+	c.S3AccessKeyID, c.S3SecretAccessKey, c.S3Region = o.S3AccessKeyID, o.S3SecretAccessKey, o.S3Region
+	c.Offsite = nil
+	return &c
 }
 
 func checksum(k Kit) string {

@@ -6,11 +6,12 @@
  */
 
 import { z } from 'zod';
-import { coreWords } from '../i18n/catalog.js';
+import { type CoreTranslator, coreTranslator, coreWords } from '../i18n/catalog.js';
 import { plural } from '../text/format.js';
 import type { HostGuest, HostServerPlatform } from './hosts.js';
 import { LOOK_FIX_STEP_MAX, LOOK_PLAN_STEP_MAX, LOOK_PLAN_STEPS_MAX } from './look-research.js';
 import { ClockTime } from './notify.js';
+import { isRestoreTestCopy } from './protected.js';
 
 /* The quiet hours for changes ------------------------------------------------------------------------------------- */
 
@@ -76,6 +77,14 @@ export function backupTime(w: ChangeWindow): string {
   return minutesClock(clockMinutes(w.start) - 60);
 }
 
+/**
+ * The weekday (cron's, 0 Sunday … 6 Saturday) on which the quiet hours of Sunday night start: Sunday when they start in
+ * the evening (23:00), Monday when they start after midnight (03:00, the night from Sunday to Monday).
+ */
+export function sundayNightDay(w: ChangeWindow): number {
+  return clockMinutes(w.start) >= 12 * 60 ? 0 : 1;
+}
+
 /** A five-field cron line at a wall-clock time: every day, or on one weekday (0 Sunday … 6 Saturday). */
 export function cronAt(time: string, weekday?: number): string {
   const [h, m] = time.split(':');
@@ -99,16 +108,17 @@ function incusProject(guestId: string): string {
 }
 
 export type TemporaryFacts = Pick<HostGuest, 'id' | 'name' | 'platform'> &
-  Partial<Pick<HostGuest, 'project' | 'labels' | 'self'>>;
+  Partial<Pick<HostGuest, 'project' | 'labels' | 'self' | 'tags'>>;
 
 /**
  * Whether a guest is a temporary machine (Whombat server-pages.md): an Incus instance outside the `default` project (CI
  * and sandbox projects keep their throwaway machines apart; their id is `project/name`), a CI job's machine, a leased
- * sandbox, or a container Whombat runs itself. The machine this Whombat runs in never is. Pages hide them; a care plan
- * never includes them.
+ * sandbox, a container Whombat runs itself, or the copy a restore test makes for a few minutes. The machine this Whombat
+ * runs in never is. Pages hide them; a care plan never includes them.
  */
 export function isTemporaryGuest(g: TemporaryFacts): boolean {
   if (g.self) return false;
+  if (g.platform === 'pve' && isRestoreTestCopy(g)) return true;
   if (g.platform === 'incus' && (g.project ?? incusProject(g.id)) !== 'default') return true;
   if (CI_JOB.test(g.name) || LEASED.test(g.name)) return true;
   if (g.platform === 'docker' && g.project && LEASED.test(g.project)) return true;
@@ -125,15 +135,17 @@ export function isTemporaryServer(name: string): boolean {
 /**
  * The kinds of step a care plan has: `backup` a Proxmox backup plan for every machine, `snapshots` an Incus snapshot
  * schedule per machine, `vm_backup` a weekly backup of QEMU/KVM machines (an automation: libvirt has no schedule of
- * its own), `updates` the system updates every week in the quiet hours (an automation), `apps` telling the person
- * about app updates (Whombat's helper does that already).
+ * its own), `updates` the system updates every week in the quiet hours (an automation), `apps` the Docker Compose apps'
+ * updates every Sunday night in the quiet hours (an automation; where no app was started with Compose, telling the
+ * person about app updates, which Whombat's helper does already), `restore_test` a weekly restore test of one Proxmox
+ * machine's backup (Whombat turns it on itself, backup-trust.md).
  */
-export const CARE_STEP_IDS = ['backup', 'snapshots', 'vm_backup', 'updates', 'apps'] as const;
+export const CARE_STEP_IDS = ['backup', 'snapshots', 'vm_backup', 'updates', 'apps', 'restore_test'] as const;
 export const CareStepId = z.enum(CARE_STEP_IDS);
 export type CareStepId = z.infer<typeof CareStepId>;
 
 /** The care steps Whombat turns on itself, as an automation, when the person says go ahead. */
-export type CareAutomationKind = 'updates' | 'vm_backup';
+export type CareAutomationKind = 'updates' | 'vm_backup' | 'apps';
 
 /**
  * One step as the plan offers it: `text` the card's line with the defaults chosen, `step` what the assistant does when
@@ -147,10 +159,12 @@ export interface CareStep {
   automation?: CareAutomationKind;
   /** The machines it covers (`vm_backup`: the guests the automation backs up). */
   guests?: string[];
+  /** Whombat turns on the server's restore tests itself when the person says go ahead (backup-trust.md). */
+  restoreTests?: true;
 }
 
 /** A guest as the plan weighs it. */
-export type CareGuest = TemporaryFacts & Partial<Pick<HostGuest, 'kind'>>;
+export type CareGuest = TemporaryFacts & Partial<Pick<HostGuest, 'kind' | 'app'>>;
 
 /** What Whombat knows about a server when it plans its care. */
 export interface CareFacts {
@@ -175,6 +189,12 @@ export interface CareFacts {
    * `serverId`: the hosts service's id of the server that shares it (Unraid through Whombat's helper).
    */
   nasShare?: { serverId: string; name: string } | null;
+  /**
+   * The release this Whombat would go back to after a failed update doesn't know the weekly app updates and restore
+   * tests: the plan offers only what that release knows (telling the person about app updates, no restore tests), so a
+   * plan it stored never reaches a release that misreads it.
+   */
+  olderRelease?: boolean;
 }
 
 /** The hint checks a care plan answers (`host.hint.<kind>`): missing backups and snapshots, waiting updates. */
@@ -204,9 +224,9 @@ export function careThingKey(key: string): string | null {
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
 /** “the 6 machines”, “web”: what a step covers, by name when there is one. */
-function machines(names: readonly string[], all = false): string {
+function machines(tr: CoreTranslator, names: readonly string[], all = false): string {
   if (names.length === 1) return names[0] as string;
-  return `${all ? 'all ' : 'the '}${plural(names.length, 'machine')}`;
+  return tr.tp(all ? 'carePlan.machines.all' : 'carePlan.machines.the', names.length, { n: names.length });
 }
 
 /** A guest's name for the person: its name, never its number. */
@@ -257,12 +277,17 @@ export function nasShareName(serverId: string): string {
  * - Incus: a daily snapshot of every long-lived machine (the `default` project's), kept 7 days;
  * - QEMU/KVM machines: a weekly backup on Sundays (an automation);
  * - every Linux server but Unraid: system updates on Sundays at the start of the quiet hours, restarting only inside
- *   them (an automation); the server this Whombat runs on asks first, as it always does; a Mac none;
- * - apps: the person hears when they have updates.
+ *   them (an automation); the server this Whombat runs on asks first, as it always does; a Mac and a Windows PC none;
+ * - Docker Compose apps: their updates every Sunday night at the start of the quiet hours (an automation): only the
+ *   apps that are safe to update by themselves, the others asked as one question; containers `docker run` started:
+ *   the person hears when they have updates.
  *
- * Temporary machines are never in it; steps already in place (`has`) are left out.
+ * Temporary machines are never in it; steps already in place (`has`) are left out, and so are the app updates and
+ * restore tests while the release the box would go back to doesn't know them (`olderRelease`). Each step's line is in
+ * `locale` (English when none); what the assistant does stays English.
  */
-export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
+export function careSteps(facts: CareFacts, window: ChangeWindow, locale?: string | null): CareStep[] {
+  const tr = coreTranslator(locale);
   const { server } = facts;
   const has = facts.has ?? {};
   const kept = facts.guests.filter((g) => !isTemporaryGuest(g));
@@ -288,10 +313,31 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
     const job = `backup_job_set create on ${server.id}: schedule "${at}", storage "${storage}", keep {"last": 7}, ${which}`;
     out.push({
       id: 'backup',
-      text: `Back up ${machines(names, true)} every night at ${at} to ${nas ? nas.name : storage}, keeping a week`,
+      text: tr.t('carePlan.step.backup', {
+        machines: machines(tr, names, true),
+        at,
+        place: nas ? nas.name : storage,
+      }),
       step: nas
         ? `backup_place_nfs on ${nas.serverId}, name "${nasShareName(server.id)}", clients ${JSON.stringify(server.addresses)}; proxmox_storage_add on ${server.id}, storage "${storage}" with its nfs_server and export; then ${job}.`
         : `${job}. Check backup_jobs lists it.`,
+    });
+  }
+
+  // A backup that was never tried may not come back: once a week one machine's newest backup is restored as a copy with
+  // its network off and started, then deleted (backup-trust.md). Only where there are or will be backups to try.
+  if (
+    server.platform === 'proxmox' &&
+    pve.length &&
+    (storage || has.backup) &&
+    !has.restore_test &&
+    !facts.olderRelease
+  ) {
+    out.push({
+      id: 'restore_test',
+      text: tr.t('carePlan.step.restoreTest'),
+      step: 'Whombat turns this on itself when the person says go ahead: nothing for you to do.',
+      restoreTests: true,
     });
   }
 
@@ -299,7 +345,7 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (incus.length && !has.snapshots) {
     out.push({
       id: 'snapshots',
-      text: `Take a snapshot of ${machines(incus.map(nameOf))} every day at ${at}, keeping a week`,
+      text: tr.t('carePlan.step.snapshots', { machines: machines(tr, incus.map(nameOf)), at }),
       step: `For each of ${incus.map((g) => g.id).join(', ')} on ${server.id}: guest_config (for its digest), then guest_config_set with set {"snapshots.schedule": "${cronAt(at)}", "snapshots.expiry": "7d"}.`,
     });
   }
@@ -308,29 +354,40 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
   if (vms.length && !has.vm_backup) {
     out.push({
       id: 'vm_backup',
-      text: `Back up ${machines(vms.map(nameOf))} every Sunday at ${at}`,
+      text: tr.t('carePlan.step.vmBackup', { machines: machines(tr, vms.map(nameOf)), at }),
       step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
       automation: 'vm_backup',
       guests: vms.map((g) => g.id),
     });
   }
 
-  // Unraid updates itself its own way; a Mac's updates restart the person's own computer (macos-servers.md).
-  if (server.platform !== 'unraid' && server.platform !== 'macos' && !has.updates) {
+  // Unraid updates itself its own way; a Mac's updates restart the person's own computer (macos-servers.md); Whombat
+  // doesn't install a Windows PC's updates (windows-servers.md).
+  const ownUpdates =
+    server.platform === 'unraid' || server.platform === 'macos' || server.platform === 'windows';
+  if (!ownUpdates && !has.updates) {
     out.push({
       id: 'updates',
-      text: server.self
-        ? `Ask you on Sundays at ${window.start} before installing its updates`
-        : `Install system updates on Sundays at ${window.start} and restart if needed`,
+      text: tr.t(server.self ? 'carePlan.step.updatesAsk' : 'carePlan.step.updates', { time: window.start }),
       step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
       automation: 'updates',
     });
   }
 
-  if (kept.some((g) => g.platform === 'docker') && !has.apps) {
+  const docker = kept.filter((g) => g.platform === 'docker');
+  // Compose apps (or a helper that will report them once it has updated itself) can be updated by Whombat.
+  const compose = docker.some((g) => g.app || g.project);
+  if (compose && !has.apps && !facts.olderRelease) {
     out.push({
       id: 'apps',
-      text: 'Tell you when apps have updates',
+      text: tr.t('carePlan.step.apps', { time: window.start }),
+      step: 'Whombat turns this on as an automation when the person says go ahead: nothing for you to do.',
+      automation: 'apps',
+    });
+  } else if (docker.length && !has.apps) {
+    out.push({
+      id: 'apps',
+      text: tr.t('carePlan.step.appsTell'),
       step: 'Nothing to set up: Whombat’s helper checks the apps for updates and they show on the server’s page.',
     });
   }

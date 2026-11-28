@@ -7,18 +7,22 @@ import { and, eq } from 'drizzle-orm';
 import { approvalActionHash } from '../../approvals/create';
 import type { ApprovalRow } from '../../approvals/engine';
 import type { ApplyContext } from '../../commit/types';
+import { callTarget } from '../../connections/call-target';
 import type { Db } from '../../db/client';
 import { automationRunSteps } from '../../db/schema/index';
+import { burrowLocale } from '../../i18n/locale';
 import { loadAgentRow, loadPrincipalRow } from '../../read/principals';
 import { trackerWords } from '../../trackers/connection';
 import { trackerReplyPlan } from '../../trackers/reply';
 import { trackerWritePlan } from '../../trackers/write';
 import { keyDecision, publisherCheck } from '../authority';
+import { planDirectAction, withNames } from '../direct-action';
 import { MERGE_WORDS, mergePlan } from '../merge';
 import { isAutomationPrincipal } from '../principal';
 import { planConnectionActions } from '../proposed-actions';
 import { CONTINUE_STEP, commentPlan, definitionStep, stepBinding, stepRoomsCheck, stepScope } from '../steps';
 import { pullRequestText } from '../steps/open-pull-request';
+import { runActionProposal } from '../steps/run-action';
 import { type AutomationRunRow, loadRunRow, loadStepRows } from '../store';
 import { branchDecision, branchProposal, resolveStepWorkspace } from '../workspace';
 
@@ -182,6 +186,28 @@ export async function approvalGuard(ctx: ApplyContext, row: ApprovalRow): Promis
       actionsHash: plan.actionsHash,
     };
   }
+  if (step.kind === 'run_action' && row.command?.name === CONTINUE_STEP) {
+    // A person lets it act without AI where their settings ask: the same action on the same thing, which can still run.
+    const plan = await planDirectAction(
+      ctx.tx,
+      ctx.services,
+      run.burrowId,
+      step,
+      await burrowLocale(ctx.services, run.burrowId),
+    );
+    if (!plan.ok) {
+      await mark('blocked');
+      return plan.reason;
+    }
+    // As the card said it: the names Whombat knows now and the connection's destination now, so a yes given for
+    // another name or another destination needs a new card.
+    input = {
+      runId: run.id,
+      stepId: step.id,
+      attempt: stepRow.attempt,
+      proposal: await runActionProposal(ctx.tx, run, withNames(step, plan.names), callTarget(plan.conn)),
+    };
+  }
   if (
     !input ||
     approvalActionHash(row.action, { name: row.command?.name ?? '', input }, binding) !== row.actionHash
@@ -209,6 +235,9 @@ export async function reconcileContinue(db: Db, row: ApprovalRow): Promise<'done
   if ((step.output as { mergeApprovalId?: string }).mergeApprovalId === row.id) return 'done';
   // And a proposed connection-actions approval.
   if ((step.output as { actionsApprovalId?: string }).actionsApprovalId === row.id) return 'done';
+  // And an action without AI that the person's settings ask about.
+  if ((step.output as { approvalId?: string }).approvalId === row.id && step.kind === 'run_action')
+    return 'done';
   if (step.state === 'waiting') return 'not_done';
   return 'unknown';
 }

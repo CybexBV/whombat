@@ -181,6 +181,7 @@ export function restorableRoute(route: SavedRoute, world: RestoreWorld): boolean
     case 'Chat':
       return str(p.conversationId);
     case 'Done':
+    case 'Protected':
     case 'Skills':
     case 'Feedback':
       return true;

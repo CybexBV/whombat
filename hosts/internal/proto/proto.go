@@ -158,6 +158,9 @@ type Report struct {
 	// MacOS: the Mac's own facts (macos.go); only macOS agents send it.
 	MacOS *MacOS `cbor:"macos,omitempty"`
 
+	// Windows: the PC's own facts (windows.go); only Windows agents send it.
+	Windows *Windows `cbor:"windows,omitempty"`
+
 	// BackupPlace: what the server keeps and offers as a backup place
 	// (backupplace.go); nil from agents that don't know backup places.
 	BackupPlace *BackupPlace `cbor:"bplace,omitempty"`
@@ -420,6 +423,12 @@ type Guest struct {
 	// (label whombat.service=1): Whombat leaves it out of what people see.
 	WhombatService  bool  `cbor:"wb_svc,omitempty"`
 	UpdateAvailable *bool `cbor:"update,omitempty"` // the registry has a newer image for the tag
+	// App: the container is a Docker Compose app this agent can update
+	// (apps.go); nil for other containers and from older agents.
+	App *GuestApp `cbor:"app,omitempty"`
+	// ImageID: the id of the image it runs ("sha256:…"), so Whombat tells a
+	// new image pulled under the same tag from the one before.
+	ImageID string `cbor:"image_id,omitempty"`
 
 	// unRAID (unraid.go): Autostart for Docker on unRAID (dockerMan's
 	// autostart list) and libvirt (everywhere); WebUI is a container's web
@@ -598,9 +607,9 @@ type AgentInfo struct {
 	ConsolesOpen  int    `cbor:"consoles,omitempty"`
 	Reconnects    uint64 `cbor:"reconnects,omitempty"` // since the agent started
 	DroppedEvents uint64 `cbor:"dropped,omitempty"`    // events lost while the hub was unreachable
-	Install       string `cbor:"install,omitempty"`    // systemd | openrc | sysv | unraid | launchd | manual
+	Install       string `cbor:"install,omitempty"`    // systemd | openrc | sysv | unraid | launchd | windows | manual
 	Arch          string `cbor:"arch,omitempty"`       // amd64 | arm64
-	OS            string `cbor:"os,omitempty"`         // darwin from macOS agents; "" = linux
+	OS            string `cbor:"os,omitempty"`         // darwin from macOS agents, windows from Windows agents; "" = linux
 	// UpdateKey is the fingerprint of the public key the agent verifies
 	// updates with ("" = built without one: no self-update).
 	UpdateKey string `cbor:"update_key,omitempty"`
@@ -614,6 +623,12 @@ const (
 	// CapHelperUpdate: the agent installs Whombat Helper sent on the update
 	// stream (UpdateRequest.Component UpdateComponentHelper).
 	CapHelperUpdate = "helper_update"
+	// CapRestoreIsolate: the agent restores a Proxmox VE backup as a copy
+	// cut off from the start (ManageRequest.Isolate).
+	CapRestoreIsolate = "restore_isolate"
+	// CapBackupConfig: the agent reads a Proxmox VE backup's own
+	// configuration (ManageRequest Op OpBackupConfig).
+	CapBackupConfig = "backup_config"
 )
 
 // ---- Hub-initiated RPCs -----------------------------------------------------

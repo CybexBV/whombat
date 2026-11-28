@@ -105,6 +105,28 @@ export class KeyCustody {
   }
 
   /**
+   * `seal` for bytes (a service's settings copy, outside-changes.md): AES-256-GCM under the master key, bound to `aad`,
+   * as one buffer (`1`, IV, tag, ciphertext) for a `bytea` column.
+   */
+  sealBytes(aad: string, plain: Uint8Array): Buffer {
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', this.key, iv);
+    cipher.setAAD(Buffer.from(aad, 'utf8'));
+    const ciphertext = Buffer.concat([cipher.update(plain), cipher.final()]);
+    return Buffer.concat([Buffer.from([1]), iv, cipher.getAuthTag(), ciphertext]);
+  }
+
+  /** Decrypts a `sealBytes()`ed buffer. Throws when the master key or the `aad` binding is wrong. */
+  openBytes(aad: string, stored: Uint8Array): Buffer {
+    const raw = Buffer.from(stored.buffer, stored.byteOffset, stored.byteLength);
+    if (raw[0] !== 1 || raw.length < 29) throw new Error('Unknown sealed bytes format');
+    const decipher = createDecipheriv('aes-256-gcm', this.key, raw.subarray(1, 13));
+    decipher.setAAD(Buffer.from(aad, 'utf8'));
+    decipher.setAuthTag(raw.subarray(13, 29));
+    return Buffer.concat([decipher.update(raw.subarray(29)), decipher.final()]);
+  }
+
+  /**
    * HMAC-SHA256 of `message` under a subkey of the master key bound to `purpose` (base64url). Lets the server
    * re-derive a secret it only stores the hash of (invite links: `commands/invite-links.ts`).
    */

@@ -44,6 +44,16 @@ export const HOSTS_INSTALL_WORDS = treeCatalogs(
       valid: 'Works for an hour, on one server. Linux, as root.',
       waiting: 'Waiting for you',
     },
+    windows: {
+      tab: 'Windows PC',
+      lead: 'Paste this into PowerShell opened as administrator on the PC. It shows up as soon as it has run, with the control you chose.',
+      how: 'To open it, right-click Start and choose Terminal (Admin).',
+      valid: 'Works for an hour, on one PC. Windows 10 or later.',
+      none: 'This Whombat can’t add Windows PCs yet. It can after its next update.',
+      removeTitle: 'To remove it later',
+      remove: 'Run this in PowerShell as administrator, then delete the PC in Whombat.',
+      copyRemove: 'Copy',
+    },
     steps: {
       signedIn: 'Signed in to {address}',
       signingIn: 'Signing in to {address}',
@@ -140,6 +150,16 @@ export const HOSTS_INSTALL_WORDS = treeCatalogs(
       copied: 'Opdracht gekopieerd.',
       valid: 'Werkt een uur, op één server. Linux, als root.',
       waiting: 'Wacht op jou',
+    },
+    windows: {
+      tab: 'Windows-pc',
+      lead: 'Plak dit in PowerShell, geopend als beheerder op de pc. Hij verschijnt zodra het is uitgevoerd, met de controle die je koos.',
+      how: 'Klik daarvoor met rechts op Start en kies Terminal (Beheerder).',
+      valid: 'Werkt een uur, op één pc. Windows 10 of nieuwer.',
+      none: 'Deze Whombat kan nog geen Windows-pc’s toevoegen. Dat kan na zijn volgende update.',
+      removeTitle: 'Later verwijderen',
+      remove: 'Voer dit uit in PowerShell als beheerder en verwijder de pc daarna in Whombat.',
+      copyRemove: 'Kopiëren',
     },
     steps: {
       signedIn: 'Ingelogd op {address}',

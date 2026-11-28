@@ -58,7 +58,8 @@ var manageRoutes = []manageRoute{
 	{method: "GET", path: "/guests/{guestId}/backups", op: proto.OpBackupList},
 	{method: "POST", path: "/guests/{guestId}/backups", op: proto.OpBackupCreate, body: []string{"storage", "mode", "compress", "notes", "protected"}},
 	{method: "POST", path: "/backups/restore", op: proto.OpBackupRestore, admin: true,
-		body: []string{"platform", "volume", "new_id", "guest", "storage", "start", "unique", "confirm"}},
+		body: []string{"platform", "volume", "new_id", "guest", "storage", "start", "unique", "isolate", "confirm"}},
+	{method: "GET", path: "/backups/config", op: proto.OpBackupConfig, query: []string{"platform", "volume"}},
 	{method: "PATCH", path: "/backups", op: proto.OpBackupUpdate, body: []string{"platform", "volume", "notes", "protected"}},
 	{method: "DELETE", path: "/backups", op: proto.OpBackupDelete, admin: true, query: []string{"platform", "volume"}},
 	{method: "GET", path: "/storage/{storage}/content", op: proto.OpContentList, query: []string{"platform", "content"}},
@@ -107,6 +108,9 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 	if packageOps[rt.op] {
 		return h.packagesManageHandler(rt) // manage_packages.go
 	}
+	if appOps[rt.op] {
+		return h.appsManageHandler(rt) // manage_apps.go
+	}
 	if placeOps[rt.op] {
 		return h.placeHandler(rt) // manage_backupplace.go
 	}
@@ -127,8 +131,11 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 			}
 			req.Platform, req.GuestID = platform, id
 		}
-		if req.Platform == "" && isPackageTask(req.Task) {
-			req.Platform = proto.PlatformHost // a package task (manage_packages.go)
+		if req.Platform == "" && isHostTask(req.Task) {
+			req.Platform = proto.PlatformHost // a package or app task (manage_packages.go, manage_apps.go)
+		}
+		if req.Isolate != nil && req.Platform != proto.PlatformPVE {
+			return invalidFields(map[string]string{"isolate": "Only a Proxmox VE restore (platform pve) can be isolated."})
 		}
 		if h.libvirtRequest(rt, serverID, &req, guestOp) {
 			return h.libvirtManage(w, r, p, rt, req, confirm, confirmName, gid) // manage_libvirt.go
@@ -159,6 +166,12 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 		if e != nil {
 			return deny(e)
 		}
+		// An agent from before isolated restores would restore the backup as
+		// it is, with its network and start at boot: never send it one.
+		if req.Isolate != nil && !agentCan(t.st.Report, proto.CapRestoreIsolate) {
+			return deny(apiErr(http.StatusConflict, "agent_outdated",
+				"This server's agent can't restore a copy cut off from the network yet; it gets a newer one by itself."))
+		}
 		if guestOp && req.Platform != proto.PlatformPVE && req.Platform != proto.PlatformIncus &&
 			!(req.Op == proto.OpTaskList && req.Platform == proto.PlatformDocker) { // a container's updates on unRAID
 			return apiErr(http.StatusNotImplemented, "unsupported", "Whombat manages Proxmox VE, Incus and libvirt guests only.")
@@ -173,6 +186,16 @@ func (h *Hub) manageHandler(rt manageRoute) handlerFunc {
 		}
 		if isBackupJobOp(req.Op) && req.Platform != proto.PlatformPVE {
 			return apiErr(http.StatusNotImplemented, "unsupported", "Backup jobs are a Proxmox VE feature, and this server does not run it.")
+		}
+		if req.Op == proto.OpBackupConfig {
+			if req.Platform != proto.PlatformPVE {
+				return apiErr(http.StatusNotImplemented, "unsupported", "Only a Proxmox VE backup's settings can be read.")
+			}
+			// An agent from before this read doesn't know the operation.
+			if !agentCan(t.st.Report, proto.CapBackupConfig) {
+				return deny(apiErr(http.StatusConflict, "agent_outdated",
+					"This server's agent can't read a backup's settings yet; it gets a newer one by itself."))
+			}
 		}
 		if e := incusRouteCheck(req, t); e != nil {
 			return e
@@ -231,6 +254,9 @@ func (h *Hub) manageRead(w http.ResponseWriter, r *http.Request, p *principal, t
 	}
 	if !resp.OK {
 		return manageProblem(resp)
+	}
+	if req.Op == proto.OpChoices && resp.Choices != nil {
+		resp.Choices.RestoreIsolate = req.Platform == proto.PlatformPVE && agentCan(t.st.Report, proto.CapRestoreIsolate)
 	}
 	body, e := manageAnswer(req.Op, resp)
 	if e != nil {
@@ -474,7 +500,7 @@ var (
 	manageIDRe     = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$`) // storages, nodes, profiles, disks, devices
 	manageVolumeRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[!-~]{1,400}$`)
 	manageSizeRe   = regexp.MustCompile(`^\+?[0-9]{1,9}(\.[0-9]{1,3})?[KMGT]?$`)
-	manageTaskRe   = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16})$`)
+	manageTaskRe   = regexp.MustCompile(`^(UPID:[!-~]{1,250}|incus:[0-9A-Za-z-]{1,64}|unraid:[0-9a-f]{16}|libvirt:[0-9a-f]{16}|pkg:[0-9a-f]{16}|app:[0-9a-f]{16})$`)
 	manageFileRe   = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9._-]{0,199}$`)
 	manageTmplRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.+-]{0,254}$`)
 	manageWordRe   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_+-]{0,63}$`) // firewall actions, macros, protocols
@@ -490,6 +516,12 @@ var (
 		"vztmpl": {".tar.gz", ".tar.xz", ".tar.zst"},
 		"import": {".ova", ".qcow2", ".vmdk", ".raw", ".img"},
 	}
+)
+
+// restoreMarkerRe and pveTagRe: an isolated restore's marker and tag.
+var (
+	restoreMarkerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	pveTagRe        = regexp.MustCompile(`^[a-z0-9_][a-z0-9_.+-]{0,63}$`)
 )
 
 // manageText reports whether s is valid UTF-8 of at most max bytes without
@@ -521,11 +553,11 @@ func validateManage(req *proto.ManageRequest, guestOp bool) map[string]string {
 	oneOf := func(v string, allowed ...string) bool { return slices.Contains(allowed, v) }
 	op := req.Op
 	if !guestOp {
-		// host: the package tasks (manage_packages.go).
-		hostTasks := op == proto.OpTaskList || ((op == proto.OpTaskStatus || op == proto.OpTaskStop) && isPackageTask(req.Task))
+		// host: the package and app tasks (manage_packages.go, manage_apps.go).
+		hostTasks := op == proto.OpTaskList || ((op == proto.OpTaskStatus || op == proto.OpTaskStop) && isHostTask(req.Task))
 		bad(oneOf(req.Platform, "", proto.PlatformPVE, proto.PlatformIncus, proto.PlatformUnraid) || (hostTasks && req.Platform == proto.PlatformHost),
-			"platform", "platform is pve, incus, unraid or, for package tasks, host.")
-		bad(!isPackageTask(req.Task) || req.Platform == proto.PlatformHost, "platform", "A package task's platform is host.")
+			"platform", "platform is pve, incus, unraid or, for package and app tasks, host.")
+		bad(!isHostTask(req.Task) || req.Platform == proto.PlatformHost, "platform", "A package or app task's platform is host.")
 	}
 	bad(manageText(req.Digest, 128, false) && !strings.ContainsRune(req.Digest, ' '), "digest", "Not a digest.")
 
@@ -589,9 +621,18 @@ func validateManage(req *proto.ManageRequest, guestOp bool) map[string]string {
 	if op == proto.OpBackupRestore {
 		bad(req.NewID == 0 || req.GuestID == "", "new_id", "Restore as a new guest (new_id) or over a guest (guest), not both.")
 	}
+	if iso := req.Isolate; iso != nil {
+		bad(op == proto.OpBackupRestore && req.Platform == proto.PlatformPVE, "isolate",
+			"Only a Proxmox VE restore can be isolated.")
+		bad(req.NewID != 0 && req.GuestID == "" && !req.Start, "isolate", "An isolated restore makes a new guest (new_id) that doesn't start.")
+		bad(manageNameRe.MatchString(iso.Name) && !strings.Contains(iso.Name, "."), "isolate.name", "The copy's name is a host name.")
+		bad(restoreMarkerRe.MatchString(iso.Marker), "isolate.marker", "The marker is one word of letters, digits, '-' and '_'.")
+		bad(iso.Tag == "" || pveTagRe.MatchString(iso.Tag), "isolate.tag", "Not a Proxmox VE tag.")
+	}
 
 	// Backups and storage content.
-	needVolume := op == proto.OpBackupRestore || op == proto.OpBackupUpdate || op == proto.OpBackupDelete || op == proto.OpContentDelete
+	needVolume := op == proto.OpBackupRestore || op == proto.OpBackupUpdate || op == proto.OpBackupDelete || op == proto.OpContentDelete ||
+		op == proto.OpBackupConfig
 	bad(req.Volume != "" || !needVolume, "volume", "Choose a volume.")
 	if req.Platform == proto.PlatformIncus { // a backup or custom volume name
 		bad(req.Volume == "" || incusNameRe.MatchString(req.Volume), "volume", "Not a backup or volume name.")
@@ -802,7 +843,7 @@ func manageAgentError(err error) *apiError {
 func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 	empty := apiErr(http.StatusBadGateway, "agent_error", "The agent sent an empty answer.")
 	switch op {
-	case proto.OpConfigGet:
+	case proto.OpConfigGet, proto.OpBackupConfig:
 		c := resp.Config
 		if c == nil {
 			return nil, empty
@@ -827,6 +868,7 @@ func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 	case proto.OpTaskList:
 		for i := range resp.Tasks {
 			packageResultArrays(&resp.Tasks[i])
+			appResultArrays(&resp.Tasks[i])
 		}
 		return map[string]any{"items": nonNil(resp.Tasks)}, nil
 	case proto.OpBackupJobList:
@@ -840,6 +882,7 @@ func manageAnswer(op string, resp proto.ManageResponse) (any, *apiError) {
 			return nil, empty
 		}
 		packageResultArrays(resp.TaskStatus)
+		appResultArrays(resp.TaskStatus)
 		return resp.TaskStatus, nil
 	case proto.OpFirewallGet:
 		f := resp.Firewall
@@ -1069,6 +1112,11 @@ func (h *Hub) pollTask(ctx context.Context, w *taskWatch) {
 	if st.Status != "running" && st.Packages != nil {
 		h.tasks.mu.Lock()
 		w.details = mergeDetails(w.details, packageTaskDetails(st))
+		h.tasks.mu.Unlock()
+	}
+	if st.Status != "running" && len(st.Apps) > 0 {
+		h.tasks.mu.Lock()
+		w.details = mergeDetails(w.details, appTaskDetails(st))
 		h.tasks.mu.Unlock()
 	}
 	switch st.Status {

@@ -324,6 +324,8 @@ describe('the assistant’s tools (AG-18)', () => {
       'delegate_read',
       'delegate_update',
       'device_probe',
+      // What the internet can reach, read-only (Whombat internet-exposure.md).
+      'internet_exposure',
       // What the assistant found out about a look (Whombat look-research.md LR-05).
       'look_report',
       'pin_widget',
@@ -337,6 +339,8 @@ describe('the assistant’s tools (AG-18)', () => {
       // A report to the Whombat Team, drafted for the person's press (Whombat team-reports.md).
       'report_to_whombat_team',
       'search_web',
+      // Whether a service really works, by Whombat's read-only test (Whombat service-works.md).
+      'service_test',
       'set_chat_title',
       // Whombat's settings for the person (Whombat assistant-settings.md).
       'settings_change',
@@ -356,6 +360,10 @@ describe('the assistant’s tools (AG-18)', () => {
       // How everything is and what went wrong, read-only.
       'watch_history',
       'watch_status',
+      // What changed on a thing, read-only (Whombat outside-changes.md).
+      'what_changed',
+      // Where everything's data is kept and the restore tests, read-only (Whombat backup-trust.md).
+      'whats_protected',
       // This Whombat's own backups, on the person's yes (Whombat first-day.md).
       'whombat_backup',
       // The person's reports to the Whombat Team, without the team's words.

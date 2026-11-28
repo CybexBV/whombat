@@ -26,21 +26,28 @@ import {
   CATALOG,
   type CatalogEntry,
   catalogEntry,
+  EXPOSURE_NEW_CHECK,
   isAgentConnection,
   isGatewayConnection,
   resolveMcpUrl,
+  SERVICE_TEST_CHECK,
   type SignInKind,
   thingId,
   UPTIME_ID,
 } from '@whombat/core';
 import { and, eq, inArray, isNull, lt, or } from 'drizzle-orm';
+import { trackConnection } from '../changes/connections';
+import { settingsCopyOf } from '../changes/copies/view';
+import type { TrackedFacts } from '../changes/diff';
 import { outsideCommandScope } from '../commit/scope';
 import { recordFromCheck, runCatalogCheck } from '../connections/checks';
 import { credentialFor } from '../connections/credentials';
 import { confirmRefusedCredential } from '../connections/refused';
 import { type CatalogConnectionRow, ConnectionAuthError } from '../connections/types';
 import { sweepUptimeChecks, uptimeHttpError, uptimePoint } from '../connections/uptime';
-import { burrows, catalogConnections, thingCauses } from '../db/schema/index';
+import { burrows, catalogConnections, type StoredProtection, thingCauses } from '../db/schema/index';
+import { exposureSeen } from '../exposure/lines';
+import { burrowLocale } from '../i18n/locale';
 import { sideBySide } from '../lib/side-by-side';
 import type { Services } from '../services';
 import { kindFor } from '../things/kinds/index';
@@ -73,6 +80,7 @@ import type { LooseNotice } from '../things/quiet/types';
 import { type ResolvedMachine, readMachine, resolveRunsOn } from '../things/runs-on';
 import { forecastFull } from '../things/series';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
+import { worksPass } from '../works/run';
 import { homeAudience, publishHomeChanged } from './notify';
 import type { ConnectionGlance } from './types';
 
@@ -299,6 +307,10 @@ export async function checkConnectionHealth(
   // Its lines as its page would show them (QN-S03), and the checks this pass didn't read (QN-S04).
   let lines: LooseNotice[] = [];
   let skipped: Skipped = [];
+  // What the kind's read tells the change log, when it read.
+  let tracked: TrackedFacts | undefined;
+  // Where the service's own backups keep its data, when its kind read it this pass (What's protected).
+  let protection: StoredProtection | undefined;
   const answered = (outcome: 'offline' | 'error') =>
     genericNotices(
       {
@@ -362,7 +374,7 @@ export async function checkConnectionHealth(
     } else {
       points = { [RTT_KEY]: Date.now() - started };
       // What the answer filled (Nextcloud's user id, connection-signin.md SG-15a), for the next calls.
-      await recordFromCheck(services, row, outcome);
+      const filled = await recordFromCheck(services, row, outcome);
       const quiet = (await kept.catch(() => null))?.[0];
       const seen = await seenOf(services, row, now, quiet).catch(() => undefined);
       lines = genericNotices({ ...row, glance: null }, 0, null);
@@ -385,6 +397,7 @@ export async function checkConnectionHealth(
         skipped = (check) => !check.startsWith('conn.');
       } else {
         Object.assign(points, seen?.points ?? {});
+        protection = seen?.protection;
         glance = {
           status: 'ok',
           ...(seen?.glance.line ? { line: seen.glance.line } : {}),
@@ -394,12 +407,31 @@ export async function checkConnectionHealth(
           ...(seen?.glance.activity ? { activity: seen.glance.activity } : {}),
         };
         if (seen) {
+          tracked = seen.tracked;
           if (seen.notices) lines.push(...seen.notices);
           else {
             const older = olderKindLine(seen.glance);
             if (older) lines.push(older);
           }
+          // A settings copy that keeps failing (outside-changes.md); nothing for a service Whombat doesn't copy.
+          const copy = await settingsCopyOf(
+            services,
+            row,
+            now,
+            await zoneOf(services, row),
+            await burrowLocale(services),
+          )
+            .then((c) => c?.line ?? null)
+            .catch(() => null);
+          if (copy) lines.push(copy);
           skipped = seen.skipped ?? [];
+        }
+        // What its settings opened to the internet since Whombat kept its first list (internet-exposure.md).
+        const exposure = await exposureSeen(services, row, now);
+        lines.push(...exposure.notices);
+        if (!exposure.read) {
+          const before = skipped;
+          skipped = (check) => check === EXPOSURE_NEW_CHECK || isSkipped(before, check);
         }
       }
       const disk = await machineDisk(services, row, now, seen?.machine).catch(() => null);
@@ -417,6 +449,19 @@ export async function checkConnectionHealth(
         const before = skipped;
         skipped = (check) => check === 'machine.backup_old' || isSkipped(before, check);
       }
+      // Whether it really works (service-works.md): a watched test runs when due, whatever its page's read did.
+      const works = await worksPass(services, filled, quiet, now, await zoneOf(services, row)).catch(
+        (err: unknown) => {
+          services.log.warn(
+            { err: err instanceof Error ? err.name : 'error' },
+            'connection health: test failed',
+          );
+          return { lines: [], skipped: true };
+        },
+      );
+      lines.push(...works.lines);
+      const read = skipped;
+      skipped = (check) => (check === SERVICE_TEST_CHECK ? works.skipped : isSkipped(read, check));
     }
   } catch (err) {
     if (err instanceof ConnectionAuthError) {
@@ -472,7 +517,7 @@ export async function checkConnectionHealth(
   await services.pipeline.transact(row.burrowId, async (session) => {
     const [updated] = await session.tx
       .update(catalogConnections)
-      .set({ glance, glanceAt: now, checkedAt: now })
+      .set({ glance, glanceAt: now, checkedAt: now, ...(protection ? { protection } : {}) })
       .where(
         and(
           eq(catalogConnections.id, row.id),
@@ -502,6 +547,10 @@ export async function checkConnectionHealth(
     if (!changed) return;
     publishHomeChanged(session, audience ?? (await homeAudience(session, row.burrowId)), ['things', 'watch']);
   });
+  if (tracked)
+    await trackConnection(services, row, tracked, glance.machine?.serverId ?? null, now).catch((err) =>
+      services.log.warn({ err: String(err) }, 'connection health: keeping what changed failed'),
+    );
   return glance;
 }
 

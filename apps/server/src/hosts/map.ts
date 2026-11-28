@@ -64,6 +64,7 @@ import {
   type HostUnraidDetail,
   type HostUnraidDisk,
   type HostUnraidParityRun,
+  type HostWindowsDetail,
   hostWatchLimit,
 } from '@whombat/core';
 import { toAgentUpdate, withAgentUpdateHints } from './agent-updates';
@@ -236,7 +237,7 @@ function remoteControlFromCard(card: J): HostRemoteControl {
 
 /* Fleet -------------------------------------------------------------------------------------------------------------- */
 
-const SERVER_KINDS = new Set(['proxmox', 'incus', 'unraid', 'libvirt', 'macos']);
+const SERVER_KINDS = new Set(['proxmox', 'incus', 'unraid', 'libvirt', 'macos', 'windows']);
 
 /** The hub's `detail_view` as the server's kind of page (IU-03): an unknown one is a standard page. */
 export function serverPlatform(detailView: unknown): HostServerPlatform {
@@ -245,11 +246,12 @@ export function serverPlatform(detailView: unknown): HostServerPlatform {
 }
 
 /**
- * The hub's `os_family` (macos-servers.md): `macos` for a Mac; anything else is left out (Linux, as before Macs),
- * but a Mac's page is a Mac whatever the hub said.
+ * The hub's `os_family` (macos-servers.md, windows-servers.md): `macos` for a Mac, `windows` for a Windows PC; anything
+ * else is left out (Linux, as before Macs), but a Mac's or a PC's page is one whatever the hub said.
  */
 export function osFamily(raw: unknown, detailView?: unknown): HostOsFamily | undefined {
   if (raw === 'macos' || detailView === 'macos') return 'macos';
+  if (raw === 'windows' || detailView === 'windows') return 'windows';
   return raw === 'linux' ? 'linux' : undefined;
 }
 
@@ -470,6 +472,7 @@ export function toHostGuest(raw: unknown, serverId: string, serverOnline?: boole
     platform: (PLATFORMS.has(platform) ? platform : 'docker') as HostGuest['platform'],
     kind: g.kind === 'vm' ? ('vm' as const) : ('container' as const),
     image: text(g.image),
+    imageId: str(g.image_id)?.slice(0, 160) || undefined,
     state: (STATES.has(text(g.state)) ? text(g.state) : 'stopped') as HostGuest['state'],
     vcpu: num(g.vcpu) ?? undefined,
     cpuPct: num(g.cpu_pct),
@@ -527,7 +530,42 @@ export function toHostGuest(raw: unknown, serverId: string, serverOnline?: boole
     webUi:
       platform === 'docker' && (typeof g.web_ui === 'string' || g.web_ui === null) ? g.web_ui : undefined,
     template: platform === 'docker' ? optBool(g.template) : undefined,
+    // A Compose app Whombat can update (app-updates.md); only agents that can say so.
+    app: platform === 'docker' ? toGuestApp(g.app) : undefined,
   }) as HostGuest;
+}
+
+/** A Compose app's update state (`app`), or undefined when the hosts service sends none. */
+export function toGuestApp(raw: unknown): HostGuest['app'] {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const a = obj(raw);
+  const service = str(a.service);
+  if (!service) return undefined;
+  const short = (v: unknown, n: number) => {
+    const t = str(v);
+    return t ? t.slice(0, n) : null;
+  };
+  const last = a.last && typeof a.last === 'object' ? obj(a.last) : null;
+  return {
+    service: service.slice(0, 200),
+    version: short(a.version, 64),
+    newVersion: short(a.new_version, 64),
+    blocked: short(a.blocked, 32),
+    updating: a.updating === true,
+    last:
+      last && str(last.status)
+        ? {
+            status: (str(last.status) as string).slice(0, 32),
+            reason: short(last.reason, 32),
+            from: short(last.from, 64),
+            to: short(last.to, 64),
+            at: ts(last.at),
+          }
+        : null,
+    // What an update carries back (the newer image's digest, Compose's hash of the service), when the agent says them.
+    ...(/^sha256:[0-9a-f]{64}$/.test(str(a.new_digest) ?? '') ? { newDigest: str(a.new_digest) } : {}),
+    ...(/^[0-9a-f]{1,128}$/.test(str(a.config_hash) ?? '') ? { configHash: str(a.config_hash) } : {}),
+  };
 }
 
 function workload(raw: unknown, serverId: string): HostPlatformWorkload {
@@ -686,7 +724,33 @@ export function toHostTask(raw: unknown): HostTask {
     // A package task (0.98, server-updates.md SWU-04): why it ended early, and what it did once it ended.
     code: str(t.code) || undefined,
     packages: toPackagesResult(t.packages),
+    // An app update (app-updates.md): each app's outcome once it ended.
+    apps: toAppResults(t.apps),
   }) as HostTask;
+}
+
+/** An app task's outcomes, or undefined on another task or while it runs. */
+function toAppResults(raw: unknown): HostTask['apps'] {
+  if (!Array.isArray(raw)) return undefined;
+  const clip = (v: unknown, n: number) => {
+    const t = str(v);
+    return t ? t.slice(0, n) : undefined;
+  };
+  return raw
+    .map((x) => obj(x))
+    .filter((x) => str(x.app) && str(x.status))
+    .slice(0, 20)
+    .map((x) =>
+      defined({
+        app: (str(x.app) as string).slice(0, 200),
+        service: clip(x.service, 200),
+        status: (str(x.status) as string).slice(0, 32),
+        reason: clip(x.reason, 32),
+        from: clip(x.from, 64),
+        to: clip(x.to, 64),
+        message: clip(x.message, 500),
+      }),
+    ) as HostTask['apps'];
 }
 
 /** A package task's result (`installed`, `kept_back`, `warning`), or undefined while it runs or on another task. */
@@ -801,6 +865,7 @@ export function toHostServerDetail(
   if (d.unraid && typeof d.unraid === 'object') out.unraid = toHostUnraidDetail(d.unraid);
   if (d.libvirt && typeof d.libvirt === 'object') out.libvirt = toHostLibvirtDetail(d.libvirt);
   if (d.macos && typeof d.macos === 'object') out.macos = toHostMacosDetail(d.macos);
+  if (d.windows && typeof d.windows === 'object') out.windows = toHostWindowsDetail(d.windows);
   if (!proxmox) {
     const w = obj(d.workloads);
     const workloads: Record<string, HostPlatformWorkload> = {};
@@ -1181,6 +1246,56 @@ export function toHostMacosDetail(raw: unknown): HostMacosDetail {
   };
 }
 
+/* Windows (windows-servers.md) ------------------------------------------------------------------------- */
+
+const onOffUnknown = (v: unknown): 'on' | 'off' | 'unknown' => (v === 'on' || v === 'off' ? v : 'unknown');
+
+/** The `windows` part of a Windows PC's detail: its version, its protection and BitLocker. */
+export function toHostWindowsDetail(raw: unknown): HostWindowsDetail {
+  const w = obj(raw);
+  const p = obj(w.protection);
+  const d = p.defender && typeof p.defender === 'object' ? obj(p.defender) : null;
+  return {
+    product: text(w.product, 'Windows').slice(0, 200),
+    displayVersion: named(w.display_version, 60),
+    build: named(w.build, 60),
+    edition: named(w.edition, 60),
+    server: bool(w.server),
+    manufacturer: named(w.manufacturer),
+    model: named(w.model),
+    updatesCheckedAt: goTime(w.updates_checked_at),
+    updatesInstalledAt: goTime(w.updates_installed_at),
+    protection: {
+      state: onOffUnknown(p.state),
+      product: named(p.product),
+      defender: d
+        ? {
+            running: bool(d.running),
+            mode: text(d.mode).slice(0, 20),
+            realTime: bool(d.real_time),
+            tamper: known(d.tamper),
+            signaturesAt: goTime(d.signatures_at),
+            quickScanAt: goTime(d.quick_scan_at),
+          }
+        : null,
+      antivirus: (Array.isArray(p.antivirus) ? p.antivirus : []).slice(0, 8).map((a) => {
+        const x = obj(a);
+        return { name: text(x.name).slice(0, 200), on: bool(x.on), upToDate: bool(x.up_to_date) };
+      }),
+    },
+    bitlocker: Array.isArray(w.bitlocker)
+      ? w.bitlocker.slice(0, 26).map((v) => {
+          const x = obj(v);
+          return {
+            drive: text(x.drive).slice(0, 3),
+            protection: onOffUnknown(x.protection),
+            system: bool(x.system),
+          };
+        })
+      : null,
+  };
+}
+
 const SCREEN_CODES: ReadonlySet<string> = new Set(HOST_SCREEN_CODES);
 /** Values the helper cuts to 200 characters; Whombat keeps a little more room. */
 const uiText = (v: unknown, max = 400): string | null => {
@@ -1517,6 +1632,10 @@ export function toHostEnrollment(raw: unknown): HostEnrollment {
     expiresAt: ts(e.expires_at) ?? new Date(Date.now() + 3600_000).toISOString(),
     // The hub starts the command with a space (kept out of shell history); the copy button copies it as it is.
     installCommand: text(e.install_command).slice(0, 4000),
+    // A Windows PC's line, while the box has a Windows agent (windows-servers.md).
+    ...(text(e.install_command_windows)
+      ? { installCommandWindows: text(e.install_command_windows).slice(0, 4000) }
+      : {}),
     ...(control ? { control } : {}),
     // Every enrollment Whombat makes is pre-approved (SI-07); an older hub doesn't say.
     ...(typeof e.approve === 'boolean' ? { preApproved: e.approve } : {}),

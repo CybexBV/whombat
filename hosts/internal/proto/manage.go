@@ -43,9 +43,14 @@ const (
 
 	OpBackupList    = "backup.list"    // guest -> Backups (every backup storage of the node)
 	OpBackupCreate  = "backup.create"  // guest: Storage, Mode, Compress, Notes, Protected -> Task
-	OpBackupRestore = "backup.restore" // host: Volume, NewID | GuestID (overwrite), Storage, Start, Unique -> Task, NewID
+	OpBackupRestore = "backup.restore" // host: Volume, NewID | GuestID (overwrite), Storage, Start, Unique, Isolate -> Task, NewID
 	OpBackupUpdate  = "backup.update"  // host: Volume, Notes, Protected
 	OpBackupDelete  = "backup.delete"  // host: Volume -> Task (or done)
+
+	// OpBackupConfig reads a Proxmox VE backup's own configuration (what a
+	// restore of it brings back: its disks and their sizes, its memory, its
+	// guest agent) without restoring it. Agents with CapBackupConfig.
+	OpBackupConfig = "backup.config" // host: Volume -> Config
 
 	OpContentList     = "content.list"     // host: Storage, Content (iso | vztmpl | import) -> Content
 	OpContentDownload = "content.download" // host: Storage, Content, URL, Filename, Checksum, ChecksumAlgorithm -> Task
@@ -166,6 +171,12 @@ type ManageRequest struct {
 	Image    string   `cbor:"image,omitempty" json:"image,omitempty"`   // Incus create: "images:debian/13", local alias or fingerprint
 	Profiles []string `cbor:"profiles,omitempty" json:"profiles,omitempty"`
 	Purge    bool     `cbor:"purge,omitempty" json:"purge,omitempty"` // delete: also from backup jobs, replication and HA
+	// Isolate (backup.restore on Proxmox VE, as a new guest that doesn't
+	// start): the copy is cut off by the restore itself, so it never
+	// exists with the backup's own settings. Only an agent reporting
+	// CapRestoreIsolate reads it (an older one would restore without it):
+	// the hub refuses to send it to any other.
+	Isolate *RestoreIsolation `cbor:"isolate,omitempty" json:"isolate,omitempty"`
 
 	// Backups and storage content.
 	Volume            string `cbor:"volume,omitempty" json:"volume,omitempty"`     // PVE volume id "pbs:backup/vm/100/2026-10-17T01:00:00Z"
@@ -181,7 +192,7 @@ type ManageRequest struct {
 	Template          string `cbor:"template,omitempty" json:"template,omitempty"`               // appliance template name
 
 	// Tasks.
-	Task     string `cbor:"task,omitempty" json:"task,omitempty"`           // PVE UPID, "incus:<operation uuid>", "unraid:…", "libvirt:…", "pkg:…"
+	Task     string `cbor:"task,omitempty" json:"task,omitempty"`           // PVE UPID, "incus:<operation uuid>", "unraid:…", "libvirt:…", "pkg:…", "app:…"
 	LogStart int    `cbor:"log_start,omitempty" json:"log_start,omitempty"` // first log line to return; -1: none
 
 	// Firewall.
@@ -247,10 +258,32 @@ type ManageRequest struct {
 	// packages.go).
 	Packages []string `cbor:"packages,omitempty" json:"packages,omitempty"`
 
+	// app.update (apps.go): the containers to update (their names, at most
+	// AppsMax); HoldMajor leaves an app as it is when the new image turns
+	// out to be a new major version, or either version isn't known (a run
+	// nobody said yes to a new major version for); AppExpect: what was
+	// checked of each app, which the update must still find.
+	Apps      []string    `cbor:"apps,omitempty" json:"apps,omitempty"`
+	HoldMajor bool        `cbor:"hold_major,omitempty" json:"hold_major,omitempty"`
+	AppExpect []AppExpect `cbor:"app_expect,omitempty" json:"expect,omitempty"`
+
 	// Backup places (backupplace.go): the place operations' values, and
 	// storage.add's storage. The hub builds them from its own bodies.
 	Place      *PlaceRequest   `cbor:"place,omitempty" json:"-"`
 	PVEStorage *PVEStorageSpec `cbor:"pve_storage,omitempty" json:"-"`
+}
+
+// RestoreIsolation is how a restored copy is cut off from the start: the
+// agent reads the backup's own configuration and restores it with every
+// network card's link down (and a new MAC address), no start at boot, no
+// protection, Name as its name (VM) or hostname (container), Marker as its
+// notes and Tag added to its tags. Proxmox VE writes these into the copy's
+// configuration with the restore, so the copy is never on the network, never
+// started by a reboot and always carries the marker of whoever restored it.
+type RestoreIsolation struct {
+	Name   string `cbor:"name" json:"name"`
+	Marker string `cbor:"marker" json:"marker"`               // one word: letters, digits, '-' and '_'
+	Tag    string `cbor:"tag,omitempty" json:"tag,omitempty"` // left out when the cluster refuses it
 }
 
 // BackupJobSpec is a backup job to create, or the changes to one: nil
@@ -424,6 +457,10 @@ type Choices struct {
 	// Download: content.download works here (PVE: the token has
 	// Sys.AccessNetwork on this node; PVE 8.3 and later).
 	Download bool `cbor:"download,omitempty" json:"download,omitempty"`
+	// RestoreIsolate: backup.restore takes Isolate here (the agent reports
+	// CapRestoreIsolate). Set by the hub from the agent's capabilities,
+	// never sent by an agent.
+	RestoreIsolate bool `cbor:"-" json:"restore_isolate,omitempty"`
 
 	// Incus.
 	Profiles []string     `cbor:"profiles,omitempty" json:"profiles,omitempty"`
@@ -542,6 +579,8 @@ type TaskStatus struct {
 	NewID string `cbor:"new_id,omitempty" json:"new_id,omitempty"`
 	// Packages: what an ended package task did (packages.go).
 	Packages *PackageResult `cbor:"packages,omitempty" json:"packages,omitempty"`
+	// Apps: what an ended app task did, app by app (apps.go).
+	Apps []AppResult `cbor:"apps,omitempty" json:"apps,omitempty"`
 	// Code: why an ended task didn't do its work, as a refusal code
 	// (TaskCodeBusy, TaskCodeTimeout); package tasks only.
 	Code string `cbor:"code,omitempty" json:"code,omitempty"`

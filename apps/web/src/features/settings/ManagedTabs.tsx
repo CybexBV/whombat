@@ -104,6 +104,7 @@ import { BOX_PAGE_TEXT } from '../../managed/pageText';
 import { FingerprintConfirm } from '../mobile/FingerprintConfirm';
 import { whatsNewOpensFresh } from '../whatsNew/freshPage';
 import { AgentUpdatesSection, AgentUpdatesSwitch } from './AgentUpdatesSwitch';
+import { BackupOffsiteSection } from './BackupOffsite';
 import { BackupOverview, useBackupOptionsShown } from './BackupOverview';
 import { BackupPlacesSection, CurrentPlaceRow } from './BackupPlaces';
 import { BoxPasskeysSection } from './BoxPasskeysSection';
@@ -234,8 +235,8 @@ export function ApplianceLoadError({ reload }: { reload: () => void }) {
 
 /**
  * This Whombat → Backups (this-whombat-sections.md AP-1228), a managed Whombat's: on a Whombat that lists its backups
- * the top card, the list and Details (`BackupOverview`), ON YOUR NETWORK, and “Bring back a Whombat you had” while it
- * started fresh; else BACKUPS (state, the place that keeps them, coverage, the destination and Back up now; `setUp` opens
+ * the top card, the list and Details (`BackupOverview`), ON YOUR NETWORK, A COPY SOMEWHERE ELSE (`BackupOffsite`) and
+ * “Bring back a Whombat you had” while it started fresh; else BACKUPS (state, the place that keeps them, coverage, the destination and Back up now; `setUp` opens
  * the destination form, from the Overview's “Set up backups”), ON YOUR NETWORK and, on a Whombat from before the
  * passkey, RECOVERY KIT. The BACKUP FILE follows them, from the part. The Inbox's Finish and Try again
  * (`&finish=restore`, `&restore=again`) open bringing it back where it stands.
@@ -297,6 +298,7 @@ export function ManagedBackups({
           onChanged={reload}
           {...(!b.bringBack && managed.onKit ? { onKit: managed.onKit } : {})}
         />
+        <BackupOffsiteSection />
         {laterRow}
       </>
     );

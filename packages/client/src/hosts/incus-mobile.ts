@@ -95,6 +95,8 @@ export function taskPlatform(taskId: string): 'pve' | 'incus' | 'unraid' | 'libv
   if (taskId.startsWith('incus:')) return 'incus';
   // A package task on the server itself (contracts 0.98.0; server-updates-app.md AP-2884).
   if (taskId.startsWith('pkg:')) return 'host';
+  // An update of Docker Compose apps on the server (app-updates.md).
+  if (taskId.startsWith('app:')) return 'host';
   if (taskId.startsWith('unraid:')) return 'unraid';
   if (taskId.startsWith('libvirt:')) return 'libvirt';
   return 'pve';

@@ -1,7 +1,8 @@
 /**
  * The automations a care plan turns on when the person says go ahead (Whombat docs/decisions/care-plan.md): a server's
- * system updates every Sunday at the start of the quiet hours for changes, restarting only inside them, and a weekly
- * backup of QEMU/KVM machines, which libvirt can't schedule itself. Whombat writes them, never the assistant, so the plan
+ * system updates every Sunday at the start of the quiet hours for changes, restarting only inside them, a weekly
+ * backup of QEMU/KVM machines, which libvirt can't schedule itself, and a server's Docker Compose apps' updates every
+ * Sunday night (Whombat app-updates.md): the ones safe to update by themselves, the others asked as one question. Whombat writes them, never the assistant, so the plan
  * card's line and what runs are the same thing. Pure.
  */
 import {
@@ -9,7 +10,13 @@ import {
   type AutomationDefinition,
   AutomationDefinition as AutomationDefinitionSchema,
 } from '../domain/automation.js';
-import { backupTime, type CareAutomationKind, type ChangeWindow, cronAt } from '../domain/care-plan.js';
+import {
+  backupTime,
+  type CareAutomationKind,
+  type ChangeWindow,
+  cronAt,
+  sundayNightDay,
+} from '../domain/care-plan.js';
 
 /** What a care automation is for: the server, the quiet hours and where its runs post. */
 export interface CareAutomationInput {
@@ -59,8 +66,25 @@ function vmBackupPrompt(input: CareAutomationInput): string {
   ].join(' ');
 }
 
+/**
+ * The apps' updates: a database's, a new major version's or an unknown version's never run unattended. They become one question the person
+ * answers in the morning (Yes, tonight · No); `hold_major` keeps an app whose new version turns out to be a major one or can't be told.
+ */
+function appsPrompt(input: CareAutomationInput): string {
+  const { server } = input;
+  return [
+    `The weekly app updates of the server ${server.id}.`,
+    `Read app_updates for ${server.id}. When no app has an update, say so in one short sentence and stop.`,
+    'Update the apps that don’t ask first with one app_update call with hold_major true, and wait until it ends (server_tasks).',
+    'Then, if any app asks first (asksFirst: a database, a new major version or a version it can’t tell), call app_update once more for just those, with ask true and the reasons app_updates gave: the person gets one question for them.',
+    'When app_updates says the server needs a newer helper, say it gets it by itself and stop.',
+    'Tell the person in one or two plain sentences what you updated, what went back, and what waits for their yes, with no image names.',
+  ].join(' ');
+}
+
 /** A care step's automation, as Whombat turns it on. */
 export function careAutomation(kind: CareAutomationKind, input: CareAutomationInput): CareAutomation {
+  if (kind === 'apps') return appsAutomation(input);
   const { server, window, timeZone } = input;
   const updates = kind === 'updates';
   const time = updates ? window.start : backupTime(window);
@@ -95,4 +119,37 @@ export function careAutomation(kind: CareAutomationKind, input: CareAutomationIn
       : `Installs ${server.name}’s system updates every Sunday at ${window.start} and restarts it before ${window.end} when it needs one.`
     : `Backs up the virtual machines on ${server.name} every Sunday at ${time}.`;
   return { name, description, definition };
+}
+
+/** The apps' updates, every Sunday night at the start of the quiet hours. */
+function appsAutomation(input: CareAutomationInput): CareAutomation {
+  const { server, window, timeZone } = input;
+  const definition = AutomationDefinitionSchema.parse({
+    version: AUTOMATION_DEFINITION_VERSION,
+    conversationId: input.conversationId,
+    triggers: [
+      {
+        kind: 'schedule',
+        schedule: { kind: 'cron', expr: cronAt(window.start, sundayNightDay(window)) },
+        timeZone,
+        missed: 'skip',
+        overlap: 'skip',
+      },
+    ],
+    steps: [
+      {
+        id: 'apps',
+        kind: 'dispatch_agent',
+        name: 'Update apps',
+        prompt: appsPrompt(input),
+        timeoutMinutes: 180,
+      },
+    ],
+    limits: { runTimeoutMinutes: 240, maxConcurrentRuns: 1, maxRunsPerDay: 2 },
+  });
+  return {
+    name: `Apps on ${server.name}`.slice(0, 80),
+    description: `Updates ${server.name}’s apps every Sunday night at ${window.start} and asks you first about databases and new major versions.`,
+    definition,
+  };
 }

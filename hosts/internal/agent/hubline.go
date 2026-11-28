@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -146,9 +145,7 @@ func RewriteHub(path, url string) error {
 	// Mode and owner as before. Errors are ignored: a FAT flash drive
 	// (Unraid) has neither, and a non-root agent can't give a file away.
 	_ = f.Chmod(fi.Mode().Perm())
-	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
-		_ = f.Chown(int(st.Uid), int(st.Gid))
-	}
+	keepOwner(f, fi)
 	if _, err := f.Write(updated); err != nil {
 		f.Close()
 		return err

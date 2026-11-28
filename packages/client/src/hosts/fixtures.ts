@@ -43,6 +43,7 @@ import { withWb } from './fixtures-wb';
 import { handleWc } from './fixtures-wc';
 import { withConsoleFixtures } from './fixtures-wd';
 import { withWi } from './fixtures-wi';
+import { withWindows } from './fixtures-windows';
 import { withWq } from './fixtures-wq';
 import { withWu } from './fixtures-wu';
 
@@ -577,6 +578,83 @@ function thetitanGuests(): HostGuest[] {
     });
   }
   return out;
+}
+
+/**
+ * Some of thetitan's containers are Docker Compose apps Whombat can update (app-updates.md): one with a newer version,
+ * a database with one (it asks first), one whose new version isn't known, one whose last update went back and one
+ * updated yesterday. The others stay as `docker run` left them.
+ */
+function withComposeApps(guests: HostGuest[], now: number): HostGuest[] {
+  const at = (ms: number) => new Date(now - ms).toISOString();
+  const apps: Record<string, Pick<HostGuest, 'image' | 'project' | 'updateAvailable' | 'app'>> = {
+    postgres: {
+      image: 'postgres:16',
+      project: 'core',
+      updateAvailable: true,
+      app: {
+        service: 'postgres',
+        version: '16.4',
+        newVersion: '16.6',
+        blocked: null,
+        updating: false,
+        last: null,
+      },
+    },
+    traefik: {
+      image: 'traefik:v3.1',
+      project: 'edge',
+      updateAvailable: true,
+      app: {
+        service: 'traefik',
+        version: 'v3.1.2',
+        newVersion: 'v3.2.0',
+        blocked: null,
+        updating: false,
+        last: null,
+      },
+    },
+    registry: {
+      image: 'registry:latest',
+      project: 'edge',
+      updateAvailable: true,
+      app: {
+        service: 'registry',
+        version: null,
+        newVersion: null,
+        blocked: null,
+        updating: false,
+        last: null,
+      },
+    },
+    loki: {
+      image: 'grafana/loki:3.2.0',
+      project: 'logs',
+      updateAvailable: false,
+      app: {
+        service: 'loki',
+        version: '3.2.0',
+        newVersion: null,
+        blocked: null,
+        updating: false,
+        last: { status: 'rolled_back', reason: 'unhealthy', from: '3.2.0', to: '3.3.0', at: at(3 * H) },
+      },
+    },
+    prometheus: {
+      image: 'prom/prometheus:v2.55.1',
+      project: 'logs',
+      updateAvailable: false,
+      app: {
+        service: 'prometheus',
+        version: 'v2.55.1',
+        newVersion: null,
+        blocked: null,
+        updating: false,
+        last: { status: 'updated', reason: null, from: 'v2.54.1', to: 'v2.55.1', at: at(DAY) },
+      },
+    },
+  };
+  return guests.map((g) => (g.platform === 'docker' && apps[g.name] ? { ...g, ...apps[g.name] } : g));
 }
 
 function blackboxGuests(): HostGuest[] {
@@ -1289,7 +1367,7 @@ export function createHostsWorld(now: number): HostsFixtureWorld {
   const guests = new Map<string, HostGuest[]>([
     ['pve-02', PVE02_GUESTS.map((g, i) => pveGuest('pve-02', g, now, i))],
     ['pve-01', PVE01_GUESTS.map((g, i) => pveGuest('pve-01', g, now, i))],
-    ['thetitan', thetitanGuests()],
+    ['thetitan', withComposeApps(thetitanGuests(), now)],
     ['blackbox', blackboxGuests()],
     ['the-falcon', []],
   ]);
@@ -2066,18 +2144,21 @@ export function createHostsFixtures(
       handle: withRp(
         withSa(
           withSi(
-            // A Mac (macos-servers.md): its page and its screen.
+            // A Mac (macos-servers.md): its page and its screen; a Windows PC (windows-servers.md): its page.
             withMac(
-              withWq(
-                withWi(
-                  withWu(withWb(withWaFixtures(world, handle), { world, now, refreshServer }), {
-                    world,
-                    now,
-                    refreshServer,
-                  }),
+              withWindows(
+                withWq(
+                  withWi(
+                    withWu(withWb(withWaFixtures(world, handle), { world, now, refreshServer }), {
+                      world,
+                      now,
+                      refreshServer,
+                    }),
+                    { world, now, refreshServer },
+                  ),
                   { world, now, refreshServer },
                 ),
-                { world, now, refreshServer },
+                { world, now },
               ),
               { world, now, ...opts.mac },
             ),

@@ -31,6 +31,7 @@ export * from './assistant-settings/index.js';
 export * from './backup.js';
 export * from './backup-file.js';
 export * from './backup-look.js';
+export * from './backup-offsite.js';
 export * from './backup-options.js';
 export * from './backup-passkey.js';
 export * from './backup-places.js';

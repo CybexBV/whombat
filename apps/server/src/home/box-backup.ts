@@ -16,6 +16,9 @@
  *   shows) or that are late: a problem only the person decides about, which the assistant can look into (*Ask
  *   {assistant} to fix it*). It starts on — a backup not happening is in the calm rule's very important list — and
  *   settles by itself once a backup works again; a new episode is a new item.
+ * - **The copy somewhere else failing or behind** (offsite-copy.md): once the person set a second place up, a copy that
+ *   failed three times in a row, or newer backups waiting more than two days for it. Only while the backups themselves
+ *   work; it settles by itself once a copy works again.
  * - **A restore waiting for its answer.** After a bring back the box waits, quarantined, for the person's one answer;
  *   an app closed meanwhile finds it here (*Finish*).
  * - **A bring back that stopped.** The box restarted before a restore finished and was put back as it was: *Try again*.
@@ -27,13 +30,19 @@
 
 import type { BackupServiceStatus } from '@whombat/control-contracts/local';
 import { type BackupPlace, bestBackupPlace, type NeedsYouItem } from '@whombat/core';
-import { BACKUP_RESTORE_INTERRUPTED, type BackupRestoreState } from '@whombat/protocol/session';
+import {
+  BACKUP_RESTORE_INTERRUPTED,
+  type BackupOffsite,
+  type BackupRestoreState,
+  offsitePlaceName,
+} from '@whombat/protocol/session';
 import { and, eq, gt, isNotNull } from 'drizzle-orm';
 import { loadBoxBackupNotes } from '../backup-places/notes';
 import { placesNow } from '../backup-places/places';
 import { applianceEvents } from '../db/schema/index';
 import { isEnglish, type ServerMessageKey, tServer } from '../i18n/catalog';
 import { localizePhrase } from '../i18n/phrases';
+import { offsiteNow, offsiteStepText } from '../managed/backup-offsite';
 import { backupFailingSince, boxBackupOf, boxBackupStatus } from '../managed/box-backup';
 import { readRestoreState } from '../managed/restore-state';
 import { loadPrincipalRow } from '../read/principals';
@@ -198,6 +207,62 @@ export function lateBackupItem(
   };
 }
 
+/* The copy somewhere else ------------------------------------------------------------------------------------------ */
+
+/**
+ * The check behind the copy's item (offsite-copy.md): it starts on, but only exists once the person set a second place
+ * up. A copy that keeps failing means the backups aren't safe from a fire or a theft any more, which only the person can
+ * fix (a key, a bucket, a bill); it is data at risk, in the calm rule's very important list.
+ */
+export const OFFSITE_CHECK = 'box.offsite_copy';
+registerChecks([{ check: OFFSITE_CHECK, startsOn: true }]);
+
+/** Failures in a row before the Inbox says so: the copy tries again after 15, 30 and 60 minutes, so a blip never shows. */
+export const OFFSITE_FAILURES = 3;
+/** How long the newest backups may wait for the copy before the Inbox says it is behind. */
+export const OFFSITE_LATE_MS = 2 * 24 * 60 * 60_000;
+
+/**
+ * The copy's item (pure): failing `OFFSITE_FAILURES` times in a row, or nothing copied for `OFFSITE_LATE_MS` while newer
+ * backups wait. An episode lasts until a copy works again, so the id changes with it and an Ignore lasts the episode.
+ */
+export function offsiteItem(offsite: BackupOffsite, now: Date, locale?: string | null): NeedsYouItem | null {
+  const place = offsitePlaceName(offsite);
+  const since = offsite.lastCopyAt ?? offsite.configuredAt;
+  const failing =
+    offsite.state === 'failing' && offsite.failedAttempts >= OFFSITE_FAILURES && offsite.lastFailure;
+  // Late only while backups wait: with none at the main place yet there is nothing to copy.
+  const late =
+    (offsite.state === 'behind' || offsite.state === 'first') &&
+    !!offsite.newestBackupAt &&
+    now.getTime() - Date.parse(since) > OFFSITE_LATE_MS;
+  if (!failing && !late) return null;
+  const why = failing
+    ? offsiteStepText(failing.step, locale)
+    : tServer(locale, 'home.offsite.lateWhy', { place });
+  return {
+    id: `backup:offsite:${since}`.slice(0, 200),
+    ref: { kind: 'backup', id: `offsite:${since}`.slice(0, 200) },
+    kind: 'alert',
+    severity: 'warn',
+    nature: 'you',
+    fixable: true,
+    title: tServer(locale, failing ? 'home.offsite.failingTitle' : 'home.offsite.lateTitle'),
+    body: `${why} ${tServer(locale, 'home.offsite.fine', { place })}`.slice(0, 600),
+    at: new Date(failing ? failing.at : since).toISOString(),
+    actions: [
+      {
+        id: 'backups',
+        label: tServer(locale, 'home.action.seeBackups'),
+        style: 'secondary',
+        kind: 'open',
+        href: BACKUPS_HREF,
+      },
+    ],
+    href: BACKUPS_HREF,
+  };
+}
+
 /* The sources ------------------------------------------------------------------------------------------------------ */
 
 /** Asks other parts of the server add after the box's own items (the passkey's, backup-passkey.md), by name. */
@@ -242,6 +307,11 @@ export async function boxBackupNeedsYou(ctx: SourceCtx): Promise<NeedsYouItem[]>
     return [backupProposalItem(place, new Date(status.updatedAt).toISOString(), ownDisk, locale)];
   }
   if (status.state === 'failing' || status.state === 'stale') return [];
+  if (checkStartsOn(OFFSITE_CHECK)) {
+    const offsite = await offsiteNow(services).catch(() => undefined);
+    const copy = offsite ? offsiteItem(offsite, ctx.now, locale) : null;
+    if (copy) return [copy];
+  }
   const password = await changePasswordNeedsYou(ctx);
   if (password.length) return password;
   for (const ask of laterAsks.values()) {

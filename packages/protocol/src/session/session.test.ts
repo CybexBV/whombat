@@ -23,18 +23,25 @@ import {
 } from './operations.js';
 import {
   ACCOUNT_PAGES_MINOR,
+  APP_UPDATES_MINOR,
+  AUTOMATIONS_WITHOUT_AI_MINOR,
   BACKGROUND_MODEL_MINOR,
   DISK_USAGE_MINOR,
+  EXPOSURE_MINOR,
   FIND_MY_MINOR,
   FIND_MY_TIMELINE_MINOR,
   LOCALE_MINOR,
   negotiateCapabilities,
   negotiateVersion,
+  OFFSITE_MINOR,
   ONEPASSWORD_SYNC_MINOR,
+  OUTSIDE_CHANGES_MINOR,
+  PROTECTED_MINOR,
   protocolAtLeast,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
   VERSION_REFUSAL_COPY,
+  WINDOWS_MINOR,
 } from './version.js';
 
 const hello: Hello = {
@@ -99,9 +106,16 @@ describe('session codec', () => {
 
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: LOCALE_MINOR });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: EXPOSURE_MINOR });
+    expect(AUTOMATIONS_WITHOUT_AI_MINOR).toBe(22);
+    expect(PROTECTED_MINOR).toBe(22);
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
+    expect(EXPOSURE_MINOR).toBe(22);
+    expect(APP_UPDATES_MINOR).toBe(22);
+    expect(OUTSIDE_CHANGES_MINOR).toBe(22);
+    expect(WINDOWS_MINOR).toBe(22);
+    expect(OFFSITE_MINOR).toBe(22);
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });

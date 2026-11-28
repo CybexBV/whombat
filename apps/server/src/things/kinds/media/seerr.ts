@@ -1267,6 +1267,7 @@ export async function seerrSeen(
   return {
     glance: { ...glance, ...(activity ? { activity } : {}) },
     points: {},
+    tracked: { version: snapshot.version ?? null },
     ...linesSeen({ notices }, seerrSkipped(snapshot)),
   };
 }

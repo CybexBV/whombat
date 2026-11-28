@@ -438,6 +438,7 @@ func (rt *Runtime) collectOnce(ctx context.Context) {
 	if rt.Helper != nil {
 		ai.Caps = append(ai.Caps, proto.CapHelperUpdate)
 	}
+	ai.Caps = append(ai.Caps, proto.CapRestoreIsolate, proto.CapBackupConfig)
 	r.Agent = ai
 	r.Checks = rt.checkRunner().Results()
 	// The running package task and the last one that ended (the broker's
@@ -446,6 +447,25 @@ func (rt *Runtime) collectOnce(ctx context.Context) {
 		PackageReport() (*proto.PackageTask, *proto.PackageLast)
 	}); ok && r.System != nil {
 		r.System.PackageTask, r.System.PackageLast = pr.PackageReport()
+	}
+	// Which Compose apps are being updated now and how each one's last
+	// update went (the broker's view: the update runs outside the agent).
+	if ar, ok := rt.Broker.(interface {
+		AppReport() (map[string]bool, map[string]proto.AppLast)
+	}); ok && r.Docker != nil {
+		busy, last := ar.AppReport()
+		for i := range r.Docker.Guests {
+			g := &r.Docker.Guests[i]
+			if g.App == nil {
+				continue
+			}
+			app := *g.App
+			app.Updating = busy[g.ID]
+			if l, ok := last[g.ID]; ok {
+				app.Last = &l
+			}
+			g.App = &app
+		}
 	}
 	rt.latest.Store(r)
 	rt.deliver(r)

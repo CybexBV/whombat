@@ -189,6 +189,47 @@ export const DOMAIN_MESSAGES = splitPairs({
     'Here’s how I’d look after {name}: {steps}, ready for your OK.',
     'Zo zou ik voor {name} zorgen: {steps}, klaar voor je akkoord.',
   ],
+  // A server's care plan steps, Whombat's defaults (care-plan.md). `{machines}` is a name or `carePlan.machines.*`.
+  'carePlan.machines.all': [
+    { one: 'all {n} machine', other: 'all {n} machines' },
+    { one: 'de {n} machine', other: 'alle {n} machines' },
+  ],
+  'carePlan.machines.the': [
+    { one: 'the {n} machine', other: 'the {n} machines' },
+    { one: 'de {n} machine', other: 'de {n} machines' },
+  ],
+  'carePlan.step.backup': [
+    'Back up {machines} every night at {at} to {place}, keeping a week',
+    'Elke nacht om {at} een back-up van {machines} maken naar {place}, een week bewaard',
+  ],
+  'carePlan.step.snapshots': [
+    'Take a snapshot of {machines} every day at {at}, keeping a week',
+    'Elke dag om {at} een snapshot van {machines} maken, een week bewaard',
+  ],
+  'carePlan.step.vmBackup': [
+    'Back up {machines} every Sunday at {at}',
+    'Elke zondag om {at} een back-up van {machines} maken',
+  ],
+  'carePlan.step.updatesAsk': [
+    'Ask you on Sundays at {time} before installing its updates',
+    'Op zondag om {time} eerst jou vragen voordat ik de updates installeer',
+  ],
+  'carePlan.step.updates': [
+    'Install system updates on Sundays at {time} and restart if needed',
+    'Op zondag om {time} systeemupdates installeren en zo nodig herstarten',
+  ],
+  'carePlan.step.apps': [
+    'Update your apps on Sunday night at {time}',
+    'Zondagnacht om {time} je apps bijwerken',
+  ],
+  'carePlan.step.restoreTest': [
+    'Test one machine’s backup every week in the quiet hours',
+    'Elke week in de stille uren de back-up van één machine testen',
+  ],
+  'carePlan.step.appsTell': [
+    'Tell you when apps have updates',
+    'Je laten weten wanneer er updates voor je apps zijn',
+  ],
   'ahead.kind.time': ['Changed times', 'Gewijzigde tijden'],
   'ahead.kind.place': ['A changed or moved place', 'Een gewijzigde of verplaatste plek'],
   'ahead.kind.cancelled': ['Cancelled or postponed plans', 'Afgezegde of uitgestelde plannen'],

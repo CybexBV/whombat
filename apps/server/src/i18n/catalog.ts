@@ -15,8 +15,12 @@ import {
   resolveLanguage,
   type Translator,
 } from '@whombat/core/i18n';
+import { APPS } from './messages/apps';
+import { AUTOMATIONS } from './messages/automations';
+import { CHANGES } from './messages/changes';
 import { CHAT } from './messages/chat';
 import { DESK } from './messages/desk';
+import { EXPOSURE } from './messages/exposure';
 import { GUIDES } from './messages/guides';
 import { HOME } from './messages/home';
 import { HOSTS } from './messages/hosts';
@@ -26,6 +30,7 @@ import { PHRASES } from './messages/phrases';
 import { SEARCH } from './messages/search';
 import { SETTINGS } from './messages/settings';
 import { THINGS } from './messages/things';
+import { WORKS } from './messages/works';
 
 export const EN = {
   ...HOME.en,
@@ -35,10 +40,15 @@ export const EN = {
   ...MANAGED.en,
   ...DESK.en,
   ...THINGS.en,
+  ...WORKS.en,
   ...PHRASES.en,
   ...SEARCH.en,
   ...SETTINGS.en,
   ...CHAT.en,
+  ...EXPOSURE.en,
+  ...CHANGES.en,
+  ...APPS.en,
+  ...AUTOMATIONS.en,
 };
 
 export type ServerMessageKey = keyof typeof EN & string;
@@ -51,10 +61,15 @@ export const NL: { [K in ServerMessageKey]: MessageValue } = {
   ...MANAGED.nl,
   ...DESK.nl,
   ...THINGS.nl,
+  ...WORKS.nl,
   ...PHRASES.nl,
   ...SEARCH.nl,
   ...SETTINGS.nl,
   ...CHAT.nl,
+  ...EXPOSURE.nl,
+  ...CHANGES.nl,
+  ...APPS.nl,
+  ...AUTOMATIONS.nl,
 };
 
 export type ServerTranslator = Translator<typeof EN>;

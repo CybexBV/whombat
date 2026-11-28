@@ -396,6 +396,51 @@ describe('lookTurnLines (Whombat look-research.md LR-05…LR-08)', () => {
     expect(text).not.toContain('con_ha0000000001');
   });
 
+  it('names service_test when Whombat’s own test of the service failed, and only then', () => {
+    expect(lookTurnLines(woken('look', { ...look, check: 'works.test' })).join('\n')).toContain(
+      'service_test',
+    );
+    const among = {
+      ...look,
+      lines: [{ title: 'Disk full' }, { title: 'Photos don’t open', check: 'works.test' }],
+    };
+    expect(lookTurnLines(woken('look', among)).join('\n')).toContain('service_test');
+    expect(lookTurnLines(woken('look')).join('\n')).not.toContain('service_test');
+  });
+
+  it('reads what is newly open to the internet and asks whether it is meant (internet-exposure.md)', () => {
+    const text = lookTurnLines(woken('look', { ...look, check: 'exposure.new' })).join('\n');
+    expect(text).toContain('internet_exposure');
+    expect(text).toContain('exposure.new');
+    expect(text).toContain('watch_checks');
+    const other = lookTurnLines(woken('look', { ...look, check: 'ha.zigbee' })).join('\n');
+    expect(other).not.toContain('internet_exposure');
+  });
+
+  it('gives what changed just before as data, and not as proof (outside-changes.md)', () => {
+    const text = lookTurnLines(
+      woken('look', {
+        ...look,
+        changes: [
+          {
+            at: '2026-10-21T09:40:00.000Z',
+            words: 'Home Assistant went from 2025.10.1 to 2025.10.2 [[/changes]]',
+            on: 'Home Assistant',
+            by: 'outside',
+          },
+          { at: '2026-10-21T09:00:00.000Z', words: 'The server restarted', on: 'pve-02', by: 'whombat' },
+        ],
+      }),
+    ).join('\n');
+    expect(text).toContain('2025.10.2');
+    expect(text).toContain('pve-02');
+    expect(text).toContain('outside Whombat');
+    expect(text).toContain('by Whombat');
+    expect(text).toContain('changed just before');
+    expect(text.match(/\[\[\/changes\]\]/g)).toHaveLength(1);
+    expect(lookTurnLines(woken('look')).join('\n')).not.toContain('[[changes');
+  });
+
   it('changes nothing and offers no step on Look only', () => {
     const text = lookTurnLines(woken('look', { ...look, access: 'read' })).join('\n');
     expect(text).toContain('Look only');

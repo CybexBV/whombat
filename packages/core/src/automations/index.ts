@@ -2,6 +2,7 @@
 
 export * from './authoring.js';
 export * from './care.js';
+export * from './direct.js';
 export * from './expr.js';
 export * from './findmy.js';
 export * from './glance.js';

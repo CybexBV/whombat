@@ -194,13 +194,15 @@ describe('Home Assistant’s page', () => {
     // Nothing on Home Assistant's Summary in slots follows a range, so it offers no picker.
     expect(p).toMatchObject({ range: '24h', ranges: ['24h'], refreshS: 60 });
     const overview = p.tabs[0]?.panels ?? [];
-    // In slots: Worth a look as the strip, what it has, then its own panels; the machine as a card after the rows.
+    // In slots: Worth a look as the strip, what it has, then its own panels; the machine as a card after the rows;
+    // Whombat's own test of it before what Whombat may do.
     expect(overview.map((x) => [x.kind, x.id, x.place])).toEqual([
       ['notices', 'notices', 'top'],
       ['list', 'inventory', 'chart'],
       ['bars', 'machine', 'chart'],
       ['list', 'not-loading', 'main'],
       ['list', 'backups', 'main'],
+      ['list', 'works', 'main'],
       ['access', 'access', 'main'],
       ['widgets', 'widgets', 'bottom'],
     ]);

@@ -460,6 +460,10 @@ const TABLE = {
   // The quiet hours for changes (care-plan.md): one signed row, the same value when sent again.
   'changeWindow.get': READ,
   'changeWindow.set': RECEIPT,
+  'protected.get': READ,
+  'restoreTests.set': RECEIPT,
+  // Commits the test's first step; the server's job does the rest, and a second ask while it runs is refused.
+  'restoreTests.run': RECEIPT,
   // Looks ahead's switch, on-demand pass, and Inbox finding actions: each is covered by its commit receipt.
   'looksAhead.get': READ,
   'looksAhead.update': RECEIPT,
@@ -559,6 +563,8 @@ const TABLE = {
   'things.quiet': NEVER,
   'things.watch': READ,
   'things.history': READ,
+  'things.exposure': READ,
+  'things.settingsCopy': READ,
   'things.setWatch': NEVER,
   'things.setWatchLimit': NEVER,
   'things.cancelWatch': RECEIPT,
@@ -810,6 +816,12 @@ const TABLE = {
   // still one).
   'backup.overview': READ,
   'backup.letAssistantSetUp': RECEIPT,
+  // The copy somewhere else (offsite-copy.md): setting it carries the bucket's key and checks the bucket, never repeated
+  // on its own; forgetting it stops copying (the copies stay in the bucket), harmless to repeat; copying now only asks.
+  'backup.offsite': READ,
+  'backup.setOffsite': NEVER,
+  'backup.removeOffsite': DESTRUCTIVE,
+  'backup.copyOffsite': RECEIPT,
   // The passkey backup key (backup-passkey.md): `set` is secret and hands the box a key it locks with at once, so a
   // client never resends it by itself; removing one takes a way back away (harmless to repeat); the paper copy's
   // confirmation is harmless to repeat; finding envelopes on the network reads.

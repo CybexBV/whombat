@@ -156,8 +156,8 @@ describe('what happened', () => {
     const group = within(card).getByRole('region', { name: 'From the server' });
     expect(group.querySelectorAll('[data-history]')).toHaveLength(2);
     expect(card.textContent).not.toContain('isn’t checking in');
-    // “Show 1 more” belongs to the outages: it comes before the heading.
-    const more = within(card).getByRole('button', { name: 'Show 1 more' });
+    // “Show N more” belongs to the outages and changes: it comes before the heading.
+    const more = within(card).getByRole('button', { name: /^Show \d+ more$/ });
     expect(more.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

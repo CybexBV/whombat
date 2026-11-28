@@ -17,13 +17,14 @@ import {
 } from '@whombat/core';
 import { api } from '@whombat/core/contracts';
 import type { HostServerDetail, ThingWatch } from '@whombat/core/domain';
-import { protocolAtLeast, THING_HISTORY_MINOR } from '@whombat/protocol/session';
+import { OUTSIDE_CHANGES_MINOR, protocolAtLeast, THING_HISTORY_MINOR } from '@whombat/protocol/session';
 import { useCallback, useRef, useState } from 'react';
 import { undoOutcome } from '../home/changes';
 import { endedToast, keptToast, LIMIT_WORDS, limitText } from '../home/monitoring';
 import { commitOutcomeText, hostErrorInfo } from '../hosts/errors';
 import { patchEndpoint } from '../query/cache';
 import { queryKeys } from '../query/keys';
+import { fromBase64 } from '../svg';
 import { useSessionProtocol, useWhombat } from './context';
 import { useUndoChange } from './home';
 import { queryHook } from './queries';
@@ -184,6 +185,51 @@ export function useThingHistory(burrow: string, thing: string, days: 30 | 90 = 3
     staleTime: 60_000,
   });
   return { supported, ...query };
+}
+
+/* A settings copy -------------------------------------------------------------------------------------------------- */
+
+/** A settings copy as a file to save: its name, type and bytes. */
+export interface SettingsCopyDownload {
+  fileName: string;
+  contentType: string;
+  bytes: Uint8Array;
+}
+
+/**
+ * Download of a service's settings copy (`things.settingsCopy`, session minor 22; outside-changes.md): read through an
+ * export stream by the session, as it is larger than a message. `download` gives the file, or null when it didn't come
+ * (`failed` then says so until the next try); `supported` false on an older Whombat, which shows no card anyway.
+ */
+export function useSettingsCopyDownload(burrow: string, thing: string) {
+  const { client } = useWhombat();
+  const supported = protocolAtLeast(useSessionProtocol(), OUTSIDE_CHANGES_MINOR);
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const download = useCallback(
+    async (copy?: string): Promise<SettingsCopyDownload | null> => {
+      setBusy(true);
+      setFailed(false);
+      try {
+        const result = await client.request(api.things.settingsCopy, {
+          params: { burrow, thing },
+          query: copy ? { copy } : {},
+        });
+        if (result.status !== 'ok') throw new Error(result.status);
+        const file = result.data;
+        const bytes = fromBase64(file.base64);
+        if (!bytes) throw new Error('not base64');
+        return { fileName: file.fileName, contentType: file.contentType, bytes };
+      } catch {
+        setFailed(true);
+        return null;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [client, burrow, thing],
+  );
+  return { supported, busy, failed, download };
 }
 
 /* Change the limit ------------------------------------------------------------------------------------------------- */

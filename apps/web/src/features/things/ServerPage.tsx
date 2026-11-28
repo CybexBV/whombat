@@ -31,6 +31,7 @@ import {
   isLibvirtServer,
   isMacServer,
   isUnraidServer,
+  isWindowsServer,
   LIBVIRT_SERVER_TAB_WORDS,
   LIBVIRT_SERVER_TABS,
   macScreenView,
@@ -55,6 +56,7 @@ import {
   splitTemporary,
   UNRAID_TABS,
   unraidTabWords,
+  WINDOWS_SERVER_TABS,
 } from '@whombat/client/hosts';
 import { useFindMyOnMac, useHostServer, useHostsLive, useServerDashboard } from '@whombat/client/hosts/react';
 import { useHomeOverview, useRenameThing, useTheAgent } from '@whombat/client/react';
@@ -102,7 +104,7 @@ export interface ServerPageProps {
   serverId: string;
 }
 
-type ServerKind = 'unraid' | 'libvirt' | 'incus' | 'mac' | 'plain';
+type ServerKind = 'unraid' | 'libvirt' | 'incus' | 'mac' | 'windows' | 'plain';
 
 /**
  * A kind's tabs and their words, Summary first; what runs on it is its Machines or, on a Docker host, its Apps. A Mac
@@ -126,6 +128,8 @@ function kindTabs(
     return macServerTabs(findMyHere).map((key) => ({ key, label: words[key] }));
   }
   const words = serverTabWords(locale);
+  // A Windows PC: the plain tabs it has (no machines, backups or sensors there).
+  if (kind === 'windows') return WINDOWS_SERVER_TABS.map((key) => ({ key, label: words[key] }));
   const guests = d ? guestsWord(serverDashboardKind(d), locale) : words.guests;
   return SERVER_TABS.map((key) => ({ key, label: key === 'guests' ? guests : words[key] }));
 }
@@ -137,7 +141,8 @@ function parseTab(kind: ServerKind, v: string | undefined, findMyHere: boolean):
   if (kind === 'libvirt') return parseLibvirtServerTab(v);
   if (kind === 'incus') return parseIncusServerTab(v);
   if (kind === 'mac') return parseMacServerTab(v, macServerTabs(findMyHere));
-  return parseServerTab(v);
+  const t = parseServerTab(v);
+  return kind === 'windows' && !WINDOWS_SERVER_TABS.includes(t) ? 'summary' : t;
 }
 
 /** The counts after a tab's words (“Guests 14”, “Storage 4”, Unraid's “Array 4”). */
@@ -166,13 +171,15 @@ export function ServerPage({ burrow, serverId }: ServerPageProps) {
     ? 'plain'
     : isMacServer(d)
       ? 'mac'
-      : isUnraidServer(d)
-        ? 'unraid'
-        : isIncusServer(d)
-          ? 'incus'
-          : isLibvirtServer(d)
-            ? 'libvirt'
-            : 'plain';
+      : isWindowsServer(d)
+        ? 'windows'
+        : isUnraidServer(d)
+          ? 'unraid'
+          : isIncusServer(d)
+            ? 'incus'
+            : isLibvirtServer(d)
+              ? 'libvirt'
+              : 'plain';
   // An older Whombat has no Find My connection: its Mac keeps its own Find My tab until it is updated.
   const findMyHere = useFindMyOnMac(kind === 'mac');
   const tab = parseTab(kind, search.tab, findMyHere);
@@ -471,8 +478,9 @@ function ServerHead({
   const told = useMemo(() => serverPageTellsProblem(detail), [detail]);
   const said = serverHeadWords(head, verdict, told);
   const rc = detail.server.remoteControl;
-  // The host's shell (and a Mac's screen beside it) goes with the host-shell switch only, as the hosts service asks.
-  const shellOk = rc.hostShell !== false && detail.server.status !== 'offline';
+  // The host's shell (and a Mac's screen beside it) goes with the host-shell switch only, as the hosts service asks; a
+  // Windows PC has none (its agent opens no console there).
+  const shellOk = rc.hostShell !== false && detail.server.status !== 'offline' && !isWindowsServer(detail);
   const [renaming, setRenaming] = useState(false);
   const { rename } = useRenameThing(burrow);
   const target = { kind: 'server' as const, id: serverId, name: head.name, max: HOST_SERVER_NAME_MAX };

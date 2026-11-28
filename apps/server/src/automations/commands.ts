@@ -64,6 +64,7 @@ import { briefAgent } from '../domain/agent-brief';
 import { postMessage } from '../domain/messages';
 import { findMyBackgroundFor } from '../hosts/findmy-background';
 import { findMyConnectionRow } from '../hosts/findmy-connection';
+import { burrowLocale } from '../i18n/locale';
 import { badRequest, conflict, forbidden, notFound } from '../lib/errors';
 import { checkOutboundUrl } from '../lib/outbound';
 import { newSecret } from '../lib/secrets';
@@ -72,6 +73,7 @@ import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
 import { outsidersTurn } from '../runtime/person';
+import type { Services } from '../services';
 import { trackerConnectionRow } from '../trackers/connection';
 import { driverIdOf, noDriverText, recipeWordsOf } from '../trackers/drivers';
 import { stopRunRequests } from '../trackers/features';
@@ -97,6 +99,14 @@ import {
 } from './store';
 import { type AgainMark, resetOutput, resetStepsFrom } from './tries';
 import { hasWebhookTrigger, NO_WEBHOOK_TRIGGER_TEXT, refuseWebhookTrigger } from './webhook-trigger';
+
+/**
+ * Follows the Home Assistant entities live automations name now. Loaded when needed, as `direct-action.ts` is: both reach
+ * the connection modules, which reach these commands, so a static import would be a cycle.
+ */
+function followSmartHome(services: Services): void {
+  void import('./home-triggers').then((m) => m.smartHomeTriggersFor(services).tick()).catch(() => {});
+}
 
 export const webhookSecretAad = (automationId: string) => `automation:${automationId}:webhook`;
 
@@ -159,6 +169,18 @@ export async function referenceProblems(
   def: AutomationDefinition,
   forPublish: boolean,
 ): Promise<string[]> {
+  return (await referenceCheck(ctx, def, forPublish)).problems;
+}
+
+/**
+ * `referenceProblems`, with the definition as it is kept: its steps that act by themselves with the ids and names
+ * Whombat found for them (`checkDirectSteps`), checked once.
+ */
+export async function referenceCheck(
+  ctx: ApplyContext,
+  def: AutomationDefinition,
+  forPublish: boolean,
+): Promise<{ problems: string[]; definition: AutomationDefinition }> {
   const problems: string[] = [...mailDefinitionProblems(def)];
   if (hasWebhookTrigger(def)) problems.push(NO_WEBHOOK_TRIGGER_TEXT);
   // A tracker trigger listens to one of the burrow's tracker connections; a mail trigger to one of the person's mailboxes.
@@ -169,6 +191,20 @@ export async function referenceProblems(
       problems.push(`There is no connected mailbox ${t.connectionId} on this Whombat.`);
     if (t.kind === 'findmy' && !(await findMyConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
       problems.push(`There is no Find My connection ${t.connectionId} on this Whombat.`);
+    // Home Assistant and UniFi Protect triggers name one of the person's connections of that kind.
+    if (t.kind === 'home_state' || t.kind === 'protect') {
+      const catalogId = t.kind === 'home_state' ? 'homeassistant' : 'unifi_protect';
+      const [row] = await ctx.tx
+        .select({ catalogId: catalogConnections.catalogId })
+        .from(catalogConnections)
+        .where(
+          and(eq(catalogConnections.id, t.connectionId), eq(catalogConnections.burrowId, ctx.burrow.id)),
+        );
+      if (row?.catalogId !== catalogId)
+        problems.push(
+          `There is no ${t.kind === 'home_state' ? 'Home Assistant' : 'UniFi Protect'} connection ${t.connectionId} on this Whombat.`,
+        );
+    }
   }
   for (const id of definitionConversations(def))
     if (!(await inBurrow(ctx.tx, ctx.burrow.id, id)))
@@ -198,7 +234,18 @@ export async function referenceProblems(
         problems.push(`Step “${s.id}” calls ${new URL(s.url).host}: only you can approve a new destination.`);
     }
   }
-  return problems;
+  if (!def.steps.some((s) => s.kind === 'run_action')) return { problems, definition: def };
+  // A step that acts by itself names a thing this Whombat has, and a call it can make (`direct-action.ts`). Why it
+  // can't be a step reaches the person through the assistant: in their language.
+  const { checkDirectSteps } = await import('./direct-action');
+  const direct = await checkDirectSteps(
+    ctx.tx,
+    ctx.services,
+    ctx.burrow.id,
+    def,
+    await burrowLocale(ctx.services, ctx.burrow.id),
+  );
+  return { problems: [...problems, ...direct.problems], definition: direct.definition };
 }
 
 export function requirePerson(ctx: ApplyContext): void {
@@ -483,14 +530,20 @@ async function addMissingRecipeGrants(
 
 /**
  * A definition published as the next version and switched on (or off): the callback destinations the person approves
- * with it (BP-C11), the timer, the trigger cursor and the signed `automation.published`. The caller checked the draft.
+ * with it (BP-C11), the timer, the trigger cursor and the signed `automation.published`. The caller checked the draft;
+ * `checked`: it is the definition `referenceCheck` gave, steps that act without AI already with their ids and names.
  */
 export async function publishVersion(
   ctx: ApplyContext,
   row: { id: string; name: string; currentVersion: number | null },
-  def: AutomationDefinition,
+  given: AutomationDefinition,
   enable: boolean,
+  opts: { checked?: boolean } = {},
 ): Promise<number> {
+  // A step that acts without AI is kept by the ids and under the names Whombat found, never the ones a draft or a file
+  // gave it: read once, by the check before when it gave this definition.
+  const { withRealNames } = await import('./direct-action');
+  const def = opts.checked ? given : await withRealNames(ctx.tx, ctx.services, ctx.burrow.id, given);
   await ctx.services.newerAutomations.refuse(def);
   const tx = ctx.tx;
   const [currentAuto] = await tx
@@ -571,11 +624,16 @@ export async function publishVersion(
   const services = ctx.services;
   const touchesMail = prevHadMail || def.triggers.some((t) => t.kind === 'mail');
   const touchesFindMy = [...(prevDef?.triggers ?? []), ...def.triggers].some((t) => t.kind === 'findmy');
+  const touchesHome = [...(prevDef?.triggers ?? []), ...def.triggers].some(
+    (t) => t.kind === 'home_state' || t.kind === 'protect',
+  );
   ctx.after(async () => {
     services.automations.nudge();
     if (touchesMail) services.mailTriggers.nudge();
     // A Find My connection an automation listens to reads at least every 15 minutes from now on, or no longer does.
     if (touchesFindMy) findMyBackgroundFor(services).nudge();
+    // Home Assistant's entities it names are followed from now on, or no longer are.
+    if (touchesHome) followSmartHome(services);
   });
   return n;
 }
@@ -640,9 +698,9 @@ export const createAutomation = defineCommand({
     if (input.publish) {
       const check = validateDefinition(draft, ctx.now.getTime());
       if (!check.ok) throw badRequest(`Fix it first: ${check.problems.slice(0, 3).join(' ')}`);
-      const problems = await referenceProblems(ctx, check.definition, true);
-      if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
-      live = check.definition;
+      const checked = await referenceCheck(ctx, check.definition, true);
+      if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
+      live = checked.definition;
     }
     const id = await insertAutomation(ctx, { name, description, draft });
     await ctx.emit({
@@ -653,7 +711,8 @@ export const createAutomation = defineCommand({
       payload: { automationId: id, source: src.kind },
     });
     if (keys.length) await writeGrants(ctx, await loadAutomationRow(tx, ctx.burrow.id, id), keys);
-    if (live) await publishVersion(ctx, { id, name: cap(name), currentVersion: null }, live, true);
+    if (live)
+      await publishVersion(ctx, { id, name: cap(name), currentVersion: null }, live, true, { checked: true });
     if (src.kind === 'describe') {
       const conversation = await loadConversationRow(tx, src.conversationId);
       if (!conversation || conversation.burrowId !== ctx.burrow.id) throw notFound('Conversation');
@@ -758,12 +817,12 @@ export const publishAutomationDraft = defineCommand({
     const def = check.definition;
     if (definitionHash(def) !== input.definitionHash)
       throw conflict('The draft changed since you looked at it. Check it again, then publish.');
-    const problems = await referenceProblems(ctx, def, true);
-    if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
+    const checked = await referenceCheck(ctx, def, true);
+    if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
     // A recipe edited to another channel gets the keys it needs that it holds none of (AR-33).
     const recipe = recipeOf(def);
     if (recipe) await addMissingRecipeGrants(ctx, row, recipe);
-    const n = await publishVersion(ctx, row, def, input.enable);
+    const n = await publishVersion(ctx, row, checked.definition, input.enable, { checked: true });
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     return { automationId: row.id, version: n };
   },
@@ -910,6 +969,7 @@ export const setAutomationEnabled = defineCommand({
     const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     const watchesThings = def.triggers.some((t) => t.kind === 'thing');
     const watchesFindMy = def.triggers.some((t) => t.kind === 'findmy');
+    const watchesHome = def.triggers.some((t) => t.kind === 'home_state' || t.kind === 'protect');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
     // new version of the same definition, checked and signed the way publishing is.
@@ -958,6 +1018,7 @@ export const setAutomationEnabled = defineCommand({
         services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
+        if (watchesHome) followSmartHome(services);
       });
       return { automationId: row.id };
     }
@@ -989,11 +1050,12 @@ export const setAutomationEnabled = defineCommand({
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
     const services = ctx.services;
-    if (input.enabled || watchesMail || watchesFindMy) {
+    if (input.enabled || watchesMail || watchesFindMy || watchesHome) {
       ctx.after(async () => {
         if (input.enabled) services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
+        if (watchesHome) followSmartHome(services);
       });
     }
     return { automationId: row.id };
@@ -1087,9 +1149,10 @@ export const runAutomationNow = defineCommand({
     if (input.test && row.draftJson) {
       const check = validateDefinition(row.draftJson, ctx.now.getTime());
       if (!check.ok) throw badRequest(`Fix the draft first: ${check.problems.slice(0, 3).join(' ')}`);
-      const problems = await referenceProblems(ctx, check.definition, true);
-      if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
-      def = check.definition;
+      // Tried with the ids Whombat finds for its steps now, as publishing would keep them: a run accepts only ids.
+      const checked = await referenceCheck(ctx, check.definition, true);
+      if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
+      def = checked.definition;
       version = 0;
       publishedById = ctx.actor.id;
     } else {
@@ -1343,6 +1406,7 @@ export async function removeAutomation(
   ctx.after(async () => {
     services.mailTriggers.nudge();
     findMyBackgroundFor(services).nudge();
+    followSmartHome(services);
   });
   return active.length;
 }

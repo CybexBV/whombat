@@ -33,6 +33,7 @@ interface ImportMetaEnv {
   readonly VITE_FIXTURE_GATEWAY?: string;
   /** A 1Password vault kept in step with the Vault (`onePasswordFixtures.ts`): synced, waiting, failing or paused. */
   readonly VITE_FIXTURE_ONEPASSWORD?: string;
+  readonly VITE_FIXTURE_OFFSITE?: string;
   readonly VITE_FIXTURE_MODELS?: string;
   /** A model on the network saved (`localModelFixtures.ts`, hermes-engine-app.md AP-5047). */
   readonly VITE_FIXTURE_LOCAL_MODEL?: string;
@@ -84,6 +85,8 @@ interface ImportMetaEnv {
   readonly VITE_FIXTURE_MONITORING?: string;
   /** Reports to the Whombat Team: `seeded`, `empty`, `stale` or `off` (`teamReportFixtures.ts`). */
   readonly VITE_FIXTURE_TEAM_REPORTS?: string;
+  /** `tested`: pve-02's restore tests on, with three results (`protectedFixtures.ts`, backup-trust.md). */
+  readonly VITE_FIXTURE_PROTECTED?: string;
   /** `good`: nothing open and every thing fine, for the status sentence (`statusFixtures.ts`, status-line.md). */
   readonly VITE_FIXTURE_STATUS?: string;
   /** `0`: Neo finished nothing today, so nothing was fixed today (`statusFixtures.ts`). */

@@ -974,6 +974,7 @@ export async function esphomeSeen(
       { figures: 2, ...(s.version ? { line: `ESPHome ${s.version}` } : {}) },
     ),
     points: {},
+    tracked: { version: s.version ?? null },
     notices,
     skipped: esphomeSkipped(s),
   };

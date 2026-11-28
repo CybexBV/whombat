@@ -49,6 +49,7 @@ import {
   useOpenPr,
 } from './steps/open-pull-request';
 import { executePostMessage } from './steps/post-message';
+import { executeRunAction } from './steps/run-action';
 import { definitionStep, GateFactsInput, retryBackoffMs, stepScope, stepTimeoutMs } from './steps/scope';
 import { block, lockRun, noticeOnStep, revokeTrackerAccessAfter, stopRun, updateStep } from './steps/state';
 import { placeFor, postInRunThread } from './steps/thread';
@@ -320,7 +321,8 @@ export const automationStep = defineCommand({
             step.kind === 'tracker_update' ||
             step.kind === 'tracker_reply' ||
             step.kind === 'merge_pull_request' ||
-            step.kind === 'connection_actions')
+            step.kind === 'connection_actions' ||
+            step.kind === 'run_action')
         ) {
           await executeStep(ctx, run, steps, input.idx, row.attempt + 1);
         } else if (input.state === 'pending') {
@@ -590,6 +592,8 @@ export async function executeStep(
       return executeHttpCallback({ ...execution, step });
     case 'connection_actions':
       return executeConnectionActions({ ...execution, step, ...(names ? { names } : {}) });
+    case 'run_action':
+      return executeRunAction({ ...execution, step });
   }
 }
 
@@ -602,7 +606,7 @@ export const continueStep = defineCommand({
     runId: z.string(),
     stepId: z.string(),
     attempt: z.number().int().nonnegative(),
-    proposal: z.object({ title: z.string(), details: z.string() }),
+    proposal: z.object({ title: z.string(), details: z.string(), target: z.string().optional() }),
     actionsHash: z.string().optional(),
   }),
   async apply(tx, ctx, input) {
@@ -687,6 +691,25 @@ export const continueStep = defineCommand({
           output: {
             ...(step.output as JsonObject),
             commentApprovalId: ctx.approvalId,
+            decidedById: approval?.decidedById ?? null,
+          },
+        },
+        ctx.now,
+      );
+    } else if (kind === 'run_action') {
+      // A person said yes to an action their settings ask about: the step runs it now, for this attempt only.
+      await updateStep(
+        tx,
+        run.id,
+        step.idx,
+        {
+          state: 'pending',
+          output: {
+            ...(step.output as JsonObject),
+            approvalId: ctx.approvalId,
+            approvalAttempt: input.attempt,
+            // Where the call went and as whom on the card: the step sends nothing when that changed since.
+            ...(input.proposal.target ? { approvedTarget: input.proposal.target } : {}),
             decidedById: approval?.decidedById ?? null,
           },
         },

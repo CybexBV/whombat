@@ -102,11 +102,13 @@ import { BackupsKeptHere } from '../KeptHere';
 import { AppLink, ConfirmDialog, Skeleton, useChangeRunner } from '../parts';
 import { PAGE_FRESH_MS, thingPageInput } from '../prefetch';
 import { HoldLine, KeepQuietDialog, useKeepsQuiet, useThingKeepQuiet } from '../quiet/KeepQuiet';
+import { SettingsCopyCard } from '../quiet/SettingsCopyCard';
 import { useThingQuiet } from '../quiet/useQuiet';
 import { WhatHappened } from '../quiet/WhatHappened';
 import { useThingSearch } from '../search';
 import things from '../Things.module.css';
 import { THING_ICONS } from '../thingIcons';
+import { AppUpdateFact, runsInContainer } from './AppUpdateFact';
 import { LookCard } from './LookCard';
 import { RunsOnDialog } from './RunsOnDialog';
 import styles from './ThingPage.module.css';
@@ -357,7 +359,11 @@ export function ThingPageScreen({ burrow, thing }: ThingPageScreenProps) {
               {summary && page.catalogId && placeKindOfCatalog(page.catalogId) ? (
                 <BackupsKeptHere thing={page.id} />
               ) : null}
-              {/* Its outages and problems over the last 30 days. */}
+              {/* The newest copy of its settings, with Download (outside-changes.md). */}
+              {summary && page.settingsCopy ? (
+                <SettingsCopyCard burrow={burrow} thing={page.id} copy={page.settingsCopy} />
+              ) : null}
+              {/* Its outages, problems and what changed on it over the last 30 days. */}
               {summary ? <WhatHappened burrow={burrow} thing={page.id} /> : null}
             </>
           )}
@@ -591,6 +597,7 @@ function Head({
               </span>
             ) : null}
             {checked ? <Fact line={checked} /> : null}
+            {runsInContainer(page.runsOn) ? <AppUpdateFact burrow={burrow} runsOn={page.runsOn} /> : null}
           </>
         ) : null
       }

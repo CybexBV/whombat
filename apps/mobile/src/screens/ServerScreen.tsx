@@ -34,12 +34,15 @@ import {
   thingRenameTarget,
 } from '@whombat/client';
 import {
+  appUpdateRow,
+  appUpdatesNote,
   detailGuests,
   findMyWords,
   guestsWord,
   isIncusServer,
   isMacServer,
   isUnraidServer,
+  isWindowsServer,
   MAC_PHONE_TABS,
   MAC_PHONE_TABS_WITH_FIND_MY,
   SERVER_DASHBOARD_DEFAULT_RANGE,
@@ -73,10 +76,17 @@ import {
   useSetWatchLimit,
   useThingWatch,
 } from '@whombat/client/react';
-import { type ChatSubject, type HostGuest, type HostSeriesRange, thingId } from '@whombat/core';
+import {
+  agentReportsApps,
+  type ChatSubject,
+  type HostGuest,
+  type HostSeriesRange,
+  thingId,
+} from '@whombat/core';
 import { KEEP_QUIET_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, View } from 'react-native';
+import { useAppUpdatesOn } from '../data/appUpdates';
 import { useBurrowBase, useNow, useNowLabel } from '../data/BurrowProvider';
 import { rangeOptions } from '../data/dashboard';
 import { parseMonitoringPick, serverMoreMenu } from '../data/monitoring';
@@ -202,6 +212,8 @@ export function ServerScreen({
   // A Mac (macos-servers.md): its Summary and its Screen, nothing running on it to list; its Summary links to the Find
   // My connection that reads it (findmy-connection.md §1.5).
   const mac = !!d && isMacServer(d);
+  // A Windows PC (windows-servers.md): its Summary alone, nothing running on it Whombat reaches.
+  const windows = !!d && isWindowsServer(d);
   const findMy = useFindMyConnectionOf(slug, mac ? serverId : null);
   // An older Whombat has no Find My connection: its Mac keeps its own Find My segment until it is updated.
   const findMyHere = useFindMyOnMac(mac);
@@ -231,6 +243,12 @@ export function ServerScreen({
     [guests.data, showTemporary, rawLocale],
   );
   const rows = list.rows;
+  // Compose apps say under their name when an update waits or how the last one went (app-updates.md); Update is on
+  // the app's own screen.
+  const appsOn = useAppUpdatesOn();
+  const allGuests = guests.data?.guests ?? [];
+  const appsHere = { agentHasApps: agentReportsApps(allGuests), manage: false, locale: rawLocale };
+  const appsNote = appsOn ? appUpdatesNote(allGuests, rawLocale) : null;
   const unraidOp = useUnraidOp(serverId, shown);
   const keep = useKeepQuiet(slug, thing, { name: shown, timeZone, note: quietNote(showToast) });
   const hold = keepsQuiet && d ? holdView(d, rawLocale) : null;
@@ -242,11 +260,13 @@ export function ServerScreen({
   const proxmox = !!d?.proxmox || d?.server.platform === 'proxmox';
   const tabs: ServerTab[] = mac
     ? [...(findMyHere ? MAC_PHONE_TABS_WITH_FIND_MY : MAC_PHONE_TABS)]
-    : unraid
-      ? ['summary', 'array', 'guests', 'plugins']
-      : proxmox || incus || libvirt
-        ? ['summary', 'guests', 'backups']
-        : ['summary', 'guests'];
+    : windows
+      ? ['summary']
+      : unraid
+        ? ['summary', 'array', 'guests', 'plugins']
+        : proxmox || incus || libvirt
+          ? ['summary', 'guests', 'backups']
+          : ['summary', 'guests'];
   const phoneTabs = serverPhoneTabs(tabs, rawLocale);
   const shownTab: ServerTab = tabs.includes(tab) ? tab : 'summary';
   const canChange = true;
@@ -446,24 +466,27 @@ export function ServerScreen({
                 error={dash.error}
               />
             ) : null}
-            <View
-              onLayout={(e) => {
-                tabsAt.current = e.nativeEvent.layout.y;
-              }}
-            >
-              <UnderlineTabs<ServerTab>
-                label={tMobile('screens2.common.whatToShow', { name: shown })}
-                value={shownTab}
-                onChange={setTab}
-                tabs={tabs.map((t) => ({
-                  key: t,
-                  // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
-                  label:
-                    t === 'guests' && d ? guestsWord(serverDashboardKind(d), rawLocale) : serverCopyHere[t],
-                }))}
-                bleed={INSET}
-              />
-            </View>
+            {/* One tab (a Windows PC's Summary) needs no row to pick it. */}
+            {tabs.length > 1 ? (
+              <View
+                onLayout={(e) => {
+                  tabsAt.current = e.nativeEvent.layout.y;
+                }}
+              >
+                <UnderlineTabs<ServerTab>
+                  label={tMobile('screens2.common.whatToShow', { name: shown })}
+                  value={shownTab}
+                  onChange={setTab}
+                  tabs={tabs.map((t) => ({
+                    key: t,
+                    // What runs on it: its Machines, or a Docker host's and Unraid's Apps.
+                    label:
+                      t === 'guests' && d ? guestsWord(serverDashboardKind(d), rawLocale) : serverCopyHere[t],
+                  }))}
+                  bleed={INSET}
+                />
+              </View>
+            ) : null}
             {shownTab === 'screen' && mac && d ? (
               <MacScreenPart serverId={serverId} serverName={shown} detail={d} now={now} />
             ) : shownTab === 'findmy' && mac ? (
@@ -660,7 +683,11 @@ export function ServerScreen({
                       // The name comes first and isn't cut (CN-08, AP-2562): a long one takes a second line.
                       titleLines={2}
                       titleAfter={g.kind.id}
-                      line={g.meta || null}
+                      line={
+                        [g.meta, appsOn ? appUpdateRow(g.guest, { ...appsHere, now }).line : null]
+                          .filter(Boolean)
+                          .join(' · ') || null
+                      }
                       badge={g.self ? <ToneBadge text={selfGuestChip(rawLocale)} tone="brand" /> : undefined}
                       trailing={
                         // Running is the dot alone; any other state says its word too (AP-1753, AP-1810).
@@ -693,6 +720,7 @@ export function ServerScreen({
                     />
                   ) : null}
                 </OneCard>
+                {appsNote ? <QuietText>{appsNote}</QuietText> : null}
               </>
             )}
           </>

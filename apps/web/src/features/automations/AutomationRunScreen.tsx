@@ -224,6 +224,9 @@ export function stepOutcome(
       if (typeof o.summary === 'string' && o.summary) return o.summary;
       if (typeof o.reason === 'string' && o.reason) return o.reason;
       return null;
+    case 'run_action':
+      // What it did and how it came out, in one line (“Shut down nas-01 at 21:14 — it’s switching off.”).
+      return typeof o.summary === 'string' && o.summary ? o.summary : null;
     case 'dispatch_agent': {
       // Coding work and reviews (bp-automations BP-C26, BP-C27).
       const ws = o.workspace as { branch?: string } | undefined;
@@ -511,12 +514,14 @@ function StepItem({
   const o = step.output as Record<string, unknown>;
   // A comment repeats the agent's answer above it: its outcome line says where it went instead. A write-back to the
   // tracker says what it wrote in its outcome line too (AP-1026), and a reply to the customer what it sent (AP-1110).
+  // An action Whombat did itself says it once, in its outcome line.
   const text =
     typeof o.text === 'string' &&
     step.kind !== 'open_pull_request' &&
     step.kind !== 'github_comment' &&
     step.kind !== 'tracker_update' &&
-    step.kind !== 'tracker_reply'
+    step.kind !== 'tracker_reply' &&
+    step.kind !== 'run_action'
       ? o.text
       : null;
   // What the customer read, signature included, as plain text: the tracker emails it as it is (AP-1110).
@@ -610,7 +615,12 @@ function StepItem({
         {story ? (
           <ConditionStory story={story} rule={rule} />
         ) : (
-          outcome && <span className={styles.rowMeta}>{outcome}</span>
+          outcome && (
+            // An action's line is the whole of what happened: it wraps rather than being cut off on a phone.
+            <span className={step.kind === 'run_action' ? styles.rowMetaWrap : styles.rowMeta}>
+              {outcome}
+            </span>
+          )
         )}
         {assessment && (
           <div className={styles.assessment} data-step-assessment="">

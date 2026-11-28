@@ -3,6 +3,69 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## 28 November 2026
+
+- Keep a copy of your backups somewhere else: under Settings → This Whombat → Backups you can add a bucket at
+  Backblaze, Cloudflare, Hetzner, Amazon or any other S3 storage. Whombat checks it first, copies each new backup
+  there and clears old ones by the same rule. If a fire or a theft takes your Whombat and its backups together, a new
+  Whombat comes back from the copy. When the copy keeps failing, your Inbox says so.
+- Does it really work? Nextcloud, Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant pages can test whether
+  the service really works, by opening a file, your newest photo or document, a library's newest item or a sensor's
+  latest reading. Run now says where it got stuck, and whether the sign-in Whombat uses lost access or the service
+  itself is broken. Watch it runs the test every 15 minutes and tells you when it fails twice in a row.
+- Open to the internet, at the end of Servers: everything your proxy, Cloudflare tunnels and router let in from the
+  internet, what each leads to and how it’s protected, with what’s worth a look first. It also says what Whombat
+  couldn’t see, like ports your router opens by itself.
+- When something new opens to the internet, Whombat tells you once and asks whether it’s meant. Press This is meant
+  and it won’t point it out again.
+- A new opening counts as new for two weeks, and a service test that gets a sign-in page instead of the service says
+  so instead of passing.
+- Whombat points out a new proxy host even when it can’t read the proxy’s streams, and no longer calls a name
+  protected when its Cloudflare Access lets everyone in, on the whole name or one of its paths. A settings copy where
+  only a password changed is kept.
+- Ask your agent “what can the internet reach?” and it answers from the same list.
+- Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
+  page and its own page, with Update. Whombat asks first, installs exactly the version it asked about, restarts only
+  that app, and puts the previous version back by itself when the new one doesn’t start, even if the server restarted
+  halfway. A database, a new major version or a version Whombat can’t tell always asks, and says why. If the app
+  changed after you said yes, Whombat leaves it alone and says so.
+- An app update also moves the stopped services that share the app’s image, and leaves them stopped. It never starts
+  what you stopped or changes how many copies of a service run.
+- On a server whose Docker Compose is too old to start an app without downloading images itself, Whombat leaves the
+  app as it is and says the server needs a newer Docker Compose.
+- A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
+- Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
+  container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says
+  whether Whombat did it or it was changed outside Whombat.
+- When your assistant looks into a problem, it sees what changed just before and tells you, without guessing a cause.
+  You can also ask it what changed on something.
+- Whombat keeps a copy of the settings of OPNsense, Pi-hole and Nginx Proxy Manager every night. Download the newest
+  from the service’s page; History tells you what changed in them.
+- Automations can act without AI, right on your Whombat, even when the internet is down: ask your assistant to shut
+  your servers down safely when the power goes out, restart a server or machine, or switch a light when Home Assistant
+  sees something change or your doorbell rings. Trying one out asks you before it changes anything. Each step names
+  the server, machine or light as Whombat itself knows it and stays with the one you chose, even after a rename, and a
+  shutdown counts only once the server says it happened. The power cut message says what happened to each server.
+- Add a Windows PC as a server: choose Windows PC in Add a server and paste the line into PowerShell opened as
+  administrator. Whombat watches its processor, memory, drives and network, says whether its virus protection is on,
+  shows BitLocker and waiting Windows updates, and can restart it. Installing updates stays yours, in Windows Update.
+- In Dutch, Whombat now also says how an app update went, a new server’s care plan and what an automation that acts
+  without AI did. On a phone, that automation’s line on its run page shows whole instead of being cut off.
+- New page: What’s protected. It lists everything that holds data (your Whombat, servers, machines and services like
+  Home Assistant) and says whether a copy is on another machine, only on the same machine, or not backed up as far
+  as Whombat can see. Open it under Servers or Settings → This Whombat → Backups, and ask your assistant to set up
+  backups for anything that isn’t safe yet.
+- What’s protected shows your Whombat’s copy somewhere else, and says when copying there fails.
+- What’s protected counts a backup as copied or kept only once one has worked, where it really is. A backup plan that
+  never worked says so, and a copy somewhere else says “nothing to copy yet” until there is a backup.
+- Whombat can test your Proxmox backups: once a week in the quiet hours it restores one machine’s backup as a copy
+  that is cut off from your network and won’t start with the server from the moment it exists, checks that it starts,
+  and deletes it again. Your real machine isn’t touched. Turn on “Test my backups” on the What’s protected page; the
+  result shows on the machine’s page. A server needs Whombat’s newer helper for this, which it gets by itself.
+- Restore tests check the room and memory a backup really needs before they restore it, and a restore that is only
+  slow no longer counts as a backup that failed. Your own Whombat counts as copied only once a backup worked at the
+  place you chose for it.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,

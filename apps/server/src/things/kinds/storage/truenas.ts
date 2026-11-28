@@ -10,6 +10,7 @@
  * Buttons (SD-07): **Scrub** a pool (`pool.scrub.run` now), **Start** and **Stop** an app, **Dismiss** a non-critical
  * alert (everyday, SD-08). Never `app.upgrade` or `update.run` (SD-02).
  */
+
 import type {
   JsonValue,
   ThingGalleryItem,
@@ -20,6 +21,7 @@ import type {
   ThingPagePanel,
   ThingPageRow,
 } from '@whombat/core';
+import { truenasProtection } from '../../../backup-trust/protection';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import { badRequest } from '../../../lib/errors';
 import type { Services } from '../../../services';
@@ -1580,6 +1582,13 @@ export const TRUENAS_KIND: KindModule = {
         truenasSkipped(s),
       ),
       points: usedPoint(truenasSpace(s)?.used),
+      tracked: { version: s.version ?? null },
+      // A task list that didn't answer says nothing about its backups.
+      protection: truenasProtection(
+        ['replication.query', 'cloudsync.query', 'pool.snapshottask.query'].some((m) => s.unread.includes(m))
+          ? null
+          : s.tasks,
+      ),
     };
   },
   actions: { scrub: scrubPool, start: startApp, stop: stopApp, dismiss: dismissAlert },

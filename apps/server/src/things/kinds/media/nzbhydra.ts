@@ -871,6 +871,7 @@ export async function hydraSeen(
       { line: snapshot.indexers ? plural(snapshot.indexers.length, 'indexer') : 'NZBHydra2' },
     ),
     points: {},
+    tracked: { version: snapshot.version ?? null },
     ...linesSeen({ notices }, hydraSkipped(snapshot)),
   };
 }

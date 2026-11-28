@@ -171,21 +171,24 @@ export async function runsToday(session: TxSession, automationId: string, now: D
   return row?.n ?? 0;
 }
 
-/** Step kinds the release before mail triggers doesn't have. */
-const STEP_KINDS_AFTER_PREVIOUS_RELEASE: readonly string[] = ['connection_actions'];
+/** Step kinds the release before mail triggers, or before automations that act without AI, doesn't have. */
+const STEP_KINDS_AFTER_PREVIOUS_RELEASE: readonly string[] = ['connection_actions', 'run_action'];
+/** Trigger kinds the release before automations that act without AI doesn't have. */
+const TRIGGER_KINDS_AFTER_PREVIOUS_RELEASE: readonly string[] = ['mail', 'home_state', 'protect'];
 
 /**
  * Whether the previous release, should an update be rolled back onto this database, must stop the run before it runs
  * any of its steps: a run started by incoming mail (that release runs agent steps of any trigger but a tracker's as the
- * person's own turns, with the email in the prompt), and a run with a step kind it doesn't have (it would try that step
- * again on every pass until the run's time ran out).
+ * person's own turns, with the email in the prompt), by Home Assistant or UniFi Protect (it can't read such a
+ * definition), and a run with a step kind it doesn't have (it would try that step again on every pass until the run's
+ * time ran out).
  */
 export function previousReleaseStops(run: {
   trigger: { kind: string };
   definition: { steps: readonly { kind: string }[] };
 }): boolean {
   return (
-    run.trigger.kind === 'mail' ||
+    TRIGGER_KINDS_AFTER_PREVIOUS_RELEASE.includes(run.trigger.kind) ||
     run.definition.steps.some((s) => STEP_KINDS_AFTER_PREVIOUS_RELEASE.includes(s.kind))
   );
 }

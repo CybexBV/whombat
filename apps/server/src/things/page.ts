@@ -36,12 +36,14 @@ import {
   UPTIME_ID,
 } from '@whombat/core';
 import { eq } from 'drizzle-orm';
+import { settingsCopyOf } from '../changes/copies/view';
 import { logoOf } from '../connections/look';
 import { type ConnectionViewer, isVisibleTo, toolRowsOf } from '../connections/store';
 import type { CatalogConnectionRow } from '../connections/types';
 import { connectorsOf } from '../connections/views';
 import { catalogConnections } from '../db/schema/index';
 import { DEVICE_CATALOG_ID, type DeviceSkillRow, skillById, skillOfConnection } from '../devices/store';
+import { exposurePageNotices } from '../exposure/lines';
 import { listChanges } from '../home/changes';
 import { burrowLocale } from '../i18n/locale';
 import { localizeTree } from '../i18n/phrases';
@@ -49,6 +51,7 @@ import { withUptime } from '../incidents/history';
 import { notFound } from '../lib/errors';
 import { liveResearches } from '../looks/research';
 import type { Services } from '../services';
+import { worksOnPage } from '../works/page';
 import { type AccountTarget, accountPage, findAccount } from './accounts/index';
 import { devicePage, learningPage } from './devices';
 import { genericSlots } from './generic';
@@ -91,7 +94,7 @@ import {
   UP_KEY,
 } from './points';
 import { thingQuiet, thingStates } from './quiet/store';
-import type { LooseNotice } from './quiet/types';
+import type { KindNotice, LooseNotice } from './quiet/types';
 import { heldPage, type MarkedLines, markLines } from './quiet/wire';
 import {
   hostsServing,
@@ -258,13 +261,20 @@ export async function connectionPage(
     viewer,
     quiet,
   };
-  const [view, tools, changed, partOf, connected, states] = await Promise.all([
+  const [view, tools, changed, partOf, connected, states, works, exposure, copy] = await Promise.all([
     kind ? kind.page(ctx) : Promise.resolve(null as KindView | null),
     toolRowsOf(services.db, row.id),
     hasChanges(services, viewer, id, now),
     within(partOfServer(services, viewer.burrowId, row), 5_000, null),
     connectedByLine(services, row, viewer, timeZone),
     thingStates(services.db, id),
+    worksOnPage(services, row, quiet, now, timeZone),
+    // What its settings opened to the internet lately (internet-exposure.md); never slows the page down.
+    within(exposurePageNotices(services, row), 3_000, [] as KindNotice[]),
+    // A service Whombat keeps a copy of the settings of (outside-changes.md): its card and, when copies fail, a line.
+    burrowLocale(services, viewer.burrowId)
+      .then((locale) => settingsCopyOf(services, row, now, timeZone, locale))
+      .catch(() => null),
   ]);
   // A kind in slots that lays them out wrong still draws; the log says what to fix.
   const misplaced = view?.slots ? slotProblems(view) : [];
@@ -325,8 +335,12 @@ export async function connectionPage(
   const backup = backupNotice(figures, now);
   const lines: LooseNotice[] = [
     ...(view?.notices ?? []),
+    // The service's test, while it is watched and failed twice in a row: the same line the health pass keeps.
+    ...(works.line ? [works.line] : []),
+    ...exposure,
     ...(backup ? [backup] : []),
     ...(machineDisk && !kindChecks.has(machineDisk.check) ? [machineDisk] : []),
+    ...(copy?.line ? [copy.line] : []),
     ...genericNotices(
       row,
       newTools.length,
@@ -378,6 +392,7 @@ export async function connectionPage(
       )
     : null;
   if (card) summary.push(card);
+  if (works.panel) summary.push(works.panel);
   const items = accessItems(entry, row, tools);
   // A gateway is no agent's (fusebox-page.md), nor is the Vault's sync (onepassword-sync.md): nothing to
   // say about what Whombat may do with it.
@@ -446,6 +461,7 @@ export async function connectionPage(
     readAt: readAt ? readAt.toISOString() : null,
     ...(problem ? { problem: clip(problem, 200) } : {}),
     ...(partOf ? { partOf } : {}),
+    ...(copy ? { settingsCopy: copy.view } : {}),
     ...rangeFields(range, slotted && !followsRange(tabs[0]?.panels ?? []) ? [range] : kind?.ranges),
     ...(view ? { refreshS: refreshOf(view) } : {}),
     ...held.fields,

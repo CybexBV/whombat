@@ -2,7 +2,12 @@ package broker
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -385,32 +390,68 @@ func (r *pveReq) backupVolume(ctx context.Context) (string, error) {
 	return st, nil
 }
 
-func (r *pveReq) backupRestore(ctx context.Context) (proto.ManageResponse, error) {
-	req := r.req
+// listedBackup checks the request's volume, a backup on a backup storage of
+// this node that its content list shows, and tells its kind (vm | container).
+func (r *pveReq) listedBackup(ctx context.Context) (string, error) {
 	st, err := r.backupVolume(ctx)
 	if err != nil {
-		return proto.ManageResponse{}, err
+		return "", err
 	}
 	// The volume must be listed (and tells the guest kind).
 	items, err := r.content(ctx, st, url.Values{"content": {"backup"}})
 	if err != nil {
+		return "", err
+	}
+	for _, it := range items {
+		if it.VolID != r.req.Volume {
+			continue
+		}
+		kind := backupKind(it.Subtype, it.VolID)
+		if kind == "" {
+			return "", codeErr(CodePlatformError, "cannot tell whether "+r.req.Volume+" is a VM or a container backup")
+		}
+		return kind, nil
+	}
+	return "", codeErr(proto.CodeNotFound, "backup "+r.req.Volume+" does not exist on this node")
+}
+
+// backupConfig is a backup's own configuration as vzdump stored it, read
+// without restoring it: what a restore brings back (its disks and their
+// sizes, its memory, its guest agent), which can differ from the guest's
+// today. Its notes, snapshots and pending changes are left out.
+func (r *pveReq) backupConfig(ctx context.Context) (proto.ManageResponse, error) {
+	kind, err := r.listedBackup(ctx)
+	if err != nil {
 		return proto.ManageResponse{}, err
 	}
-	kind := ""
-	found := false
-	for _, it := range items {
-		if it.VolID == req.Volume {
-			found, kind = true, backupKind(it.Subtype, it.VolID)
-			break
+	var raw string
+	if err := r.api.get(ctx, r.nodePath()+"/vzdump/extractconfig", url.Values{"volume": {r.req.Volume}}, &raw); err != nil {
+		return proto.ManageResponse{}, err
+	}
+	values := backupConfigValues(raw)
+	if _, ok := values["cipassword"]; ok {
+		values["cipassword"] = maskedSecret
+	}
+	c := &proto.GuestConfig{Platform: proto.PlatformPVE, Kind: kind, Values: values, Disks: pveDisks(kind, values, nil)}
+	for k, v := range values {
+		if pveRestricted(kind, k, v) && k != "rootfs" {
+			c.Restricted = append(c.Restricted, k)
 		}
 	}
-	if !found {
-		return proto.ManageResponse{}, codeErr(proto.CodeNotFound, "backup "+req.Volume+" does not exist on this node")
-	}
-	if kind == "" {
-		return proto.ManageResponse{}, codeErr(CodePlatformError, "cannot tell whether "+req.Volume+" is a VM or a container backup")
+	sort.Strings(c.Restricted)
+	return proto.ManageResponse{OK: true, Config: c}, nil
+}
+
+func (r *pveReq) backupRestore(ctx context.Context) (proto.ManageResponse, error) {
+	req := r.req
+	kind, err := r.listedBackup(ctx)
+	if err != nil {
+		return proto.ManageResponse{}, err
 	}
 	params := url.Values{}
+	if req.Isolate != nil && (r.g != nil || req.Start) {
+		return proto.ManageResponse{}, fieldErr(proto.CodeInvalidValue, "isolate", "only for a new guest that doesn't start")
+	}
 	var id string
 	if r.g != nil {
 		// Over the existing guest: same kind, stopped, same id.
@@ -449,19 +490,177 @@ func (r *pveReq) backupRestore(ctx context.Context) (proto.ManageResponse, error
 	} else {
 		params.Set("archive", req.Volume)
 	}
-	if req.Unique {
+	unique := req.Unique
+	var isolation url.Values
+	if req.Isolate != nil {
+		if isolation, err = r.restoreIsolation(ctx, kind, *req.Isolate); err != nil {
+			return proto.ManageResponse{}, err
+		}
+		// A container restored with unique gets the backup's network cards
+		// back with only a new MAC address, dropping the isolated ones; the
+		// isolated cards carry new MAC addresses of their own.
+		if kind == "container" {
+			unique = false
+		}
+		for k, v := range isolation {
+			params[k] = v
+		}
+	}
+	if unique {
 		params.Set("unique", "1")
 	}
 	if req.Start {
 		params.Set("start", "1")
 	}
 	var upid string
-	if err := r.api.post(ctx, path, params, &upid); err != nil {
+	err = r.api.post(ctx, path, params, &upid)
+	if err != nil && isolation.Has("tags") && tagsRefused(err) {
+		// A cluster that keeps tags to a list, or this token not allowed a
+		// new one: the tag only helps a person spot the copy, so the copy
+		// is restored without it. Proxmox checks the parameters before it
+		// starts the restore, so nothing was made by the refused call.
+		params.Del("tags")
+		err = r.api.post(ctx, path, params, &upid)
+	}
+	if err != nil {
 		return proto.ManageResponse{}, err
 	}
 	resp := taskAnswer(upid)
 	resp.NewID = id
 	return resp, nil
+}
+
+var (
+	restoreMarkerRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
+	pveTagRe        = regexp.MustCompile(`^[a-z0-9_][a-z0-9_.+-]{0,63}$`)
+	pveNetKeyRe     = regexp.MustCompile(`^net\d+$`)
+	macAddrRe       = regexp.MustCompile(`^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$`)
+	confKeyRe       = regexp.MustCompile(`^[a-z][a-z0-9_.-]*$`)
+)
+
+// restoreIsolation is what a restore is given so that the copy is cut off
+// from the moment Proxmox VE writes its configuration: the backup's own
+// network cards with their link down and a new MAC address, no start at
+// boot, no protection, the copy's name and the marker as its notes, and the
+// tag added to the backup's tags. Proxmox VE (7.2 and later for VMs) puts
+// settings given with a restore over the backup's, apart from disks; an
+// older one refuses a VM restore with them, which makes no copy at all.
+func (r *pveReq) restoreIsolation(ctx context.Context, kind string, iso proto.RestoreIsolation) (url.Values, error) {
+	if iso.Name == "" || len(iso.Name) > 63 || checkGuestName(iso.Name) != nil || strings.Contains(iso.Name, ".") {
+		return nil, fieldErr(proto.CodeInvalidValue, "isolate.name", "must be a host name")
+	}
+	if !restoreMarkerRe.MatchString(iso.Marker) {
+		return nil, fieldErr(proto.CodeInvalidValue, "isolate.marker", "must be one word of letters, digits, '-' and '_'")
+	}
+	if iso.Tag != "" && !pveTagRe.MatchString(iso.Tag) {
+		return nil, fieldErr(proto.CodeInvalidValue, "isolate.tag", "not a Proxmox VE tag")
+	}
+	// The backup's own configuration: which network cards it has.
+	var raw string
+	if err := r.api.get(ctx, r.nodePath()+"/vzdump/extractconfig", url.Values{"volume": {r.req.Volume}}, &raw); err != nil {
+		return nil, err
+	}
+	conf := backupConfigValues(raw)
+	out := url.Values{}
+	if kind == "container" {
+		out.Set("hostname", iso.Name)
+	} else {
+		out.Set("name", iso.Name)
+	}
+	out.Set("onboot", "0")
+	out.Set("description", iso.Marker)
+	if v := conf["protection"]; v != "" && v != "0" {
+		out.Set("protection", "0")
+	}
+	for k, v := range conf {
+		if pveNetKeyRe.MatchString(k) {
+			mac, err := randomMAC()
+			if err != nil {
+				return nil, err
+			}
+			out.Set(k, isolatedNet(kind, v, mac))
+		}
+	}
+	if iso.Tag != "" {
+		tags := slices.DeleteFunc(strings.FieldsFunc(conf["tags"], func(c rune) bool { return c == ';' || c == ',' || c == ' ' }),
+			func(t string) bool { return !pveTagRe.MatchString(t) })
+		if !slices.Contains(tags, iso.Tag) {
+			tags = append(tags, iso.Tag)
+		}
+		out.Set("tags", strings.Join(tags, ";"))
+	}
+	return out, nil
+}
+
+// backupConfigValues reads a guest configuration as vzdump stored it
+// ("key: value" lines; notes as '#' lines; snapshots and pending changes in
+// [sections] after the current configuration, which are left out).
+func backupConfigValues(raw string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			break
+		}
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, ":")
+		if k = strings.TrimSpace(k); ok && confKeyRe.MatchString(k) {
+			out[k] = strings.TrimSpace(v)
+		}
+	}
+	return out
+}
+
+// isolatedNet is a network card's value with its link down and mac as its
+// MAC address (a VM's "virtio=…" or "macaddr=…", a container's "hwaddr=…"),
+// the rest as it was.
+func isolatedNet(kind, value, mac string) string {
+	var parts []string
+	replaced := false
+	for _, p := range strings.Split(value, ",") {
+		k, v, _ := strings.Cut(p, "=")
+		switch {
+		case p == "" || k == "link_down":
+		case macAddrRe.MatchString(v):
+			parts = append(parts, k+"="+mac)
+			replaced = true
+		default:
+			parts = append(parts, p)
+		}
+	}
+	if !replaced {
+		key := "macaddr"
+		if kind == "container" {
+			key = "hwaddr"
+		}
+		parts = append(parts, key+"="+mac)
+	}
+	return strings.Join(append(parts, "link_down=1"), ",")
+}
+
+// randomMAC is a random locally administered unicast MAC address.
+func randomMAC() (string, error) {
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	b[0] = b[0]&0xfc | 0x02
+	return fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", b[0], b[1], b[2], b[3], b[4], b[5]), nil
+}
+
+// tagsRefused: Proxmox VE refused a request over its tags (a tag outside
+// the cluster's list, or one this token may not make).
+func tagsRefused(err error) bool {
+	var ae *pveAPIError
+	if !errors.As(err, &ae) {
+		return false
+	}
+	if _, ok := ae.Fields["tags"]; ok {
+		return true
+	}
+	return ae.Status == http.StatusForbidden && strings.Contains(strings.ToLower(ae.Msg), "tag")
 }
 
 func (r *pveReq) volumePath(storage string) string {

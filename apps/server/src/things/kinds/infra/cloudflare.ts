@@ -19,7 +19,9 @@ import type {
   ThingPageTab,
   ThingTone,
 } from '@whombat/core';
+import type { TrackedRoutes } from '../../../changes/diff';
 import type { CatalogConnectionRow } from '../../../connections/types';
+import { EXPOSURE_NEW } from '../../../exposure/check';
 import { ApiError } from '../../../lib/errors';
 import type { Services } from '../../../services';
 import { checkWatched } from '../../quiet/defaults';
@@ -72,6 +74,10 @@ const ACCOUNTS_MAX = 3;
 const CONNECTIONS_MAX = 12;
 const TRAFFIC_CACHE_MS = 5 * 60_000;
 const CERTS_CACHE_MS = 60 * 60_000;
+/** The tunnels' routes are read again this often for what changed there (docs/decisions/outside-changes.md). */
+const ROUTES_CACHE_MS = 15 * 60_000;
+/** Tunnels whose routes one read asks for. */
+const ROUTES_TUNNELS_MAX = 10;
 const H = 3_600_000;
 const DAY = 24 * H;
 const CERT_WARN_DAYS = 14;
@@ -112,6 +118,8 @@ export interface CfTunnel {
   inactiveAt?: Date | null;
   /** When this Whombat first saw it degraded, in memory (a restart starts over); null when it isn't. */
   degradedSince?: Date | null;
+  /** Its routes are set in Cloudflare's dashboard (`remote_config`), so Cloudflare can say them. */
+  remote?: boolean;
 }
 
 export interface CfCertificate {
@@ -191,6 +199,7 @@ export function parseTunnels(body: unknown, account: string): CfTunnel[] {
         connections: null,
         colos: [],
         inactiveAt: dateOf(t.conns_inactive_at),
+        ...(t.remote_config === true || str(t.config_src) === 'cloudflare' ? { remote: true } : {}),
       };
     })
     .filter((t): t is CfTunnel => t !== null);
@@ -365,6 +374,57 @@ async function readTunnels(
       }),
   );
   return { tunnels, partial: read.length < lists.length };
+}
+
+/**
+ * `GET /accounts/{id}/cfd_tunnel/{tid}/configurations`: where a tunnel set up in Cloudflare's dashboard sends each
+ * hostname (and path). The catch-all without a hostname isn't a route.
+ */
+export function parseIngress(body: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of list(rec(rec(resultOf(body)).config).ingress).slice(0, 200)) {
+    const r = rec(raw);
+    const host = str(r.hostname);
+    const service = str(r.service);
+    if (!host || !service) continue;
+    const path = str(r.path);
+    out[path ? `${host}${path.startsWith('/') ? '' : '/'}${path}` : host] = service;
+  }
+  return out;
+}
+
+/**
+ * The routes of the tunnels set up in Cloudflare's dashboard, kept 15 minutes, for the change log; null when there
+ * are none to read or one couldn't be read (a missing tunnel's routes would look removed).
+ */
+async function tunnelRoutes(
+  services: Services,
+  row: CatalogConnectionRow,
+  tunnels: readonly CfTunnel[] | null,
+): Promise<TrackedRoutes | null> {
+  const remote = (tunnels ?? []).filter((t) => t.remote).slice(0, ROUTES_TUNNELS_MAX);
+  if (!remote.length) return null;
+  return cachedRead(
+    services,
+    `cloudflare-routes:${row.id}:${remote.map((t) => t.id).join(',')}`,
+    row,
+    async () => {
+      const maps = await Promise.all(
+        remote.map(async (t) =>
+          parseIngress(
+            await getJson(
+              services,
+              row,
+              NAME,
+              `${API}/accounts/${encodeURIComponent(t.account)}/cfd_tunnel/${encodeURIComponent(t.id)}/configurations`,
+            ),
+          ),
+        ),
+      );
+      return { via: 'tunnel' as const, map: Object.assign({}, ...maps) as Record<string, string> };
+    },
+    ROUTES_CACHE_MS,
+  ).catch(() => null);
 }
 
 async function readCertificates(
@@ -562,6 +622,8 @@ export const CLOUDFLARE_CHECKS: readonly KindCheck[] = [
     perItem: false,
     startsOn: false,
   },
+  // Something new is open to the internet: a new opening in its settings (internet-exposure.md).
+  EXPOSURE_NEW,
 ];
 
 /** What this read couldn't see (QN-11): a part the token may not read, a refused account, sites past the first ten. */
@@ -1193,6 +1255,7 @@ export const CLOUDFLARE_KIND: KindModule = {
     return {
       glance: cardOf(view, ['requests', 'tunnels'], plural(s.zonesTotal, 'site')),
       points: {},
+      tracked: { routes: await tunnelRoutes(services, row, s.tunnels) },
       ...linesSeen(view, cloudflareSkipped(s)),
     };
   },

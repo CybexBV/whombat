@@ -23,8 +23,10 @@ import {
   proposesInTurn,
 } from '../automations/proposed-actions';
 import { automationOpensPrText, automationOwnsPullRequest } from '../automations/workspace';
+import { whatsProtectedTool } from '../backup-trust/tool';
 import { backupBringBackTool } from '../backups/look/tool';
 import { BROWSER_TOOL_HANDLERS } from '../browser/preview-tool';
+import { whatChangedTool } from '../changes/agent';
 import { setChatTitle } from '../chats/commands';
 import { editCanvas } from '../collab/commands';
 import {
@@ -53,6 +55,7 @@ import { runs, searchAnswers } from '../db/schema/index';
 import { DELEGATE_TOOL_HANDLERS } from '../delegate/tools';
 import { recordDeploy } from '../deployments/commands';
 import { deviceProbeTool, proposeDeviceSkillTool } from '../devices/tools';
+import { internetExposureTool } from '../exposure/agent';
 import { assessorReplyTool, similarReportsTool, submitAssessmentTool } from '../feedback/tools';
 import { outsidersFileIds } from '../files/access';
 import { ATTACHMENT_TOOL_HANDLERS } from '../files/tools';
@@ -104,6 +107,7 @@ import { vaultAddServerTool } from '../vault/add-server';
 import { vaultAskTool } from '../vault/ask';
 import { vaultSaveTool } from '../vault/save';
 import { weatherForecastTool } from '../weather/tool';
+import { serviceTestTool } from '../works/tool';
 
 export interface ToolContext {
   services: Services;
@@ -640,6 +644,8 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   vault_ask: (ctx, input) => vaultAskTool(ctx, input),
   // This Whombat's own backups (first-day.md): where they go, set only while nothing backs it up.
   whombat_backup: (ctx, input) => whombatBackupTool(ctx, input),
+  // Where everything's data is kept and the restore tests (backup-trust.md): a read.
+  whats_protected: (ctx, input) => whatsProtectedTool(ctx, input),
   // One thing back from a backup (backup-look.md): finding is a read, bringing back asks the person first.
   backup_bring_back: (ctx, input) => backupBringBackTool(ctx, input),
   // A thread by link (share-links.md): always a card first.
@@ -700,6 +706,9 @@ export const TOOL_HANDLERS: { [N in McpToolName]: Handler<N> } = {
   thing_watch: thingWatchTool,
   watch_status: (ctx) => watchStatusTool(ctx),
   watch_history: (ctx, input) => watchHistoryTool(ctx, input),
+  service_test: (ctx, input) => serviceTestTool(ctx, input),
+  internet_exposure: (ctx) => internetExposureTool(ctx),
+  what_changed: (ctx, input) => whatChangedTool(ctx, input),
   // Keep a thing quiet for a while, only on the person's word.
   quiet_until: (ctx, input) => quietUntilTool(ctx, input),
   // What the assistant found out about a look (look-research.md LR-05): listed and run only in a look's turns.

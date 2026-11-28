@@ -18,7 +18,8 @@
 // runs it through systemd-run to replace its own executable. So is
 // `whombat-agent package-task --dir DIR`: one package check or install, in
 // a transient unit (or its own session without systemd) that outlives the
-// agent.
+// agent, and `whombat-agent app-task --dir DIR`: one update of Docker Compose
+// apps, the same way.
 package main
 
 import (
@@ -27,23 +28,17 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"rackoon/internal/agent"
-	"rackoon/internal/agent/broker"
-	"rackoon/internal/agent/collect"
-	"rackoon/internal/agent/diagnose"
-	"rackoon/internal/agent/diskusage"
-	"rackoon/internal/agent/macos"
 )
 
 // version is set with -ldflags "-X main.version=...".
@@ -73,8 +68,8 @@ Usage:
   whombat-agent diagnose-test [--check NAME [--arg k=v]... | --exec COMMAND [--timeout S]]
                              the assistant's checks and commands, locally (no NAME: the catalog)
   whombat-agent version
-  %s
-`, version, screenUsage())
+  %s%s
+`, version, screenUsage(), serviceUsage())
 }
 
 func main() {
@@ -82,6 +77,7 @@ func main() {
 		usage()
 		os.Exit(2)
 	}
+	ownWrites()
 	var err error
 	switch os.Args[1] {
 	case "enroll":
@@ -108,10 +104,16 @@ func main() {
 		err = cmdDiagnoseTest(os.Args[2:])
 	case "package-task":
 		err = cmdPackageTask(os.Args[2:])
+	case "app-task":
+		err = cmdAppTask(os.Args[2:])
 	case "update-install":
 		err = cmdUpdateInstall(os.Args[2:])
 	case "screen":
 		err = cmdScreen(os.Args[2:])
+	case "service":
+		err = cmdService(os.Args[2:])
+	case "uninstall":
+		err = cmdUninstall(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("whombat-agent", version)
 	case "help", "-h", "--help":
@@ -127,7 +129,10 @@ func main() {
 	}
 }
 
-func newLogger(level string) *slog.Logger {
+func newLogger(level string) *slog.Logger { return newLoggerTo(os.Stderr, level) }
+
+// newLoggerTo logs to w (the Windows service's log file, else stderr).
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var l slog.Level
 	if err := l.UnmarshalText([]byte(level)); err != nil {
 		l = slog.LevelInfo
@@ -142,8 +147,14 @@ func newLogger(level string) *slog.Logger {
 			return a
 		}
 	}
-	return slog.New(slog.NewTextHandler(os.Stderr, opts))
+	return slog.New(slog.NewTextHandler(w, opts))
 }
+
+// takeOver makes the agent's folder its own before a command reads or
+// writes the settings in dir (secureDataDir): on Windows an administrator's
+// command would otherwise read what someone else left there, or write where
+// they point it. Tests replace it.
+var takeOver = secureDataDir
 
 // loadOrDefaultConfig reads agent.toml, or returns defaults when the agent
 // is not enrolled (collect and console-test work without enrollment).
@@ -176,7 +187,10 @@ func cmdEnroll(args []string) error {
 		}
 		*token = strings.TrimSpace(t)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	if err := prepareDirs(*dir, *stateDir); err != nil {
+		return err
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), stopSignals()...)
 	defer stop()
 	cfg, err := agent.Enroll(ctx, agent.EnrollOptions{
 		Hub:          *hub,
@@ -210,9 +224,15 @@ func cmdRun(args []string) error {
 	dir := fs.String("config-dir", agent.DefaultConfigDir, "configuration directory")
 	level := fs.String("log-level", "info", "log level: debug, info, warn, error")
 	fs.Parse(args)
-	log := newLogger(*level)
-	slog.SetDefault(log)
-	cfg, cfgErr := agent.LoadConfig(*dir)
+	return runPlatform(*dir, *level)
+}
+
+// runAgent runs the agent of dir until ctx ends; a value on reload makes it
+// read agent.toml again. When the agent needs a restart (an update or a
+// rollback) it restarts the process (restartProcess), which on Windows
+// ends runAgent with agent.ErrRestart.
+func runAgent(ctx context.Context, reload <-chan struct{}, dir string, log *slog.Logger) error {
+	cfg, cfgErr := agent.LoadConfig(dir)
 
 	// First of all: a freshly updated binary that keeps failing (crash
 	// loop, no hub connection) is rolled back here, before anything else
@@ -223,6 +243,9 @@ func cmdRun(args []string) error {
 		stateDir = cfg.StateDir
 	}
 	pending, err := agent.CheckPendingUpdate(stateDir, version, log)
+	if errors.Is(err, agent.ErrRestart) {
+		return err
+	}
 	if err != nil {
 		log.Error("update check failed", "err", err)
 	}
@@ -230,17 +253,7 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("%w (run `whombat-agent enroll` first)", cfgErr)
 	}
 	rt := agent.NewRuntime(cfg, version, log)
-	if runtime.GOOS == "darwin" {
-		wireMac(rt, cfg, log)
-	} else {
-		rt.Collector = collect.New(cfg, version)
-		br := broker.NewBroker(cfg, rt.Inventory, log)
-		br.OnUnraidChange = rt.RefreshUnraid
-		br.OnPackageChange = rt.RefreshPackages
-		rt.Broker = br
-		rt.Diagnostics = diagnose.New(br.Inspect, log)
-		rt.DiskUsage = diskusage.New(rt.Inventory, log)
-	}
+	wireAgent(rt, cfg, log)
 	if exeErr == nil {
 		rt.Updater = agent.NewUpdater(exe, cfg, version, log)
 	} else {
@@ -249,44 +262,30 @@ func cmdRun(args []string) error {
 	wireScreen(rt, cfg, log)
 	rt.WatchUpdate(pending)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var reexec atomic.Bool
 	rt.Restart = func() {
 		reexec.Store(true)
 		cancel()
 	}
-	sigs := make(chan os.Signal, 4)
-	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
 	go func() {
-		for s := range sigs {
-			if s == syscall.SIGHUP {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-reload:
 				if err := rt.Reload(); err != nil {
 					log.Error("reload failed", "err", err)
 				}
-				continue
 			}
-			log.Info("shutting down", "signal", s.String())
-			cancel()
-			return
 		}
 	}()
 	if err := rt.Run(ctx); err != nil {
 		return err
 	}
 	if reexec.Load() {
-		signal.Stop(sigs)
-		if restartByExit() {
-			// launchd (KeepAlive) starts the executable again, now the new
-			// one: the restart it knows and logs.
-			log.Warn("exiting so launchd starts the agent again", "executable", exe)
-			return nil
-		}
-		log.Warn("re-executing the agent", "executable", exe)
-		if err := agent.ReExec(exe); err != nil {
-			// The service manager starts the (new) executable instead.
-			return fmt.Errorf("re-exec %s: %w", exe, err)
-		}
+		return restartProcess(exe, log)
 	}
 	return nil
 }
@@ -302,7 +301,7 @@ func cmdUpdateInstall(args []string) error {
 	if *from == "" || *to == "" || !filepath.IsAbs(*from) || !filepath.IsAbs(*to) || (*backup != "" && !filepath.IsAbs(*backup)) {
 		return errors.New("update-install needs absolute --from and --to")
 	}
-	if os.Geteuid() != 0 {
+	if !isRoot() {
 		return errors.New("update-install must run as root")
 	}
 	return agent.InstallExecutable(*from, *to, *backup)
@@ -315,16 +314,16 @@ func cmdCollect(args []string) error {
 	asJSON := fs.Bool("json", true, "print the report as JSON")
 	series := fs.Bool("series", false, "also print Report.Series()")
 	fs.Parse(args)
+	// On Windows the collector writes the scripts it runs into the state
+	// folder.
+	if err := takeOver(*dir); err != nil {
+		return err
+	}
 	cfg, err := loadOrDefaultConfig(*dir)
 	if err != nil {
 		return err
 	}
-	var c agent.Collector
-	if runtime.GOOS == "darwin" {
-		c = macos.New(cfg, version)
-	} else {
-		c = collect.New(cfg, version)
-	}
+	c := newCollector(cfg)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	// Some collectors compute rates from deltas: prime them first.

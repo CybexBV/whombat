@@ -4,6 +4,7 @@
  * are in `@whombat/client/hosts/react`.
  */
 export * from './agent-updates';
+export * from './app-updates';
 export * from './apply';
 export * from './bulk';
 export * from './chart';
@@ -34,3 +35,4 @@ export * from './tiles';
 export * from './unraid';
 export * from './updates';
 export * from './verdict';
+export * from './windows';

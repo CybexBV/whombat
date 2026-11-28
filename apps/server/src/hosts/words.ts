@@ -5,7 +5,9 @@
  * backup of web on pve-02 is done.”). Written by the server from the call's own arguments and the service's answer,
  * never by the agent; no task ids, logs or tool names.
  */
+
 import { HOST_SELF_SERVER_POWER_TEXT, type HostServerDetail } from '@whombat/core';
+import { appAskPhrase, appCardNote, appListWords, appNames } from './app-words';
 import { knownServer, runsThisWhombat } from './self';
 import { packageTaskCodeText, updatePhrase, waitingUpdates } from './updates';
 
@@ -445,6 +447,8 @@ function phrase(tool: string, args: Args, now: Date): Phrase | null {
             doing: `Checking the containers on ${server} for updates`,
           }
         : { ask: `update ${guest}`, doing: `Updating ${guest}` };
+    case 'app_update':
+      return appAskPhrase(args);
     case 'guest_autostart':
       return args.on === false
         ? { ask: `stop ${guest} starting with its server`, done: `${guest} no longer starts with its server` }
@@ -581,6 +585,7 @@ function pluginName(args: Args): string | null {
  * for a moment while its updates install (SWU-08).
  */
 export function serversNoteWords(tool: string, args: Args): string | null {
+  if (tool === 'app_update') return appCardNote(args);
   if (!runsThisWhombat(args.server)) return null;
   if (tool === 'server_power') return HOST_SELF_SERVER_POWER_TEXT;
   if (tool === 'server_update' && args.action === 'install') return SELF_SERVER_UPDATE_TEXT;
@@ -686,7 +691,7 @@ export interface TaskWords {
    * What a clean end adds once the server's report shows it (IU-07): parity errors, plugin or container updates; or, for
    * a Check or Install of the server's updates (SWU-08), the whole message from the task's result and the report.
    */
-  after?: 'parity' | 'plugins' | 'containers' | 'updates.check' | 'updates.install';
+  after?: 'parity' | 'plugins' | 'containers' | 'updates.check' | 'updates.install' | 'apps';
   /** The sentence for an end with a code (a package task: the lock still held, the time limit). */
   codes?: Partial<Record<'busy' | 'timeout', string>>;
   /** An Install's named packages (its message names them). */
@@ -935,6 +940,16 @@ export function serversTaskWords(tool: string, args: Args, names: TaskNames): Ta
             after: 'containers',
           }
         : { what: `The update of ${on}`, doing: `Updating ${on}`, ok: `${on} is up to date now.` };
+    case 'app_update': {
+      // The line at the end is written from each app's outcome (`appsOutcomeText`).
+      const list = appListWords(appNames(args));
+      return {
+        server,
+        what: `The update of ${list} on ${server}`,
+        doing: `Updating ${list} on ${server}`,
+        after: 'apps',
+      };
+    }
     case 'server_update': {
       const op = action === 'check' ? 'packages.check' : 'packages.install';
       const codes = {

@@ -59,7 +59,8 @@ const SYSTEM = {
 
 describe('the host’s package ops (CT-500)', () => {
   it('appends Check and Install to the manage ops, on platform host', () => {
-    expect(HOST_MANAGE_OPS.slice(-2)).toEqual(['packages.check', 'packages.install']);
+    // Updating a Compose app (app-updates.md) came after them.
+    expect(HOST_MANAGE_OPS.slice(-3, -1)).toEqual(['packages.check', 'packages.install']);
     expect(HOST_PACKAGE_MANAGE_OPS).toEqual(['packages.check', 'packages.install']);
     expect(HostManagePlatform.options.at(-1)).toBe('host');
     expect(isHostPackageManageOp('packages.install')).toBe(true);
@@ -196,7 +197,14 @@ describe('the package task and the server’s report (CT-501, CT-502)', () => {
 describe('the Servers tools for updates (CT-505)', () => {
   it('reads with server_updates and changes with server_update, before server_add', () => {
     const names = SERVERS_TOOLS.map((t) => t.name);
-    expect(names.slice(-3)).toEqual(['server_updates', 'server_update', 'server_add']);
+    // Compose app updates (app-updates.md) sit between them and server_add.
+    expect(names.slice(-5)).toEqual([
+      'server_updates',
+      'server_update',
+      'app_updates',
+      'app_update',
+      'server_add',
+    ]);
     expect(servers().tools.map((t) => t.name)).toEqual(names);
     expect(tool('server_updates')?.access).toBe('read');
     expect(tool('server_update')?.access).toBe('write');

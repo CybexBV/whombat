@@ -1389,3 +1389,170 @@ describe('a Mac (macos-servers.md)', () => {
     }
   });
 });
+
+describe('Docker Compose app updates (app-updates.md)', () => {
+  // basalt's Compose apps while this block runs: a plain app and a database, both with a newer version.
+  let on = false;
+  const guest = (name: string, image: string, version: string, next: string) => ({
+    id: `docker:${name}`,
+    name,
+    platform: 'docker',
+    kind: 'container',
+    image,
+    state: 'running',
+    cpu_pct: 1,
+    memory_used_mb: 100,
+    memory_limit_mb: 1024,
+    uptime_s: 3600,
+    last_exit: null,
+    console: { available: false },
+    project: 'stack',
+    update_available: true,
+    // The image it runs, the newer one's digest and Compose's hash of its settings: what a yes is bound to.
+    image_id: `sha256:${name.charCodeAt(0).toString(16).repeat(32)}`,
+    app: {
+      service: name,
+      version,
+      new_version: next,
+      blocked: null,
+      updating: false,
+      last: null,
+      new_digest: `sha256:${'e'.repeat(64)}`,
+      config_hash: 'c0ffee',
+    },
+  });
+  const apps = [
+    guest('traefik', 'traefik:v3.1', 'v3.1.2', 'v3.2.0'),
+    guest('redis', 'redis:7', '7.2.4', '7.2.5'),
+  ];
+
+  beforeAll(async () => {
+    await ensureServersConnection(t.services);
+    fake.on('GET', '/api/v1/servers/basalt/guests', (r) =>
+      on && r.query.get('platform') === 'docker'
+        ? { status: 200, body: { guests: apps, total: apps.length, next_cursor: null } }
+        : null,
+    );
+    fake.on('GET', '/api/v1/guests', (r) =>
+      on && r.query.get('server') === 'basalt' && r.query.get('platform') === 'docker'
+        ? { status: 200, body: { guests: apps.map((g) => ({ ...g, server: 'basalt' })), total: apps.length } }
+        : null,
+    );
+    fake.on('POST', '/api/v1/servers/basalt/apps/update', () =>
+      on ? { status: 202, body: { ok: true, task: { id: 'app:0123456789abcdef' } } } : null,
+    );
+    on = true;
+  });
+  afterAll(() => {
+    on = false;
+  });
+
+  it('asks through the approval card from a page, saying a database’s update can’t be undone; the yes runs it', async () => {
+    const before = fake.calls('POST', '/api/v1/servers/basalt/apps/update').length;
+    const res = await as('POST', '/servers/basalt/manage', {
+      op: 'app.update',
+      platform: 'host',
+      params: { apps: ['docker:redis'] },
+    });
+    expect(res.status).toBe(200);
+    const number = res.body.approvalNumber as number;
+    expect(number).toBeGreaterThan(0);
+    // Nothing runs before the yes.
+    expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update')).toHaveLength(before);
+    const [approval] = await t.services.db.select().from(approvals).where(eq(approvals.number, number));
+    expect(approval?.question).toContain('redis');
+    expect(approval?.question).toContain('basalt');
+    const card = (await t.services.db.select().from(messages)).find((m) => m.id === approval?.messageId);
+    expect(card?.text).toContain('database');
+    const decided = await t.commit(IDS.mara, decideApproval, { number, decision: 'approve' });
+    expect(decided.status).toBe('ok');
+    const sent = await waitFor(
+      () => fake.calls('POST', '/api/v1/servers/basalt/apps/update')[before],
+      10_000,
+    );
+    expect(sent.body).toMatchObject({
+      apps: ['docker:redis'],
+      confirm: true,
+      expect: [
+        {
+          app: 'docker:redis',
+          service: 'redis',
+          image_id: apps[1]?.image_id,
+          digest: `sha256:${'e'.repeat(64)}`,
+          config_hash: 'c0ffee',
+        },
+      ],
+    });
+    expect(sent.role).toBe('admin');
+  });
+
+  it('refuses a yes when the app runs another image by then, and sends nothing', async () => {
+    const before = fake.calls('POST', '/api/v1/servers/basalt/apps/update').length;
+    const res = await as('POST', '/servers/basalt/manage', {
+      op: 'app.update',
+      platform: 'host',
+      params: { apps: ['docker:redis'] },
+    });
+    const number = res.body.approvalNumber as number;
+    const redis = apps[1] as { image_id: string };
+    const was = redis.image_id;
+    redis.image_id = `sha256:${'9'.repeat(64)}`;
+    try {
+      expect((await t.commit(IDS.mara, decideApproval, { number, decision: 'approve' })).status).toBe('ok');
+      // A refused run ends failed (only a run that worked gets executedAt).
+      const run = await waitFor(async () => {
+        const [row] = await t.services.db.select().from(approvals).where(eq(approvals.number, number));
+        return row && row.execution.state !== 'idle' && row.execution.state !== 'running' ? row : null;
+      }, 10_000);
+      expect(run.execution.state).toBe('failed');
+      expect(run.executedAt).toBeNull();
+      expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update')).toHaveLength(before);
+    } finally {
+      redis.image_id = was;
+    }
+  });
+
+  it('lets the assistant update a plain app where the server doesn’t ask, never a database without a yes', async () => {
+    expect((await as('PATCH', '/servers/basalt', { asksFirst: 'never' })).status).toBe(200);
+    const before = fake.calls('POST', '/api/v1/servers/basalt/apps/update').length;
+    // What the agent says it checked is replaced by what Whombat reads itself.
+    const plain = await call('app_update', {
+      server: 'basalt',
+      apps: ['traefik'],
+      expect: [
+        { app: 'docker:traefik', service: 'traefik', imageId: `sha256:${'0'.repeat(64)}`, image: 'x' },
+      ],
+    });
+    expect(plain.status).toBe('ok');
+    expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update').at(-1)?.body).toMatchObject({
+      apps: ['docker:traefik'],
+      hold_major: true,
+      expect: [{ app: 'docker:traefik', image_id: apps[0]?.image_id, digest: `sha256:${'e'.repeat(64)}` }],
+    });
+    const db = await call('app_update', { server: 'basalt', apps: ['redis'] });
+    expect(db.content ?? db.message ?? '').toContain('asks_first');
+    expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update')).toHaveLength(before + 1);
+    // With the reasons, it asks on this server too.
+    const asked = await call('app_update', {
+      server: 'basalt',
+      apps: ['redis'],
+      ask: true,
+      reasons: ['database'],
+    });
+    expect(asked.status).toBe('pending_approval');
+  });
+
+  it('reads which apps have updates and which ask first', async () => {
+    const res = await call('app_updates', { server: 'basalt' });
+    expect(res.status).toBe('ok');
+    const body = JSON.parse(res.content ?? '{}') as {
+      servers: { server: string; apps: { app: string; state: string; asksFirst?: string[] }[] }[];
+    };
+    const basalt = body.servers.find((s) => s.server === 'basalt');
+    expect(basalt?.apps.find((a) => a.app === 'docker:redis')).toMatchObject({
+      state: 'available',
+      asksFirst: ['database'],
+    });
+    expect(basalt?.apps.find((a) => a.app === 'docker:traefik')?.asksFirst).toBeUndefined();
+  });
+});

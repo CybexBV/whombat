@@ -2,7 +2,8 @@
  * Add a server on the phone (Whombat server-signin.md SI-01…SI-12; server-signin-mobile.md AP-1697…): what Whombat may
  * do on it (Watch only · Restart and consoles · Full control), chosen once above two ways in — **Sign in once**
  * (address, user name and the password, or a key from your Vault with the password for `sudo` if it asks, and
- * whether to leave a Vault key on it) and **Run a command** (the pre-approved command for the chosen level). Signing in
+ * whether to leave a Vault key on it), **Run a command** (the pre-approved command for the chosen level) and **Windows
+ * PC** (the same as one PowerShell line, with how to remove it again; windows-servers.md). Signing in
  * follows the job live (the `hosts.install` frame, every 2 s as well): its four steps, the key the server showed, then
  * “Open pve-03” or the reason with Try again and More detail. Servers that ran an older command wait for you on top
  * (Home's “wants to be added” opens here). A Whombat without `hosts.install` gets the command alone, as before. Rules and words are the web's (`@whombat/client/hosts` `install.ts`). Opened from Things, Home and the
@@ -34,6 +35,7 @@ import {
   signInFormDefaults,
   signInFormErrors,
   signInFormForRetry,
+  windowsCopy,
   withKeyDefaults,
 } from '@whombat/client/hosts';
 import {
@@ -49,6 +51,7 @@ import { useVault, useVaultWrite } from '@whombat/client/react';
 import {
   api,
   HOST_CONTROL_LEVELS,
+  HOST_WINDOWS_UNINSTALL_COMMAND,
   type HostControlLevel,
   type HostEnrollment,
   type HostInstall,
@@ -89,7 +92,7 @@ import { showNotice } from './feedback';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'AddServer'>;
 
-type Way = 'signIn' | 'command';
+type Way = 'signIn' | 'command' | 'windows';
 
 export function AddServerScreen({ route, navigation }: Props) {
   const { rawLocale } = useI18n();
@@ -201,6 +204,7 @@ export function AddServerScreen({ route, navigation }: Props) {
             header={header(items.length ? <WaitingForYou slug={slug} items={items} now={now} /> : null)}
             slug={slug}
             control={control}
+            windows={way === 'windows'}
             commands={commands}
             onMade={(level, e) => setCommands((m) => ({ ...m, [level]: e }))}
             bottomInset={insets.bottom}
@@ -226,6 +230,7 @@ export function AddServerScreen({ route, navigation }: Props) {
           options={[
             { value: 'signIn', label: signInCopyHere.tab },
             { value: 'command', label: commandCopyHere.tab },
+            { value: 'windows', label: windowsCopy(rawLocale).tab },
           ]}
         />
       </>
@@ -717,29 +722,63 @@ function KeyChoices({
 function CommandBlock({
   enrollment,
   error,
+  windows = false,
 }: {
   enrollment: HostEnrollment | undefined;
   error: string | null;
+  /** The Windows PC's PowerShell line instead, with how to remove the agent again. */
+  windows?: boolean;
 }) {
   const { rawLocale } = useI18n();
   const commandCopyHere = commandCopy(rawLocale);
+  const windowsCopyHere = windowsCopy(rawLocale);
   const theme = useTheme();
-  if (enrollment)
+  // A Whombat from before Windows PCs, or one without a Windows agent yet, makes no PowerShell line.
+  const line = windows ? enrollment?.installCommandWindows : enrollment?.installCommand;
+  if (enrollment && !line)
+    return (
+      <Text size={15} lh={1.5} color={theme.colors.ink2}>
+        {windowsCopyHere.none}
+      </Text>
+    );
+  if (enrollment && line)
     return (
       <>
         <View style={{ backgroundColor: theme.colors.code, borderRadius: 10, padding: 12 }}>
           <Text size={12.5} lh={1.55} mono color={theme.code.text} selectable>
-            {enrollment.installCommand}
+            {line}
           </Text>
         </View>
         <Button
           label={commandCopyHere.copy}
           variant="secondary"
-          onPress={() => void copyToClipboard(enrollment.installCommand, commandCopyHere.copied, rawLocale)}
+          onPress={() => void copyToClipboard(line, commandCopyHere.copied, rawLocale)}
         />
         <Text size={13} lh={1.45} color={theme.colors.mut}>
-          {commandCopyHere.valid}
+          {windows ? windowsCopyHere.valid : commandCopyHere.valid}
         </Text>
+        {windows ? (
+          <View style={{ gap: 8, marginTop: 6 }}>
+            <Text size={14} weight={600}>
+              {windowsCopyHere.removeTitle}
+            </Text>
+            <Text size={13} lh={1.45} color={theme.colors.mut}>
+              {windowsCopyHere.remove}
+            </Text>
+            <View style={{ backgroundColor: theme.colors.code, borderRadius: 10, padding: 12 }}>
+              <Text size={12.5} lh={1.55} mono color={theme.code.text} selectable>
+                {HOST_WINDOWS_UNINSTALL_COMMAND}
+              </Text>
+            </View>
+            <Button
+              label={windowsCopyHere.copyRemove}
+              variant="secondary"
+              onPress={() =>
+                void copyToClipboard(HOST_WINDOWS_UNINSTALL_COMMAND, commandCopyHere.copied, rawLocale)
+              }
+            />
+          </View>
+        ) : null}
       </>
     );
   if (error) return <ErrorState text={error} />;
@@ -800,6 +839,7 @@ function RunCommand({
   header,
   slug,
   control,
+  windows,
   commands,
   onMade,
   bottomInset,
@@ -809,6 +849,8 @@ function RunCommand({
   header: ReactNode;
   slug: string;
   control: HostControlLevel;
+  /** The same enrollment's PowerShell line for a Windows PC. */
+  windows: boolean;
   commands: Partial<Record<HostControlLevel, HostEnrollment>>;
   onMade: (level: HostControlLevel, e: HostEnrollment) => void;
   bottomInset: number;
@@ -844,9 +886,9 @@ function RunCommand({
       {header}
       <View style={{ gap: 12 }}>
         <Text size={15} lh={1.5} color={theme.colors.ink2}>
-          {commandCopyHere.lead}
+          {windows ? `${windowsCopy(rawLocale).lead} ${windowsCopy(rawLocale).how}` : commandCopyHere.lead}
         </Text>
-        <CommandBlock enrollment={enrollment} error={error} />
+        <CommandBlock enrollment={enrollment} error={error} windows={windows} />
         {done ? (
           <Text size={15} lh={1.5} weight={500} accessibilityLiveRegion="polite">
             {done.text}

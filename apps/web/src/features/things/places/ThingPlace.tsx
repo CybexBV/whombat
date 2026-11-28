@@ -113,6 +113,49 @@ export function ThingInPlace({
   );
 }
 
+/**
+ * A page of a place that isn't one of its things (Open to the internet, under Servers): the list beside it on a wide
+ * window with the page's own row picked, alone with “‹ Servers” back to the list on a narrow one.
+ */
+export function PageInPlace({
+  burrow,
+  place,
+  selected,
+  children,
+}: {
+  burrow: string;
+  place: ThingPlace;
+  /** The page's own row in the list (`EXPOSURE_PATH`). */
+  selected: string;
+  children: ReactNode;
+}) {
+  const lists = usePlaceLists(burrow);
+  const { tag: locale } = useWebI18n();
+  const wide = useInboxSplit();
+  const rows = rowsOf(lists, place);
+  const crumb = wide ? null : { href: PLACE_HREFS[place], label: placeWords(locale)[place].back };
+  return (
+    <div className={styles.split}>
+      {wide ? (
+        <PlaceList
+          burrow={burrow}
+          place={place}
+          rows={rows}
+          selected={selected}
+          addHref={addOf(lists, place)}
+          pending={place === 'servers' ? lists.pendingServers : 0}
+          alone={false}
+          loading={!lists.settled[place]}
+          failure={failureOf(lists, place, rows, locale)}
+        />
+      ) : null}
+      <div className={styles.page}>
+        <PlaceCrumbProvider value={crumb}>{children}</PlaceCrumbProvider>
+      </div>
+    </div>
+  );
+}
+
 /** Add a server and Point them here, over the Servers list; closing one takes its part off the address. */
 function ServerDialogs({ burrow }: { burrow: string }) {
   const [search, set] = useThingSearch();

@@ -2185,6 +2185,7 @@
                   "whombat-backup"
                   "whombat-backup-api"
                   "whombat-backup-drill"
+                  "whombat-backup-offsite"
                 ];
               # The backup's configuration file, found at build time in its unit's command (its context builds it).
               configOf =

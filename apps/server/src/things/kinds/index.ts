@@ -4,7 +4,9 @@
  * one stream. A group may extend a first kind under the same id: its entry, spread later, wins.
  */
 
+import { SERVICE_TEST_KINDS } from '@whombat/core';
 import type { CatalogConnectionRow } from '../../connections/types';
+import { WORKS_CHECK } from '../../works/rules';
 import { registerChecks } from '../quiet/defaults';
 import { recipeKind } from '../recipe/kind';
 import { BUSINESS_KINDS } from './business/index';
@@ -35,6 +37,12 @@ export const KIND_MODULES: Record<string, KindModule> = {
   findmy: FIND_MY_KIND,
   onepassword: ONEPASSWORD_KIND,
 };
+
+// A service Whombat can test says so in What Whombat watches (service-works.md): its test's switch is one of its checks.
+for (const id of SERVICE_TEST_KINDS) {
+  const kind = KIND_MODULES[id];
+  if (kind) KIND_MODULES[id] = { ...kind, checks: [...(kind.checks ?? []), WORKS_CHECK] };
+}
 
 // Which of their checks Whombat watches from the start (watch-defaults.md).
 for (const kind of Object.values(KIND_MODULES)) registerChecks(kind.checks ?? []);

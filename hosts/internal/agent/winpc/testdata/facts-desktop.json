@@ -1,0 +1,10 @@
+{"defender":{"service":true,"antivirus":true,"realtime":true,"mode":"Normal","tamper":true,"signatures":"2026-11-27T06:12:40Z","quick_scan":"2026-11-26T22:01:00Z"},
+ "security_center":true,
+ "antivirus":[{"name":"Microsoft Defender Antivirus","state":397568},{"name":"Example Antivirus \u00e9dition","state":266240},{"name":"","state":0}],
+ "system_drive":"C:",
+ "bitlocker":[{"drive":"D:","protection":0},{"drive":"C:","protection":1},{"drive":"E:","protection":2},{"drive":"","protection":1}],
+ "disks":[
+  {"id":"1","name":"Example HDD 4TB","serial":"ZA1234","media":"HDD","bus":"SATA","size":4000787030016,"health":"Warning","temp":38,"wear":0,"hours":21000,"read_errors":3,"write_errors":null},
+  {"id":"0","name":"Example NVMe 1TB","serial":"S5H9NX0","media":"SSD","bus":"NVMe","size":1000204886016,"health":"Healthy","temp":41,"wear":4,"hours":5120,"read_errors":0,"write_errors":0},
+  {"id":"","name":"no id","media":"SSD","bus":"SATA","size":1}],
+ "partitions":[{"drive":"C","disk":"0"},{"drive":"D","disk":"1"},{"drive":"","disk":"0"}]}

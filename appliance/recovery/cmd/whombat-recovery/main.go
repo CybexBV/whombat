@@ -3,14 +3,15 @@
 // append-only read credential, repository password, manifest key). It is a restricted command-line tool, not a
 // hosted UI: it can list, verify and export — never write to a backup repository.
 //
-//	whombat-recovery list   -kit KIT [-repo-dir DIR]
-//	whombat-recovery verify -kit KIT [-repo-dir DIR] [-snapshot latest] [-check-data 10%]
-//	whombat-recovery export -kit KIT [-repo-dir DIR] [-snapshot latest] -out DIR [-include-secrets] [-check-data 10%]
+//	whombat-recovery list   -kit KIT [-repo-dir DIR | -offsite]
+//	whombat-recovery verify -kit KIT [-repo-dir DIR | -offsite] [-snapshot latest] [-check-data 10%]
+//	whombat-recovery export -kit KIT [-repo-dir DIR | -offsite] [-snapshot latest] -out DIR [-include-secrets] [-check-data 10%]
 //	whombat-recovery export-disk -persist /mnt/persist -out DIR [-include-secrets] [-pg-user USER]
 //
 // -repo-dir opens a copy of the repository on a local disk (e.g. the storage provider's export, a USB disk,
 // the mounted backup disk) instead of the kit's address. The kit reaches rest:, s3: and sftp: repositories
-// by itself (its credentials, the SFTP key and the pinned host key); a disk: kit needs -repo-dir.
+// by itself (its credentials, the SFTP key and the pinned host key); a disk: kit needs -repo-dir. -offsite opens the
+// kit's second place instead: the copy in the person's bucket, with the same password and keys.
 package main
 
 import (
@@ -45,11 +46,13 @@ func logf(format string, a ...any) { fmt.Fprintf(os.Stderr, format+"\n", a...) }
 
 type common struct {
 	kit, repoDir, snapshot, checkData, restic, ssh, pgBin, git, work string
+	offsite                                                          bool
 }
 
 func (c *common) flags(fs *flag.FlagSet) {
 	fs.StringVar(&c.kit, "kit", "", "recovery kit file (whole kit or its backup section)")
 	fs.StringVar(&c.repoDir, "repo-dir", "", "open a local copy of the repository instead of the kit's URL")
+	fs.BoolVar(&c.offsite, "offsite", false, "open the kit's second place (the copy somewhere else) instead of its main place")
 	fs.StringVar(&c.snapshot, "snapshot", "latest", "checkpoint id or snapshot id")
 	fs.StringVar(&c.checkData, "check-data", "", `restic check --read-data level: "" (structure), all, 10%, 1/5`)
 	fs.StringVar(&c.restic, "restic", "", "restic binary (default: PATH)")
@@ -67,6 +70,11 @@ func (c *common) open() (restic.Repo, *kit.Material, func()) {
 	m, err := kit.Load(c.kit)
 	if err != nil {
 		die(1, "%v", err)
+	}
+	if c.offsite {
+		if m = m.FromOffsite(); m == nil {
+			die(1, "this kit names no second place (it was made before one was set up)")
+		}
 	}
 	dir, err := os.MkdirTemp("", "whombat-recovery-")
 	if err != nil {

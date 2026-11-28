@@ -44,6 +44,7 @@ import {
   type LucideIcon,
   MessageCircle,
   MessageSquare,
+  Power,
   Reply,
   Zap,
 } from '../ui/icons';
@@ -69,6 +70,7 @@ const ICONS: Record<Exclude<Extract<AutomationFlowItem, { kind: 'step' }>['icon'
   report: FileText,
   reply: Reply,
   call: LinkIcon,
+  act: Power,
 };
 
 const MARK_TONES = { plain: 'plain', changes: 'warn', merges: 'bad' } as const;

@@ -32,6 +32,7 @@ import { base64urlEncode } from '../bytes.js';
 import { ClaimMethod } from '../claim/code.js';
 import { ClaimConfirmTag, ClaimPakeShare } from '../claim/pake.js';
 import { OwnAddressClaimSecret } from '../own-address.js';
+import { BackupOffsite } from './backup-offsite.js';
 import { BackupBringBack } from './backup-passkey.js';
 import {
   AuthzGeneration,
@@ -752,6 +753,11 @@ export const BackupStatus = z.object({
    * paper copy. Absent from an older Whombat.
    */
   bringBack: BackupBringBack.optional(),
+  /**
+   * The second place, a copy of the backups somewhere else (Whombat offsite-copy.md): null when there is none. Absent
+   * from an older Whombat.
+   */
+  offsite: BackupOffsite.nullable().optional(),
 });
 export type BackupStatus = z.infer<typeof BackupStatus>;
 

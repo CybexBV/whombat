@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"rackoon/internal/agent/apps"
 	"rackoon/internal/agent/broker"
 	"rackoon/internal/proto"
 )
@@ -500,7 +501,7 @@ func (d *dockerCollector) run(ctx context.Context) error {
 	}
 
 	d.refreshSizes()
-	var updates map[string]*bool
+	var updates map[string]imageResult
 	if d.c != nil && d.c.images != nil {
 		updates = d.c.images.results()
 	}
@@ -524,6 +525,7 @@ func (d *dockerCollector) run(ctx context.Context) error {
 			Name:    e.name(),
 			Kind:    "container",
 			Image:   dockerImage(e.Image, e.ImageID),
+			ImageID: e.ImageID,
 			State:   dockerState(e.State, e.health()),
 			Project: e.Labels["com.docker.compose.project"],
 			// Whombat's own services carry this label; Whombat hides them.
@@ -545,13 +547,20 @@ func (d *dockerCollector) run(ctx context.Context) error {
 		if sz, ok := d.sizes[e.ID]; ok {
 			g.DiskUsedBytes = ptr(sz)
 		}
+		var newer imageResult
+		cand := imageCand{Ref: e.Image, ImageID: e.ImageID}
 		if e.State == "running" {
-			cand := imageCand{Ref: e.Image, ImageID: e.ImageID}
 			running = append(running, cand)
 			if u, ok := updates[cand.key()]; ok {
-				g.UpdateAvailable = copyPtr(u)
+				g.UpdateAvailable = copyPtr(u.update)
+				newer = u
 			}
+		} else if u, ok := updates[cand.key()]; ok {
+			// A stopped container isn't checked itself; one from the same
+			// image that runs was, and an update takes both to that image.
+			newer = u
 		}
+		g.App = composeApp(e.Labels, ex.image, e.Image, newer)
 		if sr := stats[i]; sr.st != nil && sr.err == nil {
 			st := sr.st
 			at := st.Read
@@ -786,4 +795,30 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	case <-t.C:
 	case <-ctx.Done():
 	}
+}
+
+// composeApp marks a container Whombat can update: one started by Docker
+// Compose, from an image it can pull again (not pinned to a digest).
+// Whether its project folder can be read is checked when it is updated:
+// the agent's sandbox hides home folders, the update runs outside it. The
+// newer image's digest and Compose's hash of the service's settings go with
+// it, so an update deploys exactly what was checked.
+func composeApp(labels map[string]string, configured, image string, newer imageResult) *proto.GuestApp {
+	p, ok := apps.ProjectOf(labels)
+	if !ok {
+		return nil
+	}
+	ref := configured
+	if ref == "" {
+		ref = image
+	}
+	a := &proto.GuestApp{Service: p.Service, Version: apps.VersionOf(labels, ref), NewVersion: newer.version,
+		ConfigHash: apps.ConfigHashOf(labels)}
+	if apps.ValidDigest(newer.digest) {
+		a.NewDigest = newer.digest
+	}
+	if apps.Pinned(ref) {
+		a.Blocked = proto.AppReasonPinned
+	}
+	return a
 }

@@ -95,4 +95,32 @@ describe('the demo’s backups v2 (backup-v2.md)', () => {
     expect(status.status?.lastSuccess?.ageSeconds).toBe(0);
     session.close();
   });
+
+  it('keeps a copy somewhere else that can be changed and stopped', async () => {
+    const demo = createDemoBackups(() => now);
+    const session = demo.session();
+    const status = await sessionOps.backupStatus(session);
+    expect(status.summary.offsite).toMatchObject({ provider: 'b2', state: 'ok' });
+    const hero = backupHero({
+      status: status.status,
+      summary: status.summary,
+      policy: null,
+      list: null,
+      placeName: 'BlackBox',
+      now,
+    });
+    expect(hero.offsite?.dot).toBe('ok');
+    const set = await sessionOps.backupSetOffsite(session, {
+      provider: 'hetzner',
+      endpoint: 'fsn1.your-objectstorage.com',
+      bucket: 'copy-of-blackbox',
+      accessKeyId: 'KEYID',
+      secretAccessKey: 'example',
+    });
+    expect(set.offsite).toMatchObject({ provider: 'hetzner', bucket: 'copy-of-blackbox', state: 'first' });
+    expect(JSON.stringify(set)).not.toContain('example');
+    expect((await sessionOps.backupRemoveOffsite(session)).offsite).toBeNull();
+    expect((await sessionOps.backupStatus(session)).summary.offsite).toBeNull();
+    session.close();
+  });
 });

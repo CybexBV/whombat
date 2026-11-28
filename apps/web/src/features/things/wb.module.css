@@ -72,6 +72,12 @@
   gap: 4px 10px;
 }
 
+/* A long value beside its dot: it wraps in place instead of moving under the dot. */
+.wbFactGrow {
+  flex: 1 1 12em;
+  min-width: 0;
+}
+
 .wbFactFlash {
   animation: wb-flash 1.6s ease-out;
 }

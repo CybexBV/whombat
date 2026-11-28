@@ -317,6 +317,26 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   paper copy holds only the backup part (`backup.paperCopy.confirm` notes it). `bringBack` in the backup summary says
   where it stands (`ready`, `needs_passkey`, `paper_only`, `none`), and while no passkey holds the key the Inbox asks
   once for the same passkey setup (`managed/backup-key-inbox.ts`). [backup-passkey.md](docs/decisions/backup-passkey.md)
+- **A copy somewhere else** (`managed/backup-offsite.ts`): a second place for the backups, an S3 bucket the person
+  owns. The backup service keeps it (`appliance/backup/internal/offsite`, `GET|PUT|DELETE /v1/offsite`,
+  `POST /v1/offsite/copy`): setting it writes, reads and deletes a small file with the key, then opens or makes the
+  copy's repository with the main one's password and chunker; the key is sealed like the main destination's. After each
+  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` checks by the
+  repositories' ids that the copy isn't the main place and is still the one set up, then runs `restic copy` of this
+  Whombat's checkpoints (those its
+  backup list trusts, `listing.Trusted`) not in the bucket's own list, read on every run, which is also all its status
+  says is there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (the copy's snapshots it
+  trusts, by restic's keep rule worked out over just those, `PolicyKeep.Expired`, removed by id) by the same keep
+  windows at most every 23 hours; with none of its own at the main place a run copies and clears
+  nothing; nothing is copied during a restore. A REST main place over https is reached through a relay on a private
+  socket that trusts only its certificate authority (`pkg/restic/relay.go`), so restic's `--cacert` stays the copy's;
+  the setup's S3 check never follows a redirect. The runtime reads its document
+  (kept a minute) into the backup summary as `offsite` (`withOffsite`; null: none, absent: a box from before) and says a
+  failed step in the person's language; `backup.setOffsite` is a secret op. The recovery details carry an `offsite`
+  part (left out for apps below protocol minor 22), `backup.adopt` falls back to the copy when the main place is gone
+  (`from`), and a change locks the passkey's copies again. Three failed tries, or newer backups waiting two days, are
+  one Inbox item (`box.offsite_copy`); `whombat_backup`'s status names the copy for the assistant.
+  [offsite-copy.md](docs/decisions/offsite-copy.md)
 - **Push** goes through the manager to control as requests with opaque references and at most a short preview the
   person can turn off (`managed/push.ts`). A `security` push (a new device, the recovery kit) says what happened in
   fixed words and its tap opens the page it is about (`managed/security-push.ts`,
@@ -842,7 +862,8 @@ published automation details read their definition and publisher from one versio
 
 - **Made by talking to the agent** (`automations/plans.ts`): in the person's Chat the agent proposes an automation, or a
   change to one, with `draft_automation` (a recipe or a definition; `automation_read` lists the person's automations, the
-  tracker connections and connected mailboxes a trigger can name, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
+  tracker connections, connected mailboxes, Home Assistant and Protect connections a trigger can name, the servers with
+  a UPS, and how to write one). Whombat checks it, keeps it as the automation's draft and posts it in the turn's thread as an
   `automation_plan` card (`automation_plans`, one waiting per automation; a newer plan replaces it). The card's sections
   are written from the definition by core's `planSections`, and a change lists what differs from the live version.
   Turning a plan on publishes exactly its definition with the keys its steps need (`definitionGrants`); Not now sets it
@@ -942,6 +963,47 @@ published automation details read their definition and publisher from one versio
   a production runtime no update helper started (it names no release, and no manager rolls it back) have them on. A
   server that started before the box's release was recorded (offline at its first start) is restarted once it is, so it
   knows its release (`provisioning.nix`).
+- **Acting without AI** (`automations/direct-action.ts`, `steps/run-action.ts`, docs/decisions/direct-automations.md):
+  a `run_action` step does one action from core's short list (`directActionProblem`) through the person's own
+  connection with `executeConnectionCall`, as the burrow's assistant, from the box: a server's power through the
+  Servers connection (`server_power`, `guest_power`), Home Assistant through its `request` tool. The step checks its
+  plan (`planDirectAction`: the connection, the tool, its tier and the person's limits on it, and the names of what it
+  acts on as Whombat reads them now, the server's, the machine's from the hosts service and the entity's friendly name;
+  a machine or entity that isn't there refuses the step), and every card and line uses those names (`withNames`); the
+  plan card's definition and every published version carry them too, with the ids of the server and the machine found
+  for the names a draft gave (`checkDirectSteps`, `pinDirectStep`, once per step); a run plans by those ids only. It
+  asks on the approval card
+  when the person's own rules ask (`callTier` with the plan's yes as the key), when it starts a scene or a script an
+  automation saved before they were refused, and in every test run (`directAsks`; the proposal carries the
+  connection's `callTarget`, the approval guard renders it again before the yes runs, and the target the yes was given
+  for is the one the call is bound to), and is marked `running` so `runExternal` calls outside any transaction: it
+  reads first whether the thing is already so (a quiet no-op; a server the hosts service can't reach is left alone and
+  the step skipped or failed), calls, and settles with one line (`directDoneLine`). A server's or a machine's power
+  settles from the hosts service's `action.finished` for that action, listened for from before the call for up to two
+  minutes (`listenForPowerFinish`, `powerSettle`): the agent's refusal fails it, no word in time may not have happened.
+  After a crash, or a call that didn't answer in time, only an action that comes out the same done twice runs again
+  (`directActionRepeatable`), where a server out of reach after the shutdown Whombat was sending is said as what is
+  known, skipped and `unconfirmed`, not done; a restart, a scene or a script is `uncertain`. A UPS power cut is a critical hub alert after 30 s (`hosts/internal/rules/health.go`), so the thing
+  trigger on `host.ups.on_battery` starts on it; such an automation with direct steps is claimed through a quiet window
+  (`claimIncidentTrigger`'s `safety`), and in any direct run `post_message` is skipped while the trigger's thing is kept
+  quiet and nothing ran or may have run yet (`stepsActed`). `automation_read` gives the UPS servers with core's
+  `powerCutDefinition`, whose message says the power is out, then each server's own line.
+- **Smart home triggers** (`automations/home-triggers.ts`, `engine/home-waits.ts`): `SmartHomeTriggers` reads which
+  Home Assistant entities and states and which Protect events live automations name (`listenedHome`), keeps one
+  Home Assistant socket per such connection subscribed to those entity ids (`subscribe_entities`, `ha-socket.ts`) and
+  signs only changes into or out of a named state as `home.state_changed`, with Home Assistant's `last_changed` (a change
+  first heard in the snapshot after a reconnect only while under two minutes old by Home Assistant's own clock, from
+  the `Date` of its answer to the socket, `clockAheadMs`); an entity Home Assistant removes (`r`) or leaves out of the
+  first list after subscribing is forgotten and reads as gone; Protect's event stream
+  (`things/kinds/home/protect-events.ts`) hands it fresh sightings, signed once each as `protect.detected`. Both are
+  signed by the burrow's Smart home system principal (`home.noted`) and read by the trigger scan like any event. A
+  `home_state` trigger with `forMinutes` keeps a row in `automation_waits` (one per automation and entity) that any
+  later change of the entity ends; at its time the scan asks the socket for the state now and starts a run only when
+  it is still the trigger's and its `last_changed` is still the change's (`heldAtItsTime`; each minute for an hour
+  while it can't tell; an entity gone, or a version published over, ends the wait). A cooldown (`cooldownOf`: the definition's
+  `limits.cooldownMinutes`, else 10 minutes for these triggers) makes a start within it start nothing. Until the
+  release a box would go back to knows `0047_direct_automations`, such automations aren't made or run and nothing is
+  followed (`directReady`); a session below minor 22 gets them as `older-apps.ts` says.
 - **Runs** are leased and fenced; each step's effect commits with its new state. External effects (calls, pull
   requests, comments) are marked first and reconciled, or set `uncertain` for the person, after a crash or a restart:
   a pull request or merge the mirror doesn't show is looked up on GitHub, and done then when GitHub hasn't got it. An
@@ -1555,6 +1617,16 @@ Setup and operation: `docs/github.md`.
   app, and never runs one that removes, erases, signs out, stops sharing or marks something lost
   ([macos-servers.md](docs/decisions/macos-servers.md), [findmy-connection.md](docs/decisions/findmy-connection.md),
   [findmy-timeline.md](docs/decisions/findmy-timeline.md), [findmy-watch.md](docs/decisions/findmy-watch.md)).
+  A Windows PC is a server too (platform and os family `windows`,
+  [windows-servers.md](docs/decisions/windows-servers.md)): its agent is the Windows build, run as the `whombat-agent`
+  service, which reads the PC's own facts with PowerShell (`hosts/internal/agent/winpc`) and adds them to the detail
+  (`windows`: its Windows, Windows Update's times, virus protection, BitLocker). Each enrollment carries a PowerShell
+  line (`installCommandWindows`) while the box has a Windows build; it fetches `install.ps1` from the agents' address,
+  which takes TLS 1.2 for Windows PowerShell 5.1. Restarts and commands (PowerShell) work as on any server; Whombat
+  reads the PC's updates but leaves installing them to the person (`server_update` refuses, no care-plan step). An app
+  below `WINDOWS_MINOR` gets a PC as a standard server without its Windows facts (`hosts/older-apps.ts`, in the fleet,
+  the page and the live rows). The apps give a PC Summary, Storage and System (the phone its Summary) and Technical
+  details' This PC (`@whombat/client/hosts` `windows.ts`).
 - **Website or address** is a no-sign-in connection (`uptime`, `connections/uptime.ts`). The person picks a website,
   port, ping, name lookup or check-in, its pace, and the watched server it runs from or this Whombat. Check-ins run
   from this Whombat. The signed connection saves the settings, and the hosts service runs one check for it.
@@ -1574,12 +1646,66 @@ Setup and operation: `docs/github.md`.
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
   Proxmox backups (to a Backup Server or a storage on the network, else to a backup place that shares a folder over NFS
   — an Unraid server through Whombat's helper, else a TrueNAS through its API — added as storage first with
-  `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups and weekly system updates in the quiet hours, never a
-  temporary machine. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
+  `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups, weekly system updates in the quiet hours and,
+  on a server with Docker Compose apps, their updates on Sunday night, never a
+  temporary machine. The app updates and a Proxmox server's weekly restore tests are offered only while the release the
+  box would go back to after a failed update knows them (`NewerAutomationsGate.careStepsReady`, the facts'
+  `olderRelease`), so no stored plan reaches a release that misreads it. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
   that proposes the ones that fit; the plan is a look's `look_plan` card (research key `care:server:<id>`), and Go
   ahead turns on the automations Whombat writes for it before the `look_fix` turn takes the rest. The server this
   Whombat runs on gets its plan once and keeps asking for its updates; a Whombat from before writes its servers down as
   known once. An older server's research is offered the same steps when its lines are missing backups or updates.
+- **Docker Compose app updates** (`hosts/internal/agent/apps`, `apps/server/src/hosts/tools-apps.ts`, `app-ask.ts`,
+  [app-updates.md](docs/decisions/app-updates.md)): Whombat's helper reports each container Compose started as an app
+  (`HostGuest.app`: its service, its version and the newer image's, the newer image's digest, Compose's hash of the
+  service's settings, `pinned`, whether an update runs, the last one) and runs an update as one host task
+  (`app:<id>`): it checks the service, its image and that hash are what the yes was for (`expect`), tags the running
+  image `…:whombat-previous-<project>.<service>`, writes the project's settings down once (`config`, checked against
+  that hash) and the way back (`progress.json`), pulls exactly the checked digest, tags it as the service's image,
+  recreates from that copy the service and every one of the project that shares its image, keeping each one's number
+  of containers (`up --no-deps --pull never --no-build --scale`; a stopped one with `--no-start`, after the others; an
+  older Compose without `--pull` only when the settings' `pull_policy` doesn't pull, else it refuses before anything
+  changes), and watches those that ran (healthy when they have a health check) for 30 seconds; when they don't come up
+  it tags the previous image back and recreates them the same way. The project's own files are noted
+  (`<state>/apps/projects/`, by name and folder), so the next update reads them, not the copy. A runner the server
+  stopped part-way is started again by the agent and, once Docker answers, finishes the update or goes back.
+  The hub starts it (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task
+  (`HostTask.apps`).
+  Every update asks through the approval card: the assistant's `app_update` asks like a container update, and always
+  for a database's, a new major version's or an unknown version's (`ask: true`, `serverAsksApply`), refusing them
+  without a yes whose reasons cover them; `connection_call` writes what was checked, and the reasons the apps ask
+  for, into the call when it's asked for (`bindAppUpdateArgs`; no card when an app can't be bound), and a run whose
+  apps changed since, or a yes not bound to every app it updates, is refused. A page's Update (`hosts.manage` op
+  `app.update`) commits that same call for the person in their Chat and opens its card (`approvalNumber`), with a
+  snapshot first when the server is a Proxmox guest Whombat watches (`proxmoxGuestOf`). The followed task posts one plain line per app (`appsOutcomeText`), Done recently records it and
+  the server is kept quiet while it runs. `app_updates` gives the assistant the same facts; the care plan's `apps`
+  automation runs it on Sunday night with `hold_major` (on for every run whose yes didn't cover a major version). The web's apps list and a service's page (when it runs in a
+  Compose container) and the phone's list and app screen draw it from `@whombat/client/hosts` (`appUpdateRow`).
+- **What's protected and restore tests** (`apps/server/src/backup-trust/`, [backup-trust.md](docs/decisions/backup-trust.md)):
+  `protected.get` builds one row per thing that holds data from what Whombat already reads — Proxmox backup jobs and
+  each machine's own backup list (copied or same machine only by where its newest backup that worked is: a Backup Server
+  or shared storage is a copy elsewhere; at most 20 lists read a build, kept until the machine's newest backup
+  changes; a plan that never worked is `none` with `planned`), Incus snapshots and QEMU/KVM backups that worked
+  (same machine), the box's backup status (copied or same machine only with a backup since backups started going to
+  the place in use, from the `backup.destination_set` events; else `planned`) and its off-site copy's own status
+  (`offsiteNow`) and each connection's own
+  backup facts (`catalog_connections.protection`, written by the health pass from what its kind reads; a service
+  without them takes its machine's from `glance.machine`) — cached a minute. Restore tests are a home job every minute
+  (`runner.ts`): per Proxmox server switched on (`restore_test_servers`), once a week in the quiet hours it picks the
+  machine whose turn it is and walks a `restore_tests` row through its steps, each a `restoreTest.step` commit as the
+  agent: read the newest backup's own settings (`GET …/backups/config`) for the room and memory it takes (none for a
+  helper that can't, a container that isn't unprivileged, or a backup that uses parts of the server), then restore it
+  to a free id in 990000–990999 through the hosts service's restore route with
+  `isolate`, so the restore itself writes the copy with every network card `link_down=1` (a new MAC), no start with
+  the server, its name, tag and the test's mark (`whombat-<test id>` in its notes); a server whose helper can't
+  (`choices.restore_isolate`) gets no copy. Then read the copy back, put on what didn't take one part at a time, and
+  refuse a copy whose own settings use parts of the server or keep a cable in; start it, wait until it runs (and the
+  guest agent its settings switch on answers), then stop (`force_stop` for a VM) and delete it. A test whose copy
+  wasn't asked to start within the hour is skipped (`overTime`). Each change, start, stop and delete first reads the copy's settings
+  and goes ahead only when they carry the test's mark. Passes never overlap; strays left by an interruption (a lost
+  restore answer among them) are swept by range and that mark. The newest failed verdict per machine is a `restore_test.failed` hint in the hosts list while tests are on;
+  a machine's page carries its newest result (`HostGuestDetail.restoreTest`). The assistant reads it with
+  `whats_protected`.
 - **The Vault** (`apps/server/src/vault/`): the person's logins, API keys and SSH keys for the agent, secrets sealed
   and write-only. Each entry has one switch for the agent (`vault_entries.agent_on_at`, with an API's variable and an
   SSH key's servers beside it); `vault.giveKey` and `vault.takeKey` set it. An entry switched on reaches the agent only
@@ -1653,7 +1779,7 @@ Setup and operation: `docs/github.md`.
   one or none when the hub couldn't make it) stays in `quiet_maintenance_left`,
   written with the change, until the hub confirms it is gone; whether or not the hub muted them, the server's open alerts are held with the window
   (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
-  restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
+  restarts (`guest_power`, `server_power`) and update installs (`server_update`, `app_update`, until 15 minutes after its task ends)
   keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
   updating it” (the same work again on this Whombat moves its end; a later end gets a new maintenance window); End now
   ends every window holding the thing. GitHub's and Website feedback's quiet rows stay through the hourly sweep while they are
@@ -1680,6 +1806,22 @@ Setup and operation: `docs/github.md`.
   that starts on (“The internet is down since 14:02”), listing the connections down with it. It ends at the first pass
   where its own step works: every step working, or a later step failing instead, which confirms on its own. A development box and
   tests never probe unless `WHOMBAT_WAY_OUT=on`.
+- **Open to the internet** (`apps/server/src/exposure/`, [internet-exposure.md](docs/decisions/internet-exposure.md)):
+  `read.ts` reads each place's openings with the connection's own sign-in (Nginx Proxy Manager's proxy hosts and
+  streams through its page's reader; Cloudflare's tunnel settings and Access applications; OPNsense's destination NAT
+  rules page by page and its UPnP service; UniFi's port forwards and UPnP switch through the console's older API; Tailscale's policy
+  for Funnel), kept 10 minutes, and `parse.ts` turns them into openings and blind spots. `things.exposure` (`view.ts`)
+  words every opening in the owner's language with what it leads to (a connection on that address and port, else a
+  server or guest by its address, `lines.ts` `buildLinks`), how it is guarded and at most one certain highlight
+  (`openings.ts`), and lists the places and what they couldn't see. The health pass (`home/health.ts`) reads each
+  source connection, keeps fingerprints in `exposure_openings` (`baseline.ts`: the first list is kept per list a place
+  has — a proxy's hosts, its streams, a router's port forwards, the list of tunnels and each tunnel's routes — the first
+  time that list is read whole, silently; an opening after it is new for 14 days; closed openings are forgotten after 30
+  days, and only after a read of everything) and adds one `exposure.new` line per new opening to the connection's own;
+  a read that fails, or misses a list while a new opening wasn't in what it read, leaves an Ignore of a gone line as it
+  is. This is meant is Stop watching that one
+  opening (`watch_offs` with subject `open:<id>`), which the page reads as meant. The assistant's `internet_exposure`
+  (`agent.ts`) gives the same view. The web page is `/internet` in the Servers place, the phone's the `Internet` screen.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
   addresses only, the resolved address pinned, no redirects, a size cap); the Vault and pictures add their own
   destination rules. A single UDP datagram and its answer (a console's discovery) go through `outboundDatagram` under
@@ -1789,7 +1931,8 @@ Setup and operation: `docs/github.md`.
   for the person pushes once. A server's care plan (above) is a research of its own beside its looks: the watcher keeps
   it while it waits, leaves the server's missing backups to it, and never counts it against the day. A look that goes, gets worse or gains a line it didn't cover ends its research, and its
   thread settles when the person didn't write in it; one that comes back as it was within a week gets the last finding
-  back at once, without a message or a turn.
+  back at once, without a message or a turn. A look's turn also gets what changed on the thing and the server it runs
+  on in the 48 hours before (below, What changed), to say “changed just before” without claiming a cause.
 - **Looks ahead** (`apps/server/src/looks-ahead/`, [looks-ahead.md](docs/decisions/looks-ahead.md)): every five minutes
   a home job (`looks-ahead/watch.ts`) reads, while the assistant's keys allow it, the person's calendars that are on (up
   to 7 days ahead, 14 for a mail turn's plans) and, when incoming mail is on, the newest 50 inbox mails of every Google,
@@ -1948,10 +2091,49 @@ Setup and operation: `docs/github.md`.
   Each page with uptime data says its week in one line (`uptime`, also one of a page's facts).
   A server's uptime starts at its first retained report and counts its offline alerts and down incidents together.
   Each uptime line counts down stretches and minutes from the start it shows.
-  `things.history` lists a thing's incidents over 30 or 90 days. A server's history includes alerts that were open
-  during the period, including alerts that began earlier, or says when its own alerts couldn't be read.
+  `things.history` lists a thing's incidents over 30 or 90 days, and what changed on it (below). A server's history
+  includes alerts that were open during the period, including alerts that began earlier, or says when its own alerts
+  couldn't be read.
   The assistant reads this with `watch_status` and `watch_history` (`incidents/agent.ts`).
   `watch_status` lists quiet windows for whole things.
+- **Does it really work?** (`apps/server/src/works/`, [service-works.md](docs/decisions/service-works.md)): Nextcloud,
+  Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant each have one read-only test (`tests.ts`) that does what a
+  person would through the connection's own sign-in (`signedConnectionFetch`): list files and read a file's first
+  bytes, load the newest photo's preview, find the newest library item and read its first bytes, see a sensor's recent
+  reading (aged by Home Assistant's own clock). A step's failure is `access` (401, 403, a sign-in that can't be
+  renewed), `broken` (another code, an unreadable answer — one without the service's JSON type and fields, a WebDAV
+  listing that isn't a `207 multistatus`, a file with no bytes, a JSON answer where a file should be, a preview that
+  isn't a picture or a film's file that isn't one by its type or first bytes (`fileFits`) —, a web page or redirect
+  where its data should be,
+  nothing where something must be, no answer in 30 s) or `down`. Runs keep only the result
+  (`service_test_runs`, 30 days). The page's card “Does it really work?” (`page.ts`) has Run now and Watch it, which
+  go through `things.action` without a change (`actions.ts`). Watch it is the check `works.test` (starts off): the
+  connection's health pass runs a watched test when due (every 15 minutes, a confirming run after a first failure, a
+  run after a change on the connection; `rules.ts`) and adds its line after two failed runs, so the dot, incidents,
+  pushes, holds and causes treat it as any line. The assistant reads or runs it with `service_test` (`tool.ts`).
+- **What changed** (`apps/server/src/changes/`, [outside-changes.md](docs/decisions/outside-changes.md)): Whombat
+  compares what it already reads. The connection health pass hands each kind's `KindSeen.tracked` (its version, its
+  devices' firmware, its proxy hosts or tunnel routes) to `trackConnection`; a 10-minute home job
+  (`home.changes-servers`) reads each online server's detail from the hosts service and compares its boot time, kernel,
+  system version, waiting updates installed (the count fell to zero) and Docker containers' images (the agent's `image_id`, else the image reference;
+  Whombat's own containers left out). `change_baselines` keeps the last read per thing and source; a first read only
+  sets it. What differs becomes `thing_changes` rows (structured facts, 90 days, pruned by that job through the pipeline): more than 3 of a
+  kind in one read are one row, the same item again within 30 minutes merges and one that went back is deleted, and a
+  `changes` row of Whombat's own about the thing or the server it runs on, from 2 hours before the read before, makes it
+  `whombat`, else `outside`. Words are made when read, in the reader's language (`changes/words.ts`). Nothing alerts:
+  the write only tells Home's `things`. The thing's History, a look's turn (up to 8 changes of the thing and its server
+  from the 48 hours before the trouble, `LookDispatchContext.changes`) and the assistant's `what_changed`
+  (`changes/agent.ts`) read them.
+  Settings copies (`changes/copies/`): a 15-minute home job (`home.settings-copies`) takes OPNsense's `config.xml`,
+  Pi-hole's Teleporter zip and Nginx Proxy Manager's hosts as JSON, once a night between 02:00 and 05:00 at the box's
+  clock (a failed try again after an hour, three times), through the connection's own key. Each copy is sealed with the
+  custody key (`settings_copies`, the newest 10 different ones; the same bytes only move `checked_at`, the same content
+  with its secrets replaces the newest) beside a summary: each item by a keyed hash of its key and of what it holds
+  with secrets cleaned out (`custody.mac`), and a keyed hash of the whole copy's content with its secrets
+  (`CONTENT_KEY`; Pi-hole's covers the Teleporter zip's own files too, `copies/zip.ts`). Two copies' summaries made the
+  same way (`MADE_KEY`) are compared into a `settings` change. `settings_copy_states` keeps the last try; the service's page gets `ThingPage.settingsCopy`
+  and, once a copy worked and none has for 48 hours, the “Settings copy failing” line (`settings.copy`).
+  `things.settingsCopy` gives the newest copy's bytes as base64 to the person, read through an export stream.
 - **Quiet hours for changes** (`care/window.ts`, [care-plan.md](docs/decisions/care-plan.md)): one change window per
   Whombat (`burrows.change_window_*`, 03:00–05:00 in its time zone until the person moves it with `changeWindow.set`).
   The care plans' updates and restarts use it, an approval's *Tonight* runs at its start, and every turn of the

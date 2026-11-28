@@ -74,6 +74,9 @@ describe('temporary machines (server-pages.md) are never in a plan', () => {
     expect(isTemporaryGuest({ id: 'incus:ci/job-1', name: 'job-1', platform: 'incus' })).toBe(true);
     expect(isTemporaryGuest({ id: 'incus:web', name: 'web', platform: 'incus' })).toBe(false);
     expect(isTemporaryGuest({ id: 'pve:120', name: 'ci-job-a8791974', platform: 'pve' })).toBe(true);
+    expect(isTemporaryGuest({ id: 'pve:990004', name: 'whombat-test-of-plex', platform: 'pve' })).toBe(true);
+    expect(isTemporaryGuest({ id: 'pve:990004', name: 'plex', platform: 'pve' })).toBe(false);
+    expect(isTemporaryGuest({ id: 'pve:101', name: 'whombat-test-of-plex', platform: 'pve' })).toBe(false);
     expect(
       isTemporaryGuest({ id: 'docker:x', name: 'x', platform: 'docker', labels: { 'whombat.service': '1' } }),
     ).toBe(true);
@@ -97,13 +100,15 @@ describe('a care plan per kind of server (care-plan.md)', () => {
       }),
       W,
     );
-    expect(steps.map((s) => s.id)).toEqual(['backup', 'updates']);
+    expect(steps.map((s) => s.id)).toEqual(['backup', 'restore_test', 'updates']);
     expect(steps[0]?.text).toBe('Back up all 6 machines every night at 02:00 to pbs-01, keeping a week');
     expect(steps[0]?.step).toContain('backup_job_set');
     expect(steps[0]?.step).toContain('"last": 7');
     expect(steps[0]?.step).toContain('selection all');
-    expect(steps[1]?.text).toBe('Install system updates on Sundays at 03:00 and restart if needed');
-    expect(steps[1]?.automation).toBe('updates');
+    // Whombat turns the weekly restore test on itself (backup-trust.md).
+    expect(steps[1]?.restoreTests).toBe(true);
+    expect(steps[2]?.text).toBe('Install system updates on Sundays at 03:00 and restart if needed');
+    expect(steps[2]?.automation).toBe('updates');
   });
 
   it('Proxmox without a Backup Server saves to the first storage that takes backups; temporary machines left out', () => {
@@ -204,6 +209,36 @@ describe('a care plan per kind of server (care-plan.md)', () => {
     expect(steps[1]?.text).toBe('Tell you when apps have updates');
   });
 
+  it('a server with Docker Compose apps: their updates on Sunday night, as an automation (app-updates.md)', () => {
+    const steps = careSteps(
+      facts({
+        server: { id: 'thetitan', name: 'thetitan', platform: 'standard', self: false },
+        guests: [
+          { id: 'docker:plex', name: 'plex', platform: 'docker' },
+          { id: 'docker:immich_server', name: 'immich_server', platform: 'docker', project: 'immich' },
+        ],
+      }),
+      W,
+    );
+    expect(steps.map((s) => s.id)).toEqual(['updates', 'apps']);
+    expect(steps[1]).toMatchObject({ automation: 'apps' });
+    expect(steps[1]?.text).toContain('Sunday night');
+    expect(steps[1]?.text).toContain(W.start);
+    // Turned on already: not offered again.
+    expect(
+      careSteps(
+        facts({
+          server: { id: 'thetitan', name: 'thetitan', platform: 'standard', self: false },
+          guests: [
+            { id: 'docker:immich_server', name: 'immich_server', platform: 'docker', project: 'immich' },
+          ],
+          has: { apps: true, updates: true },
+        }),
+        W,
+      ),
+    ).toEqual([]);
+  });
+
   it('Unraid keeps its own updates; the server this Whombat runs on asks for its own', () => {
     expect(
       careSteps(facts({ server: { id: 'blackbox', name: 'blackbox', platform: 'unraid', self: false } }), W),
@@ -222,17 +257,62 @@ describe('a care plan per kind of server (care-plan.md)', () => {
     ).toEqual([]);
   });
 
+  it('leaves a Windows PC’s updates to the person (Whombat doesn’t install them)', () => {
+    expect(
+      careSteps(facts({ server: { id: 'pc', name: 'pc', platform: 'windows', self: false } }), W),
+    ).toEqual([]);
+  });
+
   it('leaves out what is in place already', () => {
     const steps = careSteps(
       facts({
         server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
         guests: pve(2),
         backupStorages: [{ id: 'local', type: 'dir' }],
-        has: { backup: true, updates: true },
+        has: { backup: true, updates: true, restore_test: true },
       }),
       W,
     );
     expect(steps).toEqual([]);
+  });
+
+  it('offers a weekly restore test on a Proxmox server with backups, never without (backup-trust.md)', () => {
+    const backedUp = careSteps(
+      facts({
+        server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
+        guests: pve(2),
+        backupStorages: [],
+        has: { backup: true, updates: true },
+      }),
+      W,
+    );
+    expect(backedUp.map((s) => s.id)).toEqual(['restore_test']);
+    const nowhere = careSteps(
+      facts({
+        server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
+        guests: pve(2),
+        backupStorages: [],
+        has: { updates: true },
+      }),
+      W,
+    );
+    expect(nowhere.map((s) => s.id)).toEqual([]);
+  });
+
+  it('offers app updates and restore tests only when the release it would go back to knows them', () => {
+    const proxmox = {
+      server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox' as const, self: false },
+      guests: pve(2, [{ id: 'docker:immich_server', name: 'immich', platform: 'docker', project: 'immich' }]),
+      backupStorages: [{ id: 'pbs-01', type: 'pbs' }],
+    };
+    const now = careSteps(facts(proxmox), W);
+    expect(now.map((s) => s.id)).toEqual(['backup', 'restore_test', 'updates', 'apps']);
+    expect(now.find((s) => s.id === 'apps')?.automation).toBe('apps');
+    const older = careSteps(facts({ ...proxmox, olderRelease: true }), W);
+    // That release knows the plain `apps` step (telling the person), never its automation or a restore test.
+    expect(older.map((s) => s.id)).toEqual(['backup', 'updates', 'apps']);
+    expect(older.find((s) => s.id === 'apps')?.automation).toBeUndefined();
+    expect(older.some((s) => s.restoreTests)).toBe(false);
   });
 
   it('knows the lines it answers, its own key, and says it in a push', () => {
@@ -285,11 +365,70 @@ describe('the automations a care plan turns on', () => {
     expect(prompt).toContain('Never restart');
   });
 
+  it('updates Compose apps on Sunday night at the start of the quiet hours, asking about the rest', () => {
+    const a = careAutomation('apps', base);
+    expect(validateDefinition(a.definition, Date.parse('2026-10-30T12:00:00Z')).problems).toEqual([]);
+    // 03:00 starts the night from Sunday to Monday; 23:00 starts on Sunday itself.
+    expect(a.definition.triggers[0]).toMatchObject({ schedule: { expr: '0 3 * * 1' }, missed: 'skip' });
+    const late = careAutomation('apps', { ...base, window: { start: '23:00', end: '01:00' } });
+    expect(late.definition.triggers[0]).toMatchObject({ schedule: { expr: '0 23 * * 0' } });
+    const step = a.definition.steps[0];
+    const prompt = step?.kind === 'dispatch_agent' ? step.prompt : '';
+    for (const fact of ['app_updates', 'app_update', 'hold_major', 'ask true', 'pve-01'])
+      expect(prompt).toContain(fact);
+    expect(a.name).toContain('pve-01');
+  });
+
   it('backs up QEMU/KVM machines on Sundays an hour before the quiet hours', () => {
     const a = careAutomation('vm_backup', { ...base, guests: ['libvirt:win11'] });
     expect(validateDefinition(a.definition, Date.parse('2026-10-30T12:00:00Z')).ok).toBe(true);
     expect(a.definition.triggers[0]).toMatchObject({ schedule: { expr: '0 2 * * 0' } });
     const step = a.definition.steps[0];
     expect(step?.kind === 'dispatch_agent' ? step.prompt : '').toContain('libvirt:win11');
+  });
+});
+
+describe('a care plan in Dutch', () => {
+  it('says every step’s line in Dutch, with names and times as they are, and keeps the assistant’s steps English', () => {
+    const server = { id: 'pve-01', name: 'pve-01', platform: 'proxmox' as const, self: false };
+    const all = facts({
+      server,
+      guests: [
+        ...pve(3),
+        { id: 'incus:web', name: 'web', platform: 'incus' },
+        { id: 'libvirt:win', name: 'win', platform: 'libvirt' },
+        { id: 'docker:immich', name: 'immich', platform: 'docker', project: 'immich' },
+      ],
+      backupStorages: [{ id: 'pbs-01', type: 'pbs' }],
+    });
+    const en = careSteps(all, W);
+    const nl = careSteps(all, W, 'nl-NL');
+    expect(nl.map((s) => s.id)).toEqual(en.map((s) => s.id));
+    expect(nl.map((s) => s.id)).toEqual([
+      'backup',
+      'restore_test',
+      'snapshots',
+      'vm_backup',
+      'updates',
+      'apps',
+    ]);
+    nl.forEach((s, i) => {
+      expect(s.text).not.toBe(en[i]?.text);
+      expect(s.step).toBe(en[i]?.step);
+    });
+    expect(nl[0]?.text).toContain('alle 3 machines');
+    expect(nl[0]?.text).toContain('pbs-01');
+    expect(nl[0]?.text).toContain('02:00');
+    expect(nl[2]?.text).toContain('web');
+    expect(nl[3]?.text).toContain('win');
+    expect(nl[5]?.text).toContain('03:00');
+    const self = careSteps(facts({ server: { ...server, self: true } }), W, 'nl-NL');
+    expect(self[0]?.text).toContain('vragen');
+    const tell = careSteps(
+      facts({ server, guests: [{ id: 'docker:plex', name: 'plex', platform: 'docker' }] }),
+      W,
+      'nl-NL',
+    ).find((s) => s.id === 'apps');
+    expect(tell?.text).toContain('laten weten');
   });
 });

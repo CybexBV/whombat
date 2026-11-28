@@ -216,6 +216,11 @@ export const EVENT_TYPES = {
   'thing.down': 'System',
   'thing.problem': 'System',
   'thing.back': 'System',
+  // A Home Assistant entity a live automation names changed state (`HomeStateChanged`), and UniFi Protect saw or heard
+  // something on a connection a live automation listens to (`ProtectDetected`), signed by the smart home signer; no
+  // text, they show in no feed. Automations start on them (direct-automations.md).
+  'home.state_changed': 'System',
+  'protect.detected': 'System',
   // Contracts 3.15 (Whombat assistant-settings.md): the assistant asked to change one of the person's settings and it
   // went ahead or was approved (`{op, deferred}`, hidden: the op signs what it changed itself).
   'setting.changed': 'System',

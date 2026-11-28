@@ -16,8 +16,11 @@
  * The follow-up is the logic here (`TaskFollow`, unit-tested on a `TaskStore` in memory); the rows, the card, Done
  * recently and the wake are `followed.ts`'s commands (`dbTaskStore`).
  */
+
 import { TASK_RESULT_MAX, type TaskEndState, taskLostText } from '@whombat/core';
+import { burrowLocale } from '../i18n/locale';
 import type { Services } from '../services';
+import { appsOutcomeText } from './app-words';
 import { HOSTS_API, seg } from './client';
 import type { HostsChangeInput } from './commands';
 import { dbTaskStore } from './followed';
@@ -326,9 +329,15 @@ export class TaskFollow {
     let text = taskOutcomeText(task.words, result, message, code);
     let rebootRequired = false;
     let installed: number | null = null;
-    // A Check's or Install's message is written from its result and the report after it (SWU-08), warnings too.
-    const updates = isUpdatesAfter(task.words.after);
-    if (!code && (result === 'ok' || (updates && result === 'warning')) && task.words.after && this.#enrich) {
+    // A Check's or Install's message is written from its result and the report after it, warnings too; an
+    // app update's from each app's outcome, also when one of them was put back (the task then ends in error).
+    const updates = isUpdatesAfter(task.words.after) || task.words.after === 'apps';
+    const appsEnd = task.words.after === 'apps' && code !== 'not_found';
+    if (
+      (appsEnd || (!code && (result === 'ok' || (updates && result === 'warning')))) &&
+      task.words.after &&
+      this.#enrich
+    ) {
       const more = await this.#enrich(task, message, endedAt).catch(() => null);
       if (more) {
         text = updates ? more.text : `${text} ${more.text}`;
@@ -402,12 +411,29 @@ async function updatesAfter(
   };
 }
 
+/** An app update's line: each app's outcome from the ended task (app-updates.md). */
+async function appsAfter(services: Services, task: FollowedTask): Promise<TaskAfter | null> {
+  const done = await hostsFor(services)
+    .call<unknown>({
+      path: `${HOSTS_API}/servers/${seg(task.serverId)}/tasks/${seg(task.taskId)}`,
+      query: { platform: 'host' },
+      actor: { ...WHOMBAT_ACTOR, role: 'operator' },
+    })
+    .then((raw) => toHostTask(raw))
+    .catch(() => null);
+  // Said in the person's language: the card and Done recently keep these words as they are.
+  const locale = await burrowLocale(services, task.burrowId);
+  const text = appsOutcomeText(done?.apps, task.words.server ?? task.serverName, locale);
+  return text ? { text } : null;
+}
+
 /** IU-07's “No errors.”: the server's detail after the task, read again once when its report is older. */
 function enrichFor(services: Services, retryMs = AFTER_RETRY_MS): TaskEnrich {
   return async (task, message, endedAt) => {
     const after = task.words.after;
     if (!after) return null;
     if (isUpdatesAfter(after)) return updatesAfter(services, task, endedAt, retryMs);
+    if (after === 'apps') return appsAfter(services, task);
     const read = async () =>
       toHostServerDetail(
         await hostsFor(services).call<unknown>({

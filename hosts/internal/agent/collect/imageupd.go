@@ -10,10 +10,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"rackoon/internal/agent/apps"
 )
 
 // Image update checks: for each running container whose image reference
@@ -53,6 +56,20 @@ type imageUpdater struct {
 type imageCheck struct {
 	at     time.Time
 	update *bool
+	// remote: the tag's digest on the registry when it was checked;
+	// version: that image's version label, read once per new digest when
+	// it is an update (versionRead: it was tried).
+	remote      string
+	version     string
+	versionRead bool
+}
+
+// imageResult is a checked image's result: whether the registry has a
+// newer image, and that image's version and digest when known.
+type imageResult struct {
+	update  *bool
+	version string
+	digest  string
 }
 
 func newImageUpdater(toggle toggleFn, c *collector) *imageUpdater {
@@ -72,16 +89,20 @@ func newImageUpdater(toggle toggleFn, c *collector) *imageUpdater {
 	return u
 }
 
-// results returns the latest result per image (nil = unknown).
-func (u *imageUpdater) results() map[string]*bool {
+// results returns the latest result per image (update nil = unknown).
+func (u *imageUpdater) results() map[string]imageResult {
 	if u == nil {
 		return nil
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	out := make(map[string]*bool, len(u.checked))
+	out := make(map[string]imageResult, len(u.checked))
 	for k, v := range u.checked {
-		out[k] = copyPtr(v.update)
+		r := imageResult{update: copyPtr(v.update)}
+		if v.update != nil && *v.update {
+			r.version, r.digest = v.version, v.remote
+		}
+		out[k] = r
 	}
 	return out
 }
@@ -130,7 +151,7 @@ func (u *imageUpdater) run(ctx context.Context) error {
 			break
 		}
 		cctx, cancel := context.WithTimeout(ctx, imageCheckTimeout)
-		update, remote, err := u.check(cctx, cand)
+		update, remote, digest, err := u.check(cctx, cand)
 		cancel()
 		if remote {
 			asked++
@@ -139,7 +160,25 @@ func (u *imageUpdater) run(ctx context.Context) error {
 			errs = append(errs, cand.Ref+": "+err.Error())
 		}
 		u.mu.Lock()
-		u.checked[cand.key()] = imageCheck{at: time.Now(), update: update}
+		prev := u.checked[cand.key()]
+		next := imageCheck{at: time.Now(), update: update, remote: digest}
+		if digest != "" && digest == prev.remote {
+			next.version, next.versionRead = prev.version, prev.versionRead
+		}
+		u.mu.Unlock()
+		// The newer image's version, once per new digest: Whombat says which
+		// version an app goes to, and asks first before a new major version.
+		if update != nil && *update && digest != "" && !next.versionRead && ctx.Err() == nil {
+			if ref, ok := parseImageRef(cand.Ref); ok {
+				vctx, vcancel := context.WithTimeout(ctx, imageCheckTimeout)
+				v, verr := u.remoteVersion(vctx, ref, digest)
+				vcancel()
+				next.versionRead = verr == nil
+				next.version = v
+			}
+		}
+		u.mu.Lock()
+		u.checked[cand.key()] = next
 		u.mu.Unlock()
 	}
 	if len(errs) == 0 {
@@ -156,14 +195,14 @@ func (u *imageUpdater) run(ctx context.Context) error {
 // registry was asked (images without a tag or a pull digest are skipped
 // without one). A private image (the registry wants credentials) or a
 // registry error leaves the result unknown.
-func (u *imageUpdater) check(ctx context.Context, cand imageCand) (update *bool, remote bool, err error) {
+func (u *imageUpdater) check(ctx context.Context, cand imageCand) (update *bool, remote bool, digest string, err error) {
 	ref, ok := parseImageRef(cand.Ref)
 	if !ok {
-		return nil, false, nil
+		return nil, false, "", nil
 	}
 	digests, err := u.localDigests(ctx, cand.ImageID)
 	if err != nil {
-		return nil, false, err
+		return nil, false, "", err
 	}
 	var local []string
 	for _, rd := range digests {
@@ -176,21 +215,21 @@ func (u *imageUpdater) check(ctx context.Context, cand imageCand) (update *bool,
 		}
 	}
 	if len(local) == 0 {
-		return nil, false, nil // built locally or loaded from a file: nothing to compare
+		return nil, false, "", nil // built locally or loaded from a file: nothing to compare
 	}
 	dg, err := u.remoteDigest(ctx, ref)
 	if errors.Is(err, errRegistryAuth) {
-		return nil, true, nil // private repository
+		return nil, true, "", nil // private repository
 	}
 	if err != nil {
-		return nil, true, err
+		return nil, true, "", err
 	}
 	for _, l := range local {
 		if l == dg {
-			return ptr(false), true, nil
+			return ptr(false), true, dg, nil
 		}
 	}
-	return ptr(true), true, nil
+	return ptr(true), true, dg, nil
 }
 
 // dockerRepoDigests reads RepoDigests from /images/<id>/json.
@@ -402,4 +441,125 @@ func parseChallenge(h string) (scheme string, params map[string]string) {
 		}
 	}
 	return scheme, params
+}
+
+// The newer image's version: its manifest (by the digest the check found;
+// for a list, the Linux image of this machine's architecture), then its
+// config's OCI version label. Two GETs of manifests (one pull on Docker
+// Hub's count) and one of a blob, only for an image that has an update and
+// once per new digest: the person sees which version an app goes to, and
+// Whombat asks first before a new major version.
+const (
+	manifestMax = 1 << 20
+	configMax   = 4 << 20
+)
+
+// runtimeArch is this machine's architecture in the registry's words (Go's
+// names are the same).
+func runtimeArch() string { return runtime.GOARCH }
+
+func (u *imageUpdater) remoteVersion(ctx context.Context, ref imageRef, digest string) (string, error) {
+	base := registryBase(ref.Registry) + "/v2/" + ref.Repo
+	var m struct {
+		MediaType string `json:"mediaType"`
+		Manifests []struct {
+			Digest   string `json:"digest"`
+			Platform struct {
+				OS           string `json:"os"`
+				Architecture string `json:"architecture"`
+			} `json:"platform"`
+		} `json:"manifests"`
+		Config struct {
+			Digest string `json:"digest"`
+		} `json:"config"`
+	}
+	token := ""
+	get := func(path, accept string, max int64, v any) error {
+		b, tok, err := u.getAuthed(ctx, base+path, accept, token, ref.Repo, max)
+		token = tok
+		if err != nil {
+			return err
+		}
+		return json.Unmarshal(b, v)
+	}
+	if err := get("/manifests/"+url.PathEscape(digest), manifestAccept, manifestMax, &m); err != nil {
+		return "", err
+	}
+	if len(m.Manifests) > 0 {
+		pick := ""
+		for _, x := range m.Manifests {
+			if x.Platform.OS == "linux" && x.Platform.Architecture == runtimeArch() {
+				pick = x.Digest
+				break
+			}
+		}
+		if pick == "" {
+			return "", nil // no image for this machine
+		}
+		m.Manifests = nil
+		if err := get("/manifests/"+url.PathEscape(pick), manifestAccept, manifestMax, &m); err != nil {
+			return "", err
+		}
+	}
+	if !strings.HasPrefix(m.Config.Digest, "sha256:") {
+		return "", nil
+	}
+	var cfg struct {
+		Config struct {
+			Labels map[string]string `json:"Labels"`
+		} `json:"config"`
+	}
+	if err := get("/blobs/"+url.PathEscape(m.Config.Digest), "*/*", configMax, &cfg); err != nil {
+		return "", err
+	}
+	return apps.VersionOf(cfg.Config.Labels, ""), nil
+}
+
+// getAuthed GETs a registry URL, answering a Bearer challenge with an
+// anonymous token (reused through token); it returns the body (at most max
+// bytes) and the token used.
+func (u *imageUpdater) getAuthed(ctx context.Context, rawURL, accept, token, repo string, max int64) ([]byte, string, error) {
+	do := func(tok string) (*http.Response, error) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", accept)
+		req.Header.Set("User-Agent", "whombat-agent")
+		if tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+		return u.client.Do(req)
+	}
+	resp, err := do(token)
+	if err != nil {
+		return nil, token, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		ch := resp.Header.Get("WWW-Authenticate")
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		resp.Body.Close()
+		scheme, params := parseChallenge(ch)
+		if !strings.EqualFold(scheme, "bearer") || params["realm"] == "" {
+			return nil, token, errRegistryAuth
+		}
+		if token, err = u.token(ctx, params, repo); err != nil {
+			return nil, token, err
+		}
+		if resp, err = do(token); err != nil {
+			return nil, token, err
+		}
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, token, fmt.Errorf("%s", resp.Status)
+	}
+	b, err := io.ReadAll(io.LimitReader(resp.Body, max+1))
+	if err != nil {
+		return nil, token, err
+	}
+	if int64(len(b)) > max {
+		return nil, token, errors.New("answer too large")
+	}
+	return b, token, nil
 }

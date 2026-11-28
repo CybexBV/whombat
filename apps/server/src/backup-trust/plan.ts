@@ -1,0 +1,539 @@
+/**
+ * Restore tests of Proxmox machines, the decisions without I/O (docs/decisions/backup-trust.md): which machines can be
+ * tested and whose turn it is, when a test is due, where the copy goes and under which number, how a copy is proven to
+ * be this test's own, what is still missing of its isolation (the restore itself pulls its network cables, names it and
+ * keeps it from starting at boot), whether a machine uses parts of the server itself, and whether a running copy counts
+ * as started.
+ */
+import {
+  type ChangeWindow,
+  changeWindowMinutes,
+  clockMinutes,
+  inChangeWindow,
+  isRestoreTestCopy,
+  isTemporaryGuest,
+  RESTORE_TEST_FIRST_ID,
+  RESTORE_TEST_LAST_ID,
+  RESTORE_TEST_TAG,
+  type RestoreTestReason,
+  zonedInstant,
+  zonedParts,
+} from '@whombat/core';
+
+const MIN = 60_000;
+const DAY = 24 * 60 * MIN;
+const GIB = 1024 ** 3;
+
+/**
+ * A test a week: never sooner than seven days after the last one started. One that started late in the quiet hours
+ * moves the next a little later, at most to the next night's quiet hours.
+ */
+export const TEST_EVERY_MS = 7 * DAY;
+/**
+ * A test takes at most an hour. One whose copy wasn't asked to start by then is skipped (a slow restore says nothing
+ * about the backup); a copy asked to start fails as too long once its own limits have passed too (`overTime`).
+ */
+export const TEST_MAX_MS = 60 * MIN;
+/** A copy whose guest agent was expected may take this long from running to answering. */
+export const BOOT_WAIT_MS = 10 * MIN;
+/** Without a guest agent to ask, a copy that keeps running this long started (a VM; a container sooner). */
+export const VM_SETTLE_MS = 2 * MIN;
+export const CT_SETTLE_MS = MIN;
+/** A copy asked to start that isn't running after this long didn't start. */
+export const START_WAIT_MS = 5 * MIN;
+/** A test starts only while at least this much of the quiet hours is left. */
+export const START_MARGIN_MIN = 30;
+
+/** A machine whose backups can be tested. */
+export interface Candidate {
+  id: string;
+  name: string;
+  kind: 'vm' | 'container';
+  /** When its newest backup was made, as the report says; null when none is known. */
+  lastBackupAt: string | null;
+  /** Its guest agent answered in the last report. */
+  agent: boolean;
+}
+
+const obj = (v: unknown): Record<string, unknown> =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
+const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
+
+/**
+ * The Proxmox VMs and containers of a server that can be tested, from the hosts service's guest list: no templates, no
+ * temporary machines or earlier copies, and never the machine this Whombat runs in.
+ */
+export function eligibleGuests(raw: readonly unknown[]): Candidate[] {
+  const out: Candidate[] = [];
+  for (const r of raw) {
+    const g = obj(r);
+    const id = str(g.id);
+    const name = str(g.name) ?? id;
+    if (!id || !name || g.platform !== 'pve' || !id.startsWith('pve:')) continue;
+    if (g.kind !== 'vm' && g.kind !== 'container') continue;
+    if (g.template === true || g.self === true) continue;
+    const tags = Array.isArray(g.tags) ? g.tags.filter((t): t is string => typeof t === 'string') : [];
+    if (isRestoreTestCopy({ id, name, tags }) || isTemporaryGuest({ id, name, platform: 'pve', tags }))
+      continue;
+    const backup = obj(g.last_backup);
+    out.push({
+      id,
+      name,
+      kind: g.kind,
+      lastBackupAt: str(backup.at),
+      agent: g.guest_agent === 'running',
+    });
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/** The machines the person chose (none chosen: all of them). */
+export function chosenGuests(eligible: readonly Candidate[], chosen: readonly string[]): Candidate[] {
+  return chosen.length ? eligible.filter((g) => chosen.includes(g.id)) : [...eligible];
+}
+
+/**
+ * Whose turn it is: a machine with a backup before one without, then one never tested, then the one tested longest
+ * ago, so every machine comes round in turn.
+ */
+export function nextGuest(
+  candidates: readonly Candidate[],
+  lastTested: ReadonlyMap<string, Date>,
+): Candidate | null {
+  const ranked = [...candidates].sort((a, b) => {
+    const backup = Number(!!b.lastBackupAt) - Number(!!a.lastBackupAt);
+    if (backup) return backup;
+    const at = (lastTested.get(a.id)?.getTime() ?? -1) - (lastTested.get(b.id)?.getTime() ?? -1);
+    return at || a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+  });
+  return ranked[0] ?? null;
+}
+
+/** How many minutes of the quiet hours are left at a wall-clock time (0 outside them). */
+function minutesLeft(time: string, w: ChangeWindow): number {
+  if (!inChangeWindow(time, w)) return 0;
+  return (clockMinutes(w.end) - clockMinutes(time) + 1440) % 1440 || 1440;
+}
+
+/** The margin a test needs: half of a short window, else half an hour. */
+const marginOf = (w: ChangeWindow) => Math.min(START_MARGIN_MIN, Math.floor(changeWindowMinutes(w) / 2));
+
+/** Whether a server's weekly test starts now: inside the quiet hours with time left, a week after the last one. */
+export function testDue(now: Date, w: ChangeWindow, timeZone: string, lastStartedAt: Date | null): boolean {
+  if (lastStartedAt && now.getTime() - lastStartedAt.getTime() < TEST_EVERY_MS) return false;
+  const p = zonedParts(now, timeZone);
+  const time = `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`;
+  return minutesLeft(time, w) >= Math.max(1, marginOf(w));
+}
+
+/** When the next weekly test starts: the first moment of the quiet hours a week after the last test (or now). */
+export function nextTestAt(
+  now: Date,
+  w: ChangeWindow,
+  timeZone: string,
+  lastStartedAt: Date | null,
+): Date | null {
+  const earliest = new Date(Math.max(now.getTime(), (lastStartedAt?.getTime() ?? 0) + TEST_EVERY_MS));
+  const p = zonedParts(earliest, timeZone);
+  const usable = (changeWindowMinutes(w) - Math.max(1, marginOf(w))) * MIN;
+  for (let d = -1; d <= 8; d++) {
+    const day = new Date(Date.UTC(p.year, p.month - 1, p.day + d));
+    const start = zonedInstant(
+      { year: day.getUTCFullYear(), month: day.getUTCMonth() + 1, day: day.getUTCDate() },
+      w.start,
+      timeZone,
+    );
+    if (start.getTime() + usable >= earliest.getTime())
+      return new Date(Math.max(start.getTime(), earliest.getTime()));
+  }
+  return null;
+}
+
+/** The first number in the copies' range that no machine on the server has. */
+export function freeCopyId(used: Iterable<number>, after = RESTORE_TEST_FIRST_ID - 1): number | null {
+  const taken = new Set(used);
+  for (let id = Math.max(after + 1, RESTORE_TEST_FIRST_ID); id <= RESTORE_TEST_LAST_ID; id++)
+    if (!taken.has(id)) return id;
+  return null;
+}
+
+/** The Proxmox numbers of a server's guests (`pve:101` is 101). */
+export function guestNumbers(raw: readonly unknown[]): number[] {
+  return raw.flatMap((r) => {
+    const g = obj(r);
+    const n = typeof g.vmid === 'number' ? g.vmid : Number(String(g.id ?? '').replace(/^pve:/, ''));
+    return Number.isInteger(n) && n > 0 ? [n] : [];
+  });
+}
+
+/* Settings that touch the server itself ------------------------------------------------------------------------ */
+
+/**
+ * Settings that hand a machine parts of the server itself: passed-through PCI and USB devices, parallel ports, shared
+ * folders, memory shared with the server (ivshmem), hook scripts, raw QEMU arguments, raw container settings (bind
+ * mounts as `lxc.mount.entry` among them) and device nodes. A copy started with them would share them with the real
+ * machine, or run something on the server itself. Serial ports other than a socket, the server's hardware random
+ * number generator and disks or mount points on a host path are told by their value below.
+ */
+const HOST_KEYS = /^(hostpci\d+|usb\d+|parallel\d+|virtiofs\d+|ivshmem|dev\d+|hookscript|args|lxc\..*)$/;
+/** Keys that hold a disk, a CD drive or a mount point. */
+const DISK_KEYS = /^(ide|sata|scsi|virtio|mp)\d+$|^(rootfs|efidisk0|tpmstate0)$/;
+
+/** The volume a disk value names (`local-lvm:vm-101-disk-0,size=32G`, `file=…`, `volume=…`). */
+function volumeOf(value: string): string {
+  const parts = value.split(',');
+  const named = parts.find((p) => p.startsWith('file=') || p.startsWith('volume='));
+  return (named ? named.slice(named.indexOf('=') + 1) : (parts[0] ?? '')).trim();
+}
+
+const isCdrom = (value: string) => /(^|,)media=cdrom(,|$)/.test(value);
+
+/**
+ * Whether a machine's settings use parts of the server itself (then it isn't tested). A container that isn't
+ * unprivileged runs as the server's own root, so its copy would too.
+ */
+export function usesHostParts(
+  config: {
+    values: Record<string, string>;
+    restricted?: readonly string[];
+  },
+  kind: 'vm' | 'container',
+): boolean {
+  if (kind === 'container' && config.values.unprivileged !== '1') return true;
+  const keys = [...Object.keys(config.values), ...(config.restricted ?? [])];
+  if (keys.some((k) => HOST_KEYS.test(k))) return true;
+  for (const [k, v] of Object.entries(config.values)) {
+    if (/^serial\d+$/.test(k) && v !== 'socket') return true;
+    if (/^rng\d+$/.test(k) && /(^|,)source=\/dev\/hwrng(,|$)/.test(v)) return true;
+    if (!DISK_KEYS.test(k)) continue;
+    const volume = volumeOf(v);
+    // A host path or device, or the server's own CD drive.
+    if (volume.startsWith('/') || (volume === 'cdrom' && isCdrom(v))) return true;
+  }
+  return false;
+}
+
+/**
+ * Whether a restored copy's disks are all its own: every disk and mount point names a volume made for the copy's number
+ * (`vm-990001-disk-0`, `subvol-990001-disk-0`), apart from CD images and empty drives. Anything else would be the real
+ * machine's disk.
+ */
+export function copyOwnsDisks(values: Record<string, string>, copyId: number): boolean {
+  const own = new RegExp(`(^|[/:-])(vm|subvol|base)-${copyId}-`);
+  for (const [k, v] of Object.entries(values)) {
+    if (!DISK_KEYS.test(k)) continue;
+    const volume = volumeOf(v);
+    if (isCdrom(v) || volume === 'none' || volume === '') continue;
+    if (volume.startsWith('/') || !own.test(volume)) return false;
+  }
+  return true;
+}
+
+/* Whose copy it is ------------------------------------------------------------------------------------------------------ */
+
+/**
+ * The mark only one test's copy carries in its notes (`whombat-rst_…`, the test's own id), written by the restore that
+ * makes the copy: the proof that a machine at a copy's number is that test's copy, checked before anything is changed,
+ * started, stopped or deleted. A person's machine that took the number never has it. Notes rather than a tag: a cluster
+ * may keep tags to a list, and the hosts service may always write notes.
+ */
+export function copyMarker(testId: string): string {
+  return `whombat-${testId}`;
+}
+
+const MARKER = /^whombat-(rst_[0-9a-z]+)$/;
+
+const notesWords = (values: Record<string, string>) =>
+  (values.description ?? '').split(/\s+/).filter(Boolean);
+
+/** Whether a machine's settings carry the test's marker. */
+export function carriesMarker(values: Record<string, string>, testId: string): boolean {
+  return notesWords(values).includes(copyMarker(testId));
+}
+
+/** The test whose marker a machine carries, if any. */
+export function markedTestId(values: Record<string, string>): string | null {
+  for (const word of notesWords(values)) {
+    const m = MARKER.exec(word);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+/* The copy's settings ----------------------------------------------------------------------------------------------- */
+
+const NET_KEY = /^net\d+$/;
+const LINK_DOWN = /(^|,)link_down=1(,|$)/;
+
+/** A network card's value with its cable pulled. */
+export function linkDown(value: string): string {
+  if (LINK_DOWN.test(value)) return value;
+  const kept = value
+    .split(',')
+    .filter((p) => p && !p.startsWith('link_down='))
+    .join(',');
+  return `${kept},link_down=1`;
+}
+
+/** Whether every network card of a machine has its cable pulled. */
+export function networkDown(values: Record<string, string>): boolean {
+  return Object.entries(values).every(([k, v]) => !NET_KEY.test(k) || LINK_DOWN.test(v));
+}
+
+const startsAtBoot = (values: Record<string, string>) => !!values.onboot && values.onboot !== '0';
+
+/**
+ * What is still missing of a copy's isolation, as separate changes in the order they matter: not starting with the
+ * server and not protected from deletion, then every network card's cable pulled, then its name saying what it is. The
+ * restore itself sets all of them (and the marker); these only repair what didn't take, each on its own, so a card or a
+ * name Proxmox refuses never holds back the others.
+ */
+export function isolationSteps(
+  kind: 'vm' | 'container',
+  values: Record<string, string>,
+  copyName: string,
+): Record<string, string>[] {
+  const steps: Record<string, string>[] = [];
+  const options: Record<string, string> = {};
+  if (startsAtBoot(values)) options.onboot = '0';
+  if (values.protection && values.protection !== '0') options.protection = '0';
+  if (Object.keys(options).length) steps.push(options);
+  const cables: Record<string, string> = {};
+  for (const [k, v] of Object.entries(values))
+    if (NET_KEY.test(k) && !LINK_DOWN.test(v)) cables[k] = linkDown(v);
+  if (Object.keys(cables).length) steps.push(cables);
+  const nameKey = kind === 'vm' ? 'name' : 'hostname';
+  if (values[nameKey] !== copyName) steps.push({ [nameKey]: copyName });
+  return steps;
+}
+
+/** The copy's tags with the restore tests' tag added; null when it has it. */
+export function copyTags(values: Record<string, string>): string | null {
+  const tags = (values.tags ?? '').split(/[;, ]+/).filter(Boolean);
+  return tags.includes(RESTORE_TEST_TAG) ? null : [...tags, RESTORE_TEST_TAG].join(';');
+}
+
+/**
+ * Why a copy must not start, from its own settings as read back (those of the backup, which can differ from the
+ * machine's today): it doesn't carry the test's marker, it uses parts of the server itself, a disk isn't its own, a
+ * network cable is still in, or it would still start with the server. Null: it may start.
+ */
+export function copyProblem(
+  config: {
+    values: Record<string, string>;
+    pending?: Record<string, string>;
+    restricted?: readonly string[];
+  },
+  kind: 'vm' | 'container',
+  copyId: number,
+  testId: string,
+): RestoreTestReason | null {
+  const values = { ...config.values, ...(config.pending ?? {}) };
+  if (!carriesMarker(config.values, testId)) return 'not_ours';
+  if (usesHostParts({ values, restricted: config.restricted }, kind)) return 'host_parts';
+  // Unprivileged as it is now, not only once a waiting change applies.
+  if (kind === 'container' && config.values.unprivileged !== '1') return 'host_parts';
+  if (!copyOwnsDisks(config.values, copyId) || !copyOwnsDisks(values, copyId)) return 'host_parts';
+  if (!networkDown(config.values) || !networkDown(values)) return 'network_kept';
+  if (startsAtBoot(config.values) || startsAtBoot(values)) return 'refused';
+  return null;
+}
+
+/* Where the copy goes ------------------------------------------------------------------------------------------------- */
+
+export interface StorageFacts {
+  id: string;
+  content: readonly string[];
+  availBytes?: number;
+  totalBytes?: number;
+}
+
+/** Proxmox's memory for a machine whose settings name none (MiB). */
+const DEFAULT_MEMORY_MB = 512;
+const UNITS: Record<string, number> = { '': 1, K: 1024, M: 1024 ** 2, G: GIB, T: 1024 * GIB };
+
+/** A disk value's size (`size=32G`) in bytes; null when it names none. */
+function sizeOf(value: string): number | null {
+  const m = /(^|,)size=(\d+(?:\.\d+)?)([KMGT]?)(,|$)/.exec(value);
+  return m ? Math.round(Number(m[2]) * (UNITS[m[3] ?? ''] ?? 1)) : null;
+}
+
+/** What restoring a backup takes, from its own settings: its disks' sizes and its memory. */
+export interface BackupNeeds {
+  /** The disks a restore makes, in bytes (those with a size). */
+  diskBytes: number;
+  /** Every disk named its size (else `diskBytes` is only part of it). */
+  allSized: boolean;
+  memoryMb: number;
+}
+
+/**
+ * What a restore of a backup takes, read from the backup's own settings (not the machine's today, which may have lost
+ * or gained a disk since): every disk and mount point a restore makes, apart from CD drives, empty drives and host
+ * paths (nothing is made for them) and a VM's disks left out of its backups (a restore leaves them out too); and its
+ * memory (Proxmox's default when it names none).
+ */
+export function backupNeeds(kind: 'vm' | 'container', values: Record<string, string>): BackupNeeds {
+  let diskBytes = 0;
+  let allSized = true;
+  for (const [k, v] of Object.entries(values)) {
+    if (!DISK_KEYS.test(k) || isCdrom(v)) continue;
+    const volume = volumeOf(v);
+    if (volume === '' || volume === 'none' || volume.startsWith('/')) continue;
+    if (kind === 'vm' && /(^|,)backup=(0|no|off|false)(,|$)/.test(v)) continue;
+    const size = sizeOf(v);
+    if (size === null) allSized = false;
+    else diskBytes += size;
+  }
+  // `memory: 4096`, or `memory: current=4096` on newer Proxmox.
+  const memory = (values.memory ?? '')
+    .split(',')
+    .map((p) => p.replace(/^current=/, ''))
+    .find((p) => /^\d+$/.test(p));
+  return { diskBytes, allSized, memoryMb: memory ? Number(memory) : DEFAULT_MEMORY_MB };
+}
+
+/**
+ * How much room a copy needs: the size of the backup's disks, else a generous multiple of the backup (it is
+ * compressed), and the larger of the two when some disk named no size; null when nothing is known (then there is no
+ * test: Whombat can't tell that it fits).
+ */
+export function roomNeeded(
+  needs: Pick<BackupNeeds, 'diskBytes' | 'allSized'>,
+  backupBytes: number | null,
+): number | null {
+  const guess = backupBytes && backupBytes > 0 ? backupBytes * 3 : 0;
+  if (needs.allSized && needs.diskBytes > 0) return needs.diskBytes;
+  const need = Math.max(needs.diskBytes, guess);
+  return need > 0 ? need : null;
+}
+
+/**
+ * The storage the copy goes to: one that holds disks of the kind, with room for the copy and a tenth to spare, which
+ * stays under nine tenths full after it; the machine's own storage first, else the one with the most room.
+ */
+export function storageFor(
+  kind: 'vm' | 'container',
+  storages: readonly StorageFacts[],
+  preferred: readonly string[],
+  needBytes: number | null,
+): string | null {
+  const content = kind === 'vm' ? 'images' : 'rootdir';
+  const need = needBytes ?? 20 * GIB;
+  const fits = storages.filter((s) => {
+    if (!s.content.includes(content) || typeof s.availBytes !== 'number') return false;
+    if (s.availBytes < need * 1.1 + GIB) return false;
+    if (s.totalBytes && s.totalBytes > 0 && (s.totalBytes - s.availBytes + need) / s.totalBytes > 0.9)
+      return false;
+    return true;
+  });
+  for (const id of preferred) if (fits.some((s) => s.id === id)) return id;
+  return [...fits].sort((a, b) => (b.availBytes ?? 0) - (a.availBytes ?? 0))[0]?.id ?? null;
+}
+
+/** The storages a machine's disks are on, in the order of its settings. */
+export function storagesOf(values: Record<string, string>): string[] {
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(values)) {
+    if (!DISK_KEYS.test(k) || isCdrom(v)) continue;
+    const volume = volumeOf(v);
+    const at = volume.indexOf(':');
+    if (at > 0 && !volume.startsWith('/')) {
+      const id = volume.slice(0, at);
+      if (!out.includes(id)) out.push(id);
+    }
+  }
+  return out;
+}
+
+/* Whether the copy started -------------------------------------------------------------------------------------------- */
+
+const TRUE_WORDS = new Set(['1', 'yes', 'on', 'true']);
+
+/** Whether a VM's settings switch its QEMU guest agent on (`agent: 1`, `agent: enabled=1,fstrim_cloned_disks=1`). */
+export function agentEnabled(values: Record<string, string>): boolean {
+  for (const part of (values.agent ?? '').split(',')) {
+    const [k, v] = part.includes('=') ? part.split('=', 2) : ['enabled', part];
+    if (k === 'enabled') return TRUE_WORDS.has((v ?? '').trim().toLowerCase());
+  }
+  return false;
+}
+
+/**
+ * Whether the real machine leaves room for a guest agent in the copy: its agent answers, or it isn't running so
+ * nothing says it doesn't. A running machine whose agent doesn't answer hasn't got one that works (switched on, never
+ * installed), so asking its copy would fail a good backup.
+ */
+export function agentMayAnswer(real: { state: string; agent: boolean }): boolean {
+  return real.agent || real.state !== 'running';
+}
+
+/**
+ * Whether the copy's guest agent must answer for the test to work: a VM whose own settings (the backup's) switch the
+ * agent on, where the real machine leaves room for one (`agentMayAnswer`, decided when the test chose its backup).
+ */
+export function agentExpectedOf(
+  kind: 'vm' | 'container',
+  copyValues: Record<string, string>,
+  mayAnswer: boolean,
+): boolean {
+  return kind === 'vm' && mayAnswer && agentEnabled(copyValues);
+}
+
+/**
+ * What a test past its hour comes to: one whose copy wasn't asked to start yet (the restore still running, or the copy
+ * still being made ready) is skipped, which says nothing about the backup; one whose copy was asked to start waits for
+ * its own limits (a start, then the guest agent) and fails as too long only after those too; one still choosing its
+ * backup couldn't reach the server. Null: carry on.
+ */
+export function overTime(
+  t: { step: string; startedAt: Date; stepAt: Date },
+  now: Date,
+): { outcome: 'failed' | 'skipped'; reason: RestoreTestReason } | null {
+  if (t.step === 'cleaning' || t.step === 'done') return null;
+  if (now.getTime() - t.startedAt.getTime() <= TEST_MAX_MS) return null;
+  if (t.step === 'pick') return { outcome: 'skipped', reason: 'unreachable' };
+  if (t.step !== 'booting') return { outcome: 'skipped', reason: 'too_long' };
+  if (now.getTime() - t.stepAt.getTime() <= START_WAIT_MS + BOOT_WAIT_MS) return null;
+  return { outcome: 'failed', reason: 'too_long' };
+}
+
+export type BootVerdict =
+  | { verdict: 'wait'; runningAt: Date | null }
+  | { verdict: 'worked'; booted: boolean }
+  | { verdict: 'failed'; reason: RestoreTestReason };
+
+/**
+ * What a copy's state says about the test: running long enough (and, when its guest agent is expected, that agent
+ * answering inside the copy) worked; stopping after it ran, not starting, or never answering failed.
+ */
+export function bootVerdict(input: {
+  kind: 'vm' | 'container';
+  agentExpected: boolean;
+  /** The copy's state in the newest report; null when it is gone. */
+  state: string | null;
+  guestAgent: boolean;
+  /** When it was first seen running. */
+  runningAt: Date | null;
+  /** When it was asked to start. */
+  askedAt: Date;
+  now: Date;
+}): BootVerdict {
+  const { now } = input;
+  if (input.state !== 'running') {
+    if (input.runningAt) return { verdict: 'failed', reason: 'stopped_by_itself' };
+    if (now.getTime() - input.askedAt.getTime() >= START_WAIT_MS)
+      return { verdict: 'failed', reason: 'start_failed' };
+    return { verdict: 'wait', runningAt: null };
+  }
+  const since = input.runningAt ?? now;
+  const ran = now.getTime() - since.getTime();
+  if (input.kind === 'vm' && input.agentExpected) {
+    if (input.guestAgent) return { verdict: 'worked', booted: true };
+    if (ran >= BOOT_WAIT_MS) return { verdict: 'failed', reason: 'no_boot' };
+    return { verdict: 'wait', runningAt: since };
+  }
+  if (ran >= (input.kind === 'vm' ? VM_SETTLE_MS : CT_SETTLE_MS))
+    return { verdict: 'worked', booted: input.kind === 'container' || input.guestAgent };
+  return { verdict: 'wait', runningAt: since };
+}

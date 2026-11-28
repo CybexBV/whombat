@@ -3,16 +3,17 @@
 # repository (formerly Rackoon; narrow copies of it: nix/lib/sources.nix):
 #
 #   bin/whombat-hosts                                the hub (`serve --headless …`, nix/modules/hosts.nix)
-#   share/whombat-hosts/agent/whombat-agent-{linux,darwin}-{amd64,arm64}
-#                                                    the agents install.sh downloads (`--agent-dist`)
+#   share/whombat-hosts/agent/whombat-agent-{linux,darwin}-{amd64,arm64}, whombat-agent-windows-{amd64,arm64}.exe
+#                                                    the agents install.sh and install.ps1 download (`--agent-dist`)
 #   share/whombat-hosts/agent/manifest.json          their signatures: the hub offers agent self-update (NX-157).
 #                                                    Only in a signed build (below).
 #   share/whombat-hosts/agent/whombat-helper-macos.{zip,json}
 #                                                    Whombat Helper for Macs (NX-515)
 #
-# Static (CGO_ENABLED=0), so the agents run on any Linux server whatever its libc, and on any Mac from macOS 13 (Go
-# signs the macOS builds ad hoc itself; Whombat macos-servers.md MAC-01). The hub has no web UI (no `embedweb` tag):
-# Whombat owns every screen (ONE-12). Whombat Helper is a Swift app built, signed and notarized on a Mac
+# Static (CGO_ENABLED=0), so the agents run on any Linux server whatever its libc, on any Mac from macOS 13 (Go
+# signs the macOS builds ad hoc itself; Whombat macos-servers.md) and on Windows 10 and 11 (without a
+# Windows code signature, signed for self-update like the others; Whombat windows-servers.md). The hub has no web UI
+# (no `embedweb` tag): Whombat owns every screen. Whombat Helper is a Swift app built, signed and notarized on a Mac
 # (hosts/macos/helper/build.sh) and committed as a zip: Nix can't build it, so it is copied after its checksum is
 # checked against the json beside it.
 #
@@ -64,12 +65,15 @@ let
     "amd64"
     "arm64"
   ];
-  # Every agent build: Linux servers and Macs (NX-515).
+  # Every agent build: Linux servers, Macs and Windows PCs.
   oses = [
     "linux"
     "darwin"
+    "windows"
   ];
-  agentNames = lib.concatMap (os: map (a: "whombat-agent-${os}-${a}") archs) oses;
+  # A Windows build's file ends in .exe (the hub serves it so, and Windows runs nothing else).
+  agentFile = os: a: "whombat-agent-${os}-${a}" + lib.optionalString (os == "windows") ".exe";
+  agentNames = lib.concatMap (os: map (agentFile os) archs) oses;
   # The flags and their order as every signed agent was linked: other flags would be other bytes.
   ldflagsWith = buildId: "-s -w -buildid=${buildId} -X main.version=${version}";
 
@@ -116,7 +120,7 @@ let
         lib.concatMapStrings (a: ''
           GOOS=${os} GOARCH=${a} go build \
             -ldflags "${ldflagsWith agentBuildId} -X rackoon/internal/agent.UpdatePublicKey=${updateKey}" \
-            -o "$NIX_BUILD_TOP/out/whombat-agent-${os}-${a}" ./cmd/whombat-agent
+            -o "$NIX_BUILD_TOP/out/${agentFile os a}" ./cmd/whombat-agent
         '') archs
       ) oses}
       runHook postBuild
@@ -149,13 +153,20 @@ let
         grep -qaF '${updateKey}' "$f"
       done
       # Each for its own architecture (ELF e_machine: 0x3e x86-64, 0xb7 AArch64; Mach-O 64-bit magic cffaedfe and
-      # cputype 0x01000007 x86-64, 0x0100000c arm64, little-endian).
+      # cputype 0x01000007 x86-64, 0x0100000c arm64, little-endian; PE: "MZ", then at the offset in 0x3c the
+      # signature "PE" and two zero bytes, and the machine 0x8664 x86-64, 0xaa64 arm64, little-endian).
       m() { od -An -tx1 -j18 -N1 "$1" | tr -d ' '; }
       test "$(m $out/whombat-agent-linux-amd64)" = 3e
       test "$(m $out/whombat-agent-linux-arm64)" = b7
       macho() { od -An -tx1 -N8 "$1" | tr -d ' \n'; }
       test "$(macho $out/whombat-agent-darwin-amd64)" = cffaedfe07000001
       test "$(macho $out/whombat-agent-darwin-arm64)" = cffaedfe0c000001
+      pe() {
+        test "$(od -An -c -N2 "$1" | tr -d ' ')" = MZ
+        od -An -tx1 -j"$(od -An -tu4 -j60 -N4 "$1" | tr -d ' ')" -N6 "$1" | tr -d ' \n'
+      }
+      test "$(pe $out/whombat-agent-windows-amd64.exe)" = 504500006486
+      test "$(pe $out/whombat-agent-windows-arm64.exe)" = 5045000064aa
       runHook postInstallCheck
     '';
     passthru = { inherit archs oses agentNames; };

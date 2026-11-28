@@ -1,7 +1,8 @@
 /**
  * History on every page: a thing's week in one line, from its `up` points and its
  * incidents (a server's from its offline alerts in the hosts service and its incidents), and `things.history`: its
- * incidents over 30 or 90 days, its uptime over them and, for a server, the alerts the hosts service had.
+ * incidents over 30 or 90 days, its uptime over them, what changed on it (docs/decisions/outside-changes.md) and, for a
+ * server, the alerts the hosts service had.
  */
 import {
   GITHUB_THING_ID,
@@ -16,6 +17,8 @@ import {
   type ThingUptime,
   Timestamp,
 } from '@whombat/core';
+import { changesSince } from '../changes/store';
+import { thingChange } from '../changes/view';
 import type { ConnectionViewer } from '../connections/store';
 import type { IncidentRow } from '../db/schema/index';
 import { HOSTS_API, type HostsActor, seg } from '../hosts/client';
@@ -23,6 +26,7 @@ import { arr, obj, toHostAlert } from '../hosts/map';
 import { HEARTBEAT_RULE } from '../hosts/quiet-lines';
 import { serverLabel } from '../hosts/self';
 import { WHOMBAT_ACTOR } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import { notFound } from '../lib/errors';
 import type { Services } from '../services';
 import { thingVisible } from '../things/page';
@@ -279,7 +283,11 @@ export async function thingHistory(
   if (!parsed || !(await thingVisible(services, viewer, thing))) throw notFound('Thing');
   const now = services.clock();
   const from = new Date(now.getTime() - days * DAY);
-  const rows = await incidentsSince(services.db, viewer.burrowId, from, thing);
+  const [rows, changed, locale] = await Promise.all([
+    incidentsSince(services.db, viewer.burrowId, from, thing),
+    changesSince(services.db, viewer.burrowId, from, [thing]),
+    burrowLocale(services),
+  ]);
   // A server's alerts of every rule, its offline ones among them.
   const alerts =
     parsed.kind === 'server'
@@ -303,6 +311,7 @@ export async function thingHistory(
     from: from.toISOString(),
     uptime: said?.uptime ?? null,
     incidents: rows.map((r) => thingIncident(r, now)),
+    changes: changed.map((c) => thingChange(c, locale)),
     ...(alerts ? { alerts: alerts.slice(0, 500).map(historyAlert) } : {}),
     ...(parsed.kind === 'server' && alerts === null
       ? { alertsUnavailable: { serverName: serverLabel(parsed.id) } }

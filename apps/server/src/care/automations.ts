@@ -2,7 +2,8 @@
  * *Go ahead* on a care plan turns on its automations (docs/decisions/care-plan.md): the weekly updates and the weekly
  * backup of QEMU/KVM machines, written by Whombat from the step (never by the assistant) with the quiet hours of that
  * moment, published as the person in the same commit as their go-ahead — the press is the yes for exactly what the card
- * said — and written down on the server, so a later plan doesn't offer them again.
+ * said — and written down on the server, so a later plan doesn't offer them again. A Proxmox server's weekly restore
+ * tests aren't an automation: Go ahead turns its switch on (backup-trust.md).
  */
 import { careAutomation, definitionGrants } from '@whombat/core';
 import { sql } from 'drizzle-orm';
@@ -10,7 +11,7 @@ import { cap, insertAutomation, mayPublish, publishVersion, writeGrants } from '
 import { loadAutomationRow, publishAutomation } from '../automations/store';
 import { loadBurrowRow } from '../commit/pipeline';
 import type { ApplyContext } from '../commit/types';
-import { type LookPlanStepRow, serverCares } from '../db/schema/index';
+import { type LookPlanStepRow, restoreTestServers, serverCares } from '../db/schema/index';
 import { forbidden } from '../lib/errors';
 import { serverKey } from './commands';
 import { changeWindowOf } from './window';
@@ -19,6 +20,10 @@ import { changeWindowOf } from './window';
 export function turnedOnStep(name: string): string {
   return `Whombat turned this on as the automation “${name}” when the person said go ahead: nothing for you to do.`;
 }
+
+/** The restore test step as the turn after Go ahead reads it. */
+export const RESTORE_TESTS_ON_STEP =
+  'Whombat turned on weekly restore tests for this server when the person said go ahead: nothing for you to do.';
 
 /**
  * Turns on the automation of each step that has one; returns the steps with their words for the turn after it. Steps
@@ -29,12 +34,31 @@ export async function turnOnCareAutomations(
   conversationId: string,
   plan: readonly LookPlanStepRow[],
 ): Promise<LookPlanStepRow[]> {
-  if (!plan.some((p) => p.automation)) return [...plan];
+  if (!plan.some((p) => p.automation || p.restoreTests)) return [...plan];
   if (!mayPublish(ctx)) throw forbidden('Only you can turn on an automation.');
   const burrow = await loadBurrowRow(ctx.tx, ctx.burrow.id);
   const window = changeWindowOf(burrow);
   const out: LookPlanStepRow[] = [];
   for (const p of plan) {
+    if (p.restoreTests) {
+      const server = p.restoreTests.server;
+      await ctx.tx
+        .insert(restoreTestServers)
+        .values({ burrowId: ctx.burrow.id, serverId: server.id, on: true, guests: [], changedAt: ctx.now })
+        .onConflictDoUpdate({
+          target: [restoreTestServers.burrowId, restoreTestServers.serverId],
+          set: { on: true, changedAt: ctx.now },
+        });
+      await ctx.emit({
+        type: 'restore_tests.set',
+        kind: 'System',
+        text: `Turned on weekly restore tests for ${server.name}`,
+        where: null,
+        payload: { serverId: server.id, on: true, guests: 0 },
+      });
+      out.push({ text: p.text, step: RESTORE_TESTS_ON_STEP, ...(p.care ? { care: p.care } : {}) });
+      continue;
+    }
     const recipe = p.automation;
     if (!recipe) {
       out.push(p);

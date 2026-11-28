@@ -14,6 +14,7 @@ import { StackActions } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   clientTranslator,
+  exposureText,
   placeWords as listWords,
   type PlaceRowTone,
   type PlaceSummaryPart,
@@ -23,6 +24,9 @@ import {
   type ThingPlace,
   thingRenameTarget,
 } from '@whombat/client';
+import { useProtectedSupported, useSessionProtocol } from '@whombat/client/react';
+import { protectedPageWords } from '@whombat/core';
+import { EXPOSURE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
 import type { NativeTheme as Theme } from '@whombat/tokens';
 import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
@@ -42,7 +46,7 @@ import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { ThingIcon } from '../ui/assistant';
 import { BackBar, Screen } from '../ui/headers';
-import { Plus } from '../ui/icons';
+import { Globe, Plus, ShieldCheck } from '../ui/icons';
 import { InlineRename } from '../ui/inlineRename';
 import { hasNativeMenu, MenuSheet, NativeMenu } from '../ui/nativeMenu';
 import { PlacesButton, SHELL_TARGET } from '../ui/places';
@@ -76,6 +80,11 @@ export function PlaceScreen({ navigation, route }: Props) {
   // Elsewhere than iPhone a held row's menu is a sheet, for the row it was held on.
   const [menuFor, setMenuFor] = useState<PhonePlaceRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  // The place's own rows under Servers' rows, on a Whombat that has them: the first is set apart by a hairline.
+  const protocol = useSessionProtocol();
+  const protectedSupported = useProtectedSupported();
+  const internet = place === 'servers' && protocolAtLeast(protocol, EXPOSURE_MINOR);
+  const protectedShown = protectedSupported && place === 'servers' && rows.length > 0;
 
   const open = (row: PhonePlaceRow) => {
     keepLast(row.id);
@@ -228,6 +237,19 @@ export function PlaceScreen({ navigation, route }: Props) {
                   ? words.failed
                   : words.empty}
             </Text>
+          ) : null}
+          {internet ? (
+            <InternetRow
+              selected={beside?.name === 'Internet'}
+              onPress={() => navigation.navigate('Internet', { back: words.title })}
+            />
+          ) : null}
+          {protectedShown ? (
+            <ProtectedRow
+              first={!internet}
+              selected={beside?.name === 'Protected'}
+              onPress={() => navigation.navigate('Protected', { back: words.title })}
+            />
           ) : null}
           {place === 'servers' && lists.hosts && lists.pendingServers ? (
             <WaitingCard pending={lists.pendingServers} onReview={add} />
@@ -439,6 +461,110 @@ function PlaceListRow({
         }}
       />
       <View style={{ flex: 1, minWidth: 0 }}>{pressable}</View>
+    </View>
+  );
+}
+
+/**
+ * Open to the internet at the end of Servers (Whombat internet-exposure.md), set apart by a hairline: what the internet
+ * can reach through the proxies, tunnels and routers Whombat is connected to. Only on a Whombat that can say.
+ */
+function InternetRow({ selected, onPress }: { selected: boolean; onPress: () => void }) {
+  const { rawLocale } = useI18n();
+  const words = exposureText(rawLocale);
+  return (
+    <OwnRow first icon={Globe} title={words.title} line={words.row} selected={selected} onPress={onPress} />
+  );
+}
+
+/**
+ * What's protected beside Open to the internet, the same kind of row (Whombat backup-trust.md): what holds data and
+ * where its copies are, on a Whombat that has the page; set apart by the hairline when it is the first.
+ */
+function ProtectedRow({
+  first,
+  selected,
+  onPress,
+}: {
+  first: boolean;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { rawLocale } = useI18n();
+  const words = protectedPageWords(rawLocale);
+  return (
+    <OwnRow
+      first={first}
+      icon={ShieldCheck}
+      title={words.link}
+      line={words.linkHint}
+      selected={selected}
+      onPress={onPress}
+    />
+  );
+}
+
+/** A row of the place's own under its things: the glyph on its tile, the name and a line; the first under a hairline. */
+function OwnRow({
+  first,
+  icon: Glyph,
+  title,
+  line,
+  selected,
+  onPress,
+}: {
+  first: boolean;
+  icon: typeof Globe;
+  title: string;
+  line: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      style={
+        first ? { borderTopWidth: 1, borderTopColor: theme.colors.line, marginTop: 6, paddingTop: 6 } : null
+      }
+    >
+      <Touchable
+        onPress={onPress}
+        feedback="wash"
+        ringRadius={12}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${line}`}
+        accessibilityState={{ selected }}
+        style={{
+          minHeight: SHELL_TARGET,
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 12,
+          padding: 10,
+          borderRadius: 12,
+          backgroundColor: selected ? theme.colors.sel : undefined,
+        }}
+      >
+        <View
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 11,
+            backgroundColor: theme.colors.sf2,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Glyph size={21} color={theme.colors.ink2} strokeWidth={1.75} />
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text size={15} weight={600} tracking={-0.005} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text size={13} color={theme.colors.mut} numberOfLines={1}>
+            {line}
+          </Text>
+        </View>
+      </Touchable>
     </View>
   );
 }

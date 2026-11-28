@@ -624,6 +624,13 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
             (require('../screens/PlaceScreen') as typeof import('../screens/PlaceScreen')).PlaceScreen
           }
         />
+        <Stack.Screen
+          name="Internet"
+          getComponent={() =>
+            (require('../screens/ExposureScreen') as typeof import('../screens/ExposureScreen'))
+              .ExposureScreen
+          }
+        />
         {/* Search: chats, things, settings and places (phone-shell-final.md). */}
         <Stack.Screen
           name="Search"
@@ -970,6 +977,14 @@ export function RootNavigator({ persistScope = null }: { persistScope?: string |
           name="Done"
           getComponent={() =>
             (require('../screens/DoneScreen') as typeof import('../screens/DoneScreen')).DoneScreen
+          }
+        />
+        {/* What's protected and restore tests (backup-trust.md). */}
+        <Stack.Screen
+          name="Protected"
+          getComponent={() =>
+            (require('../screens/ProtectedScreen') as typeof import('../screens/ProtectedScreen'))
+              .ProtectedScreen
           }
         />
         {/* One screen per thing: a page's “Runs on” or “Also connected” opens another thing on top (AP-1964). */}

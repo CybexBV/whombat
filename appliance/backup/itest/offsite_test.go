@@ -1,0 +1,580 @@
+package itest
+
+import (
+	"context"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/CybexBV/whombat/appliance/backup/internal/dest"
+	"github.com/CybexBV/whombat/appliance/backup/internal/offsite"
+	"github.com/CybexBV/whombat/appliance/backup/internal/quarantine"
+	"github.com/CybexBV/whombat/appliance/backup/internal/state"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/gitinv"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/kit"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/manifest"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/pgtool"
+	"github.com/CybexBV/whombat/appliance/backup/pkg/restic"
+)
+
+func copyNow(t *testing.T, w *World, want int) {
+	t.Helper()
+	if due, why := offsite.Due(w.Cfg, time.Now()); !due {
+		t.Fatalf("no copy due: %s", why)
+	}
+	res, err := offsite.Copy(context.Background(), w.Cfg, t.Logf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Copied != want {
+		t.Fatalf("copied %d backups, want %d", res.Copied, want)
+	}
+	if due, why := offsite.Due(w.Cfg, time.Now()); due {
+		t.Fatalf("a copy is still due after one: %s", why)
+	}
+}
+
+// The copy somewhere else: after each backup the new ones are copied there (never the run lock held, so a long copy
+// holds no backup up), and when the main place is gone a new box brings the old one back from the copy alone with the
+// recovery kit: the kit's main place is tried first, then the copy.
+func TestOffsiteBringsBackFromTheCopyAlone(t *testing.T) {
+	ctx := context.Background()
+	a := NewWorld(t)
+	a.Configure()
+	ck1 := a.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, a.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	// A backup running doesn't hold the copy up (and the copy doesn't hold the backup's lock).
+	lock, err := state.TryLock(a.Cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, a, 1)
+	lock.Unlock()
+	doc := offsite.Doc(a.Cfg)
+	if doc.State != offsite.StateOK || doc.LastCopy == nil || doc.LastCopy.CheckpointID != ck1.Manifest.ID || doc.BackupsInCopy != 1 {
+		t.Fatalf("after the first copy: %+v", doc)
+	}
+
+	// The next backup asks for a copy by itself; only the new backup is copied.
+	home := a.Cfg.Layout().Home()
+	WriteFile(t, filepath.Join(home, "only-on-a.txt"), "made on A before its last backup")
+	Exec(t, a.DB.DSN, "create table only_on_a (id int); insert into only_on_a values (7)")
+	ck2 := a.Checkpoint()
+	if _, err := os.Stat(offsite.RequestPath(a.Cfg)); err != nil {
+		t.Fatalf("the backup asked for no copy: %v", err)
+	}
+	copyNow(t, a, 1)
+	copyRepo := offsite.Repo(a.Cfg, mustPlace(t, a.Cfg))
+	snaps, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(snaps) != 2 {
+		t.Fatalf("the copy holds %d backups: %v", len(snaps), err)
+	}
+
+	// The kit names the copy, with the newest backup in it; through JSON, as on paper or in a passkey's envelope.
+	mat, err := a.Material()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mat.Offsite == nil || mat.Offsite.Repository != copyDir || mat.Offsite.Head == nil || mat.Offsite.Head.Seq != ck2.Manifest.Seq {
+		t.Fatalf("the kit's second place: %+v", mat.Offsite)
+	}
+	b, _ := json.Marshal(mat)
+	paper, err := kit.Parse(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The fire: the box and the NAS are gone.
+	if err := os.RemoveAll(a.Rest.DataDir); err != nil {
+		t.Fatal(err)
+	}
+
+	// A new box brings it back from the copy.
+	nb := NewWorld(t)
+	from, _, err := dest.Adopt(ctx, nb.Cfg, paper, "", func(r *dest.Request) { r.AllowLocal = true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if from != dest.FromOffsite || mustDest(t, nb.Cfg).Repository != copyDir {
+		t.Fatalf("joined %s at %s", from, mustDest(t, nb.Cfg).Repository)
+	}
+	cfg := *nb.Cfg
+	cfg.RuntimeSocket = ""
+	admin := &pgtool.Admin{DSN: nb.Tools.AdminDSN}
+	pc, _ := pgx.ParseConfig(nb.Tools.AdminDSN)
+	DropSetAside(t, nb.Tools, nb.DB.Name)
+	opts := quarantine.AppOptions{CheckpointID: ck2.Manifest.ID, DB: nb.DB.Name, DBOwner: pc.User, DSN: nb.DB.DSN,
+		Admin: admin, Bins: pgtool.Bins{Dir: cfg.PGBin}, Git: gitinv.Runner{}, Log: t.Logf,
+		StopRuntime: func(context.Context) error { return nil }, StartRuntime: func(context.Context) {}}
+	if err := quarantine.AppRestore(ctx, &cfg, opts); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(cfg.Layout().Home(), "only-on-a.txt")); string(b) != "made on A before its last backup" {
+		t.Fatalf("A's file isn't back: %q", b)
+	}
+	conn, err := pgx.Connect(ctx, nb.DB.DSN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var n int
+	err = conn.QueryRow(ctx, "select id from only_on_a").Scan(&n)
+	conn.Close(ctx)
+	if err != nil || n != 7 {
+		t.Fatalf("A's database isn't back: %d %v", n, err)
+	}
+	if err := quarantine.End(ctx, &cfg, admin, ck2.Manifest.ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	release(t, &cfg)
+}
+
+// A copy that fails is recorded with its step, waits its backoff, and works again once the place answers; a
+// restore going stops copies.
+func TestOffsiteFailureAndBackoff(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	// The place goes away (a bucket deleted, a key revoked).
+	aside := copyDir + ".aside"
+	if err := os.Rename(copyDir, aside); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	_, err := offsite.Copy(ctx, w.Cfg, t.Logf)
+	var oe *offsite.Error
+	if !errors.As(err, &oe) || oe.Reason == "" {
+		t.Fatalf("a failed copy: %v", err)
+	}
+	doc := offsite.Doc(w.Cfg)
+	if doc.State != offsite.StateFailing || doc.FailedAttempts != 1 || doc.LastFailure == nil || doc.NextTryAt == nil {
+		t.Fatalf("after a failure: %+v", doc)
+	}
+	if due, why := offsite.Due(w.Cfg, time.Now()); due {
+		t.Fatalf("a copy is due right after a failure: %s", why)
+	}
+	if due, _ := offsite.Due(w.Cfg, time.Now().Add(offsite.Backoff(1)+time.Second)); !due {
+		t.Fatal("no copy due after the backoff")
+	}
+	if err := os.Rename(aside, copyDir); err != nil {
+		t.Fatal(err)
+	}
+	res, err := offsite.Copy(ctx, w.Cfg, t.Logf)
+	if err != nil || res.Copied != 1 {
+		t.Fatalf("after the place came back: %+v %v", res, err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.State != offsite.StateOK || doc.FailedAttempts != 0 || doc.LastFailure != nil {
+		t.Fatalf("after it worked again: %+v", doc)
+	}
+	// Forgetting the place keeps the copies (the bucket is the person's) and stops copying.
+	if err := offsite.Remove(w.Cfg); err != nil {
+		t.Fatal(err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.Configured {
+		t.Fatalf("still set: %+v", doc)
+	}
+	if _, err := os.Stat(filepath.Join(copyDir, "config")); err != nil {
+		t.Fatalf("the copies went with the place: %v", err)
+	}
+	if due, _ := offsite.Due(w.Cfg, time.Now()); due {
+		t.Fatal("a copy is due without a place")
+	}
+}
+
+// What is in the copy is read from the copy itself on every run: backups taken out of the bucket by someone else are
+// copied again, and until then the status doesn't say they are there.
+func TestOffsiteFollowsTheBucketsOwnList(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	ck1 := w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	// Someone empties the copy's snapshots by hand (a lifecycle rule, a prune of their own).
+	copyRepo := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg))
+	snaps, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(snaps) != 1 {
+		t.Fatalf("the copy holds %d backups: %v", len(snaps), err)
+	}
+	if _, err := copyRepo.Run(ctx, nil, "forget", snaps[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	ck2 := w.Checkpoint()
+	res, err := offsite.Copy(ctx, w.Cfg, t.Logf)
+	if err != nil || res.Copied != 2 {
+		t.Fatalf("after the bucket was pruned: %+v %v", res, err)
+	}
+	doc := offsite.Doc(w.Cfg)
+	if doc.State != offsite.StateOK || doc.BackupsInCopy != 2 || doc.LastCopy == nil ||
+		doc.LastCopy.CheckpointID != ck2.Manifest.ID {
+		t.Fatalf("after copying again: %+v", doc)
+	}
+	if after, _ := copyRepo.Snapshots(ctx, manifest.TagProduct); len(after) != 2 {
+		t.Fatalf("the copy holds %d backups, want %s and %s", len(after), ck1.Manifest.ID, ck2.Manifest.ID)
+	}
+
+	// Someone empties the folder and makes a new repository there (with the same password): it isn't the copy that was
+	// set up, so nothing is copied into it or cleared there, and the run says so.
+	if err := os.RemoveAll(copyDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := copyRepo.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var oe *offsite.Error
+	if _, err := offsite.Copy(ctx, w.Cfg, t.Logf); !errors.As(err, &oe) || oe.Step != offsite.StepRepository {
+		t.Fatalf("a run into another repository at the place: %v", err)
+	}
+	if after, err := copyRepo.Snapshots(ctx, manifest.TagProduct); err != nil || len(after) != 0 {
+		t.Fatalf("the new repository got %d backups (%v)", len(after), err)
+	}
+}
+
+// A real S3 storage (MinIO): the place is checked with a signed write, read and delete before it is saved, made with
+// the main place's chunker parameters, copied into, and its secret is in no state file, status or kit section but
+// the kit's own field.
+func TestOffsiteS3(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	mc := StartMinio(t)
+	bucket := "whombat-bk-" + Rand(4)
+	if _, err := dest.Configure(ctx, w.Cfg, dest.Request{Repository: "s3:" + mc.URL + "/" + bucket + "/box",
+		S3AccessKeyID: mc.User, S3SecretAccessKey: mc.Password, S3Region: "us-east-1", AllowInit: true}); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	req := offsite.Request{Provider: "s3", Repository: "s3:" + mc.URL + "/" + bucket + "/copy", S3AccessKeyID: mc.User,
+		S3SecretAccessKey: "wrong-" + mc.Password}
+	_, err := offsite.Set(ctx, w.Cfg, req)
+	var oe *offsite.Error
+	if !errors.As(err, &oe) || oe.Step != offsite.StepKeys || strings.Contains(err.Error(), mc.Password) {
+		t.Fatalf("a wrong secret: %v", err)
+	}
+	req.Repository = "s3:" + mc.URL + "/no-such-bucket-" + Rand(3) + "/copy"
+	req.S3SecretAccessKey = mc.Password
+	if _, err := offsite.Set(ctx, w.Cfg, req); !errors.As(err, &oe) || oe.Step != offsite.StepBucket {
+		t.Fatalf("no such bucket: %v", err)
+	}
+	req.Repository = "s3:" + mc.URL + "/" + bucket + "/box"
+	if _, err := offsite.Set(ctx, w.Cfg, req); !errors.As(err, &oe) || oe.Step != offsite.StepSame {
+		t.Fatalf("the main place again: %v", err)
+	}
+	req.Repository = "s3:" + mc.URL + "/" + bucket + "/copy"
+	place, err := offsite.Set(ctx, w.Cfg, req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	src, dst := w.Cfg.Repo(mustDest(t, w.Cfg)), offsite.Repo(w.Cfg, place)
+	sc, err1 := src.Config(ctx)
+	dc, err2 := dst.Config(ctx)
+	if err1 != nil || err2 != nil || sc.ChunkerPolynomial == "" || sc.ChunkerPolynomial != dc.ChunkerPolynomial {
+		t.Fatalf("the copy's chunker parameters differ: %v %v", err1, err2)
+	}
+	secretsAbsent(t, w, mc.Password)
+	for _, f := range []string{"offsite.json", "offsite-status.json"} {
+		if b, _ := os.ReadFile(filepath.Join(w.Cfg.StateDir, f)); strings.Contains(string(b), mc.Password) {
+			t.Fatalf("the secret is in %s", f)
+		}
+	}
+	if b, _ := json.Marshal(offsite.Doc(w.Cfg)); strings.Contains(string(b), mc.Password) {
+		t.Fatal("the secret is in the second place's status")
+	}
+	mat, err := w.Material()
+	if err != nil || mat.Offsite == nil || mat.Offsite.S3SecretAccessKey != mc.Password {
+		t.Fatalf("the kit's second place: %v", err)
+	}
+}
+
+func mustPlace(t *testing.T, c *state.Config) *offsite.Place {
+	t.Helper()
+	p, err := offsite.Load(c)
+	if err != nil || p == nil {
+		t.Fatalf("second place: %v", err)
+	}
+	return p
+}
+
+// The copy is never the main place under another address, at setup or on a later run (restic's repository ids tell,
+// whatever the addresses say); only this box's own backups are copied, never another box's in the same place; and a
+// main place without backups yet has nothing to copy, which the status doesn't call a copy that worked.
+func TestOffsiteOnlyThisBoxsBackupsElsewhere(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := offsite.Copy(ctx, w.Cfg, t.Logf); err != nil || res.Copied != 0 {
+		t.Fatalf("with nothing to copy: %+v %v", res, err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.State != offsite.StateFirst || doc.LastCopy != nil || doc.NewestBackupAt != nil {
+		t.Fatalf("with nothing to copy the status says: %+v", doc)
+	}
+
+	// The main place's own folder, named as a path instead of its server's address.
+	mainDir := filepath.Join(w.Rest.DataDir, w.RepoPath)
+	var oe *offsite.Error
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: mainDir, AllowLocal: true}); !errors.As(err, &oe) || oe.Step != offsite.StepSame {
+		t.Fatalf("the main place under another address was taken: %v", err)
+	}
+
+	// Another box writes into the same main place, under a name of its own.
+	w.Checkpoint()
+	other := filepath.Join(t.TempDir(), "theirs.txt")
+	if err := os.WriteFile(other, []byte("another box's data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mainRepo := w.Cfg.Repo(mustDest(t, w.Cfg))
+	if _, err := mainRepo.Run(ctx, nil, "backup", "--host", "another-box", "--tag", manifest.TagProduct,
+		"--tag", manifest.TagIDPrefix+"theirs", "--tag", manifest.TagMFPrefix+strings.Repeat("ab", 32), other); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	copied, err := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg)).Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(copied) != 1 || copied[0].Hostname != w.Cfg.ApplianceID {
+		t.Fatalf("the copy holds %+v (%v)", copied, err)
+	}
+
+	// The place is changed by hand to the main place's folder: the next run refuses before it copies or clears.
+	place := mustPlace(t, w.Cfg)
+	place.Repository = mainDir
+	if err := state.WriteJSON(filepath.Join(w.Cfg.StateDir, "offsite.json"), place, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	if _, err := offsite.Copy(ctx, w.Cfg, t.Logf); !errors.As(err, &oe) || oe.Step != offsite.StepSame {
+		t.Fatalf("a run into the main place: %v", err)
+	}
+	if doc := offsite.Doc(w.Cfg); doc.State != offsite.StateFailing || doc.LastFailure == nil || doc.LastFailure.Step != offsite.StepSame {
+		t.Fatalf("after refusing: %+v", doc)
+	}
+}
+
+// Clearing the copy touches only this box's own backups there, the ones its signed manifests vouch for, and removes
+// those the keep windows don't keep by their ids: a Whombat writing into the same folder under this box's machine name
+// (the one it was brought back from, still running) keeps its backups, however old.
+func TestOffsiteClearsOnlyItsOwnBackups(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	copyRepo := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg))
+	first, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(first) != 1 {
+		t.Fatalf("the copy holds %d backups: %v", len(first), err)
+	}
+	file := filepath.Join(t.TempDir(), "old.txt")
+	if err := os.WriteFile(file, []byte("an old backup"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := func(tags ...string) string {
+		args := []string{"backup", "--host", w.Cfg.ApplianceID, "--time", "2023-01-02 03:00:00"}
+		for _, tag := range tags {
+			args = append(args, "--tag", tag)
+		}
+		if _, err := copyRepo.Run(ctx, nil, append(args, file)...); err != nil {
+			t.Fatal(err)
+		}
+		snaps, err := copyRepo.Snapshots(ctx, manifest.TagIDPrefix+tagValue(tags, manifest.TagIDPrefix))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, sn := range snaps {
+			if sn.Time.Year() == 2023 {
+				return sn.ID
+			}
+		}
+		t.Fatal("the old backup isn't in the copy")
+		return ""
+	}
+	// One of this box's own, signed by it, dated long ago (its tags are those of the backup it copied).
+	mine := old(first[0].Tags...)
+	// Another Whombat's under the same machine name, as old: its manifest isn't one this box signed.
+	theirs := old(manifest.TagProduct, manifest.TagIDPrefix+"theirs", manifest.TagMFPrefix+strings.Repeat("cd", 32))
+
+	// The next copy clears (a day has passed since the last clearing).
+	st := offsite.LoadStatus(w.Cfg, mustPlace(t, w.Cfg))
+	if st.Clearing == nil || !st.Clearing.OK {
+		t.Fatalf("the first copy's clearing: %+v", st.Clearing)
+	}
+	st.Clearing.At = st.Clearing.At.Add(-2 * offsite.ClearEvery)
+	if err := state.WriteJSON(filepath.Join(w.Cfg.StateDir, "offsite-status.json"), st, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	copyNow(t, w, 1)
+	if st := offsite.LoadStatus(w.Cfg, mustPlace(t, w.Cfg)); st.Clearing == nil || !st.Clearing.OK {
+		t.Fatalf("clearing: %+v", st.Clearing)
+	}
+	after, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	for _, sn := range after {
+		left = append(left, sn.ID)
+	}
+	if slices.Contains(left, mine) || !slices.Contains(left, theirs) || len(left) != 3 {
+		t.Fatalf("after clearing the copy holds %v (this box's old one %s, the other's %s)", left, mine, theirs)
+	}
+}
+
+func tagValue(tags []string, prefix string) string {
+	for _, tag := range tags {
+		if v, ok := strings.CutPrefix(tag, prefix); ok {
+			return v
+		}
+	}
+	return ""
+}
+
+// The keep windows the copy's clearing works out itself remove exactly what restic's own forget would, over the same
+// snapshots (the main place clears with restic's): several a day lately, then weekly, monthly and older ones, and two
+// dated ahead of the clock (it was put back since).
+func TestKeepRuleIsResticsOwn(t *testing.T) {
+	ctx := context.Background()
+	bin := lookFirst("RESTIC", "restic")
+	if bin == "" {
+		t.Skip("missing tools: restic")
+	}
+	dir := t.TempDir()
+	pw := filepath.Join(dir, "password")
+	if err := os.WriteFile(pw, []byte("keep-rule"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := restic.Repo{Binary: bin, Repository: filepath.Join(dir, "repo"), PasswordFile: pw, NoCache: true}
+	if _, err := repo.Init(ctx); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "f.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	ago := []time.Duration{-40 * time.Hour, -2 * time.Hour, 3 * time.Hour, 20 * time.Hour, 30 * time.Hour, 50 * time.Hour,
+		51 * time.Hour, 70 * time.Hour}
+	for d := 4; d < 500; d += 12 + d/8 {
+		ago = append(ago, time.Duration(d)*24*time.Hour)
+		if d < 60 {
+			ago = append(ago, time.Duration(d)*24*time.Hour+3*time.Hour)
+		}
+	}
+	for _, a := range ago {
+		at := now.Add(-a).Local().Format("2006-01-02 15:04:05")
+		if _, err := repo.Run(ctx, nil, "backup", "--host", "box", "--tag", manifest.TagProduct, "--time", at, file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snaps, err := repo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(snaps) != len(ago) {
+		t.Fatalf("%d snapshots: %v", len(snaps), err)
+	}
+	for _, keep := range []state.PolicyKeep{state.DefaultPolicy().Keep, {AllDays: 1, DailyDays: 3, WeeklyWeeks: 2, MonthlyMonths: 3},
+		{AllDays: 30}, {AllDays: 1, MonthlyMonths: 120}} {
+		args := append([]string{"forget", "--dry-run", "--json", "--tag", manifest.TagProduct, "--group-by", ""}, keep.ForgetArgs()...)
+		out, err := repo.Run(ctx, nil, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var groups []struct {
+			Remove []struct {
+				ID string `json:"id"`
+			} `json:"remove"`
+		}
+		if err := json.Unmarshal(out, &groups); err != nil || len(groups) != 1 {
+			t.Fatalf("restic forget --json: %v %s", err, out)
+		}
+		var want, got []string
+		for _, sn := range groups[0].Remove {
+			want = append(want, sn.ID)
+		}
+		for _, sn := range keep.Expired(snaps, time.Now()) {
+			got = append(got, sn.ID)
+		}
+		slices.Sort(want)
+		slices.Sort(got)
+		if !slices.Equal(got, want) || len(want) == 0 {
+			for _, sn := range snaps {
+				t.Logf("%s %s restic removes it: %v", sn.ShortID, sn.Time, slices.Contains(want, sn.ID))
+			}
+			t.Fatalf("keep %+v: restic removes %d, the copy's rule %d", keep, len(want), len(got))
+		}
+	}
+}
+
+// A main place over https with a private certificate authority (a NAS's own): the copy reaches it through the relay
+// that trusts only that authority, while restic's own trust stays the copy's, and the relay is gone afterwards.
+func TestOffsiteFromAPrivateCA(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	upstream, err := url.Parse(w.Rest.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nas := httptest.NewTLSServer(httputil.NewSingleHostReverseProxy(upstream))
+	defer nas.Close()
+	ca := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: nas.Certificate().Raw}))
+	if _, err := dest.Configure(ctx, w.Cfg, dest.Request{Repository: "rest:" + nas.URL + "/" + w.RepoPath + "/",
+		RESTUser: w.RestUser, RESTPassword: w.RestPass, CACert: ca, AllowInit: true}); err != nil {
+		t.Fatal(err)
+	}
+	w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	// A main place's certificate authority that can't be read keeps every copy from reaching it: setup refuses at once
+	// and keeps no place.
+	caPath := mustDest(t, w.Cfg).CACert
+	good, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(caPath, []byte("not a certificate"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var oe *offsite.Error
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); !errors.As(err, &oe) || oe.Step != offsite.StepMain {
+		t.Fatalf("setup with an unreadable authority: %v", err)
+	}
+	if p, _ := offsite.Load(w.Cfg); p != nil {
+		t.Fatal("a place was kept that no copy can reach")
+	}
+	if err := os.WriteFile(caPath, good, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	left, _ := filepath.Glob(filepath.Join(w.Cfg.StateDir, ".copy-*"))
+	if len(left) > 0 {
+		t.Fatalf("pairing left %v", left)
+	}
+}

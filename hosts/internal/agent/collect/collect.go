@@ -201,6 +201,13 @@ func (c *collector) RefreshPackages() {
 	c.systemSub.markDirty()
 }
 
+// RefreshApps reads the Docker containers and their image updates again at
+// the next Collect: an app update started or ended.
+func (c *collector) RefreshApps() {
+	c.dockerSub.markDirty()
+	c.imagesSub.markDirty()
+}
+
 // RefreshUnraid reads unRAID's state, the Docker containers and the
 // libvirt domains' autostart again at the next Collect: an unRAID
 // operation, a container update or an autostart change went through the

@@ -971,6 +971,7 @@ export async function protectSeen(
       { figures: 2, ...(s.version ? { line: `UniFi Protect ${s.version}` } : {}) },
     ),
     points: {},
+    tracked: { version: s.version ?? null },
     notices,
     skipped: protectSkipped(s, ctx),
   };

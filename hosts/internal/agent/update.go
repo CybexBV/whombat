@@ -105,12 +105,10 @@ func ExecutablePath() (string, error) {
 	return filepath.EvalSymlinks(exe)
 }
 
-// ReExec replaces the process with exe, keeping the arguments and the
-// environment (the PID stays, so systemd, supervise-daemon and `whombat-agent
-// supervise` keep tracking it).
-func ReExec(exe string) error {
-	return syscall.Exec(exe, os.Args, os.Environ())
-}
+// ErrRestart is what ReExec returns where a process can't replace itself
+// (Windows): the agent exits with it, and the service manager starts the
+// executable again.
+var ErrRestart = errors.New("the agent restarts")
 
 // PendingUpdate is the rollback marker (<state dir>/update-pending.json)
 // written before a new executable is moved in place and removed after the
@@ -329,10 +327,22 @@ func isPermission(err error) bool {
 	return errors.Is(err, syscall.EROFS) || errors.Is(err, os.ErrPermission)
 }
 
+// stagedSuffix names the new executable while it is checked and before it
+// takes the executable's place (<exe>.new). On Windows it ends in .exe:
+// Windows runs programs by that ending.
+var stagedSuffix = stagedSuffixFor(runtime.GOOS)
+
+func stagedSuffixFor(goos string) string {
+	if goos == "windows" {
+		return ".new.exe"
+	}
+	return ".new"
+}
+
 // createStaging creates <exe>.new next to the executable, or, when that
 // directory is read-only for us (systemd sandbox), in the state dir.
 func (u *Updater) createStaging() (*os.File, string, error) {
-	path := u.Exe + ".new"
+	path := u.Exe + stagedSuffix
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
 	if err == nil {
 		return f, path, nil
@@ -343,7 +353,7 @@ func (u *Updater) createStaging() (*os.File, string, error) {
 	if err := os.MkdirAll(u.StateDir, 0o700); err != nil {
 		return nil, "", err
 	}
-	path = filepath.Join(u.StateDir, "whombat-agent.new")
+	path = filepath.Join(u.StateDir, "whombat-agent"+stagedSuffix)
 	f, err = os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o700)
 	return f, path, err
 }
@@ -418,10 +428,30 @@ func runVersion(ctx context.Context, path string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, path, "version")
-	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}
-	cmd.Dir = "/"
+	cmd.Env, cmd.Dir = versionCommandEnv(runtime.GOOS, os.Getenv)
 	out, err := cmd.Output()
 	return string(out), err
+}
+
+// versionCommandEnv is the small environment and the folder the new
+// executable's `version` runs in. A Windows program needs Windows' own
+// folders named (Go's start-up and Windows' libraries read SystemRoot and
+// WINDIR) and a Windows folder to start in.
+func versionCommandEnv(goos string, getenv func(string) string) (env []string, dir string) {
+	if goos != "windows" {
+		return []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin"}, "/"
+	}
+	root := getenv("SystemRoot")
+	if root == "" {
+		root = `C:\Windows`
+	}
+	env = []string{"SystemRoot=" + root, "WINDIR=" + root, "PATH=" + root + `\System32;` + root}
+	for _, k := range []string{"TEMP", "TMP"} {
+		if v := getenv(k); v != "" {
+			env = append(env, k+"="+v)
+		}
+	}
+	return env, root
 }
 
 // reportedVersion parses "whombat-agent <version>", or Rackoon's
@@ -441,7 +471,7 @@ func reportedVersion(out string) string {
 // caller then restarts the agent (ReExec).
 func (u *Updater) Install(ctx context.Context, staged, version string) *proto.UpdateResponse {
 	defer func() {
-		if staged != u.Exe+".new" {
+		if staged != u.Exe+stagedSuffix {
 			os.Remove(staged) // copied from the state dir
 		}
 	}()
@@ -490,37 +520,6 @@ func (u *Updater) Install(ctx context.Context, staged, version string) *proto.Up
 }
 
 // ---- file operations -------------------------------------------------------------
-
-// InstallExecutable replaces dst with a copy of src (via dst.new and a
-// rename, so dst is never partial), after keeping dst as backup (when
-// set). src may be dst.new itself.
-func InstallExecutable(src, dst, backup string) error {
-	if backup != "" {
-		if _, err := os.Stat(dst); err == nil {
-			os.Remove(backup)
-			if err := os.Link(dst, backup); err != nil {
-				if err := copyFileAtomic(dst, backup, 0o755); err != nil {
-					return fmt.Errorf("keeping the previous executable: %w", err)
-				}
-			}
-		}
-	}
-	tmp := dst + ".new"
-	if filepath.Clean(src) != filepath.Clean(tmp) {
-		if err := copyFile(src, tmp, 0o755); err != nil {
-			os.Remove(tmp)
-			return err
-		}
-	} else if err := os.Chmod(tmp, 0o755); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, dst); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	syncDir(filepath.Dir(dst))
-	return nil
-}
 
 // installWithHelper runs InstallExecutable here, or, when the systemd
 // sandbox keeps the executable's directory read-only, through `helper

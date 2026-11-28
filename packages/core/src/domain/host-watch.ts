@@ -15,6 +15,8 @@ import { NOTICE_CHECK_RE, type NoticeCheck, type NoticeNature, type QuietLifts }
 /** Whombat's own hints about a server that keeps this Whombat's backups (backup-places.md BPL-11). */
 export const BACKUP_PLACE_CLEANUP_HINT = 'backup_place.cleanup';
 export const BACKUP_PLACE_SPACE_HINT = 'backup_place.space';
+/** Whombat's own hint about a Proxmox machine whose backup didn't come back in a restore test (backup-trust.md). */
+export const RESTORE_TEST_FAILED_HINT = 'restore_test.failed';
 
 /**
  * A server check (CT-1066): `host.<rule>` for an alert rule, `host.hint.<kind>` for a hint; `name` the switch's words
@@ -93,6 +95,11 @@ const HINTS_ON: ReadonlySet<string> = new Set([
   // Whombat's root program on a Mac in a folder someone other than root can change: a security opening with one
   // clear step (run the installer again), so it starts on (watch-defaults.md).
   'macos.agent_folder',
+  // A Windows PC with no antivirus on: a security opening the person closes in Windows Security (windows-servers.md).
+  'windows.protection_off',
+  // A backup that didn't come back when Whombat tried it: data at risk, and Whombat says which and why. It exists only
+  // once the person turned restore tests on (backup-trust.md).
+  RESTORE_TEST_FAILED_HINT,
 ]);
 
 const alert = (
@@ -147,7 +154,7 @@ const hint = (
 });
 
 /**
- * Every alert rule (29) and hint kind (44 of the hosts service, 4 of Whombat's) as a check, in the hosts service's
+ * Every alert rule (30) and hint kind (47 of the hosts service, 5 of Whombat's) as a check, in the hosts service's
  * order: alerts first.
  */
 export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
@@ -352,6 +359,10 @@ export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
     'Until it’s in a safe folder.',
     false,
   ),
+  // Windows PCs (hub/model/windows.go; Whombat windows-servers.md): protection off starts on, old virus definitions off
+  // (Windows updates them by itself).
+  hint('windows.protection_off', 'Virus protection off', 'you', 'fixed', 'Until it’s on again.', false),
+  hint('windows.signatures_old', 'Old virus definitions', 'fyi', 'fixed', 'Until they’re updated.', false),
   // Proxmox VE guests and storage (hub/model/hints.go).
   hint(
     'guest.backup_old',
@@ -427,6 +438,15 @@ export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
     'fixed',
     'Until there’s room again.',
     false,
+  ),
+  // Whombat's own about a restore test of a Proxmox machine (Whombat backup-trust.md): one line per machine.
+  hint(
+    RESTORE_TEST_FAILED_HINT,
+    'Backups that didn’t come back in a restore test',
+    'problem',
+    'fixed',
+    'Until a test of it works.',
+    true,
   ),
 ];
 

@@ -126,9 +126,13 @@ describe('burrow-less paths (AP-360…)', () => {
       // Servers and Connections as places (servers-connections-places.md).
       'servers',
       'connected',
+      // Open to the internet, in the Servers place (Whombat internet-exposure.md).
+      'internet',
       'things',
       'skills',
       'done',
+      // What's protected (backup-trust.md).
+      'protected',
       // Reports to the Whombat Team (Whombat team-reports.md).
       'reports',
     ]);

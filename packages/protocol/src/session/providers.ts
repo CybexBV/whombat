@@ -26,6 +26,10 @@ export const APPLIANCE_EVENT_TYPES = [
   'backup.passkey_key_set',
   'backup.passkey_key_verified',
   'backup.passkey_key_removed',
+  // The copy somewhere else (Whombat offsite-copy.md): the second place set or forgotten (`{provider, display}`). Never
+  // the key.
+  'backup.offsite_set',
+  'backup.offsite_removed',
   'provider.signed_in',
   'provider.signed_out',
   // Diagnostic bundles (CT-52; `DiagnosticsAuditPayload`).

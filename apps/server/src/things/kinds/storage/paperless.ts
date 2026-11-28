@@ -1249,7 +1249,7 @@ export const PAPERLESS_KIND: KindModule = {
       buttons: { row },
       picture: noPictures,
     });
-    return seenOf(
+    const seen = seenOf(
       cardOf(
         { kpis: figures(s, now), notices: view.notices },
         ['inbox', 'failed'],
@@ -1258,6 +1258,7 @@ export const PAPERLESS_KIND: KindModule = {
       view.notices as KindNotice[],
       paperlessSkipped(s),
     );
+    return { ...seen, tracked: { version: s.version ?? null } };
   },
   actions: { seen: markSeen, sanity: runSanityCheck },
   checks: PAPERLESS_CHECKS,

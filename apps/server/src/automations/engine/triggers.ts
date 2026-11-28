@@ -2,7 +2,7 @@
  * Triggers (bp-automations BP-C05): each burrow's signed `events` after its durable cursor become runs of the live
  * automations they match (deduped by automation + version + event), and the cursor moves past them, in one transaction.
  */
-import { triggerMatches } from '@whombat/core';
+import { triggerMatches, upsTrigger } from '@whombat/core';
 import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import { MAIL_SINCE_SKEW_MS } from '../../connectors/types';
 import type { Db } from '../../db/client';
@@ -19,9 +19,19 @@ import type { Services } from '../../services';
 import { LIMITED_WORDS, tellLimited } from '../../trackers/stuck';
 import { publisherCheck } from '../authority';
 import { itemThread } from '../github-items';
+import { smartHomeTriggersFor } from '../home-triggers';
 import { createRun, runsToday } from '../runs';
 import { ACTIVE_RUN_STATUSES, listensToEvents, readsEvents } from '../store';
 import { EVENT_TYPES, eventCause, eventFacts } from './event-facts';
+import {
+  claimDueHomeWait,
+  claimHomeChange,
+  coolingDown,
+  dropHomeWait,
+  dueHomeWaits,
+  type HomeNow,
+  skipDueHomeWaits,
+} from './home-waits';
 import {
   claimIncidentTrigger,
   dropIncidentTrigger,
@@ -113,18 +123,49 @@ export async function scanBurrow(
     const things = await services.newerAutomations.thingsReady();
     const due = things ? await dueIncidentTriggers(tx, burrowId, now) : [];
     const active = liveChecks(services, burrowId, now);
+    // The same for automations that act without AI: Home Assistant and Protect start nothing meanwhile, and a delayed
+    // start keeps its time.
+    const direct = await services.newerAutomations.directReady();
+    const waits = direct ? await dueHomeWaits(tx, burrowId, now) : [];
+    const homeNow: HomeNow = (connectionId, entity) =>
+      smartHomeTriggersFor(services).current(connectionId, entity);
     const work = [
-      ...due,
-      ...batch.filter((event) => EVENT_TYPES.includes(event.type)).map((event) => ({ event, pending: null })),
+      ...due.map(({ event, pending }) => ({ event, pending, wait: null })),
+      ...waits.map(({ event, wait }) => ({ event, pending: null, wait })),
+      ...batch
+        .filter((event) => EVENT_TYPES.includes(event.type))
+        .map((event) => ({ event, pending: null, wait: null })),
     ];
-    for (const { event, pending } of work) {
+    for (const { event, pending, wait } of work) {
       if (pending) await dropIncidentTrigger(tx, pending);
-      if (!live.length) continue;
-      const facts = await eventFacts(tx, event);
+      const facts = live.length ? await eventFacts(tx, event) : null;
+      // A wait of an automation switched off or published again since (its version isn't live any more), or of a change
+      // Whombat can't read, ends here: nothing else would end it.
+      if (
+        wait &&
+        (facts?.facts.kind !== 'home_state' ||
+          !live.some(({ a, v }) => a.id === wait.automationId && v.n === wait.version))
+      ) {
+        await dropHomeWait(tx, wait.automationId, wait.key);
+        continue;
+      }
       if (!facts) continue;
       const cause = await eventCause(tx, event, facts);
       for (const { a, v } of live) {
         if (pending && (pending.automationId !== a.id || pending.version !== v.n)) continue;
+        if (wait && wait.automationId !== a.id) continue;
+        const kind = facts.facts.kind;
+        if (kind === 'home_state' || kind === 'protect') {
+          // What Home Assistant or Protect saw before this version was published was for another automation.
+          if (!direct || event.createdAt < v.publishedAt) continue;
+          if (
+            kind === 'home_state' &&
+            !(wait
+              ? await claimDueHomeWait(tx, wait, v.n, v.definition, facts.facts, now, homeNow)
+              : await claimHomeChange(tx, a.id, v.n, v.definition, facts.facts, event))
+          )
+            continue;
+        }
         if (!v.definition.triggers.some((t) => triggerMatches(t, facts.facts))) continue;
         // Mail already present when this automation's mail trigger became active must never start it (allow 5 s for
         // provider/box clock skew on freshly arrived mail).
@@ -148,7 +189,11 @@ export async function scanBurrow(
         if (facts.facts.kind === 'thing') {
           if (!things || event.createdAt < (a.thingActiveAt ?? v.publishedAt)) continue;
           const triggers = v.definition.triggers.filter((t) => t.kind === 'thing');
-          if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now, active)))
+          const safety =
+            facts.facts.event === 'problem' &&
+            triggers.some(upsTrigger) &&
+            v.definition.steps.some((s) => s.kind === 'run_action');
+          if (!(await claimIncidentTrigger(tx, a.id, v.n, triggers, facts.facts, event, now, active, safety)))
             continue;
         }
         const conversationId = facts.conversationId ?? v.definition.conversationId;
@@ -180,6 +225,8 @@ export async function scanBurrow(
         // One run at a time per thread: a reply (or a 🐛) in a thread this automation is still working on is part
         // of that run's conversation, not a new report.
         if (facts.threadRootId && (await activeRunInThread(tx, a.id, facts.threadRootId))) continue;
+        // A sensor that flaps or a doorbell pressed again: one run, then quiet for the automation's cooldown.
+        if (await coolingDown(tx, a.id, v.definition, now)) continue;
         const limited =
           (await runsToday(session, a.id, now)) >= v.definition.limits.maxRunsPerDay
             ? 'day'
@@ -270,6 +317,7 @@ export async function skipEventCursors(services: Services, now: Date): Promise<n
   for (const burrowId of await eventBurrows(services.db)) {
     await services.pipeline.transact(burrowId, async ({ tx }) => {
       await skipDueIncidentTriggers(tx, burrowId, now);
+      await skipDueHomeWaits(tx, burrowId, now);
       const [head] = await tx
         .select({ seq: sql<number | null>`max(${events.seq})` })
         .from(events)

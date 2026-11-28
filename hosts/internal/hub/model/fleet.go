@@ -190,15 +190,17 @@ func osName(r *proto.Report) (name, version string) {
 }
 
 // DetailView is the server's kind (IU-03, IU-13): "macos" for a Mac,
-// "proxmox" for Proxmox VE nodes, "unraid" for unRAID servers, "incus" for
-// hosts with Incus, "libvirt" for hosts whose VMs libvirt runs (shown as
-// QEMU/KVM), else "standard". The first that applies wins, in that order.
+// "windows" for a Windows PC, "proxmox" for Proxmox VE nodes, "unraid" for
+// unRAID servers, "incus" for hosts with Incus, "libvirt" for hosts whose
+// VMs libvirt runs (shown as QEMU/KVM), else "standard". The first that applies wins, in that order.
 func DetailView(r *proto.Report) string {
 	switch {
 	case r == nil:
 		return "standard"
 	case r.MacOS != nil:
 		return "macos"
+	case r.Windows != nil:
+		return "windows"
 	case r.PVE != nil:
 		return "proxmox"
 	case IsUnraid(r):
@@ -380,6 +382,9 @@ func BuildHints(s *ServerState, now time.Time, hubVersion string) []Hint {
 		out = append(out, Hint{Server: s.ID, Hint: h})
 	}
 	for _, h := range macHints(s, now) {
+		out = append(out, Hint{Server: s.ID, Hint: h})
+	}
+	for _, h := range windowsHints(s.Report, now) {
 		out = append(out, Hint{Server: s.ID, Hint: h})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return rules.HintRank(out[i].Severity) < rules.HintRank(out[j].Severity) })
@@ -606,7 +611,7 @@ type ServerListItem struct {
 	StatusNote     *string `json:"status_note"`
 	OS             *string `json:"os"`
 	DetailView     string  `json:"detail_view"`
-	OSFamily       string  `json:"os_family,omitempty"` // linux | macos
+	OSFamily       string  `json:"os_family,omitempty"` // linux | macos | windows
 	LastSeen       *Time   `json:"last_seen"`
 	AgentConnected bool    `json:"agent_connected"`
 	OpenAlerts     int     `json:"open_alerts"`

@@ -39,7 +39,7 @@ import {
   mayPublish,
   publishVersion,
   recipeFile,
-  referenceProblems,
+  referenceCheck,
   removeAutomation,
   requirePerson,
   storeDraft,
@@ -82,7 +82,11 @@ async function proposedDefinition(
     if (!check.ok) return { definition: null, problems: check.problems.slice(0, 8) };
     definition = check.definition;
   }
-  return { definition, problems: await referenceProblems(ctx, definition, false) };
+  // The plan card is the yes for what it shows: a step that acts without AI shows the names Whombat knows, never the
+  // ones the assistant wrote, and keeps the ids it found. Checked once: each step reads its thing once.
+  const checked = await referenceCheck(ctx, definition, false);
+  if (checked.problems.length) return { definition, problems: checked.problems };
+  return { definition: checked.definition, problems: [] };
 }
 
 /**
@@ -226,8 +230,8 @@ export const acceptAutomationPlan = defineCommand({
     if (!check.ok) throw badRequest(`This plan can’t run as it is: ${check.problems.slice(0, 3).join(' ')}`);
     if (definitionHash(check.definition) !== plan.definitionHash)
       throw conflict('This plan isn’t what was shown. Ask for a new plan in Chat.');
-    const problems = await referenceProblems(ctx, check.definition, true);
-    if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
+    const checked = await referenceCheck(ctx, check.definition, true);
+    if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
     const name = cap(plan.name);
     await tx
       .update(automations)
@@ -237,8 +241,9 @@ export const acceptAutomationPlan = defineCommand({
     const version = await publishVersion(
       ctx,
       { id: row.id, name, currentVersion: row.currentVersion },
-      check.definition,
+      checked.definition,
       true,
+      { checked: true },
     );
     await tx
       .update(automationPlans)

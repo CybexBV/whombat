@@ -91,15 +91,73 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
- * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md); minor 22
+ * is the look-after release: Open to the internet (`things.exposure`, Whombat internet-exposure.md); app updates: a
+ * Docker container's `app` (what Whombat knows about updating it as a Compose app), an ended task's `apps`, the
+ * `hosts.manage` op `app.update` and its answer's `approvalNumber` (Whombat app-updates.md); what changed on a thing in
+ * its history (`ThingHistory.changes`) and settings copies (`ThingPage.settingsCopy`, `things.settingsCopy`; Whombat
+ * outside-changes.md); automations that act without AI: the `run_action` step, the
+ * `home_state` and `protect` triggers and run triggers, `limits.cooldownMinutes` and the `act` tag, which a box sends
+ * as they are only to a session at minor 22 or later (Whombat direct-automations.md); Windows PCs as
+ * servers: a server's `windows` platform and os family and its `windows` block, which a box sends only to a session at
+ * minor 22 or later (an older one sees a standard server), and an enrollment's `installCommandWindows` (Whombat
+ * windows-servers.md); the copy of
+ * the backups somewhere else: `backup.offsite`, `backup.setOffsite`, `backup.removeOffsite`, `backup.copyOffsite`, the
+ * backup summary's `offsite`, the recovery material's `offsite` (sent only to a session at minor 22 or later, which
+ * reads it) and `backup.adopt`'s `from` (Whombat offsite-copy.md); What's protected and restore tests (`protected.get`,
+ * `restoreTests.*`, a guest's `restoreTest`; Whombat backup-trust.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
+
+/**
+ * Session protocol minor (major 5) that reads Open to the internet (`things.exposure`): an app shows its row and page
+ * only for a box at this minor or later.
+ */
+export const EXPOSURE_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with what changed on a thing (`ThingHistory.changes`) and settings copies
+ * (`ThingPage.settingsCopy`, `things.settingsCopy`); an app asks for a copy only from a box at this minor or later.
+ */
+export const OUTSIDE_CHANGES_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) that reads automations acting without AI (`run_action`, the `home_state` and
+ * `protect` triggers, `limits.cooldownMinutes`, the glance's `act` tag). The box hides such definitions from an older
+ * session, says their runs' triggers as a message and drops the tag.
+ */
+export const AUTOMATIONS_WITHOUT_AI_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with Windows PCs as servers. Older apps parse a server's platform and os family
+ * strictly, so the box shows them a Windows PC as a standard server without its os family.
+ */
+export const WINDOWS_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with the copy of the backups somewhere else. An app below it reads the recovery
+ * material strictly, so a box leaves the material's `offsite` out for it; an app asks the `backup.*Offsite` ops only of a
+ * box at this minor or later.
+ */
+export const OFFSITE_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with What's protected and restore tests (`protected.get`, `restoreTests.*`, a guest's
+ * `restoreTest`): an app asks those ops only of a box at this minor or later.
+ */
+export const PROTECTED_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim
  * requests). Clients omit `locale` from strict claim bodies when talking to an older box.
  */
 export const LOCALE_MINOR = 21;
+
+/**
+ * Session protocol minor (major 5) where a box updates Docker Compose apps: `hosts.manage` takes `app.update` and
+ * answers with the approval card's number. An app shows Update only to a box at this minor or later.
+ */
+export const APP_UPDATES_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with more news: up to `NEWS_SOURCES_MAX` sources (an older app takes twelve),

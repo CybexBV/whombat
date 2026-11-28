@@ -41,6 +41,7 @@ import { type DelegationFixture, delegationSeeded } from './delegationFixtures';
 import { type DeskFixtureKind, deskFixtureHasBattery, deskFixtureKind } from './deskFixtures';
 import { createEssentialsFixtures } from './essentialsFixtures';
 import { createEssentialsSettingsFixtures } from './essentialsSettingsFixtures';
+import { createExposureFixtures } from './exposureFixtures';
 import { createFeedbackChatFixtures } from './feedbackChatFixtures';
 import { createFilesWorld, type FilesWorld, handleFilesRequest, markMessageFiles } from './filesFixtures';
 import { type FirstDayFixture, firstDayFixtureOf } from './firstDayFixtures';
@@ -63,6 +64,11 @@ import {
 } from './onePasswordFixtures';
 import { createPlaceNewsFixtures } from './placeNewsFixtures';
 import { createPromptFixtures, type PromptWorldOptions } from './promptFixtures';
+import {
+  createProtectedFixtures,
+  type ProtectedFixtureKind,
+  protectedFixtureKind,
+} from './protectedFixtures';
 import { createResourcefulFixtures } from './resourcefulFixtures';
 import { createRichFixtures } from './richFixtures';
 import { createSettleFixtures } from './settleFixtures';
@@ -342,6 +348,12 @@ export interface WebFixtureOptions {
    * stays out of every other screen.
    */
   teamReports?: TeamReportFixtureKind;
+  /**
+   * What's protected (`protectedFixtures.ts`, Whombat backup-trust.md): `tested` starts with pve-02's restore tests on
+   * and their results on the machines' pages. Default: `VITE_FIXTURE_PROTECTED` or `whombat:fixture-protected`, else
+   * calm (tests off, the machines' pages as drawn).
+   */
+  protected?: ProtectedFixtureKind;
 }
 
 /** The box's battery in fixture mode (AP-3021): `power`, `VITE_FIXTURE_POWER`, else plugged in with a desk. */
@@ -738,6 +750,15 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
       return signedIn ? monitoring.fetch(req, (r) => inner(r)) : inner(req);
     };
   }
+  {
+    // Open to the internet: what Mara's proxy, tunnel and router let in, and This is meant.
+    const inner = out;
+    const exposure = createExposureFixtures();
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      return signedIn ? exposure.fetch(req, (r) => inner(r)) : inner(req);
+    };
+  }
   if (models) {
     // The agent's model and effort (AP-1134): `host.agents` with the tools' models, the agent's model runtime. Over the
     // one-Whombat layer, which serves the agent itself (one-agent.md AP-4921).
@@ -987,6 +1008,19 @@ export function createWebFixtureFetch(options: WebFixtureOptions = {}): typeof f
         if (own) return own;
       }
       return inner(req);
+    };
+  }
+  {
+    // What's protected and restore tests (Whombat backup-trust.md), over the servers' guest pages it adds results to.
+    const inner = out;
+    const prot = createProtectedFixtures(protectedFixtureKind(options.protected));
+    out = async (input, init) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      if (signedIn) {
+        const own = await prot.handle(req.clone());
+        if (own) return own;
+      }
+      return prot.decorate(req, await inner(req.clone()));
     };
   }
   {

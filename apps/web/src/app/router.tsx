@@ -22,6 +22,7 @@
  *                                   → /servers with its query
  *   /skills                         → /settings?tab=skills (AP-2305, hermes-skills.md AP-5530)
  *   /done                           Everything Whombat did, with Undo (AP-1263)
+ *   /protected                      What's protected: where each thing's data is copied, and restore tests
  *   /pr/:number                     ?repo=owner/name (several repos can have a PR #1; AP-496)  ?tab=files
  *                                   ?thread=<msgId>[&focus=1]  ?plan=…&step=…
  *   /runs/:number
@@ -221,9 +222,17 @@ const ConnectionsPages = lazyRouteComponent(
   'ConnectionsPages',
 );
 const DoneScreen = lazyRouteComponent(() => import('../features/home/DoneScreen'), 'DoneScreen');
+const ProtectedScreen = lazyRouteComponent(
+  () => import('../features/protected/ProtectedScreen'),
+  'ProtectedScreen',
+);
 const ChatRoomScreen = lazyRouteComponent(() => import('../features/chats/ChatRoomScreen'), 'ChatRoomScreen');
 const ThingScreen = lazyRouteComponent(() => import('../features/things/ThingScreen'), 'ThingScreen');
 const PlaceScreen = lazyRouteComponent(() => import('../features/things/places/ThingPlace'), 'PlaceScreen');
+const ExposureScreen = lazyRouteComponent(
+  () => import('../features/things/exposure/ExposureScreen'),
+  'ExposureScreen',
+);
 // The Skills page of a Whombat without the skill library (AP-1261, AP-2305).
 const BrandPage = lazyRouteComponent(() => import('./pages/brand/BrandPage'), 'BrandPage');
 const MobileInfoPage = lazyRouteComponent(() => import('./pages/MobileInfoPage'), 'MobileInfoPage');
@@ -515,6 +524,16 @@ const serversRoute = createRoute({
   }),
 });
 
+/** Open to the internet (Whombat internet-exposure.md), in the Servers place: the list beside it on a wide window. */
+const internetRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'internet',
+  component: withScreens([ExposureScreen], function InternetRoute() {
+    const burrow = useOpenBurrow();
+    return <ExposureScreen burrow={burrow} />;
+  }),
+});
+
 const connectedRoute = createRoute({
   getParentRoute: () => burrowRoute,
   path: 'connected',
@@ -638,6 +657,16 @@ const doneRoute = createRoute({
   component: withScreens([DoneScreen], function DoneRoute() {
     const burrow = useOpenBurrow();
     return <DoneScreen burrow={burrow} />;
+  }),
+});
+
+/** What's protected (backup-trust.md): what holds data, where its copies are, and the restore tests. */
+const protectedRoute = createRoute({
+  getParentRoute: () => burrowRoute,
+  path: 'protected',
+  component: withScreens([ProtectedScreen], function ProtectedRoute() {
+    const burrow = useOpenBurrow();
+    return <ProtectedScreen burrow={burrow} />;
   }),
 });
 
@@ -1202,6 +1231,7 @@ export const routeTree = rootRoute.addChildren([
     burrowIndexRoute,
     connectionsRoute,
     serversRoute,
+    internetRoute,
     connectedRoute,
     dashboardRoute,
     chatRoomRoute,
@@ -1210,6 +1240,7 @@ export const routeTree = rootRoute.addChildren([
     needsYouRoute,
     watchRoute,
     doneRoute,
+    protectedRoute,
     chatsRoute,
     chatRoute,
     thingRoute,

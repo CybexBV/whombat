@@ -139,6 +139,21 @@
   outline-offset: -2px;
 }
 
+/* The first of the place's own rows (Open to the internet, What's protected), set apart from the things above it by a
+   rule. */
+.extra {
+  margin-top: 8px;
+}
+
+.extra::before {
+  position: absolute;
+  top: -5px;
+  right: 10px;
+  left: 10px;
+  border-top: 1px solid var(--line);
+  content: "";
+}
+
 .logo {
   display: flex;
   grid-row: span 2;

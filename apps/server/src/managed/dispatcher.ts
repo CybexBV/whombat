@@ -57,6 +57,7 @@ import { forAssistant } from './acting-assistant';
 import { BACKUP_HANDLERS, type BackupPort } from './backup';
 import { BACKUP_KEY_HANDLERS, withBringBack } from './backup-key';
 import { BACKUP_LOOK_HANDLERS } from './backup-look';
+import { BACKUP_OFFSITE_HANDLERS, withOffsite } from './backup-offsite';
 import { BACKUP_OPTIONS_HANDLERS } from './backup-options';
 import { boxBackupStatus } from './box-backup';
 import { BOX_PASSKEY_SESSION_HANDLERS } from './box-passkeys';
@@ -240,7 +241,10 @@ const diag = (c: SessionOpContext): DiagnosticsService => {
 /** The backup summary of `appliance.status`, with where bringing the box back stands (backup-passkey.md). */
 async function applianceBackup(c: SessionOpContext) {
   const status = (await boxBackupStatus(c.services)) ?? c.facts.backup;
-  return withBringBack(c.services, summarizeBackup(status, BackupScope.options), status);
+  return withOffsite(
+    c.services,
+    await withBringBack(c.services, summarizeBackup(status, BackupScope.options), status),
+  );
 }
 export const SESSION_HANDLERS: Readonly<Record<string, SessionHandler>> = {
   'enroll.claim.begin': (c, i) => c.trust.claimBegin(identityOf(c.principal), c.session, i),
@@ -987,6 +991,7 @@ export class SessionDispatcher {
       SESSION_HANDLERS[spec.op] ??
       BACKUP_HANDLERS[spec.op] ??
       BACKUP_OPTIONS_HANDLERS[spec.op] ??
+      BACKUP_OFFSITE_HANDLERS[spec.op] ??
       BACKUP_LOOK_HANDLERS[spec.op] ??
       BACKUP_KEY_HANDLERS[spec.op] ??
       BACKUP_PLACE_HANDLERS[spec.op] ??

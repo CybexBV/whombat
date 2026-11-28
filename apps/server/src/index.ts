@@ -1,5 +1,6 @@
 import { defaultWhombatHome, sdNotifier } from '@whombat/agent-runtime/host';
 import { buildApp } from './app';
+import { smartHomeTriggersFor } from './automations/home-triggers';
 import { updateAutomationsWords } from './automations/words';
 import { backupsFor } from './backups/service';
 import { startSettleRound } from './chats/settle';
@@ -181,6 +182,9 @@ if (!readOnly) {
   // UniFi Protect's detections (service-dashboards.md SD-S20): each active Protect connection's event stream followed,
   // the last 24 hours kept for its page; older ones removed hourly.
   protectEventsFor(services).start();
+  // Home Assistant entities and Protect sightings that live automations listen to, signed so they start
+  // (docs/decisions/direct-automations.md): only what an automation names is followed.
+  smartHomeTriggersFor(services).start();
   // Found on your network by itself (desk-found.md DF-02): each start, daily, and as soon as the person has an
   // assistant; the assistant says once what it found (DF-05).
   foundScansFor(services).start();

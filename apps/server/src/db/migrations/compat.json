@@ -273,6 +273,36 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "The language a search answer is written in: one nullable text column on search_answers. The release before it reads and writes past it; an answer it writes has none and counts as English, as every answer did before."
+    },
+    "0044_service_test_runs": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Does it really work? (docs/decisions/service-works.md): a new table service_test_runs cascading with the burrow and the connection, one row per run of a service's read-only test (its result only), kept 30 days. The release before it never reads or writes the table."
+    },
+    "0045_exposure": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Open to the internet (docs/decisions/internet-exposure.md): a new table exposure_openings (connection_id, opening_id, first_seen, last_seen, baseline), the fingerprints of the openings Whombat has seen per connection, deleted with the connection. The release before it never reads or writes it."
+    },
+    "0046_outside_changes": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "What changed before it broke (docs/decisions/outside-changes.md): four new tables, thing_changes (the changes Whombat saw on a thing, 90 days), change_baselines (what it read last of a thing, to compare the next read), settings_copies (sealed copies of a few services' settings) and settings_copy_states (how their last tries went). The release before it never reads or writes them."
+    },
+    "0047_direct_automations": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Automations that act without AI wait out a Home Assistant entity's state (docs/decisions/direct-automations.md): one new table, automation_waits (automation_id, key, burrow_id, version, event_id, due_at, first_due_at). The release before it never reads it; an automation that uses it is held back on that release, as the release gate holds every newer automation."
+    },
+    "0048_restore_tests": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Backups you can trust (docs/decisions/backup-trust.md): two new tables, restore_test_servers (the person's restore test switch per Proxmox server) and restore_tests (one row per test, moved step by step), and one nullable jsonb column on catalog_connections (protection, what a connection's own backups are). The release before it reads and writes past them; a test it leaves half done is finished and its copy deleted when this release runs again."
     }
   }
 }

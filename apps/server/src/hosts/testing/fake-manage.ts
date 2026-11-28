@@ -238,8 +238,14 @@ export class FakeManage {
   taskMs = 60;
   /** Tasks run until `finishTask` ends them. */
   holdTasks = false;
+  /** Servers whose helper is from before isolated restores (no `restore_isolate`, `isolate` refused). */
+  readonly oldHelpers = new Set<string>();
+  /** Servers whose helper is from before it read a backup's own settings (no `backup_config`). */
+  readonly noBackupConfig = new Set<string>();
   readonly tasks = new Map<string, Task>();
   readonly backups = new Map<string, Json[]>();
+  /** A backup's own settings, by its volume (`backups/config`); without one, the machine's settings now. */
+  readonly backupConfigs = new Map<string, Record<string, string>>();
   readonly content = new Map<string, Json[]>();
   readonly jobs = new Map<string, Json[]>();
   readonly firewalls = new Map<string, Firewall>();
@@ -370,6 +376,7 @@ export class FakeManage {
       { method: 'GET', path: `${G}/backups`, handler: (r, p) => this.#listBackups(r, s(p), g(p)) },
       { method: 'POST', path: `${G}/backups`, handler: (r, p) => this.#backup(r, s(p), g(p)) },
       { method: 'POST', path: `${S}/backups/restore`, handler: (r, p) => this.#restore(r, s(p)) },
+      { method: 'GET', path: `${S}/backups/config`, handler: (r, p) => this.#backupConfig(r, s(p)) },
       { method: 'PATCH', path: `${S}/backups`, handler: (r, p) => this.#updateBackup(r, s(p)) },
       { method: 'DELETE', path: `${S}/backups`, handler: (r, p) => this.#deleteBackup(r, s(p)) },
       { method: 'GET', path: `${S}/storage/*/content`, handler: (r, p) => this.#listContent(r, s(p), g(p)) },
@@ -857,6 +864,7 @@ export class FakeManage {
       cpu_types: ['host', 'x86-64-v2-AES', 'x86-64-v3', 'x86-64-v4', 'kvm64'],
       nodes: this.#otherNodes(server),
       download: true,
+      ...(this.oldHelpers.has(server) ? {} : { restore_isolate: true }),
     });
   }
 
@@ -1161,6 +1169,23 @@ export class FakeManage {
     );
   }
 
+  /** A Proxmox backup's own settings, read without restoring it (helpers that can: not the old ones). */
+  #backupConfig(r: FakeRequest, server: string): FakeAnswer {
+    const refused = this.#check(r, server, 'operator');
+    if (refused) return refused;
+    if (r.query.get('platform') !== 'pve')
+      return problem(501, 'unsupported', 'Only a Proxmox VE backup’s settings can be read.');
+    if (this.noBackupConfig.has(server))
+      return problem(409, 'agent_outdated', "This server's agent can't read a backup's settings yet.");
+    const volume = r.query.get('volume') ?? '';
+    const vol = (this.backups.get(server) ?? []).find((v) => v.volume === volume);
+    if (!vol) return problem(404, 'not_found', 'No such backup.');
+    const values = this.backupConfigs.get(volume) ?? {
+      ...this.host.configOf(server, `pve:${String(vol.guest)}`).values,
+    };
+    return ok({ platform: 'pve', kind: vol.kind, digest: '', running: false, values });
+  }
+
   #restore(r: FakeRequest, server: string): FakeAnswer {
     const refused = this.#check(r, server, 'admin');
     if (refused) return refused;
@@ -1172,11 +1197,21 @@ export class FakeManage {
       'storage',
       'start',
       'unique',
+      'isolate',
       'confirm',
     ]);
     if (!('fields' in bc)) return bc;
     const b = bc.fields;
     if (typeof b.volume !== 'string' || !b.volume) return this.#invalid({ volume: 'Which backup?' });
+    const iso = b.isolate && typeof b.isolate === 'object' ? (b.isolate as Record<string, unknown>) : null;
+    if (iso) {
+      if (this.oldHelpers.has(server))
+        return problem(409, 'agent_outdated', "This server's agent can't restore a copy cut off yet.");
+      if (b.new_id === undefined || b.guest !== undefined || b.start === true)
+        return this.#invalid({ isolate: "An isolated restore makes a new guest that doesn't start." });
+      if (typeof iso.name !== 'string' || typeof iso.marker !== 'string' || !/^[\w-]+$/.test(iso.marker))
+        return this.#invalid({ 'isolate.marker': 'Not a marker.' });
+    }
     const vol = (this.backups.get(server) ?? []).find((v) => v.volume === b.volume);
     if (!vol) return problem(404, 'not_found', 'No such backup.');
     if (b.guest !== undefined && b.new_id !== undefined)
@@ -1219,7 +1254,7 @@ export class FakeManage {
             ...this.#newGuest(
               server,
               target,
-              String(source?.name ?? `restored-${vmidOf(target)}`),
+              String(iso?.name ?? source?.name ?? `restored-${vmidOf(target)}`),
               String(vol.kind ?? 'vm'),
               state,
               {},
@@ -1229,6 +1264,26 @@ export class FakeManage {
             memory_limit_mb: source?.memory_limit_mb ?? 2048,
           };
           this.host.addGuest(server, copy);
+          // As the agent asks Proxmox: the backup's own settings (a test sets them beforehand) with the copy's
+          // isolation written over them by the restore itself.
+          if (iso) {
+            const c = this.host.configOf(server, target);
+            for (const [k, v] of Object.entries(c.values))
+              if (/^net\d+$/.test(k))
+                c.values[k] = `${v
+                  .split(',')
+                  .filter((p) => p && !p.startsWith('link_down='))
+                  .join(',')},link_down=1`;
+            Object.assign(c.values, {
+              [vol.kind === 'container' ? 'hostname' : 'name']: String(iso.name),
+              onboot: '0',
+              description: String(iso.marker),
+            });
+            if (c.values.protection && c.values.protection !== '0') c.values.protection = '0';
+            if (typeof iso.tag === 'string' && iso.tag)
+              c.values.tags = [...(c.values.tags ?? '').split(/[;, ]+/).filter(Boolean), iso.tag].join(';');
+            c.digest += 1;
+          }
           this.#coverage(server);
         } else {
           const over = this.host.guest(server, target);

@@ -117,6 +117,23 @@ export const WhombatBackupOutput = z.discriminatedUnion('status', [
         }),
       )
       .optional(),
+    /**
+     * The copy somewhere else (Whombat offsite-copy.md): the second place where the backups are copied after each one,
+     * a bucket the person owns; null when there is none. `state`: `first` the first copy hasn't finished, `copying` now,
+     * `ok` the newest backup is in it, `behind` newer ones wait for the next copy, `failing` the last tries failed
+     * (`problem` says why, in plain words). Setting it up or changing it is the person's, in Settings → This Whombat →
+     * Backups (it needs the bucket's key).
+     */
+    offsite: z
+      .object({
+        place: z.string(),
+        state: z.enum(['first', 'copying', 'ok', 'behind', 'failing']),
+        lastCopyAt: z.string().nullable(),
+        newestInCopyAt: z.string().nullable(),
+        problem: z.string().nullable(),
+      })
+      .nullable()
+      .optional(),
   }),
   z.object({
     status: z.literal('set'),
@@ -218,18 +235,78 @@ export const BackupBringBackOutput = z.discriminatedUnion('status', [
 ]);
 export type BackupBringBackOutput = z.infer<typeof BackupBringBackOutput>;
 
+/** `whats_protected`: optionally one thing's rows (a name as the person says it: “plex”, “pve-01”, “Home Assistant”). */
+export const WhatsProtectedInput = z.object({
+  thing: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .optional()
+    .describe(
+      'Only rows whose name or server contains these words (“plex”, “pve-01”); leave out for everything',
+    ),
+});
+export type WhatsProtectedInput = z.input<typeof WhatsProtectedInput>;
+
+const ProtectedLine = z.object({
+  name: z.string(),
+  /** this Whombat, a server, a VM, a container, or a service. */
+  kind: z.string(),
+  /** The server a machine is on. */
+  on: z.string().optional(),
+  /** Where the copy is and how old, in the person's words (“Last copy 3 hours ago · on pbs-01”). */
+  line: z.string(),
+  /** The newest restore test, in words. */
+  test: z.string().optional(),
+  /** Its page in the app. */
+  page: z.string().optional(),
+});
+
+export const WhatsProtectedOutput = z.object({
+  copied: z.array(ProtectedLine),
+  sameMachine: z.array(ProtectedLine),
+  notBackedUp: z.array(ProtectedLine),
+  /** Restore tests per Proxmox server: on or off, which machines, the last result. */
+  restoreTests: z.array(
+    z.object({
+      server: z.string(),
+      on: z.boolean(),
+      machines: z.string(),
+      last: z.string().optional(),
+      blocked: z.string().optional(),
+    }),
+  ),
+  /** What couldn't be read just now. */
+  unread: z.array(z.string()),
+  /** How to read and say it. */
+  note: z.string(),
+});
+export type WhatsProtectedOutput = z.infer<typeof WhatsProtectedOutput>;
+
 export const BACKUP_MCP_TOOLS = {
   whombat_backup: {
     name: 'whombat_backup',
     title: 'This Whombat’s own backups',
     description:
-      'This Whombat’s own backups (its chats, settings and connections), every 6 hours unless the person chose otherwise, the first one as soon as a place is set. Without set: whether it is backed up, where to, the places on the network that could keep them, and its SSH public key. With set (only while nothing backs it up or it backs up only to its own disk; any other move is the person’s, in Settings → This Whombat): place — a ready place from places: Whombat installs a small backup app there and points the backups at it, nothing else to do; a place that needs connecting or Manage first: tell the person that one thing. sftp — on a server you look after, make a user and folder for it and add the key to that user’s ~/.ssh/authorized_keys first (server_command), then call with host, user and path; on a NAS, ask the person to turn on SFTP and do the same there. disk — the disk labelled WHOMBAT-BACKUP plugged into this Whombat. Then tell the person `say` from the answer, in your words but no longer, without addresses, ports or paths.',
+      'This Whombat’s own backups (its chats, settings and connections), every 6 hours unless the person chose otherwise, the first one as soon as a place is set. Without set: whether it is backed up, where to, the copy somewhere else (offsite: a bucket the person owns, copied after each backup; only the person sets it up, in Settings → This Whombat → Backups), the places on the network that could keep them, and its SSH public key. With set (only while nothing backs it up or it backs up only to its own disk; any other move is the person’s, in Settings → This Whombat): place — a ready place from places: Whombat installs a small backup app there and points the backups at it, nothing else to do; a place that needs connecting or Manage first: tell the person that one thing. sftp — on a server you look after, make a user and folder for it and add the key to that user’s ~/.ssh/authorized_keys first (server_command), then call with host, user and path; on a NAS, ask the person to turn on SFTP and do the same there. disk — the disk labelled WHOMBAT-BACKUP plugged into this Whombat. Then tell the person `say` from the answer, in your words but no longer, without addresses, ports or paths.',
     input: WhombatBackupInput,
     output: WhombatBackupOutput,
     requiredKey: null,
     readOnly: false,
     personal: true,
   } satisfies McpTool<typeof WhombatBackupInput, typeof WhombatBackupOutput> & { personal: true },
+  whats_protected: {
+    name: 'whats_protected',
+    title: 'What’s protected',
+    description:
+      'Everything that holds data — this Whombat, every server, every Proxmox, Incus and QEMU/KVM machine, and services that keep data (Home Assistant, Immich, Paperless, Nextcloud, a NAS, the Backup Server) — in three groups: copied to another machine, only on the same machine (lost with it), and not backed up that Whombat can see. Each with where its newest copy is and how old, and the newest restore test of Proxmox machines. Use it for “what would I lose if pve-01 died?”, “is plex backed up?”, “are my backups any good?”. “Whombat can’t see its backups” isn’t “not backed up”: say it plainly. To set up a backup, use the Servers tools and backup places you have; to turn restore tests on or off or test one now, settings_change restoreTests.set or restoreTests.run (the person says yes on a card).',
+    input: WhatsProtectedInput,
+    output: WhatsProtectedOutput,
+    requiredKey: null,
+    readOnly: true,
+    personal: true,
+  } satisfies McpTool<typeof WhatsProtectedInput, typeof WhatsProtectedOutput> & { personal: true },
   backup_bring_back: {
     name: 'backup_bring_back',
     title: 'Bring something back from a backup',

@@ -702,6 +702,7 @@ export const QNAP_KIND: KindModule = {
         qnapSkipped(s),
       ),
       points: usedPoint(qnapSpace(s)?.used),
+      tracked: { version: fw ?? null },
     };
   },
   checks: QNAP_CHECKS,

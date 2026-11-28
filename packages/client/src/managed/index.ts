@@ -4,6 +4,7 @@
  * the appliance registry, push registration and taps, and the words of those journeys.
  */
 export * from './backup-look';
+export * from './backup-offsite';
 export * from './backup-options';
 export * from './backup-places';
 export * from './backup-setup';

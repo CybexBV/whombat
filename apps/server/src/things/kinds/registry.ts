@@ -4,7 +4,9 @@
  * what always asks first, and its buttons (SD-07, SD-S04). `page.ts`, `home/health.ts` and `actions.ts` read only this.
  */
 import type { ThingPageTab } from '@whombat/core';
+import type { TrackedFacts } from '../../changes/diff';
 import type { CatalogConnectionRow } from '../../connections/types';
+import type { StoredProtection } from '../../db/schema/index';
 import type { ConnectionGlance } from '../../home/types';
 import type { Services } from '../../services';
 import type { MachineNow } from '../machine';
@@ -31,6 +33,18 @@ export interface KindSeen {
    * when Whombat doesn't watch its machine. Absent: the machine Whombat watches.
    */
   machine?: (m: MachineFigures | null) => MachineNow | null;
+  /**
+   * What can change and the change log compares between reads (docs/decisions/outside-changes.md): the service's
+   * version, its devices' firmware, its proxy hosts or tunnel routes. Absent: the kind tracks nothing; a part null:
+   * not read this time.
+   */
+  tracked?: TrackedFacts;
+
+  /**
+   * Where its own backups keep its data (What's protected, backup-trust.md): copied elsewhere, only on its own machine,
+   * or none. Absent: the kind doesn't say, or this read didn't, and what was kept stays.
+   */
+  protection?: StoredProtection;
 }
 
 /** What a button sends (`things.action`, CT-1006): which row or entity, and the value of a switch or stepper. */

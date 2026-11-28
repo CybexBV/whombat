@@ -16,6 +16,7 @@ import {
   type ThingStatus,
   UPTIME_ID,
 } from '@whombat/core';
+import { keepsSettingsCopy, SETTINGS_COPY_CHECK } from '../changes/copies/check';
 import { toolRowAlwaysAsks } from '../connections/sync';
 import type { CatalogConnectionRow, ConnectionToolRow } from '../connections/types';
 import type { ConnectionGlance } from '../home/types';
@@ -268,12 +269,13 @@ export const GENERIC_CHECKS: readonly KindCheck[] = [
     startsOn: false,
   },
 ];
-registerChecks(GENERIC_CHECKS);
+registerChecks([...GENERIC_CHECKS, SETTINGS_COPY_CHECK]);
 
 /** A console's homebrew normally disappears during rest or after a reboot. */
 export const answerCheckOf = (catalogId?: string) => (catalogId === 'ps5' ? 'ps5.available' : 'conn.answers');
 
 export function genericChecksFor(catalogId: string): readonly KindCheck[] {
+  if (keepsSettingsCopy(catalogId)) return [...GENERIC_CHECKS, SETTINGS_COPY_CHECK];
   return catalogId === 'ps5' || catalogId === 'uptime'
     ? GENERIC_CHECKS.filter((c) => c.check !== 'conn.answers')
     : GENERIC_CHECKS;

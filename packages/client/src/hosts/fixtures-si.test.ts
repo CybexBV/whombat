@@ -88,6 +88,8 @@ describe('stream SI’s fixtures (Add a server by signing in once)', () => {
       handle({ method: 'POST', path: '/enrollments', query: {}, body: { control: 'operate' } })?.body,
     );
     expect(made.installCommand).toMatch(/--token \S+ --control operate$/);
+    // A Windows PC's PowerShell line of the same enrollment (windows-servers.md).
+    expect(made.installCommandWindows).toMatch(/install\.ps1.*-Control 'operate'/);
     expect(made).toMatchObject({ control: 'operate', preApproved: true });
     const list = () => {
       const body = handle({ method: 'GET', path: '/enrollments', query: { state: 'all' }, body: {} })?.body;

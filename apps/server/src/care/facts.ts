@@ -21,11 +21,13 @@ import {
   catalogConnections,
   type LookCareRow,
   type LookPlanStepRow,
+  restoreTestServers,
   serverCares,
 } from '../db/schema/index';
 import { HOSTS_API, seg } from '../hosts/client';
 import { arr, guestsOfDetail, obj, str, toHostServerDetail } from '../hosts/map';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import type { Services } from '../services';
 import { changeWindowOf } from './window';
 
@@ -67,7 +69,13 @@ export async function careFactsOf(services: Services, burrowId: string, row: Hos
     actor: WHOMBAT_ACTOR,
   });
   const detail = toHostServerDetail(raw, [], null, services.clock());
-  const has = await careAutomationsOf(services.db, burrowId, row.id);
+  const has: Partial<Record<CareStepId, unknown>> = await careAutomationsOf(services.db, burrowId, row.id);
+  // Restore tests are a switch, not an automation.
+  const [tests] = await services.db
+    .select({ on: restoreTestServers.on })
+    .from(restoreTestServers)
+    .where(and(eq(restoreTestServers.burrowId, burrowId), eq(restoreTestServers.serverId, row.id)));
+  if (tests?.on) has.restore_test = true;
   const known = serverAddress(raw);
   const reported = hubBackupPlace(raw)?.addresses ?? [];
   const addresses = [...new Set([...(known ? [known] : []), ...reported])];
@@ -83,6 +91,8 @@ export async function careFactsOf(services: Services, burrowId: string, row: Hos
     backupStorages: backupStoragesOf(raw),
     has: Object.fromEntries(Object.keys(has).map((k) => [k, true])),
     nasShare: row.platform === 'proxmox' ? await nasShareFor(services, burrowId, row.id) : null,
+    // A plan is stored as offered: the release before app updates and restore tests can't read those steps.
+    ...((await services.newerAutomations.careStepsReady()) ? {} : { olderRelease: true }),
   };
 }
 
@@ -150,9 +160,16 @@ export function backupStoragesOf(raw: unknown): { id: string; type: string }[] {
   });
 }
 
-/** The care steps as a research keeps them (`look_researches.care`): Whombat's words, its automation's recipe. */
-export function careStepRows(facts: CareFacts, window: ChangeWindow): LookPlanStepRow[] {
-  return careSteps(facts, window).map((s) => ({
+/**
+ * The care steps as a research keeps them (`look_researches.care`): Whombat's words, in the person's `locale`, and its
+ * automation's recipe.
+ */
+export function careStepRows(
+  facts: CareFacts,
+  window: ChangeWindow,
+  locale?: string | null,
+): LookPlanStepRow[] {
+  return careSteps(facts, window, locale).map((s) => ({
     text: s.text,
     step: s.step,
     care: s.id,
@@ -165,6 +182,7 @@ export function careStepRows(facts: CareFacts, window: ChangeWindow): LookPlanSt
           },
         }
       : {}),
+    ...(s.restoreTests ? { restoreTests: { server: { id: facts.server.id, name: facts.server.name } } } : {}),
   }));
 }
 
@@ -188,6 +206,10 @@ export async function careOfferFor(
     })
     .from(burrows)
     .where(eq(burrows.id, burrowId));
-  const steps = careStepRows(await careFactsOf(services, burrowId, row), changeWindowOf(burrow));
+  const steps = careStepRows(
+    await careFactsOf(services, burrowId, row),
+    changeWindowOf(burrow),
+    await burrowLocale(services, burrowId),
+  );
   return steps.length ? { new: false, steps } : null;
 }

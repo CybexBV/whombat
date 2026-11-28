@@ -230,6 +230,10 @@ export const HOST_WATCH = splitPairs({
     'Until it’s in a safe folder.',
     'Tot hij in een veilige map staat.',
   ],
+  'hostWatch.name.host.hint.windows.protection_off': ['Virus protection off', 'Virusbescherming uit'],
+  'hostWatch.words.host.hint.windows.protection_off': ['Until it’s on again.', 'Tot hij weer aan staat.'],
+  'hostWatch.name.host.hint.windows.signatures_old': ['Old virus definitions', 'Oude virusdefinities'],
+  'hostWatch.words.host.hint.windows.signatures_old': ['Until they’re updated.', 'Tot ze bijgewerkt zijn.'],
   'hostWatch.name.host.hint.guest.backup_old': [
     'Machines with an old backup',
     'Machines met een oude back-up',
@@ -283,6 +287,11 @@ export const HOST_WATCH = splitPairs({
     'Ruimte voor back-ups raakt op',
   ],
   'hostWatch.words.host.hint.backup_place.space': ['Until there’s room again.', 'Tot er weer ruimte is.'],
+  'hostWatch.name.host.hint.restore_test.failed': [
+    'Backups that didn’t come back in a restore test',
+    'Back-ups die niet terugkwamen in een hersteltest',
+  ],
+  'hostWatch.words.host.hint.restore_test.failed': ['Until a test of it works.', 'Tot een test ervan lukt.'],
   'hostWatch.name.host.other': ['Other alerts', 'Andere waarschuwingen'],
   'hostWatch.words.host.other': ['Until it’s fixed.', 'Tot het is opgelost.'],
   'hostWatch.name.host.hint.other': ['Other hints', 'Andere hints'],

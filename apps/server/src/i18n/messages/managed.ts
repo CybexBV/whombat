@@ -218,4 +218,69 @@ export const MANAGED = splitPairs({
     'Bringing the backup back didn’t work. It tries again at its next start; ask for help if that doesn’t fix it.',
     'De back-up terugzetten is niet gelukt. Bij de volgende start probeert hij het opnieuw; vraag om hulp als dat niet helpt.',
   ],
+  // The copy somewhere else (offsite-copy.md): what failed, setting the bucket up or copying to it, by the step.
+  'managed.offsite.step.reach': [
+    'Whombat couldn’t reach the storage at that address. Check the address.',
+    'Whombat kon de opslag op dat adres niet bereiken. Controleer het adres.',
+  ],
+  'managed.offsite.step.bucket': [
+    'There’s no bucket with that name there. Check its name, or make the bucket first.',
+    'Daar is geen bucket met die naam. Controleer de naam, of maak de bucket eerst aan.',
+  ],
+  'managed.offsite.step.keys': [
+    'The storage didn’t accept the key. Check the key ID and its secret.',
+    'De opslag accepteerde de sleutel niet. Controleer de sleutel-ID en het geheim.',
+  ],
+  'managed.offsite.step.region': [
+    'The storage says the bucket is in another region. Check the region.',
+    'De opslag zegt dat de bucket in een andere regio staat. Controleer de regio.',
+  ],
+  'managed.offsite.step.write': [
+    'The key can’t save files in that bucket. Give it permission to write.',
+    'Met deze sleutel kun je geen bestanden in die bucket opslaan. Geef hem schrijfrechten.',
+  ],
+  'managed.offsite.step.read': [
+    'The key can’t read files back from that bucket. Give it permission to read.',
+    'Met deze sleutel kun je geen bestanden uit die bucket lezen. Geef hem leesrechten.',
+  ],
+  'managed.offsite.step.delete': [
+    'The key can’t delete files in that bucket. Whombat needs that to clear old copies, so give it permission to delete.',
+    'Met deze sleutel kun je geen bestanden in die bucket verwijderen. Whombat heeft dat nodig om oude kopieën op te ruimen, dus geef hem verwijderrechten.',
+  ],
+  'managed.offsite.step.repository': [
+    'That folder holds backups that aren’t this Whombat’s copy. Choose another folder.',
+    'In die map staan back-ups die niet de kopie van deze Whombat zijn. Kies een andere map.',
+  ],
+  'managed.offsite.step.same': [
+    'That’s where your backups go already. Choose another place for the copy.',
+    'Daar gaan je back-ups al naartoe. Kies een andere plek voor de kopie.',
+  ],
+  'managed.offsite.step.pair': [
+    'Your backups already go to a bucket with another key. A copy in a second bucket needs the same key.',
+    'Je back-ups gaan al naar een bucket met een andere sleutel. Een kopie in een tweede bucket heeft dezelfde sleutel nodig.',
+  ],
+  'managed.offsite.step.main': [
+    'Whombat couldn’t read the backups at their main place, so nothing was copied.',
+    'Whombat kon de back-ups op hun vaste plek niet lezen, dus er is niets gekopieerd.',
+  ],
+  'managed.offsite.step.copy': [
+    'Copying the backups there stopped before it finished.',
+    'Het kopiëren van de back-ups daarheen stopte voordat het klaar was.',
+  ],
+  'managed.offsite.notYet': [
+    'This Whombat can’t keep a copy somewhere else yet. Update it first.',
+    'Deze Whombat kan nog geen kopie op een andere plek bewaren. Werk hem eerst bij.',
+  ],
+  'managed.offsite.badAddress': [
+    'That isn’t a storage address Whombat can use. Type it like s3.eu-central-003.backblazeb2.com, without the bucket.',
+    'Dat is geen opslagadres dat Whombat kan gebruiken. Typ het zoals s3.eu-central-003.backblazeb2.com, zonder de bucket.',
+  ],
+  'managed.offsite.badPlace': [
+    'Whombat can’t use that place. Check the address, the bucket and the folder.',
+    'Whombat kan die plek niet gebruiken. Controleer het adres, de bucket en de map.',
+  ],
+  'managed.offsite.none': [
+    'There’s no copy somewhere else set up yet.',
+    'Er is nog geen kopie op een andere plek ingesteld.',
+  ],
 });

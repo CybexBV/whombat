@@ -1,14 +1,15 @@
 /**
- * The Servers tools for a server's operating-system updates (server-updates.md SWU-08; contracts 0.98.0 `SERVERS_TOOLS`;
+ * The Servers tools for a server's operating-system updates (server-updates.md; contracts 0.98.0 `SERVERS_TOOLS`;
  * server-updates-server.md SWU-S01…): `server_updates` reads what waits — the server's report (the package manager, the
  * counts, when they were checked, an error, a restart and why, the running package task and the last result) and the
  * agent's list (security first, at most 500) — and `server_update` checks for updates or installs them (everything
  * waiting, or the packages named) as a task on the server, which never restarts it (SWU-05).
  *
  * Install asks a person first through the catalog's sensitive rule unless the server is set not to ask, and always on
- * the server this Whombat runs on (`serverAsksApply`, SWU-08); Check never asks. The hub runs Check as operator and
- * Install as admin (SWU-07), with `confirm` (the yes already happened). The task is followed: the chat gets one plain
- * message when it ends (`follow.ts`), and the change is in Done recently without Undo.
+ * the server this Whombat runs on (`serverAsksApply`: an upgrade there can restart Whombat's own database); Check never
+ * asks. The hub runs Check as operator and Install as admin (installing needs Full control), with `confirm` (the yes
+ * already happened). The task is followed: the chat gets one plain message when it ends (`follow.ts`), and the change
+ * is in Done recently without Undo.
  *
  * `canInstall` comes from the server's detail read as admin, the switches the install meets (task-feedback.md TF-01);
  * when they look off, `next` leaves the last word to the install itself (TF-03).
@@ -80,11 +81,15 @@ export function waitingList(items: readonly Waiting[]): {
   };
 }
 
-/** What the server's report says about its updates, for an agent (pure). */
+/**
+ * What the server's report says about its updates, for an agent (pure). `personInstalls`: Whombat never installs
+ * them there (a Windows PC), so no hint points at `server_update install`.
+ */
 export function updatesSummary(
   serverId: string,
   r: UpdatesReport,
   canInstall: boolean | null,
+  personInstalls = false,
 ): Record<string, unknown> {
   const last = r.packageLast;
   const running = r.packageTask;
@@ -96,12 +101,14 @@ export function updatesSummary(
         : null;
   const next = running
     ? 'A package task is running there; wait for it before starting another.'
-    : canInstall === false
-      ? // A reading never decides that the install is impossible (task-feedback.md TF-03): the hub checks it live.
-        `Full control looks off on ${serverId}; server_update install says for sure, in plain words when it can’t.`
-      : r.updates
-        ? 'server_update install installs them (all, or the packages you name). It asks a person first unless the server is set not to ask, and never restarts the server.'
-        : null;
+    : personInstalls
+      ? null
+      : canInstall === false
+        ? // A reading never decides that the install is impossible (task-feedback.md): the hub checks it live.
+          `Full control looks off on ${serverId}; server_update install says for sure, in plain words when it can’t.`
+        : r.updates
+          ? 'server_update install installs them (all, or the packages you name). It asks a person first unless the server is set not to ask, and never restarts the server.'
+          : null;
   return {
     server: serverId,
     manager: r.packageManager ?? null,
@@ -130,6 +137,13 @@ export function updatesSummary(
   };
 }
 
+/**
+ * Why Whombat leaves a Windows PC's updates alone (docs/decisions/windows-servers.md): Windows Update restarts the
+ * person's own computer at times it picks, and installing them from outside goes round what the person set there.
+ */
+export const WINDOWS_UPDATES_NOTE =
+  'Whombat doesn’t install Windows updates: tell the person what waits and that they install it in Settings → Windows Update.';
+
 export const UPDATE_TOOLS: Adapter = {
   async server_updates(ctx, args) {
     const s = await scope(ctx);
@@ -144,7 +158,8 @@ export const UPDATE_TOOLS: Adapter = {
         // The detail's effective switches, else the agents row's (SWU-07: Full control installs).
         const switches = obj(obj(raw).server).remote_control;
         const rc = switches ? remoteControl(switches) : agent ? remoteControlFromAgent(agent) : null;
-        const canInstall = rc ? rc.manage === true : null;
+        // Whombat only reads a Windows PC's updates; the person installs them.
+        const canInstall = srv.kind === 'windows' ? false : rc ? rc.manage === true : null;
         // The list is the agent's, read now (diagnose or console on, SWU-11); nothing to list when nothing waits.
         let list: ReturnType<typeof waitingList> | null = null;
         let listError: string | null = null;
@@ -162,7 +177,8 @@ export const UPDATE_TOOLS: Adapter = {
           }
         }
         return output({
-          ...updatesSummary(id, report, canInstall),
+          ...updatesSummary(id, report, canInstall, srv.kind === 'windows'),
+          ...(srv.kind === 'windows' ? { note: WINDOWS_UPDATES_NOTE } : {}),
           ...(srv.runsThisWhombat ? { thisWhombat: true } : {}),
           ...(list ? { packages: list.packages, ...(list.more ? { more: list.more } : {}) } : {}),
           ...(listError ? { packagesError: listError } : {}),
@@ -185,6 +201,11 @@ export const UPDATE_TOOLS: Adapter = {
       async () => {
         const srv = await resolveServer(s, server);
         const { id } = srv;
+        if (srv.kind === 'windows')
+          return output(
+            { error: `${srv.label} is a Windows PC. ${WINDOWS_UPDATES_NOTE}`, code: 'unsupported' },
+            true,
+          );
         const r = toHostManageResult(
           await send<unknown>(s, action === 'install' ? 'admin' : 'operator', {
             method: 'POST',

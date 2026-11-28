@@ -12,8 +12,10 @@ import { coreTranslator, coreTree, coreWords, type WordTree } from '../i18n/cata
 import { formatLocaleNumber } from '../i18n/format.js';
 import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
+import { APP_UPDATE_MAX, HostAppResult, HostGuestApp } from './app-updates.js';
 import { JsonObject, Timestamp } from './common.js';
 import { ThingUptime } from './incidents.js';
+import { RestoreTestResult } from './protected.js';
 import { KeptQuiet, NoticeQuiet } from './quiet.js';
 
 const N = z.number().nullable();
@@ -51,18 +53,28 @@ export type HostConsoleProtocol = z.infer<typeof HostConsoleProtocol>;
  * (CT-363, Whombat incus-unraid.md IU-03) `incus` (Incus without Proxmox VE or unRAID: projects, pools, images,
  * profiles, networks) and `unraid` (array, parity, pools, shares, plugins); since 0.84 (CT-369, IU-13) `libvirt`
  * (“QEMU/KVM”: libvirt without Proxmox VE, unRAID or Incus; pools, networks, ISO images); `macos` a Mac (Whombat
- * macos-servers.md: its own facts, the screen and the helper, `HostServerDetail.macos`). The hub picks Proxmox
- * VE > unRAID > Incus > libvirt > standard on Linux, and `macos` for every Mac. A client maps a value it doesn't know to
+ * macos-servers.md: its own facts, the screen and the helper, `HostServerDetail.macos`); `windows` a Windows PC (Whombat
+ * windows-servers.md: its version, protection and BitLocker, `HostServerDetail.windows`; sent only to a session at
+ * `WINDOWS_MINOR` or later, an older one sees `standard`). The hub picks Proxmox VE > unRAID > Incus > libvirt >
+ * standard on Linux, `macos` for every Mac and `windows` for every Windows PC. A client maps a value it doesn't know to
  * `standard`.
  */
-export const HostServerPlatform = z.enum(['proxmox', 'standard', 'incus', 'unraid', 'libvirt', 'macos']);
+export const HostServerPlatform = z.enum([
+  'proxmox',
+  'standard',
+  'incus',
+  'unraid',
+  'libvirt',
+  'macos',
+  'windows',
+]);
 export type HostServerPlatform = z.infer<typeof HostServerPlatform>;
 
 /**
- * The family of a server's operating system (Whombat macos-servers.md): what its agent runs on. Absent is
- * `linux` (every agent before Macs).
+ * The family of a server's operating system (Whombat macos-servers.md, windows-servers.md): what its agent runs on.
+ * Absent is `linux` (every agent before Macs). `windows` only to a session at `WINDOWS_MINOR` or later.
  */
-export const HostOsFamily = z.enum(['linux', 'macos']);
+export const HostOsFamily = z.enum(['linux', 'macos', 'windows']);
 export type HostOsFamily = z.infer<typeof HostOsFamily>;
 
 /* Remote control ---------------------------------------------------------------------------------- */
@@ -150,12 +162,17 @@ export const HOST_ASKS_FIRST_WORDS = hostAsksFirstWords('en');
  * Whether the Servers catalog's sensitive rules apply to a call on a server (SA-03, SA-06): always on `risky`; on
  * `never` only for `server_power` and `server_update` on the server this Whombat runs on (SWU-08, CT-504: an upgrade
  * there can restart Whombat's own database). `server_update`'s rule asks only for `install`, so Check never asks.
+ * `app_update` with `ask: true` asks everywhere too.
  */
 export function serverAsksApply(
   tool: string,
   server: { asksFirst?: HostAsksFirst | null; hostsThisWhombat?: boolean },
+  args?: Readonly<Record<string, unknown>>,
 ): boolean {
   if ((server.asksFirst ?? HOST_ASKS_FIRST_DEFAULT) !== 'never') return true;
+  // An app update that must ask (a database, a new major version) or that someone started with Update asks on every
+  // server (app-updates.md): `ask: true`.
+  if (tool === 'app_update' && args?.ask === true) return true;
   return (tool === 'server_power' || tool === 'server_update') && server.hostsThisWhombat === true;
 }
 
@@ -666,6 +683,8 @@ export const HostTask = z.object({
     .optional(),
   /** Set only when a package task ended early (`HOST_PACKAGE_TASK_CODES`: `busy`, `timeout`; CT-502). */
   code: z.string().max(64).optional(),
+  /** An app update's outcome per app once it ended (`app:<16 hex>`, `platform: host`; app-updates.md). */
+  apps: z.array(HostAppResult).optional(),
 });
 export type HostTask = z.infer<typeof HostTask>;
 
@@ -759,6 +778,8 @@ export const HostGuest = z.object({
   platform: HostPlatform,
   kind: HostGuestKind,
   image: z.string(),
+  /** A container's image id (`sha256:…`), when its agent says it: a new image under the same tag has another. */
+  imageId: z.string().max(160).optional(),
   state: HostGuestState,
   vcpu: OptN,
   cpuPct: N,
@@ -809,6 +830,11 @@ export const HostGuest = z.object({
    * Whombat's own containers from the person's lists by it. Absent on a hosts service that doesn't send them.
    */
   labels: z.record(z.string().max(100), z.string().max(200)).optional(),
+  /**
+   * A Docker container Docker Compose started, which Whombat can update and put back (app-updates.md): absent for one
+   * `docker run` started, and on every container of an agent older than app updates (`appUpdateState`).
+   */
+  app: HostGuestApp.optional(),
 });
 export type HostGuest = z.infer<typeof HostGuest>;
 
@@ -817,6 +843,11 @@ export const HostGuestDetail = HostGuest.extend({
   remoteControl: HostRemoteControl,
   /** Configuration and lifecycle (Proxmox VE, Incus) are possible: the Manage switch is on both sides. */
   manageable: z.boolean(),
+  /**
+   * The newest restore test of this machine (Whombat backup-trust.md): whether its backup came back when Whombat tried
+   * it. Absent from an older Whombat, and for machines never tested.
+   */
+  restoreTest: RestoreTestResult.nullable().optional(),
 });
 export type HostGuestDetail = z.infer<typeof HostGuestDetail>;
 
@@ -1269,6 +1300,68 @@ export type HostMacosDetail = z.infer<typeof HostMacosDetail>;
 /** The oldest macOS Whombat's helper runs on. */
 export const HOST_MACOS_MIN_MAJOR = 13;
 
+/* Windows (Whombat windows-servers.md) ----------------------------------------------------------------- */
+
+/**
+ * A Windows PC's antivirus: `on` (Microsoft Defender with real-time protection, or another product Windows Security
+ * lists as on), `off`, or `unknown` (a Windows Server whose own antivirus Windows doesn't name). `product` names the one
+ * that is on.
+ */
+export const HostWindowsProtection = z.object({
+  state: z.enum(['on', 'off', 'unknown']),
+  product: z.string().nullable(),
+  defender: z
+    .object({
+      running: z.boolean(),
+      /** `normal` (Defender protects the PC), `passive` or `edr_block` (another antivirus does), `off`. */
+      mode: z.string(),
+      realTime: z.boolean(),
+      tamper: z.boolean().nullable(),
+      signaturesAt: Timestamp.nullable(),
+      quickScanAt: Timestamp.nullable(),
+    })
+    .nullable(),
+  antivirus: z.array(z.object({ name: z.string(), on: z.boolean(), upToDate: z.boolean() })),
+});
+export type HostWindowsProtection = z.infer<typeof HostWindowsProtection>;
+
+/** One drive's BitLocker: `on`, `off` or `unknown` (locked, or BitLocker can't say); `system` the Windows drive. */
+export const HostWindowsVolume = z.object({
+  drive: z.string(),
+  protection: z.enum(['on', 'off', 'unknown']),
+  system: z.boolean(),
+});
+export type HostWindowsVolume = z.infer<typeof HostWindowsVolume>;
+
+/**
+ * `HostServerDetail.windows`: a Windows PC's own facts from its agent's report. Windows Update's counts and restart are
+ * in the detail's `health.system` as on Linux; here when it last looked and last installed. `bitlocker` null: the PC
+ * doesn't say (no BitLocker there).
+ */
+export const HostWindowsDetail = z.object({
+  /** `Windows 11 Pro`. */
+  product: z.string(),
+  /** `24H2`. */
+  displayVersion: z.string().nullable(),
+  /** `26100.2605`. */
+  build: z.string().nullable(),
+  edition: z.string().nullable(),
+  server: z.boolean(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  updatesCheckedAt: Timestamp.nullable(),
+  updatesInstalledAt: Timestamp.nullable(),
+  protection: HostWindowsProtection,
+  bitlocker: z.array(HostWindowsVolume).nullable(),
+});
+export type HostWindowsDetail = z.infer<typeof HostWindowsDetail>;
+
+/**
+ * Removes the agent from a Windows PC, in PowerShell opened as administrator; its identity stays (as `install.sh
+ * --uninstall` does on Linux), and the person deletes the PC in Whombat to revoke it.
+ */
+export const HOST_WINDOWS_UNINSTALL_COMMAND = '& "$env:ProgramFiles\\Whombat\\whombat-agent.exe" uninstall';
+
 /* On-request disk usage breakdown ------------------------------------------------------------------- */
 
 /** One recognised bucket in an on-request disk usage breakdown (container images, journal, caches, VM disks…). */
@@ -1356,6 +1449,8 @@ export const HostServerDetail = z.object({
   libvirt: HostLibvirtDetail.optional(),
   /** A Mac's own facts, its screen and its helper: on a Mac. */
   macos: HostMacosDetail.optional(),
+  /** A Windows PC's own facts and protection: on a Windows PC (a session at `WINDOWS_MINOR` or later). */
+  windows: HostWindowsDetail.optional(),
   /**
    * Its week in one line (session minor 9), from its offline alerts and Whombat's
    * incidents: “Up 99.6 % this week · down 3 times, 41 min”. Absent: Whombat has nothing to tell.
@@ -1684,12 +1779,14 @@ export type HostCreateEnrollmentBody = z.infer<typeof HostCreateEnrollmentBody>;
 /**
  * A new enrollment: the one-line install command that dials the box's LAN address with its CA pinned (CT-374):
  * `control`, the level the command sets (it ends with `--control <level>`), and `preApproved` (SI-07), as far as the
- * hosts service says them.
+ * hosts service says them. `installCommandWindows` is the same for a Windows PC, one line for PowerShell opened as
+ * administrator (Whombat windows-servers.md); absent while the box has no Windows agent.
  */
 export const HostEnrollment = z.object({
   id: Id,
   expiresAt: Timestamp,
   installCommand: z.string().min(1).max(4000),
+  installCommandWindows: z.string().min(1).max(4000).optional(),
   control: HostControlLevel.optional(),
   preApproved: z.boolean().optional(),
 });
@@ -2710,6 +2807,8 @@ export const HostChoices = z.object({
   /** Other cluster nodes (replication and migration targets). */
   nodes: z.array(z.string()).optional(),
   download: z.boolean().optional(),
+  /** A Proxmox restore can be asked to make the copy cut off from the start (the server's helper can do it). */
+  restoreIsolate: z.boolean().optional(),
   profiles: z.array(z.string()).optional(),
   images: z.array(JsonObject).optional(),
   /** Incus: the projects (0.83, CT-364); `choices` with `project` answers that project's pools, networks, profiles. */
@@ -3003,6 +3102,11 @@ export const HOST_MANAGE_OPS = [
   /** The server's operating-system updates (0.98, CT-500): check for them, install them; `platform: host`. */
   'packages.check',
   'packages.install',
+  /**
+   * Docker Compose apps (app-updates.md): asks the person, through the approval card, to update these apps
+   * (`params.apps`: their guest ids, `params.snapshot`: a snapshot of the server first); answers `approvalNumber`.
+   */
+  'app.update',
 ] as const;
 export const HostManageOp = z.enum(HOST_MANAGE_OPS);
 export type HostManageOp = z.infer<typeof HostManageOp>;
@@ -3153,6 +3257,17 @@ export function hostSelfWords(locale?: string | null): { guestLabel: string; ser
  * an agent too old), `not_allowed` (TrueNAS, named packages on pacman), `busy` (a package task already running) and
  * `manage_disabled`.
  */
+/** `app.update`'s params: the apps (Docker guest ids) and whether to take a snapshot of the server first. */
+export const HostAppUpdateParams = z.object({
+  apps: z
+    .array(z.string().regex(/^docker:[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/))
+    .min(1)
+    .max(APP_UPDATE_MAX),
+  /** A snapshot of the Proxmox guest the server is, first. Unsaid: whenever Whombat can take one. */
+  snapshot: z.boolean().optional(),
+});
+export type HostAppUpdateParams = z.infer<typeof HostAppUpdateParams>;
+
 export const HostManageRequest = z
   .object({
     op: HostManageOp,
@@ -3165,6 +3280,23 @@ export const HostManageRequest = z
     confirmName: z.string().max(100).optional(),
   })
   .superRefine((req, ctx) => {
+    if (req.op === 'app.update') {
+      if (req.guestId !== undefined)
+        ctx.addIssue({ code: 'custom', path: ['guestId'], message: 'Name the apps in params.apps.' });
+      if (req.platform !== undefined && req.platform !== 'host')
+        ctx.addIssue({
+          code: 'custom',
+          path: ['platform'],
+          message: 'App updates run on the server itself.',
+        });
+      if (!HostAppUpdateParams.safeParse(req.params).success)
+        ctx.addIssue({
+          code: 'custom',
+          path: ['params', 'apps'],
+          message: `Apps are 1 to ${APP_UPDATE_MAX} Docker guests (docker:name).`,
+        });
+      return;
+    }
     const packageOp = isHostPackageManageOp(req.op);
     if (!packageOp) {
       // `task.stop` stops a Check (`pkg:…`) with `platform: host`.
@@ -3213,6 +3345,8 @@ export const HostManageResult = z.object({
   newId: z.string().optional(),
   changes: z.array(HostConfigChange).optional(),
   auditId: z.string().optional(),
+  /** `app.update`: the approval that asks the person (the page opens it, `?approval=`). */
+  approvalNumber: z.number().int().positive().optional(),
 });
 export type HostManageResult = z.infer<typeof HostManageResult>;
 

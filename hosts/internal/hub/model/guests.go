@@ -51,6 +51,8 @@ type Guest struct {
 	UpdateAvailable *bool
 	DiskUsedGB      *float64
 	Processes       *int
+	// ImageID: the id of the image a container runs, when its agent says it.
+	ImageID string
 	// Proxmox management additions (docs/MANAGE.md), written when known.
 	Tags           []string
 	PendingChanges int
@@ -69,6 +71,54 @@ type Guest struct {
 	// libvirt (libvirt.go): the newest snapshot (LastBackup: the newest
 	// Whombat backup).
 	LastSnapshot *Time
+	// App: a Docker container Compose started, which Whombat can update
+	// (docs/MANAGE.md 2.11); only agents that can update apps say so.
+	App *GuestApp
+}
+
+// GuestApp is a Compose app's update state: its service, its version and the
+// newer image's when known, why it can't be updated, whether an update runs
+// now, and how the last one went. NewDigest (the newer image's registry
+// digest) and ConfigHash (Compose's hash of the service's settings) are
+// what an update sends back as `expect`, when the agent says them.
+type GuestApp struct {
+	Service    string   `json:"service"`
+	Version    *string  `json:"version"`
+	NewVersion *string  `json:"new_version"`
+	Blocked    *string  `json:"blocked"`
+	Updating   bool     `json:"updating"`
+	Last       *AppLast `json:"last"`
+	NewDigest  *string  `json:"new_digest,omitempty"`
+	ConfigHash *string  `json:"config_hash,omitempty"`
+}
+
+// AppLast is a Compose app's last update: updated, current (nothing newer),
+// rolled_back, held (a new major version waits for the person) or failed.
+type AppLast struct {
+	Status string  `json:"status"`
+	Reason *string `json:"reason"`
+	From   *string `json:"from"`
+	To     *string `json:"to"`
+	At     *Time   `json:"at"`
+}
+
+func optText(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
+}
+
+func buildGuestApp(a *proto.GuestApp) *GuestApp {
+	if a == nil {
+		return nil
+	}
+	out := &GuestApp{Service: a.Service, Version: optText(a.Version), NewVersion: optText(a.NewVersion),
+		Blocked: optText(a.Blocked), Updating: a.Updating, NewDigest: optText(a.NewDigest), ConfigHash: optText(a.ConfigHash)}
+	if l := a.Last; l != nil {
+		out.Last = &AppLast{Status: l.Status, Reason: optText(l.Reason), From: optText(l.From), To: optText(l.To), At: T(l.Finished)}
+	}
+	return out
 }
 
 // GuestConsole is the guest's console capability.
@@ -150,6 +200,12 @@ func (g Guest) MarshalJSON() ([]byte, error) {
 	}
 	if g.UpdateAvailable != nil {
 		f = append(f, kv{"update_available", g.UpdateAvailable})
+	}
+	if g.App != nil {
+		f = append(f, kv{"app", g.App})
+	}
+	if g.ImageID != "" {
+		f = append(f, kv{"image_id", g.ImageID})
 	}
 	if g.DiskUsedGB != nil {
 		f = append(f, kv{"disk_used_gb", g.DiskUsedGB})
@@ -283,6 +339,10 @@ func BuildGuest(pg proto.PlatformGuest, now time.Time) Guest {
 	out.Console = buildConsole(pg.Platform, g, running)
 	out.Addresses, out.Lock, out.Restarts, out.ExitCode = g.Addresses, g.Lock, g.RestartCount, g.ExitCode
 	out.OOMKilled, out.Project, out.UpdateAvailable = g.OOMKilled, g.Project, g.UpdateAvailable
+	if pg.Platform == proto.PlatformDocker {
+		out.App = buildGuestApp(g.App)
+		out.ImageID = g.ImageID
+	}
 	if g.WhombatService {
 		out.Labels = map[string]string{"whombat.service": "1"}
 	}

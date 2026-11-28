@@ -1,0 +1,5 @@
+{"defender":{"service":false,"antivirus":false,"realtime":false,"mode":"Not running","tamper":null,"signatures":"","quick_scan":""},
+ "security_center":false,
+ "system_drive":"C:",
+ "disks":[{"id":"0","name":"Virtual Disk","media":"Unspecified","bus":"SAS","size":137438953472,"health":"Unknown"}],
+ "partitions":[{"drive":"C","disk":"0"}]}

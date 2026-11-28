@@ -44,6 +44,7 @@ import {
   ChevronDown,
   ChevronRight,
   CircleAlert,
+  CloudUpload,
   HardDrive,
   KeyRound,
   type LucideIcon,
@@ -364,6 +365,12 @@ function BackupHeroCard({
         <p className={styles.heroLine} data-tone={hero.wayBackReady ? 'ok' : 'mut'} data-backup-way-back="">
           <Icon icon={hero.wayBackReady ? Check : KeyRound} size={16} />
           <span>{hero.wayBack}</span>
+        </p>
+      ) : null}
+      {hero.offsite ? (
+        <p className={styles.heroLine} data-tone={hero.offsite.dot} data-backup-offsite-line="">
+          <Icon icon={hero.offsite.dot === 'warn' ? CircleAlert : CloudUpload} size={16} />
+          <span>{hero.offsite.text}</span>
         </p>
       ) : null}
       {hero.askPasskey ? <PasskeyLine onArmed={onArmed} /> : null}

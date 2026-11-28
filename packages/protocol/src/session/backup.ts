@@ -316,6 +316,29 @@ export const BackupRecoveryMaterial = z.object({
     )
     .max(4)
     .optional(),
+  /**
+   * The second place, where the box keeps a copy of its backups (Whombat offsite-copy.md): a restic repository of its
+   * own with the same password, in a bucket the person owns, and the newest backup in it. Bringing the box back uses it
+   * when the main place is gone. Absent when there is none, and to an app below `OFFSITE_MINOR` (it reads the material
+   * strictly).
+   */
+  offsite: z
+    .object({
+      provider: z.string().regex(/^[a-z0-9]{1,16}$/),
+      repository: ascii(500),
+      s3AccessKeyId: ascii(200).optional(),
+      s3SecretAccessKey: ascii(500).optional(),
+      s3Region: ascii(64).optional(),
+      repositoryId: ident(),
+      head: z
+        .object({
+          seq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+          manifestSha256: z.string().regex(/^[0-9a-f]{64}$/),
+          at: Rfc3339,
+        })
+        .optional(),
+    })
+    .optional(),
 });
 export const BackupRecoveryMaterialInput = z.strictObject({});
 export const BackupRunNowInput = z.strictObject({});

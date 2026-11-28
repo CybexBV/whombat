@@ -43,6 +43,7 @@
  */
 import { z } from 'zod';
 import { ChangeId, ConnectionId, DeviceSkillProposalId } from '../ids.js';
+import { SettingsCopyView } from './changes.js';
 import { Timestamp } from './common.js';
 import { HomeHref, ThingKind, ThingStatus } from './home.js';
 import { HostSeriesRange } from './hosts.js';
@@ -976,6 +977,11 @@ export const ThingPage = z.object({
   keptQuiet: KeptQuiet.optional(),
   /** Down because of something else: the badge says it (“Not answering while pve-02 is down”). */
   causedBy: ThingCause.optional(),
+  /**
+   * The service's settings copy (session minor 22, Whombat outside-changes.md): OPNsense, Pi-hole and Nginx Proxy
+   * Manager. Absent for every other kind and from an older Whombat.
+   */
+  settingsCopy: SettingsCopyView.optional(),
 });
 export type ThingPage = z.infer<typeof ThingPage>;
 

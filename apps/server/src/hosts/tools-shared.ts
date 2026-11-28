@@ -104,7 +104,7 @@ export interface ResolvedServer {
 }
 
 /** A server named by its id, the name a person gave it or its host name (case-insensitive), from the fleet. */
-export async function resolveServer(s: CallScope, raw: string): Promise<ResolvedServer> {
+export async function resolveServer(s: Pick<CallScope, 'hosts'>, raw: string): Promise<ResolvedServer> {
   const fleet = await s.hosts.fleetRaw();
   const want = raw.trim().toLowerCase();
   const cards = arr(fleet.servers).map(obj);

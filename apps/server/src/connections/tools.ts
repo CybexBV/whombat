@@ -28,6 +28,7 @@ import {
 } from '@whombat/core';
 import { handWaitWhenQueued, slicedWaitArgs } from '../automations/turn-waits';
 import { limitWordsFor } from '../devices/store';
+import { AppBindError, bindAppUpdateArgs } from '../hosts/tools-apps';
 import { withImage } from '../mcp/image';
 import type { ToolContext, ToolHandler } from '../mcp/tools';
 import { loadConversationRow } from '../read/conversations';
@@ -269,6 +270,16 @@ export const CONNECTION_TOOL_HANDLERS: {
         tool.name,
         args,
       );
+    }
+    // An app update's yes is bound to what Whombat reads now: the apps, those that share their image, and what each is.
+    // Nothing is asked when that can't be read.
+    if (c.row.catalogId === 'whombat_servers' && tool.name === 'app_update') {
+      try {
+        args = await bindAppUpdateArgs(services, args);
+      } catch (err) {
+        if (err instanceof AppBindError) return failed(err.reason, err.message);
+        throw err;
+      }
     }
     const missing = missingArgsText(tool, args);
     if (missing) return failed('invalid_arguments', missing);

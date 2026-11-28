@@ -439,9 +439,26 @@ function paperSection(m: Material): string[] {
     `Backup key: ${m.repositoryPassword}`,
     `Backups: ${m.repositoryId} · version ${m.generation}`,
     `Signature key: ${m.manifestKey}`,
+    ...offsiteSection(m.offsite),
     '',
     'For a new Whombat (the QR code holds the same; save this line as kit.json for the recovery tool):',
     JSON.stringify(m),
+  ];
+}
+
+/**
+ * The copy somewhere else, when there is one (offsite-copy.md): where it is and its key. A new Whombat tries the place
+ * above first and the copy when that place is gone; the backup key above opens both.
+ */
+function offsiteSection(o: Material['offsite']): string[] {
+  if (!o) return [];
+  return [
+    '',
+    `A copy of the backups is also at: ${o.repository}`,
+    ...(o.s3AccessKeyId ? [`Its access key: ${o.s3AccessKeyId}`] : []),
+    ...(o.s3SecretAccessKey ? [`Its secret key: ${o.s3SecretAccessKey}`] : []),
+    ...(o.s3Region ? [`Its region: ${o.s3Region}`] : []),
+    'If the place above is gone, a new Whombat brings this one back from the copy, with the same backup key.',
   ];
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -511,5 +512,40 @@ func TestBrokerManagePVE(t *testing.T) {
 	}
 	if r := b.Manage(ctx, proto.ManageRequest{Op: proto.OpChoices, Platform: proto.PlatformPVE}); !r.OK || r.Choices == nil {
 		t.Fatalf("choices: %+v", r)
+	}
+}
+
+// A restored copy's cable is pulled whatever its card: a model Whombat
+// doesn't offer and a bridge this node doesn't have stay as they are.
+func TestPVEConfigSetLinkDownOnly(t *testing.T) {
+	odd := "ne2k_pci=BC:24:11:00:00:01,bridge=vmbr9,firewall=1"
+	for _, tc := range []struct {
+		name string
+		v    string
+		ok   bool
+	}{
+		{"cable pulled", odd + ",link_down=1", true},
+		{"cable pulled and bridge changed", "ne2k_pci=BC:24:11:00:00:01,bridge=vmbr0,firewall=1,link_down=1", false},
+		{"cable put back", odd + ",link_down=0", false},
+		{"cable pulled, model changed", "virtio=BC:24:11:00:00:01,bridge=vmbr9,firewall=1,link_down=1", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakePVE(t)
+			pending := f.routes["GET /nodes/pve1/qemu/100/pending"]
+			f.on("GET /nodes/pve1/qemu/100/pending", func(q url.Values) fakeResp {
+				r := pending(q)
+				r.data = append(slices.Clone(r.data.([]map[string]any)), map[string]any{"key": "net1", "value": odd})
+				return r
+			})
+			f.on("POST /nodes/pve1/qemu/100/config", func(url.Values) fakeResp { return okResp(nil) })
+			m := newTestManage(t, f)
+			r := manageOp(t, m, testVM, proto.ManageRequest{Op: proto.OpConfigSet, Set: map[string]string{"net1": tc.v}})
+			if r.OK != tc.ok {
+				t.Fatalf("got %+v, want ok %v", r, tc.ok)
+			}
+			if ch := f.changes(); tc.ok && (len(ch) != 1 || ch[0].Form.Get("net1") != tc.v) || !tc.ok && len(ch) != 0 {
+				t.Fatalf("requests %v", ch)
+			}
+		})
 	}
 }

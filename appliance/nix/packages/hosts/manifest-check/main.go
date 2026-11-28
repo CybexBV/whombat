@@ -10,8 +10,10 @@
 //	         16 hex digits of its SHA-256, as agents report it), it names exactly the whombat-agent-<os>-<arch> files
 //	         and Whombat Helper in AGENTS, every entry's signature verifies (Ed25519 over the sha256 it names), and
 //	         every file's size and sha256 are the entry's.
-//	exit 3   other bytes: all of that holds, except that a built file's size or sha256 differs. The manifest is sound
-//	         and signs other agents than these (changed agent code, another Go). The agents need signing.
+//	exit 3   other bytes: all of that holds, except that a built file's size or sha256 differs, or the agents of a
+//	         system the manifest signs none of yet are not in it (Windows, before its builds were first signed). The
+//	         manifest is sound and signs other agents than these (changed agent code, another Go). The agents need
+//	         signing.
 //	exit 1   anything else: an unreadable manifest, another version or key, a bad signature, a file missing on either
 //	         side. Signing again would hide this; someone must look.
 //
@@ -54,7 +56,8 @@ type manifest struct {
 }
 
 type file struct {
-	// OS is "darwin" for a Mac's agent and Whombat Helper; absent (or "linux") for a Linux server's agent.
+	// OS is "darwin" for a Mac's agent and Whombat Helper, "windows" for a Windows PC's; absent (or "linux") for a
+	// Linux server's agent.
 	OS   string `json:"os,omitempty"`
 	Arch string `json:"arch"`
 	// Version is Whombat Helper's own version (its entry only; the agents' is the manifest's).
@@ -67,7 +70,7 @@ type file struct {
 const prefix = "whombat-agent-"
 
 // agentOSes are the systems an agent's name may say.
-var agentOSes = map[string]bool{"linux": true, "darwin": true}
+var agentOSes = map[string]bool{"linux": true, "darwin": true, "windows": true}
 
 // helperName is Whombat Helper's zip (NX-515): signed in the same manifest, for Macs, every architecture.
 const helperName = "whombat-helper-macos.zip"
@@ -91,13 +94,32 @@ func signedName(name string) (string, string, bool) {
 	return osArch(name)
 }
 
-// osArch splits an agent's name into its system and architecture ("whombat-agent-darwin-arm64" → darwin, arm64).
+// osArch splits an agent's name into its system and architecture ("whombat-agent-darwin-arm64" → darwin, arm64;
+// "whombat-agent-windows-amd64.exe" → windows, amd64: a Windows build's name ends in .exe, no other one does).
 func osArch(name string) (string, string, bool) {
 	sys, arch, ok := strings.Cut(strings.TrimPrefix(name, prefix), "-")
-	if !strings.HasPrefix(name, prefix) || !ok || !agentOSes[sys] || arch == "" || strings.Contains(arch, "-") {
+	if sys == "windows" {
+		var exe bool
+		arch, exe = strings.CutSuffix(arch, ".exe")
+		ok = ok && exe
+	}
+	if !strings.HasPrefix(name, prefix) || !ok || !agentOSes[sys] || arch == "" || strings.ContainsAny(arch, "-.") {
 		return "", "", false
 	}
 	return sys, arch, true
+}
+
+// signsSystem says whether the manifest signs any agent of a system ("linux" also for entries without one).
+func (m manifest) signsSystem(sys string) bool {
+	for name, f := range m.Files {
+		if s, _, ok := osArch(name); ok && s == sys {
+			return true
+		}
+		if f.OS == sys {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
@@ -210,6 +232,12 @@ func check(manifestJSON []byte, key, version, dir string) (otherBytes []string, 
 	}
 	for _, name := range names {
 		if _, ok := m.Files[name]; !ok {
+			// A system the manifest signs no agent of yet (Windows, when its builds were added): signed from the next
+			// signing on, like changed bytes. A missing build of a system it signs stays a problem.
+			if sys, _, _ := signedName(name); name != helperName && !m.signsSystem(sys) {
+				otherBytes = append(otherBytes, fmt.Sprintf("%s: not signed yet (the manifest signs no %s agent)", name, sys))
+				continue
+			}
 			add("%s is not in it", name)
 		}
 	}

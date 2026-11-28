@@ -35,6 +35,8 @@ export interface LookPlanStepRow {
     server: { id: string; name: string; self: boolean };
     guests?: string[];
   };
+  /** Weekly restore tests of the server's machines, turned on by Whombat when the person says go ahead (backup-trust.md). */
+  restoreTests?: { server: { id: string; name: string } };
 }
 
 /**

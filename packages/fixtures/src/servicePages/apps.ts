@@ -21,6 +21,7 @@ import {
 } from '@whombat/core/domain';
 import { fixtureImage } from '../pictures.js';
 import type { FixtureServiceCtx, FixtureServicePage } from './types.js';
+import { FIXTURE_WORKS_CHECK, fixtureWorks } from './works.js';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -155,6 +156,14 @@ const immich: FixtureServicePage = {
   make: (ctx) => {
     const { button, notice, week, page } = kit(ctx);
     let resumed = false;
+    const works = fixtureWorks(ctx, {
+      name: 'Open your newest photo',
+      icon: 'photo',
+      works: 'It works — opened your newest photo in 0.4 s.',
+      watched: true,
+      ranAgo: 6 * MIN,
+      history: { runs: 48, passed: 48 },
+    });
     const recent = (): ThingGalleryItem[] =>
       [
         ['IMG_4412.HEIC', 25, false],
@@ -423,6 +432,7 @@ const immich: FixtureServicePage = {
               ]),
               empty: 'No favourites yet. Mark a photo with the heart in Immich.',
             },
+            works.panel(),
           ],
         });
       },
@@ -434,8 +444,10 @@ const immich: FixtureServicePage = {
         ],
         ...(resumed ? {} : { reason: 'The smart search queue is paused' }),
       }),
-      action: ({ action, target }) => {
-        if (action !== 'resume' || target !== 'smartSearch' || resumed) return null;
+      action: (body) => {
+        const tested = works.action(body);
+        if (tested) return tested;
+        if (body.action !== 'resume' || body.target !== 'smartSearch' || resumed) return null;
         resumed = true;
         return { message: 'Smart search goes on.', recorded: true };
       },
@@ -445,6 +457,7 @@ const immich: FixtureServicePage = {
         { check: 'immich.jobs_failed', name: 'Failed jobs', nature: 'problem', perItem: true },
         { check: 'immich.integrity', name: 'Missing or changed files', nature: 'problem', perItem: false },
         { check: 'immich.update', name: 'Immich updates', nature: 'fyi', perItem: false },
+        FIXTURE_WORKS_CHECK,
       ],
     };
   },
@@ -465,6 +478,12 @@ const paperless: FixtureServicePage = {
   make: (ctx) => {
     const { button, notice, week, page } = kit(ctx);
     let seen = false;
+    const works = fixtureWorks(ctx, {
+      name: 'Open your newest document',
+      icon: 'log',
+      works: 'It works — opened your newest document in 0.3 s.',
+      watched: false,
+    });
     const docs = (prefix: string, items: [string, string, string][]): ThingGalleryItem[] =>
       items.map(([title, from, when], i) => ({
         id: `doc-${prefix}-${i + 1}`,
@@ -695,6 +714,7 @@ const paperless: FixtureServicePage = {
                 { id: 'sanity', title: 'Sanity check', detail: 'Ran 3 days ago', right: 'OK', tone: 'ok' },
               ],
             },
+            works.panel(),
           ],
         });
       },
@@ -706,7 +726,10 @@ const paperless: FixtureServicePage = {
         ],
         ...(seen ? {} : { reason: 'An import failed' }),
       }),
-      action: ({ action, target }) => {
+      action: (body) => {
+        const tested = works.action(body);
+        if (tested) return tested;
+        const { action, target } = body;
         if (action === 'sanity')
           return { message: 'Paperless-ngx is checking its documents. It takes a few minutes.' };
         if (action !== 'seen' || target !== '41' || seen) return null;
@@ -719,6 +742,7 @@ const paperless: FixtureServicePage = {
         { check: 'paperless.classifier', name: 'The classifier not training', nature: 'fyi', perItem: false },
         { check: 'paperless.disk_full', name: 'Disk filling up', nature: 'problem', perItem: false },
         { check: 'paperless.update', name: 'Paperless-ngx updates', nature: 'fyi', perItem: false },
+        FIXTURE_WORKS_CHECK,
       ],
     };
   },
@@ -736,21 +760,37 @@ const nextcloud: FixtureServicePage = {
   fields: { url: NEXTCLOUD_URL },
   make: (ctx) => {
     const { page, week } = kit(ctx);
+    const works = fixtureWorks(ctx, {
+      name: 'Open one of your files',
+      icon: 'disk',
+      works: 'It works — opened one of your files in 0.6 s.',
+      fails: {
+        words: 'The sign-in Whombat uses can’t list your files any more (it answered 401).',
+        access: true,
+        badge: 'Test sign-in lost access',
+        question: 'Why can’t Nextcloud open my files?',
+        status: 401,
+      },
+      watched: true,
+      ranAgo: 4 * MIN,
+      history: { runs: 48, passed: 41 },
+    });
     return {
-      page: () =>
-        page({
+      page: () => {
+        const line = works.notice();
+        return page({
           thing: NEXTCLOUD,
           catalogId: 'nextcloud',
           name: 'Nextcloud',
-          status: 'ok',
-          badge: '2 people active today',
+          status: line ? 'warn' : 'ok',
+          badge: works.badge() ?? '2 people active today',
           facts: [
             [{ text: 'Nextcloud ' }, { text: '35.0.2', strong: true }],
             [{ text: '4', strong: true }, { text: ' users' }],
           ],
           address: 'cloud.example.com',
           url: NEXTCLOUD_URL,
-          worth: [],
+          worth: line ? [line] : [],
           panels: [
             {
               kind: 'list',
@@ -854,15 +894,22 @@ const nextcloud: FixtureServicePage = {
                 { id: 'app-deck', title: 'deck', right: '2.0.1', icon: 'update' },
               ],
             },
+            works.panel(),
           ],
-        }),
-      row: () => ({
-        line: 'Files · Nextcloud 35.0.2',
-        facts: [
-          { label: 'Active today', value: '2' },
-          { label: 'Free space', value: '1.8 TB' },
-        ],
-      }),
+        });
+      },
+      row: () => {
+        const reason = works.badge();
+        return {
+          line: 'Files · Nextcloud 35.0.2',
+          facts: [
+            { label: 'Active today', value: '2' },
+            { label: 'Free space', value: '1.8 TB' },
+          ],
+          ...(reason ? { reason } : {}),
+        };
+      },
+      action: (body) => works.action(body),
       checks: [
         {
           check: 'nextcloud.not_admin',
@@ -873,6 +920,7 @@ const nextcloud: FixtureServicePage = {
         { check: 'nextcloud.free', name: 'Free space running out', nature: 'problem', perItem: false },
         { check: 'nextcloud.update', name: 'Nextcloud updates', nature: 'fyi', perItem: false },
         { check: 'nextcloud.app_update', name: 'App updates', nature: 'fyi', perItem: false },
+        FIXTURE_WORKS_CHECK,
       ],
     };
   },

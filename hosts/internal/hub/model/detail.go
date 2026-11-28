@@ -203,6 +203,7 @@ func BuildDetail(s *ServerState, now time.Time, in DetailInput) Detail {
 	d.Live = buildLive(r)
 	d.Live.AsOf = T(s.ReportAt)
 	d.MacOS = BuildMacOS(r)
+	d.Windows = BuildWindows(r)
 
 	// Sensors.
 	sensors := append([]proto.Sensor{}, r.Sensors...)

@@ -24,7 +24,8 @@ describe('osMark', () => {
     ['Amazon Linux 2023', 'linux'],
     ['macOS 27.2.1', 'mac'],
     ['Mac OS X 10.15', 'mac'],
-    ['Windows Server 2022', null],
+    ['Windows 11 Pro', 'pc'],
+    ['Windows Server 2022', 'pc'],
     [null, null],
   ])('%s → %s', (os, mark) => {
     expect(osMark(os)).toBe(mark);
@@ -36,6 +37,7 @@ describe('hostOsMark', () => {
     expect(hostOsMark({ platform: 'proxmox', os: 'Debian GNU/Linux 12 (bookworm)' })).toBe('proxmox');
     expect(hostOsMark({ platform: 'unraid', os: 'Slackware 15.0' })).toBe('unraid');
     expect(hostOsMark({ platform: 'macos', os: null })).toBe('mac');
+    expect(hostOsMark({ platform: 'windows', os: null })).toBe('pc');
   });
 
   it('shows any other server’s operating system', () => {
@@ -51,7 +53,7 @@ describe('hostOsMark', () => {
 
   it('lists every mark it can answer', () => {
     expect(HOST_OS_MARKS).toEqual(
-      expect.arrayContaining(['proxmox', 'unraid', 'debian', 'linux', 'qemu', 'mac']),
+      expect.arrayContaining(['proxmox', 'unraid', 'debian', 'linux', 'qemu', 'mac', 'pc']),
     );
     expect(new Set(HOST_OS_MARKS).size).toBe(HOST_OS_MARKS.length);
   });

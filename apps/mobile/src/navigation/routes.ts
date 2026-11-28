@@ -203,6 +203,8 @@ export type RootStackParamList = {
    */
   ServersPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
   ConnectionsPlace: { back?: string; opened?: boolean; idle?: boolean } | undefined;
+  /** Open to the internet (Whombat internet-exposure.md), from the end of Servers and a new opening's line. */
+  Internet: { back?: string } | undefined;
   /** The audit log (MQ-03): filters as the web's `?actor=&kind=&who=&open=`, strings checked by the screen. */
   AuditLog: { actor?: string; kind?: string; who?: string; open?: string } | undefined;
   /**
@@ -271,6 +273,8 @@ export type RootStackParamList = {
   /** Everything I did (home-redesign-mobile.md AP-2261): every change the assistant made, `whombat://done`. */
   /** `back`: the page it was opened from, else the page under it (`backWordUnder`). */
   Done: { back?: string } | undefined;
+  /** What's protected (backup-trust.md): what holds data and where its copies are, `whombat://protected`. */
+  Protected: { back?: string } | undefined;
   /**
    * A Needs you item by id, as a page: with two pages a row opens it on the right page instead of its sheet
    * (docs/app/decisions/iphone-duo.md), and a push or a link about it lands on it (`whombat://needs-you/<id>`, NYL-09).
@@ -538,6 +542,7 @@ export const LINKING_SCREENS = {
   // old Overview's addresses (`connections`, and `dashboard`, `home` and `things` before it) open Connections.
   ServersPlace: 'servers',
   ConnectionsPlace: { path: 'connected', alias: ['connections', 'dashboard', 'home', 'things'] },
+  Internet: 'internet',
   AuditLog: 'log',
   // Settings → the assistant (AP-4961): `?part=may`.
   SettingsAgent: 'settings/agent',
@@ -579,6 +584,8 @@ export const LINKING_SCREENS = {
   Thing: 'things/:thingId',
   // Everything I did (AP-2261): the web's `/done`.
   Done: 'done',
+  // What's protected and restore tests (backup-trust.md): the web's `/protected`.
+  Protected: 'protected',
   // Reports to the Whombat Team (team-reports.md): the web's `/reports`, `/reports/new` and `/reports/<reportId>`.
   TeamReports: 'reports',
   TeamReportNew: 'reports/new',
@@ -842,10 +849,10 @@ export function appScreenUrlForPath(path: string): string | null {
 /**
  * Servers and Connections as places (servers-connections-places.md): the web's `/servers` and `/connected`, burrow-less
  * or after a burrow (a first segment that is a screen's isn't one: `/things/servers` is the old servers' list).
- * `/servers?add=1` is Add a server, `?repoint=1` Point them here.
+ * `/servers?add=1` is Add a server, `?repoint=1` Point them here. `/internet` is Open to the internet.
  */
 function placeScreenUrl(pathname: string, query: Map<string, string>): string | null {
-  const m = /^(?:\/([^/]+))?\/(servers|connected)\/?$/.exec(pathname);
+  const m = /^(?:\/([^/]+))?\/(servers|connected|internet)\/?$/.exec(pathname);
   if (!m || (m[1] !== undefined && BURROW_SECTIONS.includes(m[1]))) return null;
   return m[2] === 'servers' ? serverAskUrl(query) : `${APP_SCHEME}://${m[2]}`;
 }

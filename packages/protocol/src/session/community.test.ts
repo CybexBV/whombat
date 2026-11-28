@@ -44,7 +44,18 @@ import {
   TailscaleLoginServer,
   tailscaleLoginUrlTrusted,
 } from './tailscale.js';
-import { LOCALE_MINOR, SESSION_PROTOCOL, T3_REVIEW_MORE_ROUNDS_MINOR } from './version.js';
+import {
+  APP_UPDATES_MINOR,
+  AUTOMATIONS_WITHOUT_AI_MINOR,
+  EXPOSURE_MINOR,
+  LOCALE_MINOR,
+  OFFSITE_MINOR,
+  OUTSIDE_CHANGES_MINOR,
+  PROTECTED_MINOR,
+  SESSION_PROTOCOL,
+  T3_REVIEW_MORE_ROUNDS_MINOR,
+  WINDOWS_MINOR,
+} from './version.js';
 
 const BOX = '12D3KooW9w6DSVSH3c1ea57aKZvt1uACiQA5TDwyzeBXD9gjQstH';
 const SECRET = 'Zm9vYmFyYmF6cXV4cXV1eDEyMzQ';
@@ -77,9 +88,16 @@ describe('the edition (CT-1300, CT-1301)', () => {
   });
 
   it('counts the additions in the session minor: 1 is the local claim’s proof round, 2 the hello’s claim link, 3 mail automations, 4 Find My, 5 its timeline, 6 own names, 7 account pages, 8 the 1Password sync', () => {
-    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: LOCALE_MINOR });
+    expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: EXPOSURE_MINOR });
+    expect(AUTOMATIONS_WITHOUT_AI_MINOR).toBe(22);
+    expect(PROTECTED_MINOR).toBe(22);
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
+    expect(EXPOSURE_MINOR).toBe(22);
+    expect(APP_UPDATES_MINOR).toBe(22);
+    expect(OUTSIDE_CHANGES_MINOR).toBe(22);
+    expect(WINDOWS_MINOR).toBe(22);
+    expect(OFFSITE_MINOR).toBe(22);
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

@@ -157,7 +157,8 @@ describe('opnsense page', () => {
     expect(notices[3]).toMatchObject({ episode: '25.7.6' });
     // Only what's fine is the kind's to say in the head.
     expect(opnsenseStatus(s)).toEqual({ status: 'ok', badge: 'Internet 4.2 ms' });
-    for (const c of OPNSENSE_CHECKS) expect(c.check).toMatch(/^opnsense\.[a-z_]+$/);
+    // Its own checks, and the one every place that opens ports shares (Something new is open to the internet).
+    for (const c of OPNSENSE_CHECKS) expect(c.check).toMatch(/^(opnsense\.[a-z_]+|exposure\.new)$/);
     expect(new Set(notices.map((n) => n.check)).size).toBeLessThanOrEqual(OPNSENSE_CHECKS.length);
     for (const n of notices) expect(OPNSENSE_CHECKS.map((c) => c.check)).toContain(n.check);
   });

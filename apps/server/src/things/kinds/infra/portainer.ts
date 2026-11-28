@@ -1075,6 +1075,7 @@ export const PORTAINER_KIND: KindModule = {
         plural(counts(s).total, 'container'),
       ),
       points: {},
+      tracked: { version: s.version ?? null },
       ...linesSeen(view, portainerSkipped(s)),
     };
   },

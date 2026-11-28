@@ -477,7 +477,7 @@ export async function proxmoxSeen(
   const input = { snapshot: s, url: serviceUrl(row), outside: null };
   const notices = proxmoxNotices(input);
   const running = s.guests.filter(isOn).length;
-  return seenOf(
+  const seen = seenOf(
     cardOf(
       {
         kpis: [
@@ -500,6 +500,7 @@ export async function proxmoxSeen(
     notices,
     proxmoxSkipped(input),
   );
+  return { ...seen, tracked: { version: s.version ?? null } };
 }
 
 export const PROXMOX_KIND: KindModule = {

@@ -1384,7 +1384,8 @@ server whose kind is `libvirt`, else `incus`).
 | `DELETE …/guests/{guestId}` | `guest.delete` | admin | yes | `?confirm_name=&purge=1` | 202 |
 | `GET …/guests/{guestId}/backups` | `backup.list` | operator | | | 200 `{items}` |
 | `POST …/guests/{guestId}/backups` | `backup.create` | operator | | `storage`, `mode`, `compress`, `notes`, `protected` | 202 |
-| `POST …/backups/restore` | `backup.restore` | admin | yes | `platform`, `volume`, `new_id` or `guest`, `storage`, `start`, `unique`, `confirm` | 202 |
+| `POST …/backups/restore` | `backup.restore` | admin | yes | `platform`, `volume`, `new_id` or `guest`, `storage`, `start`, `unique`, `isolate` (`{name, marker, tag}`: a new PVE guest cut off from the start, MANAGE.md 2.3; 409 `agent_outdated` from an agent without it), `confirm` | 202 |
+| `GET …/backups/config` | `backup.config` | operator | | `platform` (`pve` only; 501 `unsupported` otherwise), `volume`: the backup's own configuration, read without restoring it (MANAGE.md 2.3; 409 `agent_outdated` from an agent without it) | 200 |
 | `PATCH …/backups` | `backup.update` | operator | | `platform`, `volume`, `notes`, `protected` | 200 |
 | `DELETE …/backups` | `backup.delete` | admin | yes | `?platform=&volume=` | 200 / 202 |
 | `GET …/storage/{storage}/content` | `content.list` | operator | | `?platform=&content=` | 200 `{items}` |
@@ -1503,7 +1504,7 @@ key and value against its own allowlist, `docs/MANAGE.md` 2.4):
 | `filename` | `[A-Za-z0-9._-]`, at most 200, ending in `.iso` / `.img` (iso), `.tar.gz` / `.tar.xz` / `.tar.zst` (vztmpl), `.ova` / `.qcow2` / `.vmdk` / `.raw` / `.img` (import) |
 | `checksum`, `checksum_algorithm` | hexadecimal, 32 to 128 digits, with `md5`, `sha1`, `sha224`, `sha256`, `sha384` or `sha512` (both or neither) |
 | `template` | an appliance file name from `GET …/appliances` |
-| `task` (path) | a Proxmox UPID (`UPID:node:…`), `incus:<operation id>`, `unraid:<16 hex digits>`, `libvirt:<16 hex digits>` or `pkg:<16 hex digits>` (platform `host`, taken when none is given) |
+| `task` (path) | a Proxmox UPID (`UPID:node:…`), `incus:<operation id>`, `unraid:<16 hex digits>`, `libvirt:<16 hex digits>`, `pkg:<16 hex digits>` or `app:<16 hex digits>` (platform `host`, taken when none is given) |
 | `pos` (path), `move_to`, `rule.pos` | 0 to 9999 |
 | `rule` | required for `rule_add`; `rule_update` takes `rule`, `move_to` or both. `type` `in`, `out` or `group`; `action` `ACCEPT`, `DROP`, `REJECT` or a security group; `macro`, `proto`, `source`, `dest`, `sport`, `dport`, `iface`, `log`, `comment` one line each |
 | `state`, `max_restart`, `max_relocate` | HA: `started`, `stopped`, `ignored`, `disabled`; 0 to 10 |
@@ -1742,6 +1743,33 @@ report's `reboot`. A package task:
 while a check runs. The server's report (`GET /servers/{id}` → `system`)
 has `package_task` while one runs and `package_last` after
 (`docs/CONTRACT.md`).
+
+**Docker Compose app updates** (`docs/MANAGE.md` 2.11; Whombat
+`app-updates.md`). Pull exactly the image the person said yes to,
+recreate the app's service (and the project's other services running the
+same image), and put the previous image back when it doesn't come up. One app task at a
+time per server; the manage switches as for the other routes; audited as
+`manage.requested` / `manage.finished` (details add `apps`, `hold_major`,
+and at the end `apps_result`).
+
+| Route | Op | Role | Reauth | Body | Success |
+|---|---|---|---|---|---|
+| `POST …/apps/update` | `app.update` | admin | yes | `apps` (Docker guest ids `docker:<name>` or container names, at most 10), `hold_major` (optional), `expect` (optional: `[{app, service, image_id, digest?, config_hash?}]`, at most one per app named: what the yes was for), `confirm` (required) | 202 `{ok, task: {id}, audit_id}` |
+| `GET …/tasks/app:{hex}?platform=host&log_start=N` | `task.status` | operator | | | 200, `apps` once ended |
+
+Refusals: 400 `confirm_required`, 400 `invalid_value`
+(`field_errors.apps`, `field_errors.expect`), 404 `guest_not_found`, 409 `not_compose` (a
+container `docker run` started), 409 `app_pinned` / `app_no_files`, 409
+`busy` (being updated), 409 `agent_outdated` (the server reports Compose
+projects but no apps: its agent is older and updates itself); the agent's
+`not_allowed` (stopping it) and `busy` (another app task). A Docker guest
+of a Compose app has `app` (`GET …/guests`):
+
+```json
+{"service": "immich-server", "version": "2.3.0", "new_version": "2.4.0", "new_digest": "sha256:…", "config_hash": "9f2c…",
+ "blocked": null, "updating": false,
+ "last": {"status": "rolled_back", "reason": "stopped", "from": "2.2.1", "to": "2.3.0", "at": "2026-11-20T03:00:00Z"}}
+```
 
 **libvirt (QEMU/KVM)** (`docs/MANAGE.md` 2.8). VMs that libvirt runs, on
 every host with libvirt (a `libvirt` server, an unRAID server's VM

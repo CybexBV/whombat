@@ -1,3 +1,4 @@
+import { APP_UPDATE_MAX } from '../app-updates.js';
 import type { JsonObject, JsonValue } from '../common.js';
 import { HOST_PACKAGE_NAME_PATTERN, HOST_PACKAGES_MAX, HOST_SCREEN_LIMITS } from '../hosts.js';
 import {
@@ -118,7 +119,7 @@ const SCROLL = { minimum: -SL.scroll, maximum: SL.scroll };
  * `guest_migrate`, `guest_move`, `server_power` and `server_command` whole, and by their `action`
  * (`SERVERS_SENSITIVE`) stopping, shutting down, rebooting and pausing a guest, restoring or deleting a snapshot or a
  * backup, moving a disk, deleting an image, template, backup job, profile or volume, stopping an Unraid array,
- * cancelling a parity check, updating a plugin or a container, and installing a server's updates.
+ * cancelling a parity check, updating a plugin, a container or an app, and installing a server's updates.
  */
 export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
   {
@@ -1025,7 +1026,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'server_command',
     title: 'Run a command on a server',
     description:
-      'Run one shell command on a server as root, with a reason a person reads first. Output is capped. Asks a person first unless the server is set not to ask.',
+      'Run one shell command on a server as root (on a Windows PC a PowerShell command, as SYSTEM), with a reason a person reads first. Output is capped. Asks a person first unless the server is set not to ask.',
     access: 'write',
     sensitive: true,
     inputSchema: obj(
@@ -1120,7 +1121,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'server_update',
     title: 'Install a server’s updates',
     description:
-      'Check a server for operating-system updates, or install the waiting ones (all, or only the packages named) as a task; Whombat says in the chat when it ends. It never restarts the server, changes its repositories or upgrades it to a new release. Installing asks a person first unless the server is set not to ask.',
+      'Check a server for operating-system updates, or install the waiting ones (all, or only the packages named) as a task; Whombat says in the chat when it ends. It never restarts the server, changes its repositories or upgrades it to a new release. Not on a Windows PC: the person installs those in Windows Update. Installing asks a person first unless the server is set not to ask.',
     access: 'write',
     inputSchema: obj(
       {
@@ -1140,10 +1141,61 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     ),
   },
   {
+    name: 'app_updates',
+    title: 'App updates',
+    description:
+      'The apps Docker Compose runs on one server or all: each one’s version, whether a newer one is out (and which), whether its update asks the person first and why (a database, a new major version), and how its last update went. Also which servers need Whombat’s newer helper before their apps can be updated.',
+    access: 'read',
+    inputSchema: obj({ server: str('A server’s id or name (optional; left out: every server)') }),
+  },
+  {
+    name: 'app_update',
+    title: 'Update apps',
+    description:
+      'Update Docker Compose apps on one server: for each, pull the newer image Whombat checked and restart only that app (with the other services of its project that run the same image); one that doesn’t start goes back to its previous version by itself. Whombat says in the chat how it went. A database, a new major version, or an app whose versions aren’t known always asks the person first: then pass ask true and the reasons app_updates gave (asksFirst). Otherwise it asks unless the server is set not to ask.',
+    access: 'write',
+    sensitive: true,
+    inputSchema: obj(
+      {
+        server: SERVER,
+        apps: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 1,
+          maxItems: APP_UPDATE_MAX,
+          description: 'The apps, as app_updates or guests_list lists them: docker:immich_server',
+        },
+        ask: bool(
+          'True: ask the person first even where the server doesn’t ask (needed for a database, a new major version or a version it can’t tell)',
+        ),
+        reasons: {
+          type: 'array',
+          items: { type: 'string', enum: ['database', 'major', 'version_unknown'] },
+          description: 'What the card says before the yes, as app_updates gave them (optional)',
+        },
+        snapshot: bool(
+          'True: first take a snapshot of the Proxmox VM or container the server is, when app_updates offers one',
+        ),
+        hold_major: bool(
+          'True: leave an app whose update turns out to be a new major version as it is (unattended runs; it does so anyway unless the person’s yes said it may be a new major version)',
+        ),
+        expect: {
+          type: 'array',
+          items: { type: 'object' },
+          maxItems: APP_UPDATE_MAX,
+          description:
+            'Leave it out: Whombat fills it in when the call is asked for (what it checked of each app, so the update deploys exactly that)',
+        },
+        reason: str('Why, in plain words (optional)'),
+      },
+      ['server', 'apps'],
+    ),
+  },
+  {
     name: 'server_add',
     title: 'Ask the person to add a server',
     description:
-      'Ask the person to add a server (Linux, or a Mac with macOS 13 or later): puts a card in the conversation that opens Add a server filled in; they sign in there. You never get the password.',
+      'Ask the person to add a server (Linux, or a Mac with macOS 13 or later): puts a card in the conversation that opens Add a server filled in; they sign in there. You never get the password. A Windows PC isn’t added this way: tell the person to choose Windows PC in Add a server and paste its line into PowerShell opened as administrator.',
     access: 'read',
     inputSchema: obj(
       {
@@ -1276,5 +1328,5 @@ export const entry = {
   tools: [...SERVERS_TOOLS],
   sensitive: [...SERVERS_SENSITIVE],
   guide:
-    'Start with servers_overview, then server_detail or guests_list; incus_overview, unraid_overview and libvirt_overview show their details. Disk filling up: server_disk_usage (when skipped, say its real reason: asleep vs sleep state unknown). server_add puts a card in chat to add a server; only the person signs in there. Read before you change: guest_config and incus_profile give the digest their _set tool needs; guest_snapshots, guest_backups, backup_jobs and server_choices the names and ids other tools take. Backups, clones, restores, moves and Unraid actions run as tasks; Whombat says when one ends and server_tasks shows progress. The guest this Whombat runs in can be read, snapshotted and backed up, not changed. Updates: server_updates lists what waits; server_update checks or installs them. Say what changed, offer a restart (server_power) if needed, update a cluster one node at a time, never a new major release. On a Mac, press by name first (mac_ui press; list gives names); mac_screen look and click only if needed; unlock, password for prompts, mac_ui open accessibility if missing. Never ask for a Mac’s password. Risky steps (deleting, restoring, moving, stopping, restarting, updates, commands, a Mac’s screen) ask a person first unless server_detail says asksFirst never; give a plain reason. To stop asking, the person sets Asks you first to Never on the server’s System tab or the card’s button; never suggest a way around a question.',
+    'Start with servers_overview, then server_detail or guests_list; incus_overview, unraid_overview and libvirt_overview show their details. Disk filling up: server_disk_usage (when skipped, say its real reason: asleep vs sleep state unknown). server_add puts a card in chat to add a server; only the person signs in there. Read before you change: guest_config and incus_profile give the digest their _set tool needs; guest_snapshots, guest_backups, backup_jobs and server_choices the names and ids other tools take. Backups, clones, restores, moves and Unraid actions run as tasks; Whombat says when one ends (progress: server_tasks). The guest this Whombat runs in can be read, snapshotted and backed up, not changed. Updates: server_updates lists what waits; server_update checks or installs them. Compose apps: app_updates, then app_update. Say what changed, offer a restart (server_power) if needed, update a cluster one node at a time, never a new major release. On a Mac, press by name first (mac_ui press; list gives names); mac_screen look and click only if needed; unlock, password for prompts, mac_ui open accessibility if missing. Never ask for a Mac’s password. Risky steps (deleting, restoring, moving, stopping, restarting, updates, commands, a Mac’s screen) ask a person first unless server_detail says asksFirst never; give a plain reason. To stop asking, the person sets Asks you first to Never on the server’s System tab or the card’s button; never suggest a way around a question.',
 } satisfies CatalogEntryInput;

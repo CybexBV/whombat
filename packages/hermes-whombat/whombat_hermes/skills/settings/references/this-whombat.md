@@ -47,6 +47,7 @@ Where the box backs up, when, and backup files.
 - Check that a backup restores — `backup.check` · change
 - Read the list of backups — `backup.checkpoints` · read
 - Set where the box backs up (it needs a password) — `backup.configureDestination` · theirs: send them there
+- Copy the backups somewhere else now — `backup.copyOffsite` · change
 - Look for an earlier Whombat’s locked backup details on the network — `backup.findKits` · read
 - Finish bringing a Whombat back — `backup.finishRestore` · theirs: send them there
 - Forget a place that keeps the backups — `backup.forgetPlace` · change, always asks
@@ -56,6 +57,7 @@ Where the box backs up, when, and backup files.
 - Close a backup that was opened to look inside it — `backup.lookClose` · change
 - Read what is in a backup that is open — `backup.lookContents` · read
 - Move the backups left on this Whombat to the backup place — `backup.moveLocal` · change, always asks
+- Read how the copy of the backups somewhere else is doing — `backup.offsite` · read
 - Read the backups, the places and the options — `backup.overview` · read
 - Note that the paper copy of the backup details was saved — `backup.paperCopy.confirm` · theirs: send them there
 - Stop a passkey from opening the backups — `backup.passkeyKey.remove` · theirs: send them there
@@ -68,9 +70,11 @@ Where the box backs up, when, and backup files.
 - Read how often backups run and how long they are kept — `backup.policy` · read
 - Show the recovery details for the backups — `backup.recoveryMaterial` · theirs: send them there
 - Remove the backups left on this Whombat — `backup.removeLocal` · change, always asks
+- Stop keeping a copy of the backups somewhere else — `backup.removeOffsite` · change, always asks
 - Bring a Whombat back from a backup — `backup.restore` · theirs: send them there
 - Read how bringing a Whombat back is going — `backup.restoreState` · read
 - Back up now — `backup.runNow` · change
+- Keep a copy of the backups somewhere else (it needs a key) — `backup.setOffsite` · theirs: send them there
 - Change how often backups run and how long they are kept — `backup.setPolicy` · change, always asks
 - Read the key a backup place needs to trust — `backup.sshPublicKey` · read
 - Read how the backups are doing — `backup.status` · read
@@ -85,6 +89,9 @@ Where the box backs up, when, and backup files.
 - Delete a backup file — `backups.remove` · change, always asks
 - Restore a backup file — `backups.restore` · theirs: send them there
 - Choose what a new backup file includes — `backups.setDefaults` · change
+- Read what’s protected and where its copies are — `protected.get` · read
+- Test a machine’s backup now — `restoreTests.run` · change, always asks
+- Turn weekly restore tests of a server’s machines on or off — `restoreTests.set` · change, always asks
 
 ## Settings → This Whombat → Screen (`appliance.screen`)
 

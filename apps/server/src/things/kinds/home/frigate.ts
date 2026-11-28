@@ -981,6 +981,7 @@ export async function frigateSeen(
       { figures: 2, ...(s.version ? { line: `Frigate ${s.version}` } : {}) },
     ),
     points: {},
+    tracked: { version: s.version ?? null },
     notices,
     skipped: frigateSkipped(s),
   };

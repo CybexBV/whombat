@@ -986,6 +986,7 @@ export async function qbtSeen(
       [QBT_MBPS_KEY]: Math.round((snapshot.state.dlSpeedBps / 1e6) * 100) / 100,
       ...downloadedPoint(snapshot),
     },
+    tracked: { version: snapshot.version ?? null },
     ...linesSeen(view, qbtSkipped(snapshot)),
   };
 }

@@ -1553,6 +1553,10 @@ export function createAssistantFixtures(options: AssistantFixtureOptions) {
       }
       case 'things.history':
         return json(monitoring.history(thing, Number(url.searchParams.get('days') ?? 30) === 90 ? 90 : 30));
+      case 'things.settingsCopy': {
+        const answer = monitoring.settingsCopy(thing);
+        return json(answer.body, answer.status);
+      }
       case 'things.setWatchLimit': {
         const ref = parseThingId(thing);
         const watchOf = () =>

@@ -14,8 +14,10 @@ import {
   BACKUP_STATUS_KIND,
   type BackupCheckpoint,
   type BackupCheckpointsOutput,
+  type BackupOffsite,
   type BackupPolicy,
   type BackupPolicyOutput,
+  BackupSetOffsiteInput,
   BackupSetPolicyInput,
 } from '@whombat/protocol/session';
 
@@ -96,6 +98,29 @@ export function createDemoBackups(now: () => Date = () => new Date()): DemoBacku
   let localSet = false;
   /** When Back up now last made one (the status says “just now” then). */
   let madeAt: Date | null = null;
+  /** The copy somewhere else (offsite-copy.md): a bucket at Backblaze, copied ten minutes after the last backup. */
+  let offsite: BackupOffsite | null | 'demo' = 'demo';
+  const offsiteNow = (t: Date, lastAt: Date): BackupOffsite | null => {
+    if (offsite !== 'demo') return offsite;
+    return {
+      provider: 'b2',
+      display: 's3.eu-central-003.backblazeb2.com/blackbox-copy/home',
+      endpoint: 's3.eu-central-003.backblazeb2.com',
+      bucket: 'blackbox-copy',
+      folder: 'home',
+      region: null,
+      state: 'ok',
+      configuredAt: iso(at(t, 20, 9)),
+      lastCopyAt: iso(new Date(Math.min(t.getTime(), lastAt.getTime() + 10 * 60_000))),
+      newestInCopyAt: iso(lastAt),
+      newestBackupAt: iso(lastAt),
+      backupsInCopy: demoCheckpoints(t).length,
+      failedAttempts: 0,
+      lastFailure: null,
+      nextTryAt: null,
+      lastClearedAt: null,
+    };
+  };
   const list = (): BackupCheckpointsOutput => {
     const t = now();
     if (!localSet) {
@@ -177,9 +202,45 @@ export function createDemoBackups(now: () => Date = () => new Date()): DemoBacku
               nasCopyAt: iso(lastAt),
               paperAt: null,
             },
+            offsite: offsiteNow(t, lastAt),
           },
         });
       }
+      case 'backup.offsite':
+        return ok({ offsite: offsiteNow(t, lastAt) });
+      // The demo checks nothing: the copy is set up, and its first copy is on its way.
+      case 'backup.setOffsite': {
+        const parsed = BackupSetOffsiteInput.safeParse(input);
+        if (!parsed.success)
+          return { status: 400, body: { error: { code: 'invalid', message: 'Invalid.' } } };
+        const { provider, endpoint, bucket, folder = '', region } = parsed.data;
+        const host = endpoint.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+        offsite = {
+          provider,
+          display: [host, bucket, folder].filter(Boolean).join('/'),
+          endpoint: host,
+          bucket,
+          folder,
+          region: region ?? null,
+          state: 'first',
+          configuredAt: iso(t),
+          lastCopyAt: null,
+          newestInCopyAt: null,
+          newestBackupAt: iso(lastAt),
+          backupsInCopy: 0,
+          failedAttempts: 0,
+          lastFailure: null,
+          nextTryAt: null,
+          lastClearedAt: null,
+        };
+        return ok({ offsite });
+      }
+      case 'backup.removeOffsite':
+        offsite = null;
+        return ok({ offsite: null });
+      case 'backup.copyOffsite':
+        if (offsite && offsite !== 'demo') offsite = { ...offsite, state: 'copying' };
+        return ok({ queued: true });
       case 'backup.checkpoints':
         return ok(list());
       case 'backup.policy':

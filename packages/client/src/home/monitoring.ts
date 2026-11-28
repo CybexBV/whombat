@@ -13,6 +13,7 @@ import {
   type NoticeSubject,
   QUIET_SNOOZE_HOUR,
   type ThingCause,
+  type ThingChange,
   type ThingHistory,
   type ThingHistoryAlert,
   type ThingIncident,
@@ -324,6 +325,19 @@ export function historyWords(locale?: string | null) {
 
 export const HISTORY_WORDS = historyWords();
 
+/** A service's settings copy card's own words (its title and line come from the page), in a locale. */
+export function settingsCopyWords(locale?: string | null) {
+  const tr = clientTranslator(locale);
+  return {
+    download: tr.raw('settingsCopy.download'),
+    downloading: tr.raw('settingsCopy.downloading'),
+    /** The button's accessible name: “Download opnsense-config-2026-11-28.xml”. */
+    downloadName: (name: string) => tr.t('settingsCopy.downloadName', { name }),
+    failed: tr.raw('settingsCopy.failed'),
+    kept: (n: number) => tr.tp('settingsCopy.kept', n),
+  };
+}
+
 /** “41 min”, “2 h 5 min”, “1 d 3 h”: at least a minute (the server's words for the same). */
 export function durationWords(minutes: number, locale?: string | null): string {
   const w = clientTree(locale, HOME_AREA_WORDS).duration;
@@ -357,13 +371,16 @@ export function historyWhen(
 
 export interface HistoryRow {
   id: string;
-  /** Down is bad, a problem amber; a server's warning amber, its critical alert bad. */
-  tone: 'bad' | 'warn';
+  /**
+   * Down is bad, a problem amber; a server's warning amber, its critical alert bad; what changed on it (a version, a
+   * restart, settings) a quiet grey `change`.
+   */
+  tone: 'bad' | 'warn' | 'change';
   /** What it was: “Not answering”, “A disk is failing”. */
   words: string;
   /** “Mon 07:31 · 41 min”, “Today 07:31 · still going”. */
   when: string;
-  /** “While pve-02 was down”; null for its own. */
+  /** “While pve-02 was down”; for a change who made it (“Changed outside Whombat”); null for its own. */
   cause: string | null;
   /** Still going: drawn with its tone's dot. */
   open: boolean;
@@ -417,6 +434,19 @@ function alertRow(
   };
 }
 
+/** What changed on it (docs/decisions/outside-changes.md): when Whombat saw it, and whether Whombat made it. */
+function changeRow(c: ThingChange, now: Date | number, timeZone: string, locale?: string | null): HistoryRow {
+  const tr = clientTranslator(locale);
+  return {
+    id: c.id,
+    tone: 'change',
+    words: c.words,
+    when: historyWhen(c.at, now, timeZone, locale),
+    cause: tr.raw(c.by === 'whombat' ? 'history.byWhombat' : 'history.outside'),
+    open: false,
+  };
+}
+
 /** The hosts service's alert that says a server stopped checking in: its offline time. */
 export const SERVER_OFFLINE_RULE = 'agent.heartbeat_missing';
 
@@ -452,7 +482,19 @@ export function historyView(
   locale?: string | null,
 ): HistoryView {
   const tr = clientTranslator(locale);
-  const rows = history.incidents.map((i) => incidentRow(i, now, timeZone, locale));
+  // Its incidents and what changed on it in one list, newest first (a change just before an outage shows under it).
+  const rows = [
+    ...history.incidents.map((i) => ({
+      at: Date.parse(i.startedAt),
+      row: incidentRow(i, now, timeZone, locale),
+    })),
+    ...(history.changes ?? []).map((c) => ({
+      at: Date.parse(c.at),
+      row: changeRow(c, now, timeZone, locale),
+    })),
+  ]
+    .sort((a, b) => b.at - a.at)
+    .map((r) => r.row);
   const alerts = (history.alerts ?? [])
     .filter((a) => !sameOutage(a, history.incidents, now))
     .map((a, i) => alertRow(a, i, now, timeZone, locale));

@@ -6,6 +6,7 @@
  * too (`home.*`, `watch.*`, `needsYou.*`, `changes.*`, `widgets.*`, `chats.*`, `deviceSkills.*`).
  */
 import { z } from 'zod';
+import { SettingsCopyFile, SettingsCopyQuery } from '../domain/changes.js';
 import { ChatRuntime, ChatRuntimeView } from '../domain/chat-runtime.js';
 import { Count, Cursor, Timestamp } from '../domain/common.js';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../domain/conversation.js';
 import { DESK_SCREEN_VIEWS_MAX, DeskCatalog, DeskWidgetRef, DeskWidgetView } from '../domain/desk-screens.js';
 import { DeviceActionChoice, DeviceSkillCard } from '../domain/devices.js';
+import { ExposureView } from '../domain/exposure.js';
 import { ChangeEntry, HomeOverview, HomeRef, WatchItem, Widget } from '../domain/home.js';
 import { ThingHistory, ThingHistoryQuery } from '../domain/incidents.js';
 import { LookResearch } from '../domain/look-research.js';
@@ -540,10 +542,29 @@ export const thingEndpoints = {
     method: 'GET',
     path: '/burrows/:burrow/things/:thing/history',
     summary:
-      'What happened to a server, connection or device over the last 30 or 90 days (session minor 9): its incidents (down or a problem, when, how long, what and their cause), its uptime over the period, and for a server the alerts the hosts service had.',
+      'What happened to a server, connection or device over the last 30 or 90 days (session minor 9): its incidents (down or a problem, when, how long, what and their cause), its uptime over the period, for a server the alerts the hosts service had, and (minor 22) what changed on it.',
     params: B.extend({ thing: ThingParam }),
     query: ThingHistoryQuery,
     response: ThingHistory,
+  }),
+  exposure: endpoint({
+    id: 'things.exposure',
+    method: 'GET',
+    path: '/burrows/:burrow/exposure',
+    summary:
+      'Open to the internet (session minor 22): every opening Whombat finds in the settings of what it is connected to (proxy hosts, Cloudflare tunnels, port forwards, Tailscale Funnel), what each leads to, what guards it, what is new and what is worth a look, and which places Whombat read or can’t see. Read from those settings only; nothing is checked from outside the house.',
+    params: B,
+    response: ExposureView,
+  }),
+  settingsCopy: endpoint({
+    id: 'things.settingsCopy',
+    method: 'GET',
+    path: '/burrows/:burrow/things/:thing/settings-copy',
+    summary:
+      'A service’s settings copy for Download (session minor 22): the newest, or the one named by `copy`, as base64 with its file name and type. Larger than a message: clients read it through an export stream. Only the person; `not_found` when there is none.',
+    params: B.extend({ thing: ThingParam }),
+    query: SettingsCopyQuery,
+    response: SettingsCopyFile,
   }),
   setWatch: endpoint({
     id: 'things.setWatch',

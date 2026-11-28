@@ -98,6 +98,12 @@
   outline-offset: -2px;
 }
 
+/* A glance-style row that is a link (What's protected under the backups). */
+.linkRow {
+  color: inherit;
+  text-decoration: none;
+}
+
 .chevron {
   display: flex;
   flex: none;

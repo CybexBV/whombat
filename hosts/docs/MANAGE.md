@@ -116,7 +116,8 @@ start and on reload, idempotent; failures are logged and returned as
 3. When the privilege `Sys.AccessNetwork` exists (PVE 8.3+): role
    `WhombatNetwork` = `Sys.AccessNetwork`, ACL on `/nodes/<node>` for the
    user (this is what `download-url` needs instead of `Sys.Modify` on `/`).
-   `Choices.Download` reports whether it is there.
+   `Choices.Download` reports whether it is there. (`Choices.restore_isolate`, set by the hub from the agent's
+   capabilities, says whether `backup.restore` takes `isolate`.)
 4. Token `whombat-manage@pve!agent-<node>` (`--privsep 0`), stored in
    `/etc/whombat-agent/pve-manage-token` (0600, `[pve] manage_token_file`), like
    the read-only token (`provisionPVEToken`). Never logged.
@@ -162,7 +163,8 @@ Async PVE endpoints return a UPID: answer `OK` with `Task{ID: upid}`.
 | guest.migrate | VM `POST .../qemu/{vmid}/migrate {target, online, with-local-disks, targetstorage}`; CT `POST .../lxc/{vmid}/migrate {target, restart, timeout, target-storage}` | Cluster only; target another node; the digest (if given) compared with `GET .../config` first; running VM → `online=1` + `with-local-disks=1`, running CT → `restart=1`, `timeout=180`, stopped → offline; templates refused. Needs `VM.Migrate` (listed in `WhombatManage`). |
 | backup.list | content `?content=backup&vmid=` of every active storage with `backup` content | `verification.state` → Verified; `protected`, `notes`, `encrypted`, `format`, `subtype` → Kind. |
 | backup.create | `POST /nodes/{n}/vzdump {vmid, storage, mode, compress, notes-template, protected}` | Storage must offer `backup`; mode default snapshot; compress default zstd (ignored for PBS). |
-| backup.restore | VM `POST /nodes/{n}/qemu {vmid, archive, storage, force, unique, start}`; CT `POST /nodes/{n}/lxc {vmid, ostemplate: archive, restore: 1, storage, force, unique, start}` | Volume must be a backup volume of this node's storages; GuestID set = overwrite (`force=1`, guest stopped, same vmid); else NewID / next id. |
+| backup.restore | VM `POST /nodes/{n}/qemu {vmid, archive, storage, force, unique, start}`; CT `POST /nodes/{n}/lxc {vmid, ostemplate: archive, restore: 1, storage, force, unique, start}` | Volume must be a backup volume of this node's storages; GuestID set = overwrite (`force=1`, guest stopped, same vmid); else NewID / next id. **Isolate** (`{name, marker, tag}`, a new guest that doesn't start; agents with the capability `restore_isolate`, the hub refuses it to others with `agent_outdated`): the agent reads the backup's configuration (`GET /nodes/{n}/vzdump/extractconfig`) and restores with `onboot=0`, every `netN` of it with `link_down=1` and a new MAC (the rest as it was), `protection=0` when it had protection, `name`/`hostname`, `description` = the marker and `tags` = its tags plus the tag. Proxmox VE writes these over the backup's own settings with the restore (VMs: PVE 7.2 and later; older ones refuse the restore, so nothing is made); a container's restore leaves `unique` out, which would give it the backup's cards back. A restore refused over the tag alone (a cluster that keeps tags to a list) is sent once more without it. |
+| backup.config | `GET /nodes/{n}/vzdump/extractconfig {volume}` | Read only, nothing restored: the backup's own configuration (what a restore brings back, which can differ from the guest's today) as a `Config` with its `kind`, `values` (without its notes, snapshots and pending changes; `cipassword` masked), `disks` with their sizes and `restricted`. Volume as for backup.restore (listed on a backup storage of this node). Agents with the capability `backup_config`; the hub refuses the read to others with `agent_outdated`. |
 | backup.update | `PUT /nodes/{n}/storage/{s}/content/{volume} {notes, protected}` | |
 | backup.delete | `DELETE /nodes/{n}/storage/{s}/content/{volume}` | Refuse protected (`protected`). |
 | content.list | `GET /nodes/{n}/storage/{s}/content?content=` | iso, vztmpl, import. |
@@ -236,7 +238,10 @@ e1000e, rtl8139, vmxnet3, then `bridge` (must be one of Choices.Bridges),
 `tag` (1–4094), `firewall`, `rate`, `queues`, `mtu`, `link_down`,
 `trunks`, `macaddr`. CT: `name`, `bridge`, `hwaddr`, `ip`, `gw`, `ip6`,
 `gw6`, `tag`, `firewall`, `rate`, `mtu`, `link_down`, `type=veth`.
-Unknown sub-keys are passed through (PVE validates them).
+Unknown sub-keys are passed through (PVE validates them). A card's
+current value with only `link_down=1` added is always taken, whatever its
+model or bridge: pulling the cable never fails over a card Whombat doesn't
+offer.
 
 **Property strings** (Go `parsePropString` / TS `parseProps`): an ordered
 list of `key=value` items separated by `,`; an item without `=` is the
@@ -851,6 +856,141 @@ agents before the kit user), and the locations. Nothing is pulled or changed. Th
 the machine the hosts service runs on (one of its network cards' MACs is
 the hub's) or one of its guests is.
 
+### 2.11 Docker Compose app updates
+
+Whombat's `app-updates.md` (APU-01…) decides what this is for. The agent
+updates containers Docker Compose started, one app at a time (with the
+services of its project that run the same image), deploys exactly the
+image the person said yes to, and puts the previous image back by itself
+when the new one doesn't come up. Code:
+`internal/agent/apps` (labels, versions, the runner, the docker CLI),
+`internal/agent/broker/app_tasks.go` (tasks, the operation), the runner
+command `whombat-agent app-task` (`cmd/whombat-agent/apptask.go`), the
+collector's `composeApp` (`collect/docker.go`) and the newer image's
+version (`collect/imageupd.go`).
+
+**Which containers.** A Docker guest whose labels name a Compose project
+and service (`com.docker.compose.project`, `…service`; not a one-off
+`compose run` container) has `Guest.App` (`app`): `{svc, ver, new_ver,
+new_dg, cfg_hash, blocked, busy, last}`. `ver` is the image's `org.opencontainers.image.version`
+label, else a version-like tag (`16.4`, `v2.3.0`); `new_ver` the newer
+image's label when the image check found one (once per new digest: the
+manifest, this machine's image in a list, its config blob; one pull on
+Docker Hub's count). `new_dg` is that newer image's registry digest
+(`sha256:…`), `cfg_hash` the container's `com.docker.compose.config-hash`
+label. `blocked` is `pinned` for an image named by digest. A project or
+service name that isn't letters, digits, `.`, `_` and `-` starting with a
+letter or digit is no app (an image's labels could claim to be Compose's;
+a name like `--build` must never reach `compose`).
+The project's folder and files are checked when the update runs: the
+agent's sandbox hides home folders. A container `docker run` started has
+no `app`; neither does any container of an agent older than this, which
+is how Whombat tells an old agent (it gets the newer one by itself).
+
+**Operation** `app.update` (`Platform: "host"` or empty; the manage switch
+on both sides): `Apps` (`apps`) names up to 10 containers, `HoldMajor`
+(`hold_major`) leaves a new major version, or one whose version isn't
+known, for a person (every run whose yes didn't cover one). `AppExpect`
+(`app_expect`; `[{app, svc, image_id, digest?, cfg_hash?}]`, at most one
+per app named) is what the yes was for: the service, the image it ran,
+the newer image's digest, the settings' hash. With it the agent updates
+an app only while it is so: an app named without an entry, or an entry
+without `cfg_hash`, is `changed`. Without any (an older Whombat) it pulls
+the tag, still only while the settings are what runs.
+It answers at once with a task `app:<16 hex>`; one app task at a time.
+Refused before anything runs: no such container `not_found`, not a Compose
+app, pinned, one of Whombat's own services `not_allowed`, not Linux
+`unsupported`, a task already running `busy`, an `app_expect` for an app
+not named, twice, or with a malformed service, image id, digest or hash
+`invalid_value`. An agent older than this
+answers `unsupported` “unknown operation”.
+
+**How it runs**: like a package task (2.9): spec in
+`<state_dir>/apps/app-<hex>/task.json`, `whombat-agent app-task --dir …`
+in a transient unit `whombat-app-<hex>.service` (`TimeoutStopSec=600s`,
+`RuntimeMaxSec` 30 minutes per app plus 5, at most 3 hours) or its own
+session, `log`, `result.json` last; tasks are kept a day, each container's
+last outcome for good (`last.json`). It can't be stopped (`not_allowed`):
+an app half updated is worse than a slow update. Per app, in order:
+
+1. Inspect the container: project, service, working folder, config and
+   environment files (labels `…project.working_dir`, `…project.config_files`,
+   `…project.environment_file`), the image it runs and the reference it
+   was created from. Gone, no Compose, a file missing or not absolute,
+   pinned: `failed`. Another service or image than its `app_expect`:
+   `failed` `changed`.
+2. The group: every container of the project, running or not, with the
+   same reference, image, folder and files (services sharing an image move
+   together). With `app_expect`, each one needs its own, else `changed`;
+   a container of one of those services on another image is `changed`
+   too; apps of the group named too are reported with it. A container
+   recreated from a task's copy (step 3) names that copy as its file: its
+   project's own files are read from `<state_dir>/apps/projects/<project>-<hash>.json`
+   (the hash of its folder; the note's name and folder must match).
+3. `docker compose --project-name … --project-directory … --file …
+   --env-file … config --hash=<service>` for each service must equal its
+   container's `config-hash` label (and `cfg_hash` when given): anything
+   else in the files changed since the yes, `changed`. Then `… --profile '*'
+   config` is written down in the task's folder (`compose-<project>-<service>.yaml`,
+   root only), its own `--hash` must give the same, and the project's files
+   are noted; every `up` below runs from that copy with the same name,
+   folder and env files.
+4. When `compose up --help` doesn't list `--pull` (an older Compose), a
+   `pull_policy` in the written-down settings other than `missing`,
+   `if_not_present` or `never` is `failed` `compose_old`: nothing changed.
+   Tag the running image `<repo>:whombat-previous-<project>.<service>` and write
+   `progress.json` (the services, the old image id, the reference, the
+   tag) before anything moves.
+5. `docker pull -- <repo>@<digest>` (the `app_expect` digest of any app
+   of the group; different ones are `changed`; the reference itself without
+   one), 20 minutes at most. The same image id: `current`.
+6. With `HoldMajor`, a new major version (first numbers differ; calendar
+   versions, a year first, have none) or a version not known on either
+   side: the old image is tagged back (even past the deadline), nothing
+   restarts: `held`.
+7. Tag the new image as the reference, then `docker compose … up --detach
+   --no-deps --pull never --no-build --remove-orphans=false --scale
+   <service>=<n> -- <services>` for the services that ran (without `--pull`
+   and `--remove-orphans=false` on an older Compose, only when the settings
+   ask for no pull: else, going back too, `ErrComposeOld`; `n` the containers
+   each has), then watch their
+   containers: running for 30 s, healthy when they have a health check (5
+   minutes at most); exited, dead, two restarts since before the update or
+   unhealthy fails. Then the services that were stopped the same way with
+   `--no-start` instead of `--detach`: they stay stopped.
+8. Works: the backup tag goes, `updated`. Fails: the old image id is
+   tagged as the reference again and the same `up`s recreate them,
+   watched the same way: `rolled_back`; when that fails too, `failed`
+   with reason `back_failed` and the backup tag stays for a person. An image
+   pulled that ends up running nowhere (held, put back, cut short) is
+   removed when no tag or container uses it.
+
+**When the server stops it part-way** (a restart, the unit killed): the
+broker finds the runner gone, no `result.json` and an update in
+`progress.json`, and starts the runner again in `whombat-app-<hex>-<n>
+.service` (twice at most). It first waits up to five minutes for Docker
+to answer; when it doesn't, the runner ends without a result and keeps
+`progress.json` for the next try. It doesn't start new apps: when the services
+still run the old image it puts the tag back (`failed` `interrupted`);
+when they run the new one it watches them again (restarts counted from
+that look) and keeps it (`updated`) or goes back (`rolled_back`); apps
+never reached end `failed` `interrupted`. After two tries the task ends
+`failed` with the update's app `back_failed`, its backup tag kept.
+
+Commands run with `HOME=/root` (registry sign-ins `docker login` saved),
+`docker compose` or else `docker-compose`.
+
+**Task status** (`task.status` with an `app:` id): type `app.update`, the
+log, `guest` when one app, and once it ended `apps: [{app, service,
+status: updated|current|held|rolled_back|failed, reason?, from?, to?,
+message?}]`. Reasons: `gone`, `no_compose`, `no_files`, `pinned`, `pull`,
+`no_cli`, `compose_old`, `start`, `stopped`, `restarting`, `unhealthy`, `back_failed`,
+`docker`, `timeout`, `changed`, `interrupted`.
+
+**The report**: `app.busy` while a task updates the container, `app.last`
+`{status, reason, from, to, finished}` after. When a task starts or ends
+the agent reads the containers and image checks again and reports at once.
+
 ## 3. Hub
 
 - Switch `rc_manage` everywhere the four existing switches are wired
@@ -897,7 +1037,8 @@ re-authentication. `web/src/api/manage.ts` calls exactly these.
 | DELETE | `/guests/{guestId}` | guest.delete | admin | `?confirm_name=&purge=1` |
 | GET | `/guests/{guestId}/backups` | backup.list | operator | → `{items}` |
 | POST | `/guests/{guestId}/backups` | backup.create | operator | `{storage, mode, compress, notes, protected}` |
-| POST | `/backups/restore` | backup.restore | admin | `{platform, volume, new_id \| guest, storage, start, unique, confirm}` |
+| POST | `/backups/restore` | backup.restore | admin | `{platform, volume, new_id \| guest, storage, start, unique, isolate, confirm}` |
+| GET | `/backups/config` | backup.config | operator | `?platform=pve&volume=` → the backup's `Config` |
 | PATCH | `/backups` | backup.update | operator | `{platform, volume, notes, protected}` |
 | DELETE | `/backups` | backup.delete | admin | `?platform=&volume=` |
 | GET | `/storage/{storage}/content` | content.list | operator | `?platform=&content=` → `{items}` |

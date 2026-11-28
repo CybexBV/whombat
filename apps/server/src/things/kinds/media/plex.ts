@@ -1305,6 +1305,7 @@ export async function plexSeen(
       ...(activity ? { activity } : {}),
     },
     points: live ? { [PLEX_STREAMS_KEY]: live.sessions.length } : {},
+    tracked: { version: rest.version?.replace(/-.*$/, '') ?? null },
     ...linesSeen({ notices }, plexSkipped(rest, live)),
   };
 }

@@ -48,6 +48,23 @@ A run posts in its own thread in your Chat; a run about an issue, pull request o
 first run about it. A failed run, an approval and a review always notify you. **Delete** stops runs in progress, switches
 the automation off, removes its keys and takes it off every list; its past runs stay in the audit log.
 
+## Acting without AI
+
+Some automations need no assistant at all, and keep working when the internet is down: “When the UPS has been on
+battery for 10 minutes, shut down the NAS.” Such a step does one thing from a short list, right on your Whombat:
+restart or shut down a server; start, stop, shut down or restart one of its machines; restart Home Assistant; switch a
+light, a switch, a fan or a toggle on or off; run a scene or a script. Locks, alarms, doors and gates, deleting and
+unlocking always need you, so the assistant can't make them a step. The plan says it plainly (“Shut down nas-01 — runs
+on this Whombat right away, without AI”); turning it on is your yes. What your own settings ask about (a server set to
+ask you first, the server your Whombat runs on) still asks each time.
+
+They can start when a UPS is on battery for some minutes or the power is back, when something in Home Assistant
+changes (optionally only once it has stayed so for some minutes), or when UniFi Protect's doorbell rings or a camera
+sees someone or hears a smoke or CO alarm. Where Whombat sees a UPS, the assistant can set up “When the power goes out,
+shut down my servers safely”: the other servers first, the one with the UPS last, then a message that says what
+happened. Each step says what it did in one line (“Shut down nas-01 at 21:14 — it’s switching off.”); something
+already off or on is left alone. Decisions: `docs/decisions/direct-automations.md`.
+
 ## GitHub issues and pull requests
 
 - New issues and pull requests start runs only for repositories an automation listens to, and only from the moment it
@@ -93,6 +110,10 @@ they never reach your mail, files, Vault or memory. Details: `docs/decisions/rep
 - Per automation: one run at once and 50 runs a day by default, a run may take 7 days (waiting for you included), and
   optionally a token budget per run and per day.
 - Automations started by other automations stop after two hops, and an automation never starts itself.
+- An automation started by Home Assistant or UniFi Protect waits 10 minutes after a run before it starts again (you can
+  ask for another time), so a doorbell pressed five times starts it once. One started by something going down starts
+  once for each outage.
+- Keeping something quiet hushes the messages of its automations, never the shutdown when the power is out.
 - A step that reaches outside Whombat (a call, a pull request, a comment) and was interrupted by a crash is never
   repeated blindly: the run shows **Needs you**, and you say what happened.
 - Webhooks can't start an automation: nothing from outside reaches a Whombat. Use a schedule, a GitHub event or Run now.

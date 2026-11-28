@@ -7,6 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { agentCommandRoutes } from '../agent-commands/routes';
 import { agentServiceRoutes } from '../agent-services/routes';
 import { automationRoutes } from '../automations/routes';
+import { backupTrustRoutes } from '../backup-trust/routes';
 import { backupRoutes } from '../backups/routes';
 import { keptSiteRoutes } from '../browser/kept-site-routes';
 import { careRoutes } from '../care/routes';
@@ -114,6 +115,7 @@ export const ROUTES: RouteDef[] = [
   // One Whombat: task chats, Home, Watch, changes and widgets (one-whombat-assistant.md).
   ...oneWhombatRoutes,
   ...careRoutes,
+  ...backupTrustRoutes,
   ...looksAheadRoutes,
   // Where this Whombat is, and the news sites it reads (docs/decisions/weather-news.md).
   ...placeRoutes,

@@ -151,7 +151,7 @@ Shapes: `docs/REST-API.md` "Fleet and servers" and "Guests". All viewer.
 | Whombat op | Route |
 |---|---|
 | `hosts.fleet` | `GET /fleet?range=` (hosts table, KPIs, open alerts, hints); `GET /fleet/series?range=24h` for the per-server sparklines (`servers.<id>.cpu_pct`: 60 points over the range, `null` for gaps; average pairs down to ≤ 48 for `cpu24h`) |
-| `hosts.servers.get` | `GET /servers/{id}?range=` (detail: facts, storages, disks/SMART, sensors, health, updates, Proxmox cluster/storages/backups, virtualization, hints, `server.remote_control`; a Mac's `macos` block, `detail_view` `macos`, `os_family`) |
+| `hosts.servers.get` | `GET /servers/{id}?range=` (detail: facts, storages, disks/SMART, sensors, health, updates, Proxmox cluster/storages/backups, virtualization, hints, `server.remote_control`; a Mac's `macos` block, `detail_view` `macos`, `os_family`; a Windows PC's `windows` block, `detail_view` and `os_family` `windows`) |
 | `hosts.servers.metrics` | `GET /servers/{id}/metrics?range=&series=` (or `from`/`to`); chart markers `GET /servers/{id}/annotations?range=` |
 | `hosts.guests.list` | `GET /servers/{id}/guests?platform=&kind=&q=&sort=&limit=&cursor=`; fleet-wide `GET /guests?q=&state=&platform=&server=&tag=` |
 | `hosts.guests.get` | `GET /servers/{id}/guests/{guestId}` (`guestId` = `pve:101`, `incus:web`, `docker:pihole`, `libvirt:win11`) |
@@ -308,6 +308,19 @@ warning}` and `code` once ended; `DELETE` stops a check). `task.finished`
 carries `code` (`busy`, `timeout`) when the task ended with one. The server
 detail's `system` has `package_task` and `package_last`. An agent older
 than this answers 501 `unsupported` “unknown operation”.
+
+New: **Docker Compose app updates** (Whombat `app-updates.md`;
+`docs/MANAGE.md` 2.11, `docs/REST-API.md` "Manage", Docker Compose app
+updates): `hosts.manage` op `app.update` (`POST /servers/{id}/apps/update
+{apps: ["docker:<name>"…], hold_major?, expect?: [{app, service,
+image_id, digest?, config_hash?}], confirm: true}`, admin), 202 with a
+task `app:<16 hex>` (`hosts.tasks.get` with `?platform=host`; its status
+adds `apps: [{app, service, status, reason, from, to, message}]` once
+ended). `task.finished` names the guest when one app was updated. A Docker
+guest Compose started has `app: {service, version, new_version,
+new_digest, config_hash, blocked, updating, last: {status, reason, from,
+to, at}}`; a server whose agent is
+older answers 409 `agent_outdated`.
 
 New: **backup jobs** (Proxmox VE's scheduled backups, PX-03). Manage
 switch; 501 `unsupported` on a server without Proxmox VE.
@@ -495,7 +508,12 @@ Headless answer (201):
 ```
 
 `approve` is always there (`false` when not asked); `control` and `name`
-are `null` when not given. Show `install_command` as it is (it starts with
+are `null` when not given. While the hub has a Windows build of the agent
+the answer also has `install_command_windows` (one line for PowerShell
+opened as administrator: it fetches `install.ps1` from the agents'
+address, checks it against the SHA-256 in the line and runs it with
+`-Origin`, `-Hub`, `-Token` and `-Control`) and
+`uninstall_command_windows`; without one both are absent. Show `install_command` as it is (it starts with
 a space: shells with `HISTCONTROL=ignorespace` keep the token out of the
 history). The token is single use and lasts an hour. 503 `no_agent_url`
 when the hub cannot tell the address agents reach it at (no `--agent-url`,
@@ -868,6 +886,27 @@ Two ways in (Whombat SI-01), the same installer:
   `--insecure` only skips the CA check curl cannot do (the certificate is
   from the hub's own CA); `--pinnedpubkey` pins the agent listener's key,
   so the script cannot come from anyone else.
+- **Windows PC**: Whombat shows `install_command_windows` of the same
+  enrollment; the person pastes it into PowerShell opened as
+  administrator. It fetches `install.ps1` (without a certificate check for
+  that one download, put back right after it: Windows PowerShell can't be
+  given the hub's CA for one download), checks
+  its SHA-256 against the one in the line and runs it; the script checks
+  the agent's `.exe` against the SHA-256 it carries for the PC's
+  architecture, installs it as `%ProgramFiles%\Whombat\whombat-agent.exe`,
+  keeps its identity and settings in `%ProgramData%\Whombat` (SYSTEM and
+  Administrators only; the agent takes the folder over, moves out what
+  someone else could have written there and refuses links in it),
+  registers the service `whombat-agent` (LocalSystem,
+  automatic, restarted on failure), enrolls and prints one line. Run again,
+  it updates the agent in place. Each agent command it runs as
+  administrator (`whoami` first) takes the folder over before reading it,
+  so an identity someone else left there is set aside and the PC enrolls
+  afresh; a step that fails stops the line with its reason. `& "$env:ProgramFiles\Whombat\whombat-agent.exe"
+  uninstall` removes the service and the program and keeps the identity
+  (`--purge` removes it too). The agent's commands below work the same on
+  the PC, with that path, as administrator; a reload is the service's
+  parameter-change control.
 
 **install.sh** (`sh install.sh [--token TOKEN|-] [--control watch|operate|full] [--force] [--hub URL] [--download-base URL] [--sha256 HEX] | --uninstall [--purge]`):
 
@@ -1023,8 +1062,11 @@ hub wss://<new address>:8443` on the server.
 - Ping checks use unprivileged ICMP sockets (`net.ipv4.ping_group_range`
   must include gid 965) or `CAP_NET_RAW`.
 - `--agent-dist`: `whombat-agent-linux-amd64`, `whombat-agent-linux-arm64`,
-  `whombat-agent-darwin-amd64`, `whombat-agent-darwin-arm64` (`make agents`
-  builds all four), the signed `manifest.json` (`rackoon-sign manifest`;
+  `whombat-agent-darwin-amd64`, `whombat-agent-darwin-arm64`,
+  `whombat-agent-windows-amd64.exe`, `whombat-agent-windows-arm64.exe`
+  (`make agents` builds all six; `GET /install.ps1` on the agents' address
+  serves the Windows installer with their SHA-256s, and a hub without the
+  `.exe` files makes no Windows line), the signed `manifest.json` (`rackoon-sign manifest`;
   `appliance/dev/sign-agents`; a darwin entry carries `"os":
   "darwin"`; the helper's entry `whombat-helper-macos.zip` is `{"os":
   "darwin", "arch": "universal", "version", "size", "sha256", "sig"}`) and,

@@ -7,6 +7,7 @@
  */
 import {
   type AutomationStep,
+  directActionRepeatable,
   mailStepProblem,
   namesOrganization,
   REPEATABLE_EXTERNAL_STEP_KINDS,
@@ -15,9 +16,12 @@ import { and, eq } from 'drizzle-orm';
 import { mergeTarget } from '../../commands/prs';
 import { repos } from '../../db/schema/index';
 import { type GhPullRequest, GitHubError, GitHubNotConnectedError } from '../../github/adapter';
+import { tServer } from '../../i18n/catalog';
+import { burrowLocale } from '../../i18n/locale';
 import { ApiError } from '../../lib/errors';
 import { OutboundError, outboundRequest } from '../../lib/outbound';
 import { githubScope } from '../../managed/providers/github-adapter';
+import { runDirectAction } from '../direct-action';
 import { MERGE_WORDS, mergeOutputOf } from '../merge';
 import { githubRetriesOf, openedPr, openPrStep } from '../steps';
 import { shotsBranch, shotsSection } from '../steps/shots';
@@ -74,6 +78,10 @@ export async function runExternal(
     await runConnectionActions(lease, row, step);
     return true;
   }
+  if (step.kind === 'run_action') {
+    await runDirectAction(lease, row, step);
+    return true;
+  }
   return false;
 }
 
@@ -93,6 +101,23 @@ async function recoverExternal(
   if (REPEATABLE_EXTERNAL_STEP_KINDS.includes(step.kind) && step.kind === 'tracker_reply') {
     await replyOnTracker(lease, row, step);
     return true;
+  }
+  // An action that comes out the same done twice (a second shut down finds it off) is simply done now. Any other (a
+  // restart, a scene or a script) may have happened already: it isn't done again, and a person checks.
+  if (step.kind === 'run_action') {
+    if (directActionRepeatable(step)) {
+      await runDirectAction(lease, row, step, { recovering: true });
+      return true;
+    }
+    const locale = await burrowLocale(services, run.burrowId);
+    await lease.commit({
+      op: 'settle',
+      idx: row.idx,
+      state: 'uncertain',
+      error: tServer(locale, 'automations.direct.maybeDone'),
+      from: ['running'],
+    });
+    return false;
   }
   // Recovery: a step this process didn't start is from a crashed one, or one an update restarted. Reconcile from the
   // mirror, else from GitHub, else a person decides.

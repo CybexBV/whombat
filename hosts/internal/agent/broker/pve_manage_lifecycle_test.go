@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -280,6 +281,204 @@ func TestPVEBackupRestore(t *testing.T) {
 	}
 	if ch := f.changes(); len(ch) != 0 {
 		t.Fatalf("refused restores sent: %v", ch)
+	}
+}
+
+// An isolated restore gives Proxmox the copy's settings with the restore
+// itself: the backup's own cards (not its snapshots') with their cable
+// pulled and a new MAC, no start at boot, no protection, the copy's name,
+// the marker as its notes and the tag added.
+func TestPVEBackupRestoreIsolated(t *testing.T) {
+	vol := "local:backup/vzdump-qemu-100-2026_10_16-01_00_02.vma.zst"
+	ctVol := "local:backup/vzdump-lxc-200-2026_10_16-01_10_00.tar.zst"
+	vmConf := "#the real web server\nboot: order=scsi0\nname: web\n" +
+		"net0: e1000-82545em=BC:24:11:00:00:01,bridge=vmbr9,firewall=1\n" +
+		"net1: model=virtio,macaddr=BC:24:11:00:00:02,bridge=vmbr0,link_down=0\n" +
+		"onboot: 1\nprotection: 1\ntags: prod;web\nscsi0: local-zfs:vm-100-disk-0,size=32G\n" +
+		"\n[before-upgrade]\nnet2: virtio=BC:24:11:00:00:03,bridge=vmbr0\n"
+	ctConf := "hostname: dns\nnet0: name=eth0,bridge=vmbr0,hwaddr=BC:24:11:00:00:C8,ip=192.0.2.53/24,type=veth\nonboot: 1\n"
+	iso := &proto.RestoreIsolation{Name: "whombat-test-of-web", Marker: "whombat-rst_abc123", Tag: "whombat-restore-test"}
+	macAt := func(v, key string) string {
+		for _, p := range strings.Split(v, ",") {
+			if k, m, _ := strings.Cut(p, "="); k == key {
+				return m
+			}
+		}
+		return ""
+	}
+
+	f := newFakePVE(t)
+	f.on("GET /nodes/pve1/vzdump/extractconfig", func(q url.Values) fakeResp {
+		if q.Get("volume") == ctVol {
+			return okResp(ctConf)
+		}
+		return okResp(vmConf)
+	})
+	f.on("POST /nodes/pve1/qemu", func(url.Values) fakeResp { return okResp(upidFor("qmrestore", "990001")) })
+	f.on("POST /nodes/pve1/lxc", func(url.Values) fakeResp { return okResp(upidFor("vzrestore", "990002")) })
+	m := newTestManage(t, f)
+	r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupRestore, Volume: vol, NewID: 990001, Storage: "tank",
+		Unique: true, Isolate: iso})
+	ch := f.changes()
+	if !r.OK || r.NewID != "990001" || len(ch) != 1 || ch[0].Path != "/nodes/pve1/qemu" {
+		t.Fatalf("isolated restore: %+v %v", r, ch)
+	}
+	form := ch[0].Form
+	for k, want := range map[string]string{"vmid": "990001", "archive": vol, "storage": "tank", "unique": "1",
+		"name": iso.Name, "onboot": "0", "protection": "0", "description": iso.Marker, "tags": "prod;web;whombat-restore-test"} {
+		if form.Get(k) != want {
+			t.Errorf("%s = %q, want %q", k, form.Get(k), want)
+		}
+	}
+	if form.Has("start") || form.Has("net2") {
+		t.Errorf("form %v", form)
+	}
+	net0, net1 := form.Get("net0"), form.Get("net1")
+	if m := macAt(net0, "e1000-82545em"); !macAddrRe.MatchString(m) || m == "BC:24:11:00:00:01" ||
+		strings.Replace(net0, m, "BC:24:11:00:00:01", 1) != "e1000-82545em=BC:24:11:00:00:01,bridge=vmbr9,firewall=1,link_down=1" {
+		t.Errorf("net0 = %q", net0)
+	}
+	if m := macAt(net1, "macaddr"); !macAddrRe.MatchString(m) || m == "BC:24:11:00:00:02" ||
+		strings.Replace(net1, m, "BC:24:11:00:00:02", 1) != "model=virtio,macaddr=BC:24:11:00:00:02,bridge=vmbr0,link_down=1" {
+		t.Errorf("net1 = %q", net1)
+	}
+
+	// A container: its hostname, and without unique (which would give it the
+	// backup's cards back); its card gets a new MAC of its own.
+	f.reset()
+	r = manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupRestore, Volume: ctVol, NewID: 990002, Unique: true, Isolate: iso})
+	ch = f.changes()
+	if !r.OK || len(ch) != 1 || ch[0].Path != "/nodes/pve1/lxc" {
+		t.Fatalf("isolated container restore: %+v %v", r, ch)
+	}
+	form = ch[0].Form
+	if form.Get("hostname") != iso.Name || form.Has("name") || form.Has("unique") || form.Has("protection") ||
+		form.Get("onboot") != "0" || form.Get("description") != iso.Marker || form.Get("restore") != "1" {
+		t.Errorf("container form %v", form)
+	}
+	if v := form.Get("net0"); macAt(v, "hwaddr") == "BC:24:11:00:00:C8" || !strings.HasSuffix(v, ",ip=192.0.2.53/24,type=veth,link_down=1") {
+		t.Errorf("container net0 = %q", v)
+	}
+
+	// Refused: over a guest, started after, a marker that isn't one word.
+	f.reset()
+	for _, tc := range []struct {
+		g   *proto.Guest
+		req proto.ManageRequest
+	}{
+		{testCT, proto.ManageRequest{Volume: ctVol, Isolate: iso}},
+		{nil, proto.ManageRequest{Volume: vol, Start: true, Isolate: iso}},
+		{nil, proto.ManageRequest{Volume: vol, Isolate: &proto.RestoreIsolation{Name: iso.Name, Marker: "two words"}}},
+		{nil, proto.ManageRequest{Volume: vol, Isolate: &proto.RestoreIsolation{Name: "web.example.com", Marker: iso.Marker}}},
+	} {
+		tc.req.Op = proto.OpBackupRestore
+		if r := manageOp(t, m, tc.g, tc.req); r.OK || r.Code != proto.CodeInvalidValue {
+			t.Errorf("accepted %+v: %+v", tc.req, r)
+		}
+	}
+	if ch := f.changes(); len(ch) != 0 {
+		t.Fatalf("refused restores sent: %v", ch)
+	}
+}
+
+// A backup's own settings come back without restoring it: its disks with
+// their sizes, its memory and guest agent, the parts of the server it uses;
+// not its snapshots or notes. Only a listed backup of this node is read.
+func TestPVEBackupConfig(t *testing.T) {
+	vol := "local:backup/vzdump-qemu-100-2026_10_16-01_00_02.vma.zst"
+	ctVol := "local:backup/vzdump-lxc-200-2026_10_16-01_10_00.tar.zst"
+	f := newFakePVE(t)
+	reads := 0
+	f.on("GET /nodes/pve1/vzdump/extractconfig", func(q url.Values) fakeResp {
+		reads++
+		if q.Get("volume") == ctVol {
+			return okResp("hostname: dns\nmemory: 512\nrootfs: local-zfs:subvol-200-disk-0,size=8G\nunprivileged: 1\n")
+		}
+		return okResp("#the real web server\nagent: 1\nhostpci0: 0000:01:00.0\nmemory: 16384\nname: web\n" +
+			"scsi0: local-zfs:vm-100-disk-0,size=32G\nscsi1: tank:vm-100-disk-1,size=2T\ncipassword: $5$secret\n" +
+			"\n[before-upgrade]\nscsi2: local-zfs:vm-100-disk-2,size=500G\n")
+	})
+	m := newTestManage(t, f)
+	r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: vol})
+	c := r.Config
+	if !r.OK || c == nil || c.Kind != "vm" || c.Values["memory"] != "16384" || c.Values["agent"] != "1" {
+		t.Fatalf("vm backup config: %+v", r)
+	}
+	if _, ok := c.Values["scsi2"]; ok || c.Values["cipassword"] != maskedSecret || c.Values["description"] != "" {
+		t.Errorf("values %v", c.Values)
+	}
+	var total uint64
+	for _, d := range c.Disks {
+		total += d.SizeBytes
+	}
+	if len(c.Disks) != 2 || total != 32<<30+2<<40 || !slices.Contains(c.Restricted, "hostpci0") {
+		t.Errorf("disks %+v restricted %v", c.Disks, c.Restricted)
+	}
+
+	r = manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: ctVol})
+	if !r.OK || r.Config == nil || r.Config.Kind != "container" || r.Config.Values["unprivileged"] != "1" ||
+		len(r.Config.Disks) != 1 || r.Config.Disks[0].SizeBytes != 8<<30 {
+		t.Fatalf("container backup config: %+v", r)
+	}
+
+	before := reads
+	for _, tc := range []struct {
+		vol  string
+		code string
+	}{
+		{"local:backup/vzdump-qemu-100-1999_01_01-00_00_00.vma", proto.CodeNotFound},
+		{"elsewhere:backup/vzdump-qemu-100.vma", proto.CodeNotAllowed},
+		{"local:iso/debian-13.0.0-amd64-netinst.iso", proto.CodeInvalidValue},
+		{"/var/lib/vz/dump/vzdump-qemu-100.vma", proto.CodeInvalidValue},
+	} {
+		if r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupConfig, Volume: tc.vol}); r.Code != tc.code {
+			t.Errorf("config of %s: %+v, want %s", tc.vol, r, tc.code)
+		}
+	}
+	if reads != before || len(f.changes()) != 0 {
+		t.Fatalf("refused reads went to Proxmox (%d) or changed something: %v", reads-before, f.changes())
+	}
+}
+
+// A cluster that refuses the tag still gets the copy, cut off, without it;
+// any other refusal is not tried again.
+func TestPVEBackupRestoreIsolatedTagRefused(t *testing.T) {
+	vol := "local:backup/vzdump-qemu-100-2026_10_16-01_00_02.vma.zst"
+	iso := &proto.RestoreIsolation{Name: "whombat-test-of-web", Marker: "whombat-rst_abc123", Tag: "whombat-restore-test"}
+	for _, tc := range []struct {
+		name  string
+		first fakeResp
+		posts int
+		ok    bool
+	}{
+		{"tag not on the list", fakeResp{status: 400, reason: "Parameter verification failed.",
+			errors: map[string]string{"tags": "tag 'whombat-restore-test' not allowed"}}, 2, true},
+		{"no right to make a tag", errResp(403, "Permission check failed (/, Sys.Modify for creating tag 'whombat-restore-test')"), 2, true},
+		{"network refused", errResp(403, "Permission check failed (/sdn/zones/localnetwork/vmbr0, SDN.Use)"), 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakePVE(t)
+			f.data("GET /nodes/pve1/vzdump/extractconfig", "name: web\nnet0: virtio=BC:24:11:00:00:01,bridge=vmbr0\n")
+			posts := 0
+			f.on("POST /nodes/pve1/qemu", func(form url.Values) fakeResp {
+				posts++
+				if posts == 1 {
+					return tc.first
+				}
+				return okResp(upidFor("qmrestore", "990001"))
+			})
+			m := newTestManage(t, f)
+			r := manageOp(t, m, nil, proto.ManageRequest{Op: proto.OpBackupRestore, Volume: vol, NewID: 990001, Isolate: iso})
+			ch := f.changes()
+			if r.OK != tc.ok || len(ch) != tc.posts {
+				t.Fatalf("got %+v after %v", r, ch)
+			}
+			last := ch[len(ch)-1].Form
+			if tc.ok && (last.Has("tags") || last.Get("description") != iso.Marker || last.Get("onboot") != "0" ||
+				!strings.HasSuffix(last.Get("net0"), ",link_down=1")) {
+				t.Fatalf("retried without the isolation: %v", last)
+			}
+		})
 	}
 }
 

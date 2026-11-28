@@ -13,13 +13,20 @@
  *   (looks-ahead.md, `looks-ahead/watch.ts`).
  * - **Incidents**, every minute: outages kept from the same looks, and one push when something important went wrong
  *   (`incidents/watch.ts`).
+ * - **Restore tests**, every minute: Proxmox machines' weekly restore tests, a step at a time (`backup-trust/runner.ts`).
  * - **Causes** and **the way out**, every minute: what each thing is down because of
  *   (`things/causes.ts`), and whether Whombat reaches its router, name lookups and the internet (`managed/way-out.ts`).
+ * - **What changed on the servers**, every 10 minutes: restarts, kernels, updates installed and containers' images
+ *   (`changes/servers.ts`; the connections' changes come with their health). **Settings copies**, every 15 minutes:
+ *   a nightly copy of a few services' settings (`changes/copies/run.ts`).
  *
  * Kept out of the `Services` interface (`homeJobsFor`), like the connection pool.
  */
 import { and, isNotNull, isNull, lte, sql } from 'drizzle-orm';
+import { type RestoreTests, restoreTestsFor } from '../backup-trust/runner';
 import { CareWatcher } from '../care/watch';
+import { SETTINGS_COPIES_MS, settingsCopyPass } from '../changes/copies/run';
+import { CHANGES_SERVERS_MS, changesServerPass } from '../changes/servers';
 import { approvals } from '../db/schema/index';
 import { INCIDENTS_WATCH_MS, IncidentWatcher } from '../incidents/watch';
 import { LookWatcher, WATCH_MS } from '../looks/watch';
@@ -67,6 +74,7 @@ class HomeJobs {
   readonly #care: CareWatcher;
   readonly #incidents: IncidentWatcher;
   readonly #wayOut: WayOutWatch;
+  readonly #restoreTests: RestoreTests;
 
   constructor(private readonly services: Services) {
     this.#looks = new LookWatcher(services);
@@ -74,10 +82,13 @@ class HomeJobs {
     this.#care = new CareWatcher(services);
     this.#incidents = new IncidentWatcher(services);
     this.#wayOut = new WayOutWatch(services);
+    this.#restoreTests = restoreTestsFor(services);
   }
 
   start(): void {
     if (this.#stops.length) return;
+    this.#restoreTests.start();
+    this.#stops.push(() => this.#restoreTests.close());
     const job = (name: string, everyMs: number, run: () => Promise<unknown>) =>
       this.services.housekeeping.add(name, everyMs, async () => {
         if (this.services.maintenance.held) return;
@@ -99,10 +110,14 @@ class HomeJobs {
       job('home.looks-ahead', AHEAD_WATCH_MS, () => this.#ahead.pass()),
       // A care plan for a server that was just added (care-plan.md).
       job('home.care', WATCH_MS, () => this.#care.pass()),
+      // Weekly restore tests of Proxmox machines (backup-trust.md).
+      job('home.restore-tests', WATCH_MS, () => this.#restoreTests.tick()),
       job('home.incidents', INCIDENTS_WATCH_MS, () => this.#incidents.pass()),
       // The box's own way out, then what each thing is down because of.
       job('home.way-out', WAY_OUT_CHECK_MS, () => this.#wayOut.pass()),
       job('home.causes', CAUSES_MS, () => passCauses(this.services)),
+      job('home.changes-servers', CHANGES_SERVERS_MS, () => changesServerPass(this.services)),
+      job('home.settings-copies', SETTINGS_COPIES_MS, () => settingsCopyPass(this.services)),
     );
   }
 

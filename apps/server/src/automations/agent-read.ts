@@ -7,21 +7,29 @@ import {
   type AgentAutomationDetail,
   type AgentAutomationSummary,
   type AgentFindMyPerson,
+  type AgentHomeConnection,
   type AgentMailConnection,
   type AgentTrackerConnection,
+  type AgentUpsServer,
   AUTOMATION_AUTHORING_GUIDE,
   AUTOMATION_PLAN_NOT_HERE,
   type Automation,
   CONNECTOR_PROVIDER_LABELS,
   type JsonObject,
   type McpToolOutput,
+  powerCutDefinition,
 } from '@whombat/core';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { Db } from '../db/client';
 import { automationPlans, automations, catalogConnections } from '../db/schema/index';
+import { HOSTS_API, seg } from '../hosts/client';
 import { findMyFor } from '../hosts/findmy';
 import { findMyConnections, macOf } from '../hosts/findmy-connection';
 import { keptPlaces } from '../hosts/findmy-places';
+import { toHostServerDetail } from '../hosts/map';
+import { serverThingId } from '../hosts/quiet-lines';
+import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import { forbidden } from '../lib/errors';
 import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
@@ -29,6 +37,7 @@ import { outsidersTurn } from '../runtime/person';
 import { TRACKER_CATALOG_ID } from '../trackers/connection';
 import {
   ACTION_AUTOMATIONS_LATER,
+  DIRECT_AUTOMATIONS_LATER,
   FIND_MY_AUTOMATIONS_LATER,
   MAIL_AUTOMATIONS_LATER,
   THING_AUTOMATIONS_LATER,
@@ -111,28 +120,86 @@ async function findMyPeopleOf(ctx: ToolContext): Promise<AgentFindMyPerson[]> {
   return out.slice(0, 500);
 }
 
+/** The person's Home Assistant and UniFi Protect connections, for `home_state` and `protect` triggers. */
+async function homeConnectionsOf(db: Db, burrowId: string): Promise<AgentHomeConnection[]> {
+  const rows = await db
+    .select({
+      id: catalogConnections.id,
+      catalogId: catalogConnections.catalogId,
+      label: catalogConnections.label,
+      status: catalogConnections.status,
+    })
+    .from(catalogConnections)
+    .where(
+      and(
+        eq(catalogConnections.burrowId, burrowId),
+        inArray(catalogConnections.catalogId, ['homeassistant', 'unifi_protect']),
+      ),
+    )
+    .orderBy(asc(catalogConnections.createdAt))
+    .limit(50);
+  return rows.map((r) => ({
+    connectionId: r.id,
+    catalogId: r.catalogId as AgentHomeConnection['catalogId'],
+    label: r.label,
+    working: r.status === 'active',
+  }));
+}
+
+const UPS_SERVERS_READ = 20;
+
+/**
+ * The servers whose UPS Whombat sees (their page's UPS readings), each with the ready-made automation that shuts the
+ * servers down safely when the power has been out 10 minutes: every server but the one this Whombat runs on, the UPS's
+ * own last. Empty when Whombat has no servers or can't read them now.
+ */
+async function upsServersOf(ctx: ToolContext): Promise<AgentUpsServer[]> {
+  const hosts = hostsFor(ctx.services);
+  if (!hosts.present || !(await hosts.serves(ctx.burrowId).catch(() => false))) return [];
+  const fleet = await hosts.fleet().catch(() => null);
+  if (!fleet) return [];
+  const servers = fleet.servers.slice(0, UPS_SERVERS_READ);
+  const named = servers
+    .filter((s) => !s.hostsThisWhombat)
+    .map((s) => ({ thing: serverThingId(s.id), name: s.name }));
+  const out: AgentUpsServer[] = [];
+  // Its message is the person's to read: in their language.
+  const locale = await burrowLocale(ctx.services, ctx.burrowId);
+  for (const s of servers) {
+    const raw = await hosts
+      .call<unknown>({ path: `${HOSTS_API}/servers/${seg(s.id)}`, actor: WHOMBAT_ACTOR })
+      .catch(() => null);
+    if (!raw) continue;
+    const ups = toHostServerDetail(raw, [], null, ctx.services.clock()).health?.ups;
+    if (!Array.isArray(ups) || !ups.length) continue;
+    const thing = serverThingId(s.id);
+    const definition = powerCutDefinition({
+      conversationId: ctx.dispatch.conversationId,
+      ups: { thing, name: s.name },
+      servers: named,
+      locale,
+    });
+    if (definition.steps.length < 2) continue;
+    out.push({ thing, name: s.name, powerCut: definition as unknown as JsonObject });
+  }
+  return out;
+}
+
 /**
  * The guide while automations the release before them can't run wait for the next update (release-gate.ts): what the
  * person is told when they ask for one, before the rest. draft_automation refuses them with the same line.
  */
-const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} ${THING_AUTOMATIONS_LATER} Draft none of these until then; when the person asks for one, tell them that line.
+const LATER_GUIDE = `Not on this Whombat yet: ${MAIL_AUTOMATIONS_LATER} ${ACTION_AUTOMATIONS_LATER} ${THING_AUTOMATIONS_LATER} ${DIRECT_AUTOMATIONS_LATER} Draft none of these until then; when the person asks for one, tell them that line.
 
 ${AUTOMATION_AUTHORING_GUIDE}`;
 
-/** The guide while only findmy automations wait for the next update. */
-const FIND_MY_LATER_GUIDE = `Not on this Whombat yet: ${FIND_MY_AUTOMATIONS_LATER} Don’t draft one until then; when the person asks for one, tell them that line.
+/** The guide while some kinds wait for the next update: their lines first. */
+function laterGuide(lines: readonly string[]): string {
+  const draft = lines.length === 1 ? 'Don’t draft one' : 'Draft none of these';
+  return `Not on this Whombat yet: ${lines.join(' ')} ${draft} until then; when the person asks for one, tell them that line.
 
 ${AUTOMATION_AUTHORING_GUIDE}`;
-
-/** The guide while automations started by something going down or coming back wait for the next update. */
-const THING_LATER_GUIDE = `Not on this Whombat yet: ${THING_AUTOMATIONS_LATER} Don’t draft one until then; when the person asks for one, tell them that line.
-
-${AUTOMATION_AUTHORING_GUIDE}`;
-
-/** Both of those. */
-const FIND_MY_AND_THING_LATER_GUIDE = `Not on this Whombat yet: ${FIND_MY_AUTOMATIONS_LATER} ${THING_AUTOMATIONS_LATER} Draft neither until then; when the person asks for one, tell them that line.
-
-${AUTOMATION_AUTHORING_GUIDE}`;
+}
 
 export async function automationsForAgent(
   ctx: ToolContext,
@@ -171,6 +238,8 @@ export async function automationsForAgent(
     trackerConnections: await trackerConnectionsOf(db, ctx.burrowId),
     mailConnections: await mailConnectionsOf(db, ctx.burrowId),
     findMyPeople: await findMyPeopleOf(ctx),
+    homeConnections: await homeConnectionsOf(db, ctx.burrowId),
+    upsServers: await upsServersOf(ctx),
     guide: await guideNow(ctx),
   };
 }
@@ -179,9 +248,10 @@ export async function automationsForAgent(
 async function guideNow(ctx: ToolContext): Promise<string> {
   const gate = ctx.services.newerAutomations;
   if (!(await gate.ready())) return LATER_GUIDE;
-  const findMy = await gate.findMyReady();
-  const things = await gate.thingsReady();
-  if (findMy && things) return AUTOMATION_AUTHORING_GUIDE;
-  if (!findMy && !things) return FIND_MY_AND_THING_LATER_GUIDE;
-  return findMy ? THING_LATER_GUIDE : FIND_MY_LATER_GUIDE;
+  const later = [
+    ...((await gate.findMyReady()) ? [] : [FIND_MY_AUTOMATIONS_LATER]),
+    ...((await gate.thingsReady()) ? [] : [THING_AUTOMATIONS_LATER]),
+    ...((await gate.directReady()) ? [] : [DIRECT_AUTOMATIONS_LATER]),
+  ];
+  return later.length ? laterGuide(later) : AUTOMATION_AUTHORING_GUIDE;
 }

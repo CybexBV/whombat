@@ -146,10 +146,15 @@ How the split was made: `docs.md`.
 - `quiet-notices.md` — what Whombat watches, and Ignore.
 - `watch-defaults.md` — which checks Whombat watches from the start: only the very important ones it can act on.
 - `monitoring.md` — monitoring servers, networks and services: your own checks, keeping quiet, one push per outage, one cause, uptime and outage history.
+- `service-works.md` — does a service really work: a read-only test per service (open a file, the newest photo), Run now,
+  Watch it, a refused sign-in told apart from a broken service.
+- `internet-exposure.md` — Open to the internet: what the proxies, tunnels and routers let in, what is new, and This is meant.
 - `../app/decisions/monitoring-web.md` — monitoring on the web: Keep quiet… and End now, the hold under a page's head,
   What happened, Change the limit, catalog fields that follow another.
 - `on-purpose.md` — stop watching what is set up so on purpose (the assistant asks and switches it on your word, the
   Inbox's More), and an Ignore that outlasts a blip.
+- `outside-changes.md` — what changed before it broke: the change log in History, looks and `what_changed`, and
+  settings copies of OPNsense, Pi-hole and Nginx Proxy Manager with Download.
 - `look-research.md` — the assistant looks into a problem by itself and says what is wrong and what it can do.
 - `looks-ahead.md` — the assistant checks what is on the person's calendar the afternoon before and tells them only a sourced mismatch.
 - `needs-you-list.md` — one Needs you list (Watch merged), split by who has to act, one count, Ask in the thing's own
@@ -164,6 +169,8 @@ How the split was made: `docs.md`.
 - `overview-arranged.md` — the Overview arranged by the person: one layout per Whombat, Arrange as a mode with a gear on each tile (what it shows, its time span, its size, its place, Remove), the summary card with four chosen figures, Today, tiles read as the desk's widgets.
 - `../app/decisions/phone-refresh-asks.md`, `../app/decisions/phone-refresh-status.md` — the 2026-11-05 phone refresh from the phone-app design council: approvals, screen readers, Inbox and Chat; status, Overview, headers, back and service page heads.
 - `handle-it.md` — the assistant looks into every line of a thing, offers one plan with Go ahead, and asks in plain words.
+- `app-updates.md` — Docker Compose app updates with automatic rollback, asked through the approval card, and the care
+  plan's Sunday-night app updates.
 - `care-plan.md` — a care plan when a server is added (one yes for backups and updates), quiet hours for changes, automation
   ideas from what is connected.
 - `plain-words.md` — everything a person reads in the word list (your Whombat, Whombat’s helper, machines, apps), three
@@ -178,6 +185,8 @@ How the split was made: `docs.md`.
 - `automation-chat.md` — automations made and changed by talking to the agent: plan cards, turning on, not now.
 - `automation-recipes.md` — recipes, GitHub issues, fixing bugs, Delete (*in part*).
 - `automation-list.md` — the Automations list at a glance.
+- `direct-automations.md` — automations that act without AI: the `run_action` step and its short list, Home Assistant
+  and UniFi Protect triggers, cooldowns, quiet windows, the UPS power cut and its ready-made automation.
 - `automation-run-review.md` — what run #9 taught us (*in part*).
 - `report-trackers.md` — customers' reports in a report tracker through automations, tracker drivers as plugins,
   and the bridge that moved the first tracker's automations and the database to the next migration chain.
@@ -277,6 +286,7 @@ How the split was made: `docs.md`.
 - `server-names.md` — names people give servers, renaming servers and connections where they are listed.
 - `server-updates.md`, `server-updates-server.md` — software updates on servers.
 - `macos-servers.md` — Macs as servers: the macOS agent, the screen through Screen Sharing, Whombat Helper.
+- `windows-servers.md` — Windows PCs as servers: the Windows agent and service, the PowerShell line, what a PC reports and what Whombat leaves to the person.
 - `findmy-connection.md`, `../app/decisions/findmy-connection.md` — Find My as a connection through a Mac: its check, background reads, arriving and leaving automations, the assistant's tool.
 - `findmy-timeline.md` — a Find My connection's timeline: what the box keeps of whom and for how long, reading for it, its routes and map, the assistant's `findmy_timeline`.
 - `../app/decisions/findmy-timeline.md` — a Find My timeline in the apps: the Timeline tab, before it's on, the strips and a colour per place, the map's marks, whose and the assistant switch.
@@ -297,6 +307,9 @@ How the split was made: `docs.md`.
 - `backup-look.md` — getting one thing back from a backup: the box opens it for reading, lists it, and brings the picked things back through the backup file's restorer (only adds); the assistant's `backup_bring_back`.
 - `backup-passkey.md` — the passkey as the key to the backups: arming in one touch, locking again, the copy next to the backups (the place's kit user), bring back from the account or the network, the paper copy, the Inbox's ask.
 - `backup-places.md` — a NAS or server that keeps this Whombat's backups: the backup app, cleanup, places, moving, by hand.
+- `offsite-copy.md` — a copy of the backups somewhere else: the second place (an S3 bucket), the copy after each backup, its key, bringing a Whombat back from it, the Backups page and the Inbox.
+- `backup-trust.md` — What's protected (everything that holds data and where its copy is) and weekly restore tests of
+  Proxmox machines on a copy with its network off.
 
 ## Server internals
 

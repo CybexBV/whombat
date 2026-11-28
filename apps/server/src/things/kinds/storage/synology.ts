@@ -7,6 +7,7 @@
  * `SYNO.Core.Upgrade.Server check` (kept an hour); whatever doesn't answer is left out. Package updates have no read
  * worth trusting: left out (SD-S17). Signed in as the connection's user (its session, `_sid`). Read only.
  */
+
 import type {
   ThingGalleryItem,
   ThingLine,
@@ -16,6 +17,7 @@ import type {
   ThingPagePanel,
   ThingPageRow,
 } from '@whombat/core';
+import { synologyProtection } from '../../../backup-trust/protection';
 import type { CatalogConnectionRow } from '../../../connections/types';
 import type { Services } from '../../../services';
 import type { KindCheck } from '../../quiet/types';
@@ -1306,6 +1308,8 @@ export const SYNOLOGY_KIND: KindModule = {
         synologySkipped(s),
       ),
       points: usedPoint(synologySpace(s)?.used),
+      tracked: { version: s.version ?? null },
+      protection: synologyProtection(s.backups),
     };
   },
   checks: SYNOLOGY_CHECKS,

@@ -7,8 +7,8 @@
  * - **The hold under the head** (`KeptQuietLine`): “Quiet until 23:00 · Moving the NAS”, who kept it quiet, and End now
  *   for who may end it; and a cause's way to what it depends on (`CauseLink`: “Open pve-02 ›”).
  * - **What happened** (`WhatHappenedCard`): the last 30 days' outages and problems, newest first, each with when, how
- *   long and its cause; a server's own alerts folded under them; “Nothing went wrong in the last 30 days.” Asked only of
- *   a Whombat that has it.
+ *   long and its cause, and what changed on it with who made it (outside-changes.md); a server's own alerts folded under
+ *   them; “Nothing went wrong in the last 30 days.” Asked only of a Whombat that has it.
  * - **Change the limit** (`LimitSheet`): the value with its unit, the range, the default and Use the default; Save
  *   says so in a toast with Undo.
  * The words, times and rules are the shared ones (`@whombat/client`'s monitoring parts); this only draws them.
@@ -446,7 +446,8 @@ function HistoryLine({ row, first = false }: { row: HistoryRow; first?: boolean 
       }}
     >
       <View style={{ width: 20, alignItems: 'center', paddingTop: 7 }}>
-        <Dot tone={row.open ? row.tone : null} />
+        {/* What changed is never still going: its dot stays grey. */}
+        <Dot tone={row.open && row.tone !== 'change' ? row.tone : null} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text size={15} weight={600} numberOfLines={2}>

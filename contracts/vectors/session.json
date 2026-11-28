@@ -6,6 +6,7 @@
     "backup.passkeyKey.set",
     "backup.passkeyKey.verifyBegin",
     "backup.passkeyKey.verifyConfirm",
+    "backup.setOffsite",
     "backups.create",
     "backups.inspect",
     "backups.restore",

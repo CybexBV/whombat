@@ -225,6 +225,7 @@ var secretCreds = map[string]string{
 	SecretRESTPassword:       "rest-password",
 	SecretS3Key:              "s3-secret",
 	SecretSSHKey:             "ssh-key",
+	SecretOffsiteS3Key:       "offsite-s3-secret",
 }
 
 // Secret file names.
@@ -233,11 +234,13 @@ const (
 	SecretRESTPassword       = "rest-password"
 	SecretS3Key              = "s3-secret-access-key"
 	SecretSSHKey             = "ssh-key" // the box's Ed25519 key for SFTP destinations (OpenSSH format)
+	// SecretOffsiteS3Key is the secret of the bucket that keeps the second copy (internal/offsite).
+	SecretOffsiteS3Key = "offsite-s3-secret-access-key"
 )
 
 // SecretNames lists the secrets in sealing order.
 func SecretNames() []string {
-	return []string{SecretRepositoryPassword, SecretRESTPassword, SecretS3Key, SecretSSHKey}
+	return []string{SecretRepositoryPassword, SecretRESTPassword, SecretS3Key, SecretSSHKey, SecretOffsiteS3Key}
 }
 
 // SecretWritePath is where the service writes a new value (the seal unit picks it up).
@@ -604,6 +607,26 @@ type ChainEntry struct {
 	Repository     string    `json:"repository"`
 	At             time.Time `json:"at"`
 	Reason         string    `json:"reason"`
+}
+
+// Chain returns every chain entry, oldest first (none when there is no chain yet).
+func Chain(c *Config) ([]ChainEntry, error) {
+	b, err := ReadStateFile(c.ChainPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var out []ChainEntry
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		var e ChainEntry
+		if line := bytes.TrimSpace(sc.Bytes()); len(line) > 0 && json.Unmarshal(line, &e) == nil {
+			out = append(out, e)
+		}
+	}
+	return out, sc.Err()
 }
 
 // LastChain returns the newest chain entry (nil when none).
