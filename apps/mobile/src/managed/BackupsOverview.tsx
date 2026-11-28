@@ -31,6 +31,7 @@ import {
   Check,
   ChevronDown,
   CircleAlert,
+  CloudUpload,
   FileText,
   HardDrive,
   KeyRound,
@@ -182,6 +183,19 @@ export function BackupHeroCard({
             icon={hero.wayBackReady ? Check : KeyRound}
             color={hero.wayBackReady ? theme.colors.ok : theme.colors.mut}
             text={hero.wayBack}
+          />
+        ) : null}
+        {hero.offsite ? (
+          <MarkLine
+            icon={hero.offsite.dot === 'warn' ? CircleAlert : CloudUpload}
+            color={
+              hero.offsite.dot === 'ok'
+                ? theme.colors.ok
+                : hero.offsite.dot === 'warn'
+                  ? theme.colors.warn
+                  : theme.colors.mut
+            }
+            text={hero.offsite.text}
           />
         ) : null}
         {hero.askPasskey && passkey ? <PasskeyLine passkey={passkey} /> : null}

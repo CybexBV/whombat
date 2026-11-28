@@ -1,6 +1,7 @@
 /**
  * `whombat_backup` (Whombat first-day.md, backup-places.md): this Whombat's own backups for its assistant, in a turn for
- * the person. It reads whether the box is backed up, the places on the network that could keep its backups and the key
+ * the person. It reads whether the box is backed up, the copy somewhere else (offsite-copy.md: read only, the person sets
+ * it up), the places on the network that could keep its backups and the key
  * it signs in to an SFTP server with, and — only while nothing backs it up, or only this Whombat's own disk does
  * (BPL-06) — sets where backups go: a backup place Whombat sets up, a folder on a server over SFTP, or the disk labelled
  * WHOMBAT-BACKUP. The person's yes on the Inbox proposal is what asks for it; any other move stays theirs (Settings →
@@ -10,7 +11,7 @@
  * first backup runs, never an address, port or path.
  */
 import { BACKUP_PLACE_TEXT, type WhombatBackupInput, type WhombatBackupOutput } from '@whombat/core';
-import { BackupSshPublicKey } from '@whombat/protocol/session';
+import { type BackupOffsite, BackupSshPublicKey, offsitePlaceName } from '@whombat/protocol/session';
 import type { z } from 'zod';
 import { placesNow } from '../backup-places/places';
 import { usePlace } from '../backup-places/use';
@@ -18,6 +19,7 @@ import { ApiError } from '../lib/errors';
 import type { ToolContext } from '../mcp/tools';
 import { ownTurn } from '../vault/self-serve';
 import { setBackupDestination } from './backup';
+import { offsiteNow, offsiteStepText } from './backup-offsite';
 import { boxBackupOf, boxBackupStatus } from './box-backup';
 
 type Input = z.output<typeof WhombatBackupInput>;
@@ -31,6 +33,17 @@ export const WHOMBAT_BACKUP_TEXT = {
   unknown:
     'The backup service doesn’t say where backups go right now, so nothing was changed. Tell the person it isn’t answering and try again in a few minutes.',
 } as const;
+
+/** The second place as the agent reads it (pure): where by name, how it does, and why it fails, in plain English. */
+export function offsiteForAgent(offsite: BackupOffsite) {
+  return {
+    place: offsitePlaceName(offsite),
+    state: offsite.state,
+    lastCopyAt: offsite.lastCopyAt,
+    newestInCopyAt: offsite.newestInCopyAt,
+    problem: offsite.lastFailure ? offsiteStepText(offsite.lastFailure.step, null) : null,
+  };
+}
 
 const fail = (reason: Extract<WhombatBackupOutput, { status: 'failed' }>['reason'], message: string) =>
   ({ status: 'failed', reason, message }) satisfies WhombatBackupOutput;
@@ -58,10 +71,12 @@ export async function whombatBackupTool(ctx: ToolContext, input: Input): Promise
   if (!input.set) {
     const key = await box.port.call('GET', '/v1/ssh-public-key').catch(() => null);
     const parsed = key?.status === 200 ? BackupSshPublicKey.safeParse(key.body) : null;
+    const offsite = await offsiteNow(services).catch(() => undefined);
     return {
       status: 'ok',
       state: status?.state ?? 'unprotected',
       destination: where,
+      ...(offsite === undefined ? {} : { offsite: offsite && offsiteForAgent(offsite) }),
       publicKey: parsed?.success ? parsed.data.publicKey : null,
       places: (now?.places ?? []).map((p) => ({
         id: p.id,

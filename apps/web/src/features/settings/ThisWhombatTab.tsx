@@ -43,6 +43,7 @@ import { TeamReportsAbout } from '../teamReports/TeamReportsAbout';
 import { VoiceSection } from '../voice/VoiceSection';
 import { AgentUpdatesSection } from './AgentUpdatesSwitch';
 import { BackupFileSection } from './BackupFileSection';
+import { BackupOffsiteSection } from './BackupOffsite';
 import { BackupOverview } from './BackupOverview';
 import { BackupPlacesSection } from './BackupPlaces';
 import {
@@ -174,6 +175,7 @@ export function ThisWhombatTab({
             <>
               <BackupOverview agentName={assistant} burrow={burrow} />
               <BackupPlacesSection />
+              <BackupOffsiteSection />
             </>
           ) : appliance.status ? (
             <ManagedBackups

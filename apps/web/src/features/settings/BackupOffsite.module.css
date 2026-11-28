@@ -1,0 +1,23 @@
+/* A COPY SOMEWHERE ELSE on Backups: the copy's line with its dot, the rows' values on the right in the settings' mono,
+   and the row of actions. Tokens only. */
+
+.line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.value {
+  flex: none;
+  max-width: 60%;
+  overflow-wrap: anywhere;
+  text-align: right;
+  color: var(--ink2);
+  font: 400 13px var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

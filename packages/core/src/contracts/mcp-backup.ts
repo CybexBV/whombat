@@ -117,6 +117,23 @@ export const WhombatBackupOutput = z.discriminatedUnion('status', [
         }),
       )
       .optional(),
+    /**
+     * The copy somewhere else (Whombat offsite-copy.md): the second place where the backups are copied after each one,
+     * a bucket the person owns; null when there is none. `state`: `first` the first copy hasn't finished, `copying` now,
+     * `ok` the newest backup is in it, `behind` newer ones wait for the next copy, `failing` the last tries failed
+     * (`problem` says why, in plain words). Setting it up or changing it is the person's, in Settings → This Whombat →
+     * Backups (it needs the bucket's key).
+     */
+    offsite: z
+      .object({
+        place: z.string(),
+        state: z.enum(['first', 'copying', 'ok', 'behind', 'failing']),
+        lastCopyAt: z.string().nullable(),
+        newestInCopyAt: z.string().nullable(),
+        problem: z.string().nullable(),
+      })
+      .nullable()
+      .optional(),
   }),
   z.object({
     status: z.literal('set'),
@@ -223,7 +240,7 @@ export const BACKUP_MCP_TOOLS = {
     name: 'whombat_backup',
     title: 'This Whombat’s own backups',
     description:
-      'This Whombat’s own backups (its chats, settings and connections), every 6 hours unless the person chose otherwise, the first one as soon as a place is set. Without set: whether it is backed up, where to, the places on the network that could keep them, and its SSH public key. With set (only while nothing backs it up or it backs up only to its own disk; any other move is the person’s, in Settings → This Whombat): place — a ready place from places: Whombat installs a small backup app there and points the backups at it, nothing else to do; a place that needs connecting or Manage first: tell the person that one thing. sftp — on a server you look after, make a user and folder for it and add the key to that user’s ~/.ssh/authorized_keys first (server_command), then call with host, user and path; on a NAS, ask the person to turn on SFTP and do the same there. disk — the disk labelled WHOMBAT-BACKUP plugged into this Whombat. Then tell the person `say` from the answer, in your words but no longer, without addresses, ports or paths.',
+      'This Whombat’s own backups (its chats, settings and connections), every 6 hours unless the person chose otherwise, the first one as soon as a place is set. Without set: whether it is backed up, where to, the copy somewhere else (offsite: a bucket the person owns, copied after each backup; only the person sets it up, in Settings → This Whombat → Backups), the places on the network that could keep them, and its SSH public key. With set (only while nothing backs it up or it backs up only to its own disk; any other move is the person’s, in Settings → This Whombat): place — a ready place from places: Whombat installs a small backup app there and points the backups at it, nothing else to do; a place that needs connecting or Manage first: tell the person that one thing. sftp — on a server you look after, make a user and folder for it and add the key to that user’s ~/.ssh/authorized_keys first (server_command), then call with host, user and path; on a NAS, ask the person to turn on SFTP and do the same there. disk — the disk labelled WHOMBAT-BACKUP plugged into this Whombat. Then tell the person `say` from the answer, in your words but no longer, without addresses, ports or paths.',
     input: WhombatBackupInput,
     output: WhombatBackupOutput,
     requiredKey: null,

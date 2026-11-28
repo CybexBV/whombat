@@ -53,6 +53,7 @@ export { default as CircuitBoard } from 'lucide-react-native/icons/circuit-board
 export { default as Clock } from 'lucide-react-native/icons/clock';
 export { default as Cloud } from 'lucide-react-native/icons/cloud';
 export { default as CloudSun } from 'lucide-react-native/icons/cloud-sun';
+export { default as CloudUpload } from 'lucide-react-native/icons/cloud-upload';
 export { default as Code2 } from 'lucide-react-native/icons/code-xml';
 export { default as Columns2 } from 'lucide-react-native/icons/columns-2';
 export { default as Contrast } from 'lucide-react-native/icons/contrast';

@@ -114,6 +114,10 @@
   color: var(--warn);
 }
 
+.heroLine[data-tone="mut"] > svg {
+  color: var(--mut);
+}
+
 /* The passkey's one calm line, inside the top card. */
 .passkeyRow {
   display: flex;

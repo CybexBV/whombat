@@ -288,6 +288,11 @@ export const BackupAdoptInput = z.strictObject({
 });
 export const BackupAdoptOutput = z.object({
   oldApplianceId: ident(),
+  /**
+   * Where the backups were found: the kit's main place, or its second place (the copy somewhere else, Whombat
+   * offsite-copy.md) when the main place didn't answer. Absent from an older Whombat (the main place).
+   */
+  from: z.enum(['main', 'offsite']).optional(),
   /** The first page of the earlier Whombat's backups (CT-1690); `backup.checkpoints` with `nextCursor` reads on. */
   checkpoints: z.array(BackupCheckpoint).max(5000),
   total: count.optional(),

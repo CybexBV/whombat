@@ -25,6 +25,7 @@ import {
   type BackupDestinationKind,
   BackupScope,
   BackupSshPublicKey,
+  OFFSITE_MINOR,
 } from '@whombat/protocol/session';
 import type { z } from 'zod';
 import { oneAtATime } from '../backup-places/lock';
@@ -33,6 +34,7 @@ import { ApiError } from '../lib/errors';
 import type { Services } from '../services';
 import { appendApplianceEvent } from './audit';
 import { withBringBack } from './backup-key';
+import { withOffsite } from './backup-offsite';
 import { BACKUP_DOWN_TEXT, type BackupPort, BackupServiceDown, READ } from './backup-port';
 import type { SessionOpContext } from './dispatcher';
 import { requirePerson } from './trust';
@@ -193,6 +195,11 @@ export function whenDestinationSet(services: Services, name: string, fn: () => v
   destinationWatchers.set(services, watchers);
 }
 
+/** Tells the watchers what a new Whombat needs to open the backups changed (a destination, or the second place). */
+export function noteDestinationChanged(services: Services): void {
+  for (const fn of destinationWatchers.get(services)?.values() ?? []) fn();
+}
+
 /**
  * Sets where backups go (CT-142): the input goes to the backup service unchanged, its refusal comes back without any
  * credential the input carried, and the signed appliance event says who set it — the person from their device, or
@@ -234,7 +241,7 @@ export async function setBackupDestination(
       at: services.clock(),
     });
   });
-  for (const fn of destinationWatchers.get(services)?.values() ?? []) fn();
+  noteDestinationChanged(services);
   return {
     repositoryId: out.repositoryId,
     appendOnly: out.appendOnly,
@@ -242,6 +249,17 @@ export async function setBackupDestination(
     ...(out.kind ? { kind: out.kind } : {}),
     ...(out.hostKeyFingerprint ? { hostKeyFingerprint: out.hostKeyFingerprint } : {}),
   };
+}
+
+/**
+ * The recovery material as the asking app reads it: an app below `OFFSITE_MINOR` reads it strictly and doesn't know the
+ * second place, so it gets the material without it (its kit then brings the box back from the main place only).
+ */
+export function materialFor<T extends object>(material: T, protocolMinor: number | undefined): T {
+  if (protocolMinor === undefined || protocolMinor >= OFFSITE_MINOR || !('offsite' in material))
+    return material;
+  const { offsite: _offsite, ...rest } = material as T & { offsite?: unknown };
+  return rest as T;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each handler receives its op's parsed input.
@@ -257,7 +275,10 @@ export const BACKUP_HANDLERS: Readonly<Record<string, BackupHandler>> = {
     const status = parsed.success ? parsed.data : null;
     return {
       status,
-      summary: await withBringBack(c.services, summarizeBackup(status, BackupScope.options), status),
+      summary: await withOffsite(
+        c.services,
+        await withBringBack(c.services, summarizeBackup(status, BackupScope.options), status),
+      ),
     };
   },
 
@@ -305,7 +326,7 @@ export const BACKUP_HANDLERS: Readonly<Record<string, BackupHandler>> = {
       generation: material.generation ?? null,
       repositoryId: material.repositoryId ?? null,
     });
-    return material;
+    return materialFor(material, c.principal.protocolMinor);
   },
 
   'backup.runNow': async (c) => {
