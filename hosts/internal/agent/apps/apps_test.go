@@ -780,6 +780,15 @@ func TestUpFailsGoesBack(t *testing.T) {
 	if ups := f.called("compose up"); len(ups) != 2 || strings.Contains(ups[1], "--pull") || !strings.Contains(ups[1], "--no-build") {
 		t.Fatalf("ups %v", ups)
 	}
+	// docker-compose 1 takes no value for --remove-orphans: asked again without it.
+	f = newFake()
+	f.upErrs = []error{errors.New("--remove-orphans must not have an argument")}
+	if a := runTask(t, f, false).Apps[0]; a.Status != proto.AppUpdated {
+		t.Fatalf("%+v", a)
+	}
+	if ups := f.called("compose up"); len(ups) != 2 || strings.Contains(ups[1], "--remove-orphans") || !strings.Contains(ups[1], "--scale immich-server=1") {
+		t.Fatalf("ups %v", ups)
+	}
 }
 
 func TestVersions(t *testing.T) {

@@ -719,7 +719,7 @@ func (r *Runner) up(ctx context.Context, p Project, services []string, scale map
 	if len(services) == 0 {
 		return nil
 	}
-	args := func(pull bool) []string {
+	args := func(newer bool) []string {
 		a := []string{"up"}
 		if start {
 			a = append(a, "--detach")
@@ -727,10 +727,13 @@ func (r *Runner) up(ctx context.Context, p Project, services []string, scale map
 			a = append(a, "--no-start")
 		}
 		a = append(a, "--no-deps")
-		if pull {
+		if newer {
 			a = append(a, "--pull", "never")
 		}
-		a = append(a, "--no-build", "--remove-orphans=false")
+		a = append(a, "--no-build")
+		if newer {
+			a = append(a, "--remove-orphans=false")
+		}
 		for _, s := range services {
 			if n := scale[s]; n > 0 {
 				a = append(a, "--scale", fmt.Sprintf("%s=%d", s, n))
@@ -741,7 +744,9 @@ func (r *Runner) up(ctx context.Context, p Project, services []string, scale map
 	r.logf("$ docker compose %s", strings.Join(args(true), " "))
 	err := r.Docker.Compose(ctx, p, r.writer(), args(true)...)
 	if err != nil && unknownFlag(err) {
-		// Compose before --pull: the image is there, so it isn't pulled anyway.
+		// Compose before --pull (or docker-compose 1, which doesn't read
+		// COMPOSE_REMOVE_ORPHANS either): the image is there, so it isn't
+		// pulled anyway.
 		err = r.Docker.Compose(ctx, p, r.writer(), args(false)...)
 	}
 	return err
@@ -781,7 +786,8 @@ func (r *Runner) back(ctx context.Context, pend *Pending, before map[string]int)
 
 func unknownFlag(err error) bool {
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "unknown flag") || strings.Contains(s, "no such option") || strings.Contains(s, "unrecognized")
+	return strings.Contains(s, "unknown flag") || strings.Contains(s, "no such option") || strings.Contains(s, "unrecognized") ||
+		strings.Contains(s, "must not have an argument")
 }
 
 // serviceContainers are the project's containers of these services.

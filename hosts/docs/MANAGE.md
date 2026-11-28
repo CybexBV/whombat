@@ -942,7 +942,8 @@ an app half updated is worse than a slow update. Per app, in order:
 7. Tag the new image as the reference, then `docker compose … up --detach
    --no-deps --pull never --no-build --remove-orphans=false --scale
    <service>=<n> -- <services>` for the services that ran (without `--pull`
-   on an older Compose; `n` the containers each has), then watch their
+   and `--remove-orphans=false` on an older Compose; `n` the containers
+   each has), then watch their
    containers: running for 30 s, healthy when they have a health check (5
    minutes at most); exited, dead, two restarts since before the update or
    unhealthy fails. Then the services that were stopped the same way with
