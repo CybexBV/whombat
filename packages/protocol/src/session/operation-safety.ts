@@ -460,6 +460,10 @@ const TABLE = {
   // The quiet hours for changes (care-plan.md): one signed row, the same value when sent again.
   'changeWindow.get': READ,
   'changeWindow.set': RECEIPT,
+  'protected.get': READ,
+  'restoreTests.set': RECEIPT,
+  // Commits the test's first step; the server's job does the rest, and a second ask while it runs is refused.
+  'restoreTests.run': RECEIPT,
   // Looks ahead's switch, on-demand pass, and Inbox finding actions: each is covered by its commit receipt.
   'looksAhead.get': READ,
   'looksAhead.update': RECEIPT,

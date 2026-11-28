@@ -283,6 +283,11 @@ export const HOST_WATCH = splitPairs({
     'Ruimte voor back-ups raakt op',
   ],
   'hostWatch.words.host.hint.backup_place.space': ['Until there’s room again.', 'Tot er weer ruimte is.'],
+  'hostWatch.name.host.hint.restore_test.failed': [
+    'Backups that didn’t come back in a restore test',
+    'Back-ups die niet terugkwamen in een hersteltest',
+  ],
+  'hostWatch.words.host.hint.restore_test.failed': ['Until a test of it works.', 'Tot een test ervan lukt.'],
   'hostWatch.name.host.other': ['Other alerts', 'Andere waarschuwingen'],
   'hostWatch.words.host.other': ['Until it’s fixed.', 'Tot het is opgelost.'],
   'hostWatch.name.host.hint.other': ['Other hints', 'Andere hints'],

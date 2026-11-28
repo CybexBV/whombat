@@ -47,6 +47,7 @@ import { memoryEndpoints } from './memory.js';
 import { deviceEndpoints, notificationEndpoints } from './notifications.js';
 import { onePasswordEndpoints } from './onepassword.js';
 import { promptEndpoints } from './prompts.js';
+import { protectedEndpoints, restoreTestEndpoints } from './protected.js';
 import { providerSignInEndpoints } from './providers.js';
 import { runnerEndpoints } from './runner.js';
 import { scheduleEndpoints } from './schedules.js';
@@ -132,6 +133,7 @@ export * from './memory.js';
 export * from './notifications.js';
 export * from './onepassword.js';
 export * from './prompts.js';
+export * from './protected.js';
 export * from './providers.js';
 export * from './realtime.js';
 export * from './runner.js';
@@ -212,6 +214,8 @@ export interface Api {
   needsYou: typeof needsYouEndpoints;
   looks: typeof lookEndpoints;
   changeWindow: typeof changeWindowEndpoints;
+  protected: typeof protectedEndpoints;
+  restoreTests: typeof restoreTestEndpoints;
   looksAhead: typeof looksAheadEndpoints;
   place: typeof placeEndpoints;
   news: typeof newsEndpoints;
@@ -330,6 +334,10 @@ export const api: Api = {
   looks: lookEndpoints,
   /** The quiet hours for changes (care-plan.md). */
   changeWindow: changeWindowEndpoints,
+  /** What's protected: everything that holds data and where its copies are (backup-trust.md). */
+  protected: protectedEndpoints,
+  /** Weekly restore tests of a Proxmox server's machines (backup-trust.md). */
+  restoreTests: restoreTestEndpoints,
   /** Looks ahead: its switch, calendars and stopped kinds (looks-ahead.md). */
   looksAhead: looksAheadEndpoints,
   /** Where this Whombat is, for the weather and the suggested news (weather-news.md). */

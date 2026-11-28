@@ -30,6 +30,7 @@ import { LABELS_MESSAGES } from './messages/labels.js';
 import { LIVE_MESSAGES } from './messages/live.js';
 import { NEWS_MESSAGES } from './messages/news.js';
 import { ONEPASSWORD } from './messages/onepassword.js';
+import { PROTECTED_MESSAGES } from './messages/protected.js';
 import { PROTOCOL } from './messages/protocol.js';
 import { RECIPES } from './messages/recipes.js';
 import { SCHEDULE } from './messages/schedule.js';
@@ -59,6 +60,7 @@ export const EN = {
   ...APPROVALS.en,
   ...KEYS.en,
   ...HOST_WATCH.en,
+  ...PROTECTED_MESSAGES.en,
   ...CONNECTION_MESSAGES.en,
   ...DOMAIN_MESSAGES.en,
   ...VOICE_MESSAGES.en,
@@ -92,6 +94,7 @@ export const NL: { [K in CoreMessageKey]: MessageValue } = {
   ...APPROVALS.nl,
   ...KEYS.nl,
   ...HOST_WATCH.nl,
+  ...PROTECTED_MESSAGES.nl,
   ...CONNECTION_MESSAGES.nl,
   ...DOMAIN_MESSAGES.nl,
   ...VOICE_MESSAGES.nl,

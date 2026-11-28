@@ -14,6 +14,7 @@ import { utf8ByteLength } from '../text/utf8.js';
 import { parseVaultSshHost } from '../vault/ssh.js';
 import { JsonObject, Timestamp } from './common.js';
 import { ThingUptime } from './incidents.js';
+import { RestoreTestResult } from './protected.js';
 import { KeptQuiet, NoticeQuiet } from './quiet.js';
 
 const N = z.number().nullable();
@@ -817,6 +818,11 @@ export const HostGuestDetail = HostGuest.extend({
   remoteControl: HostRemoteControl,
   /** Configuration and lifecycle (Proxmox VE, Incus) are possible: the Manage switch is on both sides. */
   manageable: z.boolean(),
+  /**
+   * The newest restore test of this machine (Whombat backup-trust.md): whether its backup came back when Whombat tried
+   * it. Absent from an older Whombat, and for machines never tested.
+   */
+  restoreTest: RestoreTestResult.nullable().optional(),
 });
 export type HostGuestDetail = z.infer<typeof HostGuestDetail>;
 

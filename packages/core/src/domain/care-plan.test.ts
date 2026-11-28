@@ -97,13 +97,15 @@ describe('a care plan per kind of server (care-plan.md)', () => {
       }),
       W,
     );
-    expect(steps.map((s) => s.id)).toEqual(['backup', 'updates']);
+    expect(steps.map((s) => s.id)).toEqual(['backup', 'restore_test', 'updates']);
     expect(steps[0]?.text).toBe('Back up all 6 machines every night at 02:00 to pbs-01, keeping a week');
     expect(steps[0]?.step).toContain('backup_job_set');
     expect(steps[0]?.step).toContain('"last": 7');
     expect(steps[0]?.step).toContain('selection all');
-    expect(steps[1]?.text).toBe('Install system updates on Sundays at 03:00 and restart if needed');
-    expect(steps[1]?.automation).toBe('updates');
+    // Whombat turns the weekly restore test on itself (backup-trust.md).
+    expect(steps[1]?.restoreTests).toBe(true);
+    expect(steps[2]?.text).toBe('Install system updates on Sundays at 03:00 and restart if needed');
+    expect(steps[2]?.automation).toBe('updates');
   });
 
   it('Proxmox without a Backup Server saves to the first storage that takes backups; temporary machines left out', () => {
@@ -228,11 +230,34 @@ describe('a care plan per kind of server (care-plan.md)', () => {
         server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
         guests: pve(2),
         backupStorages: [{ id: 'local', type: 'dir' }],
-        has: { backup: true, updates: true },
+        has: { backup: true, updates: true, restore_test: true },
       }),
       W,
     );
     expect(steps).toEqual([]);
+  });
+
+  it('offers a weekly restore test on a Proxmox server with backups, never without (backup-trust.md)', () => {
+    const backedUp = careSteps(
+      facts({
+        server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
+        guests: pve(2),
+        backupStorages: [],
+        has: { backup: true, updates: true },
+      }),
+      W,
+    );
+    expect(backedUp.map((s) => s.id)).toEqual(['restore_test']);
+    const nowhere = careSteps(
+      facts({
+        server: { id: 'pve-01', name: 'pve-01', platform: 'proxmox', self: false },
+        guests: pve(2),
+        backupStorages: [],
+        has: { updates: true },
+      }),
+      W,
+    );
+    expect(nowhere.map((s) => s.id)).toEqual([]);
   });
 
   it('knows the lines it answers, its own key, and says it in a push', () => {

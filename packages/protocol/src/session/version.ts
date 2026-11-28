@@ -93,7 +93,13 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
  * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
+
+/**
+ * Session protocol minor (major 5) with What's protected and restore tests (`protected.get`, `restoreTests.*`, a guest's
+ * `restoreTest`): an app asks those ops only of a box at this minor or later.
+ */
+export const PROTECTED_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

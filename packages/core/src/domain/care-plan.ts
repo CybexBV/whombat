@@ -126,9 +126,10 @@ export function isTemporaryServer(name: string): boolean {
  * The kinds of step a care plan has: `backup` a Proxmox backup plan for every machine, `snapshots` an Incus snapshot
  * schedule per machine, `vm_backup` a weekly backup of QEMU/KVM machines (an automation: libvirt has no schedule of
  * its own), `updates` the system updates every week in the quiet hours (an automation), `apps` telling the person
- * about app updates (Whombat's helper does that already).
+ * about app updates (Whombat's helper does that already), `restore_test` a weekly restore test of one Proxmox machine's
+ * backup (Whombat turns it on itself, backup-trust.md).
  */
-export const CARE_STEP_IDS = ['backup', 'snapshots', 'vm_backup', 'updates', 'apps'] as const;
+export const CARE_STEP_IDS = ['backup', 'snapshots', 'vm_backup', 'updates', 'apps', 'restore_test'] as const;
 export const CareStepId = z.enum(CARE_STEP_IDS);
 export type CareStepId = z.infer<typeof CareStepId>;
 
@@ -147,6 +148,8 @@ export interface CareStep {
   automation?: CareAutomationKind;
   /** The machines it covers (`vm_backup`: the guests the automation backs up). */
   guests?: string[];
+  /** Whombat turns on the server's restore tests itself when the person says go ahead (backup-trust.md). */
+  restoreTests?: true;
 }
 
 /** A guest as the plan weighs it. */
@@ -292,6 +295,17 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
       step: nas
         ? `backup_place_nfs on ${nas.serverId}, name "${nasShareName(server.id)}", clients ${JSON.stringify(server.addresses)}; proxmox_storage_add on ${server.id}, storage "${storage}" with its nfs_server and export; then ${job}.`
         : `${job}. Check backup_jobs lists it.`,
+    });
+  }
+
+  // A backup that was never tried may not come back: once a week one machine's newest backup is restored as a copy with
+  // its network off and started, then deleted (backup-trust.md). Only where there are or will be backups to try.
+  if (server.platform === 'proxmox' && pve.length && (storage || has.backup) && !has.restore_test) {
+    out.push({
+      id: 'restore_test',
+      text: `Test one machine’s backup every week in the quiet hours`,
+      step: 'Whombat turns this on itself when the person says go ahead: nothing for you to do.',
+      restoreTests: true,
     });
   }
 
