@@ -158,6 +158,9 @@ type Report struct {
 	// MacOS: the Mac's own facts (macos.go); only macOS agents send it.
 	MacOS *MacOS `cbor:"macos,omitempty"`
 
+	// Windows: the PC's own facts (windows.go); only Windows agents send it.
+	Windows *Windows `cbor:"windows,omitempty"`
+
 	// BackupPlace: what the server keeps and offers as a backup place
 	// (backupplace.go); nil from agents that don't know backup places.
 	BackupPlace *BackupPlace `cbor:"bplace,omitempty"`
@@ -598,9 +601,9 @@ type AgentInfo struct {
 	ConsolesOpen  int    `cbor:"consoles,omitempty"`
 	Reconnects    uint64 `cbor:"reconnects,omitempty"` // since the agent started
 	DroppedEvents uint64 `cbor:"dropped,omitempty"`    // events lost while the hub was unreachable
-	Install       string `cbor:"install,omitempty"`    // systemd | openrc | sysv | unraid | launchd | manual
+	Install       string `cbor:"install,omitempty"`    // systemd | openrc | sysv | unraid | launchd | windows | manual
 	Arch          string `cbor:"arch,omitempty"`       // amd64 | arm64
-	OS            string `cbor:"os,omitempty"`         // darwin from macOS agents; "" = linux
+	OS            string `cbor:"os,omitempty"`         // darwin from macOS agents, windows from Windows agents; "" = linux
 	// UpdateKey is the fingerprint of the public key the agent verifies
 	// updates with ("" = built without one: no self-update).
 	UpdateKey string `cbor:"update_key,omitempty"`

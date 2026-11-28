@@ -15,8 +15,11 @@ import (
 )
 
 // MachineID returns /etc/machine-id (or the D-Bus fallback), trimmed; on
-// a Mac the hardware UUID (IOPlatformUUID).
+// a Mac the hardware UUID (IOPlatformUUID); on Windows its MachineGuid.
 func MachineID() string {
+	if id, ok := platformMachineID(); ok {
+		return id
+	}
 	if runtime.GOOS == "darwin" {
 		return darwinMachineID()
 	}
@@ -64,8 +67,12 @@ func Hostname() string {
 	return h
 }
 
-// OSPrettyName returns PRETTY_NAME from os-release.
+// OSPrettyName returns PRETTY_NAME from os-release (on Windows the name
+// Windows shows: "Windows 11 Pro 24H2 (26100.2605)").
 func OSPrettyName() string {
+	if name, ok := platformOSName(); ok {
+		return name
+	}
 	for _, p := range []string{"/etc/os-release", "/usr/lib/os-release"} {
 		f, err := os.Open(p)
 		if err != nil {

@@ -1,0 +1,6 @@
+{"updates":[
+  {"title":"2026-11 Cumulative Update for Windows 11 Version 24H2 for x64-based Systems (KB5055523)","kb":["5055523"],"severity":"Critical","categories":["0fa1201d-4330-4fa8-8ae9-b877473b6441"],"size":812345678},
+  {"title":"Security Intelligence Update for Microsoft Defender Antivirus - KB2267602","kb":["2267602"],"severity":"","categories":["E0789628-CE08-4437-BE74-2495B842F43B","8c3fcc84-7410-4a95-8b89-a166a0190486"],"size":1000},
+  {"title":"Example Driver Update","kb":[],"severity":"","categories":["ebfc1fc5-71a4-4f7b-9aca-3b9a503104a0"],"size":2000},
+  {"title":"","kb":["1"],"severity":"Important","categories":[]}],
+ "error":"","reboot":false,"searched":"2026-11-28T04:00:00Z","installed":"2026-11-20T03:10:00Z","cbs_reboot":true,"wu_reboot":false}

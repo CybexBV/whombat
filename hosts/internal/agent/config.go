@@ -10,12 +10,9 @@ import (
 	"rackoon/internal/proto"
 )
 
-// Default locations.
-const (
-	DefaultConfigDir = "/etc/whombat-agent"
-	DefaultStateDir  = "/var/lib/whombat-agent"
-	ConfigFileName   = "agent.toml"
-)
+// ConfigFileName is the agent's configuration in its configuration
+// directory (DefaultConfigDir: paths_unix.go, paths_windows.go).
+const ConfigFileName = "agent.toml"
 
 // Config is /etc/whombat-agent/agent.toml. Remote control is decided here, on the
 // host: the hub cannot turn it on remotely.
