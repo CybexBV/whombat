@@ -31,6 +31,9 @@ function answer(status: number, body: unknown = '', type?: string): TestAnswer {
   return { status, body: Buffer.from(text), headers: contentType ? { 'content-type': contentType } : {} };
 }
 
+/** A film's first bytes (an MP4's), sent without a type as Jellyfin and Plex may. */
+const FILM = '\u0000\u0000\u0000\u0018ftypmp42';
+
 const LOGIN_PAGE =
   '<!DOCTYPE html><html><head><title>Sign in</title></head><body><form></form></body></html>';
 
@@ -152,7 +155,7 @@ describe('the tests only read', () => {
           ]),
       ],
       [(r) => r.path === '/Items', () => answer(200, { Items: [{ Id: 'abcdef12', MediaType: 'Video' }] })],
-      [(r) => r.path === '/Videos/abcdef12/stream', () => answer(206, 'x')],
+      [(r) => r.path === '/Videos/abcdef12/stream', () => answer(206, FILM)],
     ]);
     const result = await testOnce('jellyfin', fetch, row, NOW);
     expect(result).toMatchObject({ outcome: 'ok', facts: { library: 'Movies' } });
@@ -187,7 +190,7 @@ describe('the tests only read', () => {
             },
           }),
       ],
-      [(r) => r.path === '/library/parts/9/1/file.mkv', () => answer(206, 'x')],
+      [(r) => r.path === '/library/parts/9/1/file.mkv', () => answer(206, FILM)],
     ]);
     expect(await testOnce('plex', fetch, row, NOW)).toMatchObject({
       outcome: 'ok',
@@ -367,6 +370,13 @@ describe('a web page or another answer where the service’s data should be', ()
     expect(fileFits(file(mkv, 'application/octet-stream'), { kind: 'media' })).toBe(true);
     expect(fileFits(file('x', 'video/x-matroska'), { kind: 'media' })).toBe(true);
     expect(fileFits(file('<MediaContainer size="0"/>', 'application/xml'), { kind: 'media' })).toBe(false);
+    // Without a type, an unknown container is binary; a plain error message, in any language, or nothing, isn't one.
+    const unknownContainer = Buffer.from([0x2e, 0x52, 0x4d, 0x46, 0, 0, 0, 0x12, 0x00, 0x01]);
+    expect(fileFits(file(unknownContainer), { kind: 'media' })).toBe(true);
+    expect(fileFits(file('Storage unavailable'), { kind: 'media' })).toBe(false);
+    expect(fileFits(file('Speicher nicht verfügbar\r\n'), { kind: 'media' })).toBe(false);
+    expect(fileFits(file(`Error: ${'é'.repeat(300)}`), { kind: 'media' })).toBe(false);
+    expect(fileFits(file(''), { kind: 'media' })).toBe(false);
     expect(fileFits(file('{"error":1}', 'application/json'), { kind: 'any' })).toBe(false);
     // A file that is JSON itself (Nextcloud's listing says so) opens as one.
     expect(fileFits(file('{"a":1}', 'application/json'), { kind: 'any', json: true })).toBe(true);
