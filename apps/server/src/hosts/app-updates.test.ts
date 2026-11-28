@@ -11,6 +11,7 @@ import {
   bindAppArgs,
   bindingOf,
   bindingReasons,
+  boundToServer,
   cardReasons,
   parseBindings,
   proxmoxGuestOf,
@@ -231,6 +232,7 @@ describe('what a yes is bound to', () => {
 
   it('reads the service, the image, Compose’s hash and the newer image’s digest', () => {
     expect(bindingOf(bound('immich_server'))).toEqual({
+      server: 'nas',
       app: 'docker:immich_server',
       service: 'immich_server',
       imageId: ID('a'),
@@ -285,6 +287,17 @@ describe('what a yes is bound to', () => {
     expect(stillBound(g, { ...b, configHash: null })).toBe(false);
     // A newer image found since isn't a change: the yes keeps its own.
     expect(stillBound(bound('web', {}, { newDigest: ID('d') }), b)).toBe(true);
+    // The same app on another server isn't the one the yes was for.
+    expect(stillBound(bound('web', { serverId: 'nas-2' }), b)).toBe(false);
+  });
+
+  it('holds to the server it was read on, whatever name the call gives it', () => {
+    const b = bindingOf(bound('web'));
+    if (!b) throw new Error('bound');
+    expect(boundToServer([b], 'nas')).toBe(true);
+    // Another server has come to go by the name the call says.
+    expect(boundToServer([b], 'nas-2')).toBe(false);
+    expect(boundToServer([b, { ...b, server: 'nas-2' }], 'nas')).toBe(false);
   });
 
   it('reads back only Whombat’s own shape', () => {
@@ -292,6 +305,8 @@ describe('what a yes is bound to', () => {
     expect(parseBindings([b])).toEqual([b]);
     expect(parseBindings([{ app: 'docker:web' }])).toBeNull();
     expect(parseBindings([{ ...b, configHash: null }])).toBeNull();
+    // Without the server it was read on, a yes isn't bound to anything.
+    expect(parseBindings([{ ...b, server: undefined }])).toBeNull();
     expect(parseBindings('x')).toBeNull();
     expect(parseBindings([])).toBeNull();
   });
@@ -323,6 +338,7 @@ describe('asking for an update only when it can be bound', () => {
     );
     expect(args.apps).toEqual(['docker:immich_server', 'docker:postgres', 'docker:immich_ml']);
     expect((args.expect as { app: string }[]).map((e) => e.app)).toEqual(args.apps);
+    expect((args.expect as { server: string }[]).every((e) => e.server === 'nas')).toBe(true);
     // The agent forgot the database: the card says it all the same.
     expect(args.reasons).toEqual(['major', 'database']);
   });
