@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Add a Windows PC as a server: choose Windows PC in Add a server and paste the line into PowerShell opened as
   administrator. Whombat watches its processor, memory, drives and network, says whether its virus protection is on,
