@@ -31,7 +31,15 @@ import { addressIndex } from '../things/runs-on';
 import { HOSTS_API, seg } from './client';
 import { arr, obj, toHostGuest } from './map';
 import { HOSTS_TEXT, hostsFor, WHOMBAT_ACTOR } from './service';
-import { bindingOf, cardReasons, proxmoxGuestOf, withSharedImage } from './tools-apps';
+import {
+  type AppBinding,
+  type AppCardReason,
+  bindingOf,
+  cardReasons,
+  proxmoxGuestOf,
+  tooManyWith,
+  withSharedImage,
+} from './tools-apps';
 
 /** Why the page's Update can't ask, in the person's words and `locale` (English when none); null when it can. */
 export function appAskRefusal(
@@ -50,6 +58,31 @@ export function appAskRefusal(
     if (state === 'updating') return tServer(locale, 'hosts.apps.refuse.updating', { app: g.name });
   }
   return null;
+}
+
+/**
+ * What the page's Update asks about (pure): the apps named and those that share their image, what the yes is bound to
+ * for each, and the reasons the card says; or why it can't ask, in the person's words. No app goes without what it is
+ * bound to.
+ */
+export function appAskBound(
+  guests: readonly HostGuest[],
+  wanted: readonly string[],
+  locale?: string | null,
+): { picked: HostGuest[]; expect: AppBinding[]; reasons: AppCardReason[] } | { refused: string } {
+  const refused = appAskRefusal(guests, wanted, locale);
+  if (refused) return { refused };
+  const named = guests.filter((g) => wanted.includes(g.id));
+  const picked = withSharedImage(guests, named);
+  const many = tooManyWith(named, picked);
+  if (many) return { refused: tServer(locale, 'hosts.apps.refuse.tooMany', { app: many.name }) };
+  const expect: AppBinding[] = [];
+  for (const g of picked) {
+    const b = bindingOf(g);
+    if (!b) return { refused: tServer(locale, 'hosts.apps.refuse.unbound', { app: g.name }) };
+    expect.push(b);
+  }
+  return { picked, expect, reasons: cardReasons(picked) };
 }
 
 /** Asks to update apps for the person; the approval's number, which the page opens. */
@@ -85,15 +118,10 @@ export async function askAppUpdate(
     actor: WHOMBAT_ACTOR,
   });
   const guests = arr(obj(page).guests).map((g) => toHostGuest(g, input.serverId));
-  const refused = appAskRefusal(guests, apps, locale);
-  if (refused) throw new ApiError('conflict', refused);
   // The card names, and the yes is bound to, the apps as they are now and those that share their image.
-  const picked = withSharedImage(
-    guests,
-    guests.filter((g) => apps.includes(g.id)),
-  );
-  const reasons = cardReasons(picked);
-  const expect = picked.flatMap((g) => bindingOf(g) ?? []);
+  const bound = appAskBound(guests, apps, locale);
+  if ('refused' in bound) throw new ApiError('conflict', bound.refused);
+  const { picked, expect, reasons } = bound;
   // A snapshot first is offered whenever the server is a Proxmox guest Whombat watches, unless the page said no.
   const snapshot =
     input.snapshot ??
@@ -106,7 +134,7 @@ export async function askAppUpdate(
     ask: true,
     ...(reasons.length ? { reasons } : {}),
     ...(snapshot ? { snapshot: true } : {}),
-    ...(expect.length ? { expect } : {}),
+    expect,
   };
   const callId = newCallId();
   const argsEnc = services.custody.seal(callArgsAad(callId), JSON.stringify(args));

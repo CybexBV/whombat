@@ -12849,6 +12849,8 @@
   "server:hosts.apps.refuse.none": "518b3d04fe50e609",
   "server:hosts.apps.refuse.off": "6e5a3953106949ea",
   "server:hosts.apps.refuse.outdated": "d95465833b3cbd65",
+  "server:hosts.apps.refuse.tooMany": "9b5d8aea5b25e306",
+  "server:hosts.apps.refuse.unbound": "7fb9a178f0a19186",
   "server:hosts.apps.refuse.updating": "4fe7f1d2b479cdba",
   "server:hosts.apps.rolledBack": "54acc19b459285b6",
   "server:hosts.apps.rolledBackUnknown": "fd60ba52d53f8530",

@@ -1,11 +1,14 @@
 import type { HostGuest, HostGuestApp } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
-import { appAskRefusal } from './app-ask';
+import { ConnectionArgumentError } from '../connections/request';
+import { appAskBound, appAskRefusal } from './app-ask';
 import { appAskPhrase, appCardNote, appOutcomeLine, appsOutcomeText } from './app-words';
 import type { HostsChange } from './service';
 import {
+  AppBindError,
   appFacts,
   askReasons,
+  bindAppArgs,
   bindingOf,
   bindingReasons,
   cardReasons,
@@ -14,11 +17,15 @@ import {
   snapshotFinished,
   snapshotName,
   stillBound,
+  tooManyWith,
+  unboundText,
   withSharedImage,
   yesAllowsMajor,
   yesCovers,
 } from './tools-apps';
 import { serversTaskWords } from './words';
+
+const D = `sha256:${'e'.repeat(64)}`;
 
 const app = (over: Partial<HostGuestApp> = {}): HostGuestApp => ({
   service: 'server',
@@ -27,6 +34,8 @@ const app = (over: Partial<HostGuestApp> = {}): HostGuestApp => ({
   blocked: null,
   updating: false,
   last: null,
+  newDigest: D,
+  configHash: 'c0ffee',
   ...over,
 });
 
@@ -185,17 +194,23 @@ describe('what Dusty reads and the card must say', () => {
   });
 
   it('asks first for a database, a new major version or versions that aren’t known', () => {
-    expect(bindingReasons({ image: 'postgres:16', version: '16.4', newVersion: '16.5' })).toEqual([
+    expect(bindingReasons({ image: 'postgres:16', version: '16.4', newVersion: '16.5', digest: D })).toEqual([
       'database',
     ]);
-    expect(bindingReasons({ image: 'web:1', version: '1.9', newVersion: '2.0' })).toEqual(['major']);
-    expect(bindingReasons({ image: 'web:latest', version: null, newVersion: '2.0' })).toEqual([
+    expect(bindingReasons({ image: 'web:1', version: '1.9', newVersion: '2.0', digest: D })).toEqual([
+      'major',
+    ]);
+    expect(bindingReasons({ image: 'web:latest', version: null, newVersion: '2.0', digest: D })).toEqual([
       'version_unknown',
     ]);
-    expect(bindingReasons({ image: 'web:latest', version: '1.2', newVersion: null })).toEqual([
+    expect(bindingReasons({ image: 'web:latest', version: '1.2', newVersion: null, digest: D })).toEqual([
       'version_unknown',
     ]);
-    expect(bindingReasons({ image: 'web:1', version: '1.2', newVersion: '1.3' })).toEqual([]);
+    expect(bindingReasons({ image: 'web:1', version: '1.2', newVersion: '1.3', digest: D })).toEqual([]);
+    // Without the newer image's digest the tag is pulled, whatever it names by then: its version isn't known.
+    expect(bindingReasons({ image: 'web:1', version: '1.2', newVersion: '1.3', digest: null })).toEqual([
+      'version_unknown',
+    ]);
     // A yes that said it may be a new major version covers one whose version isn't known, and lets it through.
     expect(yesCovers(['major'], 'version_unknown')).toBe(true);
     expect(yesCovers(['database'], 'version_unknown')).toBe(false);
@@ -227,6 +242,8 @@ describe('what a yes is bound to', () => {
     });
     expect(bindingOf(bound('x', { imageId: 'abc' }))).toBeNull();
     expect(bindingOf(guest('x', { imageId: ID('a'), app: undefined }))).toBeNull();
+    // Without Compose's hash of its settings nothing can be bound to it.
+    expect(bindingOf(bound('x', {}, { configHash: null }))).toBeNull();
   });
 
   it('takes along the other services of the project that run the same image', () => {
@@ -234,13 +251,25 @@ describe('what a yes is bound to', () => {
     const micro = bound('immich_microservices');
     const other = bound('other', { project: 'elsewhere' });
     const stopped = bound('stopped', { state: 'stopped' });
+    const unhealthy = bound('unhealthy', { state: 'unhealthy' });
     const redis = bound('redis', { imageId: ID('b') });
-    const all = [server, micro, other, stopped, redis];
+    const all = [server, micro, other, stopped, unhealthy, redis];
+    // Running or not, healthy or not: the agent updates them all together.
     expect(withSharedImage(all, [server]).map((g) => g.name)).toEqual([
       'immich_server',
       'immich_microservices',
+      'stopped',
+      'unhealthy',
     ]);
     expect(withSharedImage(all, [redis]).map((g) => g.name)).toEqual(['redis']);
+  });
+
+  it('names the app when its shared image makes more than one update takes', () => {
+    const many = Array.from({ length: 11 }, (_, i) => bound(`worker_${i}`));
+    const picked = [many[0] as HostGuest];
+    expect(tooManyWith(picked, withSharedImage(many, picked))?.name).toBe('worker_0');
+    const ten = many.slice(0, 10);
+    expect(tooManyWith(picked, withSharedImage(ten, picked))).toBeNull();
   });
 
   it('refuses what changed since', () => {
@@ -251,6 +280,9 @@ describe('what a yes is bound to', () => {
     expect(stillBound(bound('web', { imageId: ID('f') }), b)).toBe(false);
     expect(stillBound(bound('web', {}, { service: 'api' }), b)).toBe(false);
     expect(stillBound(bound('web', {}, { configHash: 'beef' }), b)).toBe(false);
+    // Settings that can't be read any more aren't the ones the yes was for.
+    expect(stillBound(bound('web', {}, { configHash: null }), b)).toBe(false);
+    expect(stillBound(g, { ...b, configHash: null })).toBe(false);
     // A newer image found since isn't a change: the yes keeps its own.
     expect(stillBound(bound('web', {}, { newDigest: ID('d') }), b)).toBe(true);
   });
@@ -259,8 +291,85 @@ describe('what a yes is bound to', () => {
     const b = bindingOf(bound('web'));
     expect(parseBindings([b])).toEqual([b]);
     expect(parseBindings([{ app: 'docker:web' }])).toBeNull();
+    expect(parseBindings([{ ...b, configHash: null }])).toBeNull();
     expect(parseBindings('x')).toBeNull();
     expect(parseBindings([])).toBeNull();
+  });
+});
+
+describe('asking for an update only when it can be bound', () => {
+  const ID = (c: string) => `sha256:${c.repeat(64)}`;
+  const bound = (name: string, over: Partial<HostGuest> = {}, a: Partial<HostGuestApp> = {}) =>
+    guest(name, { imageId: ID('a'), app: app({ service: name, ...a }), ...over });
+  const reading =
+    (all: HostGuest[]) =>
+    async (_server: string): Promise<{ id: string; all: HostGuest[] }> => ({ id: 'nas', all });
+  const refusal = async (p: Promise<unknown>) => {
+    const err = await p.then(
+      () => null,
+      (e: unknown) => e,
+    );
+    if (!(err instanceof AppBindError)) throw new Error(`not refused: ${String(err)}`);
+    return err;
+  };
+
+  it('binds every app and its siblings, and says every reason they ask for', async () => {
+    const server = bound('immich_server');
+    const ml = bound('immich_ml', { state: 'stopped' });
+    const db = bound('postgres', { image: 'postgres:16', imageId: ID('b') });
+    const args = await bindAppArgs(
+      { server: 'nas', apps: ['immich_server', 'postgres'], reasons: ['major'], expect: [{ app: 'x' }] },
+      reading([server, ml, db]),
+    );
+    expect(args.apps).toEqual(['docker:immich_server', 'docker:postgres', 'docker:immich_ml']);
+    expect((args.expect as { app: string }[]).map((e) => e.app)).toEqual(args.apps);
+    // The agent forgot the database: the card says it all the same.
+    expect(args.reasons).toEqual(['major', 'database']);
+  });
+
+  it('makes no card when an app can’t be bound or the apps can’t be read', async () => {
+    const server = bound('immich_server');
+    const noHash = bound('immich_ml', {}, { configHash: null });
+    expect(
+      (await refusal(bindAppArgs({ server: 'nas', apps: ['immich_server'] }, reading([server, noHash]))))
+        .reason,
+    ).toBe('invalid_arguments');
+    const down = async () => {
+      throw new Error('connect ECONNREFUSED');
+    };
+    expect((await refusal(bindAppArgs({ server: 'nas', apps: ['immich_server'] }, down))).reason).toBe(
+      'unreachable',
+    );
+    const unknown = async () => {
+      throw new ConnectionArgumentError('There’s no server “x”.');
+    };
+    expect((await refusal(bindAppArgs({ server: 'x', apps: ['immich_server'] }, unknown))).reason).toBe(
+      'invalid_arguments',
+    );
+    const gone = await refusal(bindAppArgs({ server: 'nas', apps: ['paperless'] }, reading([server])));
+    expect(gone.message).toContain('paperless');
+    const many = Array.from({ length: 11 }, (_, i) => bound(`worker_${i}`));
+    expect(
+      (await refusal(bindAppArgs({ server: 'nas', apps: ['worker_0'] }, reading(many)))).message,
+    ).toContain('worker_0');
+  });
+
+  it('binds the page’s Update the same way, or says why it can’t, in the person’s words', () => {
+    const server = bound('immich_server');
+    const ml = bound('immich_ml', { state: 'unhealthy' });
+    const ok = appAskBound([server, ml], ['docker:immich_server']);
+    if ('refused' in ok) throw new Error(ok.refused);
+    expect(ok.picked.map((g) => g.name)).toEqual(['immich_server', 'immich_ml']);
+    expect(ok.expect.map((b) => b.app)).toEqual(['docker:immich_server', 'docker:immich_ml']);
+    const noHash = appAskBound(
+      [server, bound('immich_ml', {}, { configHash: null })],
+      ['docker:immich_server'],
+    );
+    expect('refused' in noHash && noHash.refused).toContain('immich_ml');
+    const many = Array.from({ length: 11 }, (_, i) => bound(`worker_${i}`));
+    const tooMany = appAskBound(many, ['docker:worker_0'], 'nl');
+    expect('refused' in tooMany && tooMany.refused).toContain('worker_0');
+    expect(unboundText(server, true)).toBeNull();
   });
 });
 
