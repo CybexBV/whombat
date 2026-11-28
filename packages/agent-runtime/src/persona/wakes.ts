@@ -34,7 +34,7 @@
  * (BP-07, SL-D55), never Whombat's rules.
  */
 import type { DispatchContext } from '@whombat/core/contracts';
-import { describeScheduleWhen, shortNameOf } from '@whombat/core/domain';
+import { describeScheduleWhen, EXPOSURE_NEW_CHECK, shortNameOf } from '@whombat/core/domain';
 import { formatClock, formatDate, formatShortWeekday } from '@whombat/core/text';
 import { defuseDelimiters } from './defuse';
 
@@ -545,6 +545,18 @@ function onPurposeLine(l: NonNullable<DispatchContext['look']>): string {
   return `When it may be how the person set it up on purpose (remote access switched off, a port kept closed, a machine or service stopped, something they don’t use), don’t try to change it: ask in the summary whether it is on purpose, and offer as fix “Stop watching …” in a few words (“Stop watching remote access”), with the step to switch off ${which} with watch_checks and report it fixed.`;
 }
 
+/**
+ * Something newly open to the internet (internet-exposure.md): what it leads to and how it is guarded are on the
+ * openings' list, the person decides whether it is meant, and meant is stopping that one opening's check.
+ */
+function exposureLine(l: NonNullable<DispatchContext['look']>): string[] {
+  const about = l.check === EXPOSURE_NEW_CHECK || (l.lines ?? []).some((x) => x.check === EXPOSURE_NEW_CHECK);
+  if (!about) return [];
+  return [
+    `Something is newly open to the internet: read internet_exposure for what it leads to and how it is protected, and don’t close it yourself. Say what it exposes in plain words and ask whether it is meant; when the person says it is, switch off Whombat’s check ${EXPOSURE_NEW_CHECK} for that one opening (its subject) with watch_checks.`,
+  ];
+}
+
 /** What always asks, whatever the person said go ahead to (server-asks.md SA-10; handle-it.md). */
 const STILL_ASKS =
   'Go ahead covers exactly these steps: anything on this Whombat’s own server, deleting or restoring still asks with its card.';
@@ -701,6 +713,7 @@ export function lookTurnLines(ctx: DispatchContext): string[] {
       ? 'It is Look only: change nothing and offer no step; the summary says what the person can do.'
       : 'A small, safe step you can undo (restart or reload one integration, add-on, container or service; retry a job) you may take yourself when nothing about it asks the person: check it worked and report it fixed. Offer anything bigger, or anything that asks, as one step instead.',
     ...(lookOnly ? [] : [onPurposeLine(l)]),
+    ...exposureLine(l),
     FINISH_HERE,
     'End with look_report: a title, one to three plain sentences, fixed, and fix (its button’s label and the step in your words) when you offer one. No fix when only the person can do it (power, a cable, a sign-in, a payment).',
     ...(many || l.asked
