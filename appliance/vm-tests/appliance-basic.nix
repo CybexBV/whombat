@@ -171,12 +171,12 @@ in
         # Server credentials arrive via LoadCredential, not the environment.
         machine1.fail("systemctl show -P Environment whombat-server | grep -qF \"$(cat /persist/secrets/master.key)\"")
         machine1.succeed("systemctl show -P Environment whombat-server | grep -q 'WHOMBAT_MASTER_KEY_FILE=/run/credentials/whombat-server.service/master-key'")
-        # NX-30: hosted UI origin of the environment (MR-45) on both units; the backup API for the server only
+        # NX-30: the hosted UI's origin (MR-45) on both units; the backup API for the server only
         # (MR-19), reachable by the server's and the manager's users.
         for u in ["whombat-server", "whombat-runner"]:
-            machine1.succeed(f"systemctl show -P Environment {u} | tr ' ' '\\n' | grep -qx 'WHOMBAT_APP_URL=https://dev.whombat.com'")
-            # NX-39: the Feedback widget's origin of the environment (FD-31).
-            machine1.succeed(f"systemctl show -P Environment {u} | tr ' ' '\\n' | grep -qx 'WHOMBAT_EMBED_URL=https://embed-dev.whombat.com'")
+            machine1.succeed(f"systemctl show -P Environment {u} | tr ' ' '\\n' | grep -qx 'WHOMBAT_APP_URL=https://app.whombat.com'")
+            # NX-39: the Feedback widget's origin (FD-31).
+            machine1.succeed(f"systemctl show -P Environment {u} | tr ' ' '\\n' | grep -qx 'WHOMBAT_EMBED_URL=https://embed.whombat.com'")
         machine1.succeed("systemctl show -P Environment whombat-server | tr ' ' '\\n' | grep -qx 'WHOMBAT_BACKUP_SOCKET=/run/whombat-backup/api.sock'")
         machine1.fail("systemctl show -P Environment whombat-runner | grep -q WHOMBAT_BACKUP_SOCKET")
         machine1.succeed("jq -e '.backupSocket == \"/run/whombat-backup/api.sock\"' /etc/whombat/manager.json")
