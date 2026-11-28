@@ -290,7 +290,14 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
     const c = parsed.data;
     const summary = homeChangeSummary(c);
     return {
-      facts: { kind: 'home_state', connectionId: c.connectionId, entity: c.entity, from: c.from, to: c.to },
+      facts: {
+        kind: 'home_state',
+        connectionId: c.connectionId,
+        entity: c.entity,
+        from: c.from,
+        to: c.to,
+        changedAt: c.changedAt ?? null,
+      },
       conversationId: null,
       threadRootId: null,
       itemKey: null,

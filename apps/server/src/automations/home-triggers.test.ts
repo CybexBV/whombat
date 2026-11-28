@@ -3,7 +3,13 @@
  * the entities and states live automations name, and only changes into or out of those states are signed.
  */
 import { describe, expect, it } from 'vitest';
-import { homeChangesOf, listenedOf } from './home-triggers';
+import {
+  forgetUnwatched,
+  HOME_CHANGE_FRESH_MS,
+  homeChangesOf,
+  type KnownEntity,
+  listenedOf,
+} from './home-triggers';
 
 const HA = 'con_homeassist1';
 const PROTECT = 'con_protect0001';
@@ -58,11 +64,67 @@ describe('homeChangesOf', () => {
     expect(known.get('binary_sensor.water_leak')?.state).toBe('unavailable');
   });
 
-  it('signs a change that happened while the socket was away', () => {
-    const known = new Map([['binary_sensor.water_leak', { state: 'off', name: 'Water leak' }]]);
-    const again = { a: { 'binary_sensor.water_leak': { s: 'on' } } };
-    expect(homeChangesOf(known, watched, again)).toMatchObject([
-      { from: 'off', to: 'on', name: 'Water leak' },
+  const NOW = Date.parse('2026-11-28T21:00:00Z');
+  const secondsAgo = (ms: number) => (NOW - ms) / 1000;
+
+  it('signs a change that happened just before the socket came back, with Home Assistant’s time', () => {
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'off', name: 'Water leak' }],
     ]);
+    const lc = secondsAgo(30_000);
+    const again = { a: { 'binary_sensor.water_leak': { s: 'on', lc } } };
+    expect(homeChangesOf(known, watched, again, NOW)).toMatchObject([
+      { from: 'off', to: 'on', name: 'Water leak', changedAt: lc },
+    ]);
+  });
+
+  it('signs nothing for a change older than two minutes heard only when the socket came back', () => {
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'off', name: 'Water leak' }],
+    ]);
+    const stale = {
+      a: { 'binary_sensor.water_leak': { s: 'on', lc: secondsAgo(HOME_CHANGE_FRESH_MS + 1000) } },
+    };
+    expect(homeChangesOf(known, watched, stale, NOW)).toEqual([]);
+    // It is known now, so the next live change is from it.
+    expect(known.get('binary_sensor.water_leak')?.state).toBe('on');
+    // A snapshot that doesn't say when can't be told fresh either.
+    const unsaid = new Map<string, KnownEntity>([['binary_sensor.water_leak', { state: 'off', name: null }]]);
+    expect(homeChangesOf(unsaid, watched, { a: { 'binary_sensor.water_leak': { s: 'on' } } }, NOW)).toEqual(
+      [],
+    );
+    // A live change is news whenever it comes.
+    const live = {
+      c: { 'binary_sensor.water_leak': { '+': { s: 'off', lc: secondsAgo(HOME_CHANGE_FRESH_MS * 5) } } },
+    };
+    expect(homeChangesOf(known, watched, live, NOW)).toMatchObject([{ from: 'on', to: 'off' }]);
+  });
+
+  it('keeps Home Assistant’s time of the last change, also when the state came back meanwhile', () => {
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'on', name: 'Water leak', changedAt: secondsAgo(600_000) }],
+    ]);
+    const back = secondsAgo(60_000);
+    expect(
+      homeChangesOf(known, watched, { a: { 'binary_sensor.water_leak': { s: 'on', lc: back } } }, NOW),
+    ).toEqual([]);
+    expect(known.get('binary_sensor.water_leak')?.changedAt).toBe(back);
+  });
+});
+
+describe('forgetUnwatched', () => {
+  it('forgets an entity no longer followed, so following it again makes no change from long ago', () => {
+    const watched = new Map([['binary_sensor.water_leak', new Set(['on'])]]);
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'off', name: 'Water leak' }],
+      ['binary_sensor.front_door', { state: 'off', name: 'Front door' }],
+    ]);
+    forgetUnwatched(known, watched);
+    expect([...known.keys()]).toEqual(['binary_sensor.water_leak']);
+    // Followed again: its first state is a first sight.
+    const again = new Map([...watched, ['binary_sensor.front_door', new Set(['on'])]]);
+    const NOW = Date.now();
+    const first = { a: { 'binary_sensor.front_door': { s: 'on', lc: NOW / 1000 } } };
+    expect(homeChangesOf(known, again, first, NOW)).toEqual([]);
   });
 });

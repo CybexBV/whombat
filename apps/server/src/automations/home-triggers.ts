@@ -108,23 +108,40 @@ export async function listenedHome(db: Db | Tx): Promise<Listened> {
 /** One change of state to sign. */
 export type HomeChange = Omit<HomeStateChanged, 'connectionId'>;
 
+/** What Whombat last heard of an entity: its state, its friendly name and when Home Assistant says it last changed. */
+export interface KnownEntity {
+  state: string;
+  name: string | null;
+  /** Home Assistant's `last_changed` (seconds since 1970); null when it didn't say. */
+  changedAt?: number | null;
+}
+
 const STATE_MAX = 64;
 
+/** A change Whombat only hears of when it follows again (after Home Assistant was away) starts nothing after this. */
+export const HOME_CHANGE_FRESH_MS = 2 * 60_000;
+
+const timeOf = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+
 /**
- * What one `subscribe_entities` event changes (pure): `known` (each entity's last state and name) is brought up to date
- * and the changes that matter come back. Home Assistant sends every followed entity once (`a`) when the subscription
- * starts and then only what changed (`c`, the new state under `+.s`). An entity seen for the first time invents no
- * change; one seen again after a reconnect with another state did change meanwhile. A change matters when it goes to a
- * state a trigger names, or leaves one (a wait for `forMinutes` ends then). Attributes alone change nothing.
+ * What one `subscribe_entities` event changes (pure): `known` (each entity's last state, name and time of change) is
+ * brought up to date and the changes that matter come back. Home Assistant sends every followed entity once (`a`) when
+ * the subscription starts and then only what changed (`c`, the new state under `+.s`, its time under `+.lc`). An entity
+ * seen for the first time invents no change; one seen again after a reconnect with another state did change meanwhile,
+ * but only a change younger than two minutes by its own `lc` (at `now`) is signed: a door opened while Home Assistant
+ * was away for an hour is no news at reconnect. A change matters when it goes to a state a trigger names, or leaves one
+ * (a wait for `forMinutes` ends then). Attributes alone change nothing.
  */
 export function homeChangesOf(
-  known: Map<string, { state: string; name: string | null }>,
+  known: Map<string, KnownEntity>,
   watched: ReadonlyMap<string, ReadonlySet<string>>,
   event: unknown,
+  now: number = Date.now(),
 ): HomeChange[] {
   const e = (event ?? {}) as Record<string, unknown>;
   const changes: HomeChange[] = [];
-  const seen = (entity: string, state: unknown, attributes: unknown) => {
+  const seen = (entity: string, state: unknown, attributes: unknown, lc: unknown, again: boolean) => {
     const states = watched.get(entity);
     if (!states || typeof state !== 'string' || !state.trim()) return;
     const before = known.get(entity);
@@ -134,24 +151,35 @@ export function homeChangesOf(
         ? friendly.trim().slice(0, 120)
         : (before?.name ?? null);
     const to = state.trim().slice(0, STATE_MAX);
-    known.set(entity, { state: to, name });
+    const changedAt = timeOf(lc) ?? before?.changedAt ?? null;
+    known.set(entity, { state: to, name, changedAt });
     if (!before || lower(before.state) === lower(to)) return;
     if (!states.has(lower(to)) && !states.has(lower(before.state))) return;
-    changes.push({ entity, name, from: before.state, to });
+    // Heard again after a reconnect: only when Home Assistant says it changed just now (it always says when).
+    if (again && (timeOf(lc) === null || now - (timeOf(lc) as number) * 1000 > HOME_CHANGE_FRESH_MS)) return;
+    changes.push({ entity, name, from: before.state, to, ...(changedAt !== null ? { changedAt } : {}) });
   };
   const added = e.a && typeof e.a === 'object' ? (e.a as Record<string, Record<string, unknown> | null>) : {};
-  for (const [entity, v] of Object.entries(added)) seen(entity, v?.s, v?.a);
+  for (const [entity, v] of Object.entries(added)) seen(entity, v?.s, v?.a, v?.lc, true);
   const changed =
     e.c && typeof e.c === 'object' ? (e.c as Record<string, Record<string, unknown> | null>) : {};
   for (const [entity, v] of Object.entries(changed)) {
     const plus = (v?.['+'] ?? null) as Record<string, unknown> | null;
-    if (plus && 's' in plus) seen(entity, plus.s, plus.a);
+    if (plus && 's' in plus) seen(entity, plus.s, plus.a, plus.lc, false);
     else if (plus?.a) {
       const before = known.get(entity);
-      if (before) seen(entity, before.state, plus.a);
+      if (before) seen(entity, before.state, plus.a, plus.lc, false);
     }
   }
   return changes;
+}
+
+/**
+ * Forgets what was heard of entities no longer followed: followed again later, an entity's first state is a first
+ * sight, not a change from a state long gone.
+ */
+export function forgetUnwatched(heard: Map<string, unknown>, watched: ReadonlyMap<string, unknown>): void {
+  for (const entity of [...heard.keys()]) if (!watched.has(entity)) heard.delete(entity);
 }
 
 /* Signing ------------------------------------------------------------------------------------------------------------ */
@@ -218,6 +246,12 @@ export const noteSmartHome = defineCommand({
 
 export const SMART_HOME_COMMANDS = [noteSmartHome];
 
+/** An entity's state now, as Home Assistant's socket last said it, and its `last_changed` (null when it didn't say). */
+export interface HomeEntityNow {
+  state: string;
+  changedAt: number | null;
+}
+
 /* Following Home Assistant -------------------------------------------------------------------------------------------- */
 
 const OPEN_MS = 15_000;
@@ -242,7 +276,7 @@ class HomeFollower {
   #closed = false;
   /** Subscribed and given every entity's state once: its states are current. */
   #live = false;
-  readonly #known = new Map<string, { state: string; name: string | null }>();
+  readonly #known = new Map<string, KnownEntity>();
   readonly #signedAt = new Map<string, number[]>();
   #watched: Map<string, Set<string>>;
   #key: string;
@@ -265,6 +299,8 @@ class HomeFollower {
   /** Follows these entities now: the same ones keep the socket, others subscribe afresh on a new one. */
   follow(watched: Map<string, Set<string>>): void {
     this.#watched = watched;
+    forgetUnwatched(this.#known, watched);
+    forgetUnwatched(this.#signedAt, watched);
     const key = [...watched.keys()].sort().join(',');
     if (key === this.#key) return;
     this.#key = key;
@@ -274,9 +310,10 @@ class HomeFollower {
     this.#ha?.close();
   }
 
-  /** The entity's state now; null when Whombat doesn't know it (not connected, or Home Assistant didn't say). */
-  current(entity: string): string | null {
-    return this.#live ? (this.#known.get(entity)?.state ?? null) : null;
+  /** The entity's state now and when it changed; null when Whombat doesn't know it (not connected, or not said). */
+  current(entity: string): HomeEntityNow | null {
+    const known = this.#live ? this.#known.get(entity) : undefined;
+    return known ? { state: known.state, changedAt: known.changedAt ?? null } : null;
   }
 
   close(): void {
@@ -329,7 +366,7 @@ class HomeFollower {
 
   #event(event: unknown): void {
     if (this.#closed) return;
-    const changes = homeChangesOf(this.#known, this.#watched, event);
+    const changes = homeChangesOf(this.#known, this.#watched, event, this.services.clock().getTime());
     this.#live = true;
     const now = Date.now();
     const kept = changes.filter((c) => {
@@ -455,10 +492,10 @@ export class SmartHomeTriggers {
   }
 
   /**
-   * An entity's state now, for a delayed start at its time: the state, or null when Whombat doesn't know it now (Home
-   * Assistant can't be reached, or isn't followed).
+   * An entity's state now, for a delayed start at its time: the state and Home Assistant's time of its last change, or
+   * null when Whombat doesn't know it now (Home Assistant can't be reached, or isn't followed).
    */
-  current(connectionId: string, entity: string): string | null {
+  current(connectionId: string, entity: string): HomeEntityNow | null {
     return this.#followers.get(connectionId)?.current(entity) ?? null;
   }
 

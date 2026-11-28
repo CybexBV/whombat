@@ -187,7 +187,9 @@ export const HOME_STATE_CHANGED = 'home.state_changed';
 /**
  * The payload of a signed `home.state_changed`: an entity a live automation names went from one state to another
  * (`from`: null when Whombat didn't know it before, or it was too long to be a trigger's word). `name` is Home
- * Assistant's friendly name, for the run's words.
+ * Assistant's friendly name, for the run's words. `changedAt` is Home Assistant's own time of the change (its
+ * `last_changed`, seconds since 1970), when it said one: a state that must hold for some minutes holds only while that
+ * stays the same.
  */
 export const HomeStateChanged = z.object({
   connectionId: ConnectionId,
@@ -195,6 +197,7 @@ export const HomeStateChanged = z.object({
   name: z.string().max(120).nullable(),
   from: HomeState.nullable(),
   to: HomeState,
+  changedAt: z.number().nonnegative().optional(),
 });
 export type HomeStateChanged = z.infer<typeof HomeStateChanged>;
 
@@ -205,6 +208,8 @@ export interface HomeStateFacts {
   entity: string;
   from: string | null;
   to: string;
+  /** Home Assistant's own time of the change (`last_changed`, seconds since 1970); null when it didn't say. */
+  changedAt?: number | null;
 }
 
 const sameState = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();

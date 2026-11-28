@@ -20,8 +20,17 @@ import { automationRuns, automationWaits, events } from '../../db/schema/index';
 type Wait = typeof automationWaits.$inferSelect;
 type Event = typeof events.$inferSelect;
 
-/** An entity's state now, as Home Assistant's socket last said it; null when Whombat can't tell now. */
-export type HomeNow = (connectionId: string, entity: string) => string | null;
+/**
+ * An entity's state now, as Home Assistant's socket last said it, and Home Assistant's time of its last change (its
+ * `last_changed`; null when it didn't say); null when Whombat can't tell now.
+ */
+export type HomeNow = (
+  connectionId: string,
+  entity: string,
+) => { state: string; changedAt: number | null } | null;
+
+/** Home Assistant's times are seconds with a fraction: the same change reads the same to well within a millisecond. */
+const SAME_CHANGE_S = 0.001;
 
 const RETRY_MS = 60_000;
 const RETRY_LIMIT_MS = 60 * RETRY_MS;
@@ -93,8 +102,10 @@ export async function claimHomeChange(
 
 /**
  * A wait whose time came, for its automation: whether it starts a run now. A newer version than the wait's starts
- * nothing; the entity must still be in the trigger's state; while Whombat can't tell, the wait asks again each minute
- * for an hour after its time.
+ * nothing; the entity must still be in the trigger's state, and still from the change that started the wait: when Home
+ * Assistant's time of its last change isn't that change's any more, it changed and came back meanwhile (unseen while
+ * Home Assistant was away, or among a flapping sensor's changes that weren't signed), so it didn't hold. While Whombat
+ * can't tell, the wait asks again each minute for an hour after its time.
  */
 export async function claimDueHomeWait(
   tx: Db,
@@ -109,8 +120,8 @@ export async function claimDueHomeWait(
     await dropHomeWait(tx, wait.automationId, wait.key);
     return false;
   }
-  const state = current(facts.connectionId, facts.entity);
-  if (state === null) {
+  const heard = current(facts.connectionId, facts.entity);
+  if (heard === null) {
     const limit = wait.firstDueAt.getTime() + RETRY_LIMIT_MS;
     if (now.getTime() >= limit) await dropHomeWait(tx, wait.automationId, wait.key);
     else
@@ -121,7 +132,26 @@ export async function claimDueHomeWait(
     return false;
   }
   await dropHomeWait(tx, wait.automationId, wait.key);
-  // Still in the state the change went to: the trigger's `to` (its `from` was about the change itself).
+  return heldAtItsTime(definition, facts, heard);
+}
+
+/**
+ * Whether the change behind a wait held until its time (pure): the entity is still in the state it went to (the
+ * trigger's `to`; its `from` was about the change itself), and Home Assistant's time of its last change is still that
+ * change's. Both times are Home Assistant's own, so no clock is compared with another; a change signed without one
+ * leaves the state alone to decide.
+ */
+export function heldAtItsTime(
+  definition: Pick<AutomationDefinition, 'triggers'>,
+  facts: HomeStateFacts,
+  heard: { state: string; changedAt: number | null },
+): boolean {
+  if (
+    typeof facts.changedAt === 'number' &&
+    heard.changedAt !== null &&
+    Math.abs(heard.changedAt - facts.changedAt) > SAME_CHANGE_S
+  )
+    return false;
   return definition.triggers.some(
     (t) =>
       t.kind === 'home_state' &&
@@ -129,7 +159,7 @@ export async function claimDueHomeWait(
       t.entity === facts.entity &&
       !!t.forMinutes &&
       homeStateTriggerMatches(t, facts) &&
-      t.to.trim().toLowerCase() === state.trim().toLowerCase(),
+      t.to.trim().toLowerCase() === heard.state.trim().toLowerCase(),
   );
 }
 

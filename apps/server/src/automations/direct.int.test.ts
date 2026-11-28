@@ -339,10 +339,18 @@ describe('Home Assistant and Protect starts', () => {
     );
     const now = vi.spyOn(smartHomeTriggersFor(w.services), 'current');
     try {
-      const change = (from: string, to: string) =>
+      const change = (from: string, to: string, changedAt?: number) =>
         signSmartHome({
           connectionId: haId,
-          changes: [{ entity: 'binary_sensor.water_leak', name: 'Water leak', from, to }],
+          changes: [
+            {
+              entity: 'binary_sensor.water_leak',
+              name: 'Water leak',
+              from,
+              to,
+              ...(changedAt ? { changedAt } : {}),
+            },
+          ],
         });
       await change('off', 'on');
       await w.settle();
@@ -361,11 +369,21 @@ describe('Home Assistant and Protect starts', () => {
       await w.settle();
       expect(await w.runs(id)).toHaveLength(0);
 
-      // Wet again, and still wet ten minutes later: one run.
-      await change('off', 'on');
+      // Wet again, and wet ten minutes later, but from a later change Whombat didn't hear: it didn't hold.
+      const wet = w.now().getTime() / 1000;
+      await change('off', 'on', wet);
       await w.settle();
       w.advance(10 * MINUTE);
-      now.mockReturnValue('on');
+      now.mockReturnValue({ state: 'on', changedAt: wet + 240 });
+      await w.settle();
+      expect(await w.runs(id)).toHaveLength(0);
+
+      // Wet again, and still wet from that change ten minutes later: one run.
+      const again = w.now().getTime() / 1000;
+      await change('off', 'on', again);
+      await w.settle();
+      w.advance(10 * MINUTE);
+      now.mockReturnValue({ state: 'on', changedAt: again });
       await w.settle();
       const runs = await w.runs(id);
       expect(runs).toHaveLength(1);
