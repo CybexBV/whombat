@@ -21,7 +21,8 @@ them once they have been tried on Beta.
 - A new opening counts as new for two weeks, and a service test that gets a sign-in page instead of the service says
   so instead of passing.
 - Whombat points out a new proxy host even when it can’t read the proxy’s streams, and no longer calls a name
-  protected when its Cloudflare Access lets everyone in. A settings copy where only a password changed is kept.
+  protected when its Cloudflare Access lets everyone in, on the whole name or one of its paths. A settings copy where
+  only a password changed is kept.
 - Ask your agent “what can the internet reach?” and it answers from the same list.
 - Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
   page and its own page, with Update. Whombat asks first, installs exactly the version it asked about, restarts only
