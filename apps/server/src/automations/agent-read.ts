@@ -29,6 +29,7 @@ import { keptPlaces } from '../hosts/findmy-places';
 import { toHostServerDetail } from '../hosts/map';
 import { serverThingId } from '../hosts/quiet-lines';
 import { hostsFor, WHOMBAT_ACTOR } from '../hosts/service';
+import { burrowLocale } from '../i18n/locale';
 import { forbidden } from '../lib/errors';
 import { personMailConnections } from '../mail-triggers/index';
 import type { ToolContext } from '../mcp/tools';
@@ -162,6 +163,8 @@ async function upsServersOf(ctx: ToolContext): Promise<AgentUpsServer[]> {
     .filter((s) => !s.hostsThisWhombat)
     .map((s) => ({ thing: serverThingId(s.id), name: s.name }));
   const out: AgentUpsServer[] = [];
+  // Its message is the person's to read: in their language.
+  const locale = await burrowLocale(ctx.services, ctx.burrowId);
   for (const s of servers) {
     const raw = await hosts
       .call<unknown>({ path: `${HOSTS_API}/servers/${seg(s.id)}`, actor: WHOMBAT_ACTOR })
@@ -174,6 +177,7 @@ async function upsServersOf(ctx: ToolContext): Promise<AgentUpsServer[]> {
       conversationId: ctx.dispatch.conversationId,
       ups: { thing, name: s.name },
       servers: named,
+      locale,
     });
     if (definition.steps.length < 2) continue;
     out.push({ thing, name: s.name, powerCut: definition as unknown as JsonObject });

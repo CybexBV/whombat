@@ -139,8 +139,13 @@ export async function scanBurrow(
     for (const { event, pending, wait } of work) {
       if (pending) await dropIncidentTrigger(tx, pending);
       const facts = live.length ? await eventFacts(tx, event) : null;
-      // A wait of an automation switched off or changed, or of a change Whombat can't read, ends here.
-      if (wait && (facts?.facts.kind !== 'home_state' || !live.some(({ a }) => a.id === wait.automationId))) {
+      // A wait of an automation switched off or published again since (its version isn't live any more), or of a change
+      // Whombat can't read, ends here: nothing else would end it.
+      if (
+        wait &&
+        (facts?.facts.kind !== 'home_state' ||
+          !live.some(({ a, v }) => a.id === wait.automationId && v.n === wait.version))
+      ) {
         await dropHomeWait(tx, wait.automationId, wait.key);
         continue;
       }

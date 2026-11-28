@@ -399,6 +399,24 @@ describe('a power cut', () => {
       forMinutes: 5,
     });
   });
+
+  it('says only that the power is out, then each server’s own line, in the person’s language', () => {
+    const textOf = (locale?: string) => {
+      const tell = powerCutDefinition({ conversationId: 'cnv_chat', ups, servers, locale }).steps.at(-1);
+      return tell?.kind === 'post_message' ? tell.text : '';
+    };
+    for (const locale of [undefined, 'nl-NL']) {
+      const [opening, ...lines] = textOf(locale).split('\n');
+      expect(opening).toContain('nas-01');
+      // What happened to a server is its own step's line: the opening claims nothing about them.
+      expect(opening).not.toMatch(/shut|uitgezet|uitzetten|servers/i);
+      expect(opening).not.toContain('{{');
+      expect(lines).toEqual(
+        ['shut_down_1', 'shut_down_2', 'shut_down_3'].map((id) => `{{steps.${id}.text}}`),
+      );
+    }
+    expect(textOf('nl-NL')).not.toEqual(textOf());
+  });
 });
 
 describe('Dusty’s guide', () => {

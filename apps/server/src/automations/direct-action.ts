@@ -36,6 +36,7 @@ import { burrows, catalogConnections, connectionTools } from '../db/schema/index
 import { limitWordsFor } from '../devices/store';
 import { thePerson } from '../domain/the-person';
 import { callServerOf, SERVERS_CATALOG } from '../hosts/asks';
+import { knownServer } from '../hosts/self';
 import { type HostsChange, type HostsService, hostsFor } from '../hosts/service';
 import { isEnglish, tServer } from '../i18n/catalog';
 import { burrowLocale } from '../i18n/locale';
@@ -122,19 +123,34 @@ async function entityName(
   }
 }
 
+/** A machine in a server's list by its own id (any case, as the hosts tools compare them), or by a name only it has. */
+function guestOf(
+  guests: readonly unknown[],
+  want: string,
+  opts: { byName: boolean },
+): Record<string, unknown> | undefined {
+  const key = want.trim().toLowerCase();
+  const list = guests.map(rec);
+  const byId = list.find((g) => String(g.id ?? '').toLowerCase() === key);
+  if (byId || !opts.byName) return byId;
+  const byName = list.filter((g) => String(g.name ?? '').toLowerCase() === key);
+  return byName.length === 1 ? byName[0] : undefined;
+}
+
 /**
  * The names of what a step acts on as Whombat knows them now: the server's (as its pages call it), its machine's from
  * the hosts service's list, Home Assistant's label and the entity's own friendly name. The names the assistant wrote
  * are never used: nothing checked them, and the plan card and the approval card are a yes for what they say. A name
  * Whombat can't read just now is left to the id. `missing` when the hosts service or Home Assistant says the machine or
- * the entity isn't there.
+ * the entity isn't there; `unread` when the machine's server can't say which machines it has just now. A machine is
+ * found only by the id the step keeps: a name could be another machine's by now.
  */
 async function directNames(
   services: Services,
   conn: CatalogConnectionRow,
   step: RunActionStep,
   server: { id: string; name: string } | null,
-): Promise<DirectNames | 'missing'> {
+): Promise<DirectNames | 'missing' | 'unread'> {
   const kind = directTargetKind(step);
   if (kind === 'home' || kind === 'entity') {
     if (kind === 'home' || !step.target) return { thingName: conn.label };
@@ -147,17 +163,40 @@ async function directNames(
   const guests = await hostsFor(services)
     .guestsRaw(server?.id ?? idOf(step.thing))
     .catch(() => null);
-  if (!guests) return { thingName };
-  // The machine as `guest_power` finds it: by its id, else by a name only one of them has.
-  const want = step.target.trim().toLowerCase();
-  const list = guests.map(rec);
-  const byName = list.filter((g) => String(g.name ?? '').toLowerCase() === want);
-  const guest =
-    list.find((g) => String(g.id ?? '').toLowerCase() === want) ??
-    (byName.length === 1 ? byName[0] : undefined);
+  if (!guests) return 'unread';
+  const guest = guestOf(guests, step.target, { byName: false });
   if (!guest) return 'missing';
   const name = typeof guest.name === 'string' && guest.name.trim() ? guest.name.trim() : String(guest.id);
   return { thingName, targetName: name.slice(0, 120) };
+}
+
+/**
+ * The step with the ids of what it acts on in place of names a draft may have given it (`server:<name>` becomes the
+ * server's own id, a machine's name its id), found as the Servers tools find them. Run on a draft and when an
+ * automation is saved, so a step keeps acting on the server and the machine it was saved for: each run accepts only
+ * those ids, and a server or a machine renamed later, or another one given the old name, can't take its place.
+ * `unread` when the hosts service can't say just now. A Home Assistant step names its entity by Home Assistant's own
+ * id already; a name nothing has is left for the plan to refuse.
+ */
+export async function pinDirectStep(
+  services: Services,
+  step: RunActionStep,
+): Promise<RunActionStep | 'unread'> {
+  const kind = directTargetKind(step);
+  if (kind !== 'server' && kind !== 'machine') return step;
+  const hosts = hostsFor(services);
+  // Without a hosts service there are no servers: the plan says so.
+  if (!hosts.present) return step;
+  // Reading the fleet notes every server by its id, the name a person gave it and its host name.
+  if (!(await hosts.fleetRaw().catch(() => null))) return 'unread';
+  const server = knownServer(idOf(step.thing));
+  if (!server) return step;
+  const pinned: RunActionStep = { ...step, thing: `server:${server.id}` };
+  if (kind !== 'machine' || !step.target) return pinned;
+  const guests = await hosts.guestsRaw(server.id).catch(() => null);
+  if (!guests) return 'unread';
+  const guest = guestOf(guests, step.target, { byName: true });
+  return guest && typeof guest.id === 'string' && guest.id ? { ...pinned, target: guest.id } : pinned;
 }
 
 const POWER: Record<string, string> = {
@@ -264,6 +303,23 @@ export async function planDirectAction(
       gone: true,
     };
   const server = await callServerOf(db, services, burrowId, conn.catalogId, call.args);
+  // Only the server with the id the step keeps: another one known by that name now isn't the one it was saved for.
+  if (onServer && server?.id.toLowerCase() !== idOf(step.thing).toLowerCase()) {
+    const read = await hostsFor(services)
+      .fleetRaw()
+      .then(
+        () => true,
+        () => false,
+      );
+    return read
+      ? {
+          ok: false,
+          reason: t('automations.direct.noServer', { name: step.thingName }),
+          fatal: false,
+          gone: true,
+        }
+      : { ok: false, reason: t('automations.direct.serversAway'), fatal: false };
+  }
   // The plan's yes is the key: what still asks is what the person set to ask, and the catalog's own rules.
   const decided = callTier(entry, tool, call.args, 'can', conn.access, server);
   if (decided.lookOnly)
@@ -281,6 +337,7 @@ export async function planDirectAction(
   if (outside) return { ok: false, reason: outside, fatal: false };
   const named = server ? { id: server.id, name: server.name } : null;
   const names = await directNames(services, conn, step, named);
+  if (names === 'unread') return { ok: false, reason: t('automations.direct.serversAway'), fatal: false };
   if (names === 'missing')
     return {
       ok: false,
@@ -310,33 +367,57 @@ export async function planDirectAction(
 }
 
 /**
- * A definition whose `run_action` steps carry the names Whombat knows now instead of the ones the assistant wrote: what
- * the plan card and the automation's page say is what each step acts on. A step that can't run now keeps no name
- * Whombat didn't check: the id stands in for its target, and for its server.
+ * A definition's `run_action` steps checked in one pass, as a draft is proposed or an automation saved: each step keeps
+ * the ids of its server and machine (`pinDirectStep`) and the names Whombat knows now instead of the ones the assistant
+ * wrote, so what the plan card and the automation's page say is what each step acts on; and why a step can't be one,
+ * in `locale`. A step that can't run now keeps no name Whombat didn't check: the id stands in for its target, and for
+ * its server. Each step is planned once, so a proposal reads Home Assistant once per step.
  */
-export async function withRealNames(
+export async function checkDirectSteps(
   db: Db | Tx,
   services: Services,
   burrowId: string,
   definition: AutomationDefinition,
-): Promise<AutomationDefinition> {
-  if (!definition.steps.some((s) => s.kind === 'run_action')) return definition;
+  locale?: string | null,
+): Promise<{ definition: AutomationDefinition; problems: string[] }> {
+  if (!definition.steps.some((s) => s.kind === 'run_action')) return { definition, problems: [] };
+  const problems: string[] = [];
   const steps: AutomationStep[] = [];
   for (const s of definition.steps) {
     if (s.kind !== 'run_action') {
       steps.push(s);
       continue;
     }
-    const plan = await planDirectAction(db, services, burrowId, s);
-    if (plan.ok) steps.push(withNames(s, plan.names));
+    const pinned = await pinDirectStep(services, s);
+    const step = pinned === 'unread' ? s : pinned;
+    const plan = await planDirectAction(db, services, burrowId, step, locale);
+    // Something only out of reach now (a sign-in, a setting) doesn't stop it being drafted: it says so when it runs.
+    // Which server and machine it acts on is fixed now, though, so servers that can't say which stop it.
+    if (!plan.ok && plan.fatal) problems.push(`Step “${s.id}”: ${plan.reason}`);
+    else if (pinned === 'unread')
+      problems.push(`Step “${s.id}”: ${tServer(locale, 'automations.direct.serversAway')}`);
+    else if (!plan.ok && plan.gone) problems.push(`Step “${s.id}”: ${plan.reason}`);
+    if (plan.ok) steps.push(withNames(step, plan.names));
     else
       steps.push(
-        withNames(s, {
-          thingName: s.thing.startsWith('server:') ? idOf(s.thing) : await connectionLabel(db, burrowId, s),
+        withNames(step, {
+          thingName: step.thing.startsWith('server:')
+            ? idOf(step.thing)
+            : await connectionLabel(db, burrowId, step),
         }),
       );
   }
-  return { ...definition, steps };
+  return { definition: { ...definition, steps }, problems };
+}
+
+/** The definition as `checkDirectSteps` keeps it: ids found, names read. */
+export async function withRealNames(
+  db: Db | Tx,
+  services: Services,
+  burrowId: string,
+  definition: AutomationDefinition,
+): Promise<AutomationDefinition> {
+  return (await checkDirectSteps(db, services, burrowId, definition)).definition;
 }
 
 /** The label of the connection a Home Assistant step names, else the name it was saved with. */
@@ -562,32 +643,34 @@ export async function runDirectAction(
     .from(burrows)
     .where(eq(burrows.id, run.burrowId));
   const at = () => clock(services.clock(), burrow?.timeZone ?? 'UTC');
+  // `unconfirmed`: it may have happened, but nobody can say it did; it is said, not counted as done.
   const settleLine = (
     state: 'succeeded' | 'skipped' | 'failed' | 'uncertain',
     line: string,
     error?: string,
+    unconfirmed?: true,
   ) =>
     lease.commit({
       op: 'settle',
       idx: row.idx,
       state,
       ...(state === 'succeeded' ? {} : { error: (error ?? line).slice(0, 1000) }),
-      output: { ran: false, text: line.slice(0, 500), summary: line.slice(0, 500) },
+      output: {
+        ran: false,
+        ...(unconfirmed ? { unconfirmed } : {}),
+        text: line.slice(0, 500),
+        summary: line.slice(0, 500),
+      },
       from: ['running'],
     });
 
   const already = await alreadySo(services, plan, step);
   if (already === 'unreachable') {
-    // Whombat stopped while it was shutting this server down: off now is the shutdown it had sent, done.
+    // Whombat stopped while it was shutting this server down. Out of reach now may be that shutdown, or only its network
+    // gone: the line says what is known, the run goes on, and it isn't counted as a shutdown that happened.
     if (opts.recovering && step.action === 'shut_down') {
-      const line = directDoneLine(step, { kind: 'done', result: null }, at(), locale);
-      await lease.commit({
-        op: 'settle',
-        idx: row.idx,
-        state: 'succeeded',
-        output: { ran: true, text: line, summary: line },
-        from: ['running'],
-      });
+      const line = t('automations.direct.offAfterRestart', { name: step.thingName, time: at() });
+      await settleLine('skipped', line, undefined, true);
       return;
     }
     const line = t('automations.direct.unreachable', { name: step.thingName, time: at() });
@@ -687,6 +770,8 @@ export async function runDirectAction(
       await settleLine(
         step.otherwise === 'skip' ? 'skipped' : 'failed',
         t('automations.direct.notConfirmed', { what, name: step.thingName, time: at() }),
+        undefined,
+        true,
       );
       return;
     }

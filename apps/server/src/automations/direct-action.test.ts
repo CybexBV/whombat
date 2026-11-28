@@ -5,6 +5,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { HostsChange } from '../hosts/service';
 import { listenForPowerFinish, powerSettle, withNames } from './direct-action';
+import { stepsActed } from './steps/post-message';
 
 function fakeHosts() {
   const listeners = new Set<(change: HostsChange) => void>();
@@ -109,5 +110,14 @@ describe('withNames', () => {
       targetName: 'nextcloud',
     });
     expect(withNames(saved, { thingName: 'nas-01' })).not.toHaveProperty('targetName');
+  });
+});
+
+describe('stepsActed', () => {
+  it('counts an action that may have happened, so a quiet window never hides it', () => {
+    expect(stepsActed([{ output: { ran: false, text: 'x' } }, { output: {} }])).toBe(false);
+    expect(stepsActed([{ output: { ran: false, noop: true } }])).toBe(false);
+    expect(stepsActed([{ output: { ran: true } }])).toBe(true);
+    expect(stepsActed([{ output: { ran: false, unconfirmed: true } }])).toBe(true);
   });
 });

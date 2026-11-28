@@ -49,8 +49,16 @@ export const AUTOMATIONS = splitPairs({
     'Couldn’t reach {name} at {time}, so nothing was sent to it.',
     'Whombat kon {name} om {time} niet bereiken, dus er is niets naar gestuurd.',
   ],
+  'automations.direct.offAfterRestart': [
+    'Whombat restarted while shutting down {name}. At {time} {name} couldn’t be reached, so it’s off or its network is down.',
+    'Whombat startte opnieuw tijdens het uitzetten van {name}. Om {time} was {name} niet bereikbaar, dus hij staat uit of zijn netwerk ligt eruit.',
+  ],
   'automations.direct.noEntity': ['{name} has no {target}.', '{name} heeft geen {target}.'],
   'automations.direct.noMachine': ['{name} has no machine {target}.', '{name} heeft geen machine {target}.'],
+  'automations.direct.noServer': [
+    'There’s no server {name} on this Whombat.',
+    'Er is geen server {name} op deze Whombat.',
+  ],
   'automations.direct.offThere': [
     '{name} is set not to allow this from Whombat.',
     '{name} staat dit niet toe vanuit Whombat.',

@@ -42,8 +42,9 @@ import { personAccountId } from '../read/principals';
 import { IDS, useAutomationWorld } from '../test/automations';
 import { insertConnection } from '../test/connections';
 import { useVaultNetForTests } from '../vault/net';
-import { runAutomationNow } from './commands';
+import { publishAutomationDraft, runAutomationNow, saveAutomationDraft } from './commands';
 import { noteSmartHome, smartHomePrincipal, smartHomeTriggersFor } from './home-triggers';
+import { acceptAutomationPlan, proposeAutomationPlan } from './plans';
 
 type Json = Record<string, unknown>;
 
@@ -61,6 +62,8 @@ const home = {
   ]),
   names: new Map<string, string>([['light.porch', 'Porch light']]),
   calls: [] as { path: string; body: Json }[],
+  /** How often each entity's state was read. */
+  reads: new Map<string, number>(),
   port: 0,
 };
 const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
@@ -74,6 +77,7 @@ const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
     };
     const state = /^\/api\/states\/(.+)$/.exec(path);
     if (req.method === 'GET' && state?.[1]) {
+      home.reads.set(state[1], (home.reads.get(state[1]) ?? 0) + 1);
       const now = home.states.get(state[1]);
       const name = home.names.get(state[1]);
       return now
@@ -214,6 +218,33 @@ async function savedSteps(automationId: string) {
     );
   if (!v) throw new Error('no version');
   return v;
+}
+
+/** Gives servers other host names in the hosts service, as a person renaming them would; the old ones back after. */
+async function withHostnames(names: Record<string, string>, body: () => Promise<void>) {
+  const cards = fake.fleet.servers as Json[];
+  const before = new Map(cards.map((c) => [c, c.hostname]));
+  const rename = (to: Record<string, string>) => {
+    for (const c of cards) if (typeof c.id === 'string' && c.id in to) c.hostname = to[c.id];
+    hostsFor(w.services).forget();
+  };
+  try {
+    rename(names);
+    await body();
+  } finally {
+    for (const [c, hostname] of before) c.hostname = hostname;
+    hostsFor(w.services).forget();
+  }
+}
+
+/** Gives the version an automation runs other steps, as one saved some other way would keep them. */
+async function saveSteps(automationId: string, change: (s: Json) => Json) {
+  const v = await savedSteps(automationId);
+  const steps = v.definition.steps.map((x) => (x.kind === 'run_action' ? change(x as Json) : x));
+  await w.services.db
+    .update(automationVersions)
+    .set({ definition: { ...v.definition, steps } as typeof v.definition })
+    .where(and(eq(automationVersions.automationId, automationId), eq(automationVersions.n, v.n)));
 }
 
 /** The Servers connection, as the box made it. */
@@ -481,6 +512,70 @@ describe('a run_action step', () => {
     await expect(w.publish(definition([light]))).rejects.toThrow(/light\.nowhere/);
   });
 
+  it('keeps acting on the server it was saved for when another one takes its name', async () => {
+    await withHostnames({ granite: 'storage' }, async () => {
+      const id = await w.publish(definition([shutDown('storage'), tell('{{steps.off.text}}')]));
+      expect((await savedSteps(id)).definition.steps[0]).toMatchObject({ thing: 'server:granite' });
+      await withHostnames({ granite: 'granite', obsidian: 'storage' }, async () => {
+        const granite = actions('granite').length;
+        const obsidian = actions('obsidian').length;
+        const off = step(await runNow(id), 'off');
+        expect(off.state).toBe('succeeded');
+        expect(actions('granite')).toHaveLength(granite + 1);
+        expect(actions('obsidian')).toHaveLength(obsidian);
+      });
+    });
+  });
+
+  it('keeps acting on the machine it was saved for when another one takes its name', async () => {
+    const guests = fake.guestsOf('shale');
+    const lab = guests.find((g) => g.id === 'pve:107');
+    const build = guests.find((g) => g.id === 'pve:101');
+    if (!lab || !build) throw new Error('missing shale’s machines');
+    const start = {
+      id: 'on',
+      kind: 'run_action' as const,
+      thing: 'server:shale',
+      thingName: 'shale',
+      target: 'win11-lab',
+      action: 'start' as const,
+    };
+    const id = await w.publish(definition([start]));
+    expect((await savedSteps(id)).definition.steps[0]).toMatchObject({ target: 'pve:107' });
+    const names = { lab: lab.name, build: build.name };
+    lab.name = 'win11-old';
+    build.name = 'win11-lab';
+    hostsFor(w.services).forget();
+    try {
+      const path = (guest: string) => `/api/v1/servers/shale/guests/${guest}/actions`;
+      const before = {
+        lab: fake.calls('POST', path('pve:107')).length,
+        build: fake.calls('POST', path('pve:101')).length,
+      };
+      const on = step(await runNow(id), 'on');
+      expect(on.state).toBe('succeeded');
+      expect(String((on.output as Json).text)).toContain('win11-old');
+      expect(fake.calls('POST', path('pve:107'))).toHaveLength(before.lab + 1);
+      expect(fake.calls('POST', path('pve:101'))).toHaveLength(before.build);
+    } finally {
+      lab.name = names.lab;
+      build.name = names.build;
+      hostsFor(w.services).forget();
+    }
+  });
+
+  it('acts only on a server by its id: a step kept under a name is refused and sends nothing', async () => {
+    const id = await w.publish(definition([shutDown('granite'), tell('{{steps.off.text}}')]));
+    await saveSteps(id, (x) => ({ ...x, thing: 'server:storage', thingName: 'storage' }));
+    await withHostnames({ granite: 'storage' }, async () => {
+      const before = actions('granite').length;
+      const off = step(await runNow(id), 'off');
+      expect(off.state).not.toBe('succeeded');
+      expect(off.error).toContain('storage');
+      expect(actions('granite')).toHaveLength(before);
+    });
+  });
+
   it('keeps to the limits the person set on the tool', async () => {
     const servers = await serversConnection();
     const where = and(eq(connectionTools.connectionId, servers.id), eq(connectionTools.name, 'server_power'));
@@ -626,16 +721,20 @@ describe('after Whombat stopped mid-action', () => {
     expect(home.calls.slice(calls).map((c) => c.path)).toEqual(['/api/services/light/turn_on']);
   });
 
-  it('counts a shutdown it had sent as done when the server is off after the restart', async () => {
+  it('says a shutdown it was sending may have happened when the server is out of reach after the restart', async () => {
     const id = await w.publish(definition([shutDown('marble', { id: 'act' })]), {
       name: 'Marble off, cut short',
     });
     const run = await w.run(await cutShort(id));
+    // Not a failure of the run, and not counted as a shutdown that happened: what is known is said.
+    expect(run.status).toBe('succeeded');
     const act = step(run, 'act');
-    expect(act.state).toBe('succeeded');
-    expect(act.output).toMatchObject({ ran: true });
-    expect(String((act.output as Json).text)).toContain('marble');
-    expect(String((act.output as Json).text)).not.toMatch(/reach/);
+    expect(act.state).toBe('skipped');
+    expect(act.output).toMatchObject({ ran: false, unconfirmed: true });
+    const text = String((act.output as Json).text);
+    expect(text).toContain('marble');
+    expect(text).toMatch(/restarted/);
+    expect(text).not.toMatch(/switching off/);
     expect(actions('marble')).toHaveLength(0);
   });
 
@@ -795,6 +894,78 @@ describe('Home Assistant and Protect starts', () => {
     } finally {
       now.mockRestore();
     }
+  });
+
+  it('ends a wait of a version published over before its time, starting nothing', async () => {
+    const leak = (forMinutes: number) =>
+      definition(
+        [tell('{{trigger.text}}')],
+        [
+          {
+            kind: 'home_state',
+            connectionId: haId,
+            entity: 'binary_sensor.basement_leak',
+            entityName: 'Basement leak',
+            to: 'on',
+            forMinutes,
+          },
+        ],
+      );
+    const id = await w.publish(leak(10), { name: 'Basement leak' });
+    const waits = () =>
+      w.services.db.select().from(automationWaits).where(eq(automationWaits.automationId, id));
+    await signSmartHome({
+      connectionId: haId,
+      changes: [{ entity: 'binary_sensor.basement_leak', name: 'Basement leak', from: 'off', to: 'on' }],
+    });
+    await w.settle();
+    expect(await waits()).toHaveLength(1);
+    // Published again a minute later, before the wait's time: its wait was for the version before.
+    w.advance(MINUTE);
+    await w.ok(IDS.mara, saveAutomationDraft, {
+      automationId: id,
+      definition: JSON.parse(JSON.stringify(leak(15))),
+    });
+    await w.ok(IDS.mara, publishAutomationDraft, {
+      automationId: id,
+      enable: true,
+      definitionHash: await w.draftHash(id),
+    });
+    w.advance(20 * MINUTE);
+    await w.settle();
+    expect(await waits()).toHaveLength(0);
+    expect(await w.runs(id)).toHaveLength(0);
+  });
+
+  it('reads Home Assistant once per step when the assistant proposes an automation, and when it is turned on', async () => {
+    home.states.set('light.porch', 'off');
+    const reads = home.reads.get('light.porch') ?? 0;
+    const dispatchId = await w.turn(IDS.dusty, IDS.dmDusty);
+    const out = await w.ok(IDS.dusty, proposeAutomationPlan, {
+      name: 'Porch light on',
+      description: 'Turns the porch light on.',
+      definition: JSON.parse(
+        JSON.stringify({
+          ...definition([
+            {
+              id: 'on',
+              kind: 'run_action',
+              thing: `connection:${haId}`,
+              thingName: 'Home Assistant',
+              target: 'light.porch',
+              action: 'turn_on',
+            },
+          ]),
+          conversationId: IDS.dmDusty,
+        }),
+      ),
+      dispatchId,
+    } as never);
+    expect(out.problems).toEqual([]);
+    expect(out.planId).toBeTruthy();
+    expect(home.reads.get('light.porch')).toBe(reads + 1);
+    await w.ok(IDS.mara, acceptAutomationPlan, { planId: out.planId as string });
+    expect(home.reads.get('light.porch')).toBe(reads + 2);
   });
 
   it('starts once for a doorbell pressed again within the cooldown, and again after it', async () => {

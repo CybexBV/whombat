@@ -465,6 +465,9 @@ export const AUTOMATION_VIEWS = splitPairs({
     '{name} was already stopped at {time}, so nothing was done.',
     '{name} was om {time} al gestopt, dus er is niets gedaan.',
   ],
+  // The ready-made power cut automation's message: the fact that started it, then one line per server saying what
+  // happened to it.
+  'direct.powerCut.out': ['The power is out at {name}.', 'De stroom is uitgevallen bij {name}.'],
   'direct.problem.kind': [
     'Only a server, one of its machines or Home Assistant can be acted on directly.',
     'Alleen een server, een van zijn machines of Home Assistant kan direct worden aangestuurd.',
