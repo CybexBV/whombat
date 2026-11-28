@@ -169,6 +169,18 @@ export async function referenceProblems(
   def: AutomationDefinition,
   forPublish: boolean,
 ): Promise<string[]> {
+  return (await referenceCheck(ctx, def, forPublish)).problems;
+}
+
+/**
+ * `referenceProblems`, with the definition as it is kept: its steps that act by themselves with the ids and names
+ * Whombat found for them (`checkDirectSteps`), checked once.
+ */
+export async function referenceCheck(
+  ctx: ApplyContext,
+  def: AutomationDefinition,
+  forPublish: boolean,
+): Promise<{ problems: string[]; definition: AutomationDefinition }> {
   const problems: string[] = [...mailDefinitionProblems(def)];
   if (hasWebhookTrigger(def)) problems.push(NO_WEBHOOK_TRIGGER_TEXT);
   // A tracker trigger listens to one of the burrow's tracker connections; a mail trigger to one of the person's mailboxes.
@@ -212,25 +224,6 @@ export async function referenceProblems(
       !(await trackerConnectionRow(ctx.tx, ctx.burrow.id, s.connectionId))
     )
       problems.push(`Step “${s.id}”: there is no tracker connection ${s.connectionId} on this Whombat.`);
-    // A step that acts by itself names a thing this Whombat has, and a call it can make (`direct-action.ts`).
-    if (s.kind === 'run_action') {
-      // Something only out of reach now (a server's agent, a sign-in) doesn't stop it being drafted: it says so when
-      // it runs.
-      const { planDirectAction } = await import('./direct-action');
-      // Why it can't be a step reaches the person through the assistant: in their language.
-      const plan = await planDirectAction(
-        ctx.tx,
-        ctx.services,
-        ctx.burrow.id,
-        s,
-        await burrowLocale(ctx.services, ctx.burrow.id),
-      );
-      if (!plan.ok && (plan.fatal || plan.gone)) problems.push(`Step “${s.id}”: ${plan.reason}`);
-      else if (plan.ok && s.thing.startsWith('server:') && !plan.server)
-        problems.push(
-          `Step “${s.id}”: there is no server ${s.thing.slice('server:'.length)} on this Whombat.`,
-        );
-    }
     if (s.kind === 'http_callback') {
       try {
         checkOutboundUrl(s.url, { allowPrivate: ctx.services.config.WHOMBAT_OUTBOUND_ALLOW_PRIVATE });
@@ -241,7 +234,18 @@ export async function referenceProblems(
         problems.push(`Step “${s.id}” calls ${new URL(s.url).host}: only you can approve a new destination.`);
     }
   }
-  return problems;
+  if (!def.steps.some((s) => s.kind === 'run_action')) return { problems, definition: def };
+  // A step that acts by itself names a thing this Whombat has, and a call it can make (`direct-action.ts`). Why it
+  // can't be a step reaches the person through the assistant: in their language.
+  const { checkDirectSteps } = await import('./direct-action');
+  const direct = await checkDirectSteps(
+    ctx.tx,
+    ctx.services,
+    ctx.burrow.id,
+    def,
+    await burrowLocale(ctx.services, ctx.burrow.id),
+  );
+  return { problems: [...problems, ...direct.problems], definition: direct.definition };
 }
 
 export function requirePerson(ctx: ApplyContext): void {
@@ -526,17 +530,20 @@ async function addMissingRecipeGrants(
 
 /**
  * A definition published as the next version and switched on (or off): the callback destinations the person approves
- * with it (BP-C11), the timer, the trigger cursor and the signed `automation.published`. The caller checked the draft.
+ * with it (BP-C11), the timer, the trigger cursor and the signed `automation.published`. The caller checked the draft;
+ * `checked`: it is the definition `referenceCheck` gave, steps that act without AI already with their ids and names.
  */
 export async function publishVersion(
   ctx: ApplyContext,
   row: { id: string; name: string; currentVersion: number | null },
   given: AutomationDefinition,
   enable: boolean,
+  opts: { checked?: boolean } = {},
 ): Promise<number> {
-  // A step that acts without AI is kept under the names Whombat knows, never the ones a draft or a file gave it.
+  // A step that acts without AI is kept by the ids and under the names Whombat found, never the ones a draft or a file
+  // gave it: read once, by the check before when it gave this definition.
   const { withRealNames } = await import('./direct-action');
-  const def = await withRealNames(ctx.tx, ctx.services, ctx.burrow.id, given);
+  const def = opts.checked ? given : await withRealNames(ctx.tx, ctx.services, ctx.burrow.id, given);
   await ctx.services.newerAutomations.refuse(def);
   const tx = ctx.tx;
   const [currentAuto] = await tx
@@ -691,9 +698,9 @@ export const createAutomation = defineCommand({
     if (input.publish) {
       const check = validateDefinition(draft, ctx.now.getTime());
       if (!check.ok) throw badRequest(`Fix it first: ${check.problems.slice(0, 3).join(' ')}`);
-      const problems = await referenceProblems(ctx, check.definition, true);
-      if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
-      live = check.definition;
+      const checked = await referenceCheck(ctx, check.definition, true);
+      if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
+      live = checked.definition;
     }
     const id = await insertAutomation(ctx, { name, description, draft });
     await ctx.emit({
@@ -704,7 +711,8 @@ export const createAutomation = defineCommand({
       payload: { automationId: id, source: src.kind },
     });
     if (keys.length) await writeGrants(ctx, await loadAutomationRow(tx, ctx.burrow.id, id), keys);
-    if (live) await publishVersion(ctx, { id, name: cap(name), currentVersion: null }, live, true);
+    if (live)
+      await publishVersion(ctx, { id, name: cap(name), currentVersion: null }, live, true, { checked: true });
     if (src.kind === 'describe') {
       const conversation = await loadConversationRow(tx, src.conversationId);
       if (!conversation || conversation.burrowId !== ctx.burrow.id) throw notFound('Conversation');
@@ -809,12 +817,12 @@ export const publishAutomationDraft = defineCommand({
     const def = check.definition;
     if (definitionHash(def) !== input.definitionHash)
       throw conflict('The draft changed since you looked at it. Check it again, then publish.');
-    const problems = await referenceProblems(ctx, def, true);
-    if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
+    const checked = await referenceCheck(ctx, def, true);
+    if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
     // A recipe edited to another channel gets the keys it needs that it holds none of (AR-33).
     const recipe = recipeOf(def);
     if (recipe) await addMissingRecipeGrants(ctx, row, recipe);
-    const n = await publishVersion(ctx, row, def, input.enable);
+    const n = await publishVersion(ctx, row, checked.definition, input.enable, { checked: true });
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     return { automationId: row.id, version: n };
   },
@@ -1141,9 +1149,10 @@ export const runAutomationNow = defineCommand({
     if (input.test && row.draftJson) {
       const check = validateDefinition(row.draftJson, ctx.now.getTime());
       if (!check.ok) throw badRequest(`Fix the draft first: ${check.problems.slice(0, 3).join(' ')}`);
-      const problems = await referenceProblems(ctx, check.definition, true);
-      if (problems.length) throw badRequest(problems.slice(0, 3).join(' '));
-      def = check.definition;
+      // Tried with the ids Whombat finds for its steps now, as publishing would keep them: a run accepts only ids.
+      const checked = await referenceCheck(ctx, check.definition, true);
+      if (checked.problems.length) throw badRequest(checked.problems.slice(0, 3).join(' '));
+      def = checked.definition;
       version = 0;
       publishedById = ctx.actor.id;
     } else {

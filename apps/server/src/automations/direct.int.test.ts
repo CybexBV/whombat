@@ -216,6 +216,33 @@ async function savedSteps(automationId: string) {
   return v;
 }
 
+/** Gives servers other host names in the hosts service, as a person renaming them would; the old ones back after. */
+async function withHostnames(names: Record<string, string>, body: () => Promise<void>) {
+  const cards = fake.fleet.servers as Json[];
+  const before = new Map(cards.map((c) => [c, c.hostname]));
+  const rename = (to: Record<string, string>) => {
+    for (const c of cards) if (typeof c.id === 'string' && c.id in to) c.hostname = to[c.id];
+    hostsFor(w.services).forget();
+  };
+  try {
+    rename(names);
+    await body();
+  } finally {
+    for (const [c, hostname] of before) c.hostname = hostname;
+    hostsFor(w.services).forget();
+  }
+}
+
+/** Gives the version an automation runs other steps, as one saved some other way would keep them. */
+async function saveSteps(automationId: string, change: (s: Json) => Json) {
+  const v = await savedSteps(automationId);
+  const steps = v.definition.steps.map((x) => (x.kind === 'run_action' ? change(x as Json) : x));
+  await w.services.db
+    .update(automationVersions)
+    .set({ definition: { ...v.definition, steps } as typeof v.definition })
+    .where(and(eq(automationVersions.automationId, automationId), eq(automationVersions.n, v.n)));
+}
+
 /** The Servers connection, as the box made it. */
 async function serversConnection() {
   const [row] = await w.services.db
@@ -479,6 +506,70 @@ describe('a run_action step', () => {
       action: 'turn_on' as const,
     };
     await expect(w.publish(definition([light]))).rejects.toThrow(/light\.nowhere/);
+  });
+
+  it('keeps acting on the server it was saved for when another one takes its name', async () => {
+    await withHostnames({ granite: 'storage' }, async () => {
+      const id = await w.publish(definition([shutDown('storage'), tell('{{steps.off.text}}')]));
+      expect((await savedSteps(id)).definition.steps[0]).toMatchObject({ thing: 'server:granite' });
+      await withHostnames({ granite: 'granite', obsidian: 'storage' }, async () => {
+        const granite = actions('granite').length;
+        const obsidian = actions('obsidian').length;
+        const off = step(await runNow(id), 'off');
+        expect(off.state).toBe('succeeded');
+        expect(actions('granite')).toHaveLength(granite + 1);
+        expect(actions('obsidian')).toHaveLength(obsidian);
+      });
+    });
+  });
+
+  it('keeps acting on the machine it was saved for when another one takes its name', async () => {
+    const guests = fake.guestsOf('shale');
+    const lab = guests.find((g) => g.id === 'pve:107');
+    const build = guests.find((g) => g.id === 'pve:101');
+    if (!lab || !build) throw new Error('missing shale’s machines');
+    const start = {
+      id: 'on',
+      kind: 'run_action' as const,
+      thing: 'server:shale',
+      thingName: 'shale',
+      target: 'win11-lab',
+      action: 'start' as const,
+    };
+    const id = await w.publish(definition([start]));
+    expect((await savedSteps(id)).definition.steps[0]).toMatchObject({ target: 'pve:107' });
+    const names = { lab: lab.name, build: build.name };
+    lab.name = 'win11-old';
+    build.name = 'win11-lab';
+    hostsFor(w.services).forget();
+    try {
+      const path = (guest: string) => `/api/v1/servers/shale/guests/${guest}/actions`;
+      const before = {
+        lab: fake.calls('POST', path('pve:107')).length,
+        build: fake.calls('POST', path('pve:101')).length,
+      };
+      const on = step(await runNow(id), 'on');
+      expect(on.state).toBe('succeeded');
+      expect(String((on.output as Json).text)).toContain('win11-old');
+      expect(fake.calls('POST', path('pve:107'))).toHaveLength(before.lab + 1);
+      expect(fake.calls('POST', path('pve:101'))).toHaveLength(before.build);
+    } finally {
+      lab.name = names.lab;
+      build.name = names.build;
+      hostsFor(w.services).forget();
+    }
+  });
+
+  it('acts only on a server by its id: a step kept under a name is refused and sends nothing', async () => {
+    const id = await w.publish(definition([shutDown('granite'), tell('{{steps.off.text}}')]));
+    await saveSteps(id, (x) => ({ ...x, thing: 'server:storage', thingName: 'storage' }));
+    await withHostnames({ granite: 'storage' }, async () => {
+      const before = actions('granite').length;
+      const off = step(await runNow(id), 'off');
+      expect(off.state).not.toBe('succeeded');
+      expect(off.error).toContain('storage');
+      expect(actions('granite')).toHaveLength(before);
+    });
   });
 
   it('keeps to the limits the person set on the tool', async () => {
