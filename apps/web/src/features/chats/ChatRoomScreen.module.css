@@ -110,28 +110,31 @@
   text-align: center;
 }
 
-/* All · Unread · Waiting as light chips, the picked one on a quiet fill; Settled at the row's end. */
+/* All · Waiting · Working · Done · Unread as light chips, the picked one on a quiet fill; Settled at the row's end. They
+   scroll sideways when the list is too narrow for all of them. */
 .filterRow {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
 .filters {
   display: flex;
   flex: 0 1 auto;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 
 .filter {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   height: 30px;
-  padding: 0 12px;
+  padding: 0 6px;
   border: 0;
   border-radius: var(--radius-pill);
   background: none;
@@ -156,7 +159,7 @@
   outline-offset: 2px;
 }
 
-/* A number only when there is one: Unread's blue, Waiting's in the warning's ink. */
+/* A number only when there is one: Unread's blue, Waiting's in the warning's ink, Working's in ink, Done's green. */
 .filterCount {
   font: 500 11px var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -168,6 +171,14 @@
 
 .filterCount[data-tone="waiting"] {
   color: var(--warn-text);
+}
+
+.filterCount[data-tone="working"] {
+  color: var(--ink2);
+}
+
+.filterCount[data-tone="done"] {
+  color: var(--ok-text);
 }
 
 /* “Settled ›”: quiet words at the end of the filters' row. */
@@ -345,17 +356,35 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* “Waiting for you” at the start of the reply's words, which wrap under it: the warn words on a quiet chip, no dot
-   (the dot means new). */
-.waiting {
+/* Where the thread stands at the start of the reply's words, which wrap under it, as a quiet chip: “Waiting for you”
+   and “Didn’t finish” in the warning's ink, “Done” in the good one, work in ink, checks and Stopped muted. No dot (the
+   dot means new). */
+.status {
   display: inline-block;
   height: 18px;
   padding: 0 6px;
   border-radius: 6px;
   background: var(--sf2);
-  color: var(--warn-text);
-  font: 600 12px / 18px var(--font-sans);
+  color: var(--ink2);
+  font: 500 12px / 18px var(--font-sans);
+  white-space: nowrap;
   vertical-align: 1px;
+}
+
+.status[data-status="waiting"],
+.status[data-status="failed"] {
+  color: var(--warn-text);
+  font-weight: 600;
+}
+
+.status[data-status="done"] {
+  color: var(--ok-text);
+  font-weight: 600;
+}
+
+.status[data-status="checks"],
+.status[data-status="stopped"] {
+  color: var(--mut);
 }
 
 /* Settle and Mark as unread or read, at the row's top right while the pointer or the focus is on it. */

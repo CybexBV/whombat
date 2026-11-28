@@ -3,10 +3,10 @@
  * as a `Handoff` for the Whombat thread it was handed over from, and T3 Code's latest items as steps in plain words.
  * Pure: T3 Code's answers and the watch's row in, words out.
  */
-import { HANDOFF_STEPS_MAX, type Handoff, type HandoffOutcome, type HandoffStep } from '@whombat/core';
-import { AT_WORK, FINISHED, type T3Status } from '../things/kinds/business/t3code';
+import { HANDOFF_STEPS_MAX, type Handoff, type HandoffStep } from '@whombat/core';
 import { list, rec, str } from '../things/words';
 import { commandOf, progressOf, progressParts, shellWriteOf } from './progress';
+import { AT_WORK, FINISHED, outcomeOf, type T3Status } from './status';
 
 /** Ended work shows this long at most, until the agent answered after it. */
 export const HANDOFF_ENDED_SHOWN_MS = 30 * 60_000;
@@ -175,14 +175,6 @@ export function runEndedOf(body: unknown): Date | null {
   const d = v ? new Date(v) : null;
   return d && Number.isFinite(d.getTime()) ? d : null;
 }
-
-/** How a thread's run ended, as the person sees it. */
-export const outcomeOf = (status: T3Status): HandoffOutcome =>
-  status === 'failed' || status === 'rolled_back'
-    ? 'failed'
-    : status === 'interrupted' || status === 'cancelled'
-      ? 'stopped'
-      : 'completed';
 
 /** The parts of a watch's row a hand-over is made of. */
 export interface HandoffRow {

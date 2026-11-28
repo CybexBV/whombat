@@ -4,6 +4,7 @@ import { BurrowId, ConversationId, MessageId, PrincipalId, RepoId } from '../ids
 import { ChatRuntime } from './chat-runtime.js';
 import { Count, Timestamp } from './common.js';
 import { CouncilMark, CouncilStage } from './council.js';
+import { HandoffOutcome } from './handoff.js';
 import { ConversationLink, LinkRef } from './links.js';
 
 /**
@@ -196,6 +197,17 @@ export const ChatThreadLast = z.object({
 export type ChatThreadLast = z.infer<typeof ChatThreadLast>;
 
 /**
+ * `ChatThread.job`: how the latest job handed over from a thread ended (a T3 Code thread, Whombat t3code.md), as long as
+ * the person hasn't written in the thread since. Its row says Done, Didn’t finish or Stopped by it once the live
+ * hand-overs no longer list the job.
+ */
+export const ChatThreadJob = z.object({
+  outcome: HandoffOutcome,
+  endedAt: Timestamp,
+});
+export type ChatThreadJob = z.infer<typeof ChatThreadJob>;
+
+/**
  * The plain start of a message for a list row's preview (Whombat chat-inbox.md): its lines joined by a space, Markdown
  * marks dropped, a link as its words (`[PR 69](https://…)` reads “PR 69”), a bare address without its scheme, clipped
  * with “…” at `max`. Empty for a message without words. The server makes `ChatThread.last.text` with it and the apps
@@ -300,6 +312,12 @@ export const ChatThread = z.object({
   last: ChatThreadLast.optional(),
   /** The repository its work is in, for its row's icon (Whombat chat-inbox.md). Absent or null: none. */
   repo: ChatThreadRepo.nullable().optional(),
+  /**
+   * How the latest job handed over from it ended, while the person hasn't written there since (`ChatThreadJob`). Absent
+   * or null: none ended, it still goes on, or the person wrote after it. `working`, `waiting` and a live hand-over win
+   * over it on the row.
+   */
+  job: ChatThreadJob.nullable().optional(),
 });
 export type ChatThread = z.infer<typeof ChatThread>;
 

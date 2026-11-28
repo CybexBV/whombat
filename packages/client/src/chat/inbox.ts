@@ -9,14 +9,19 @@ import {
   type ChatThread,
   type ChatThreadLast,
   chatThreadHref,
+  type Handoff,
+  type HandoffOutcome,
   type Message,
   threadPreview,
 } from '@whombat/core';
 import { interpolate } from '@whombat/core/i18n';
+import { currentStep, handoffMinutes, T3_CODE_NAME } from '../handoff';
 import { doneWhen } from '../home/time';
 import { clientTree } from '../i18n/catalog';
 import { CHAT_AREA_WORDS } from '../i18n/messages/chatWork/chat';
+import { WORK_AREA_WORDS } from '../i18n/messages/chatWork/work';
 import { canSettle } from './settle';
+import { threadStageWords } from './stage';
 import { threadTitle } from './threads';
 
 /** The inbox's words in a locale (English when none). `{agent}` is the assistant's name. */
@@ -28,8 +33,17 @@ export function inboxWords(locale?: string | null) {
     waiting: w.waiting,
     /** A row's and an open thread's status while something in it waits for the person. */
     waitingForYou: w.waitingForYou,
-    /** A row's status while the assistant works on it. */
+    /** A row's status while the assistant works on it; the Working filter. */
     working: w.working,
+    /** The Done filter, and a row's status once its job finished. */
+    done: w.done,
+    waitingChecks: w.waitingChecks,
+    didntFinish: w.didntFinish,
+    stopped: w.stopped,
+    nothingWorking: w.nothingWorking,
+    nothingWorkingHint: w.nothingWorkingHint,
+    nothingDone: w.nothingDone,
+    nothingDoneHint: w.nothingDoneHint,
     you: w.you,
     /** A row's second line under the person's own question before any reply; never a title. */
     noReply: w.noReply,
@@ -134,8 +148,12 @@ export interface InboxRow {
   when: string;
   /** New messages in it for the person; 0 for the thread open on screen (it is being read). */
   unread: number;
+  /** Something in it waits for the person: a card or question of the assistant's, or T3 Code asking for their OK. */
   waiting: boolean;
+  /** Work goes on from it (the assistant's turn, a run, a council, a checklist or T3 Code): it can't settle now. */
   working: boolean;
+  /** Where it stands, said in front of its line and marked on its icon; null when nothing goes on and nothing ended. */
+  status: RowStatus | null;
   /** It may be settled now (`canSettle`). */
   settleable: boolean;
   /** Something in it came from someone else, so Mark as unread can do something. */
@@ -160,6 +178,132 @@ export interface InboxRow {
   subjectKind: ChatSubject['kind'] | null;
   subjectId: string | null;
   subjectName: string | null;
+}
+
+/**
+ * Where a row's thread stands, in the order one wins over another: something waits for the person; the assistant or
+ * T3 Code works on it; it waits for a pull request's checks (nothing to do); its latest job finished, didn't finish or
+ * was stopped.
+ */
+export const ROW_STATUS_KINDS = ['waiting', 'working', 'checks', 'failed', 'stopped', 'done'] as const;
+export type RowStatusKind = (typeof ROW_STATUS_KINDS)[number];
+
+export interface RowStatus {
+  kind: RowStatusKind;
+  /** In front of the line: “Waiting for you”, “Dusty is working”, “T3 Code is working”, “Done”. */
+  words: string;
+  /** The words start with a name (the assistant's, T3 Code's), so they keep their capitals when read out. */
+  named: boolean;
+  /** For work handed to T3 Code: when its run started, for the clock after the words (`· 6m`); null without one. */
+  since: number | null;
+  /** In place of the newest reply: what T3 Code does now, or what it asks the person to approve. Null keeps the reply. */
+  line: string | null;
+}
+
+/** Two statuses that read the same, so a row that didn't change keeps its drawing. */
+export function sameRowStatus(a: RowStatus | null, b: RowStatus | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return a.kind === b.kind && a.words === b.words && a.since === b.since && a.line === b.line;
+}
+
+/**
+ * A row's status as a screen reader hears it after the title: the inbox's own words in lower case (“waiting for you”,
+ * “done”), and words that start with a name as they are (“Dusty is working”, “T3 Code is working”).
+ */
+export function rowStatusSpoken(status: Pick<RowStatus, 'words' | 'named'>): string {
+  return status.named ? status.words : status.words.toLowerCase();
+}
+
+/** A row's status words with its clock: “T3 Code is working · 6m”. */
+export function rowStatusWords(status: RowStatus, nowMs: number): string {
+  return status.since === null ? status.words : `${status.words} · ${handoffMinutes(status.since, nowMs)}`;
+}
+
+const msOf = (iso: string | null | undefined): number | null => {
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : null;
+};
+
+const ENDED_KIND: Record<HandoffOutcome, RowStatusKind> = {
+  completed: 'done',
+  failed: 'failed',
+  stopped: 'stopped',
+};
+
+/**
+ * Where one thread stands (`InboxRow.status`), read from its flags, the assistant's live work there (`live`) and the
+ * hand-overs to T3 Code from it (`handoffs`, the thread's own, oldest first). How its latest job ended comes from the
+ * server's `job`, or from a hand-over that ended since the list was read, unless the person wrote after that end.
+ */
+export function rowStatus(
+  t: Pick<ChatThread, 'waiting' | 'working' | 'handedOver' | 'job' | 'last'>,
+  handoffs: readonly Handoff[],
+  o: { live: boolean; me: string | null | undefined; agentName: string; locale?: string | null },
+): RowStatus | null {
+  const words = o.locale ? inboxWords(o.locale) : INBOX_WORDS;
+  const w = clientTree(o.locale, CHAT_AREA_WORDS).inbox;
+  const hw = clientTree(o.locale, WORK_AREA_WORDS).handoff;
+  const t3 = T3_CODE_NAME;
+  const active = handoffs.filter((h) => h.state !== 'ended');
+  const needsOk = active.find((h) => h.state === 'needs_ok');
+  if (t.waiting || needsOk) {
+    const line =
+      !t.waiting && needsOk
+        ? needsOk.asks
+          ? interpolate(hw.approveAsks, { t3, asks: needsOk.asks })
+          : interpolate(hw.approve, { t3 })
+        : null;
+    return { kind: 'waiting', words: words.waitingForYou, named: false, since: null, line };
+  }
+  if (t.working || o.live)
+    return {
+      kind: 'working',
+      words: threadStageWords(o.locale).working(o.agentName),
+      named: true,
+      since: null,
+      line: null,
+    };
+  const doing = active.filter((h) => h.state !== 'checks');
+  const now = doing.at(-1);
+  if (now) {
+    const step = currentStep(now);
+    const said =
+      now.state === 'finishing'
+        ? interpolate(hw.lineFinishing, { t3 })
+        : now.state === 'asked'
+          ? interpolate(hw.lineAsked, { t3, agentName: o.agentName })
+          : interpolate(w.t3Working, { t3 });
+    return {
+      kind: 'working',
+      words: said,
+      named: true,
+      since: now.state === 'working' ? msOf(now.since) : null,
+      line: now.state === 'asked' ? now.asks : (step?.text ?? null),
+    };
+  }
+  if (active.length)
+    return { kind: 'checks', words: words.waitingChecks, named: false, since: null, line: null };
+  // A council or a checklist at work from it, or T3 Code before the hand-overs were read.
+  if (t.handedOver) return { kind: 'working', words: words.working, named: false, since: null, line: null };
+  const job = t.job ?? null;
+  let outcome: HandoffOutcome | null = job?.outcome ?? null;
+  let endedAt = msOf(job?.endedAt);
+  for (const h of handoffs) {
+    const at = msOf(h.endedAt);
+    if (h.state === 'ended' && h.outcome && at !== null && (endedAt === null || at > endedAt)) {
+      outcome = h.outcome;
+      endedAt = at;
+    }
+  }
+  if (!outcome || endedAt === null) return null;
+  // The person wrote after it ended: their new question is the thread's news now.
+  const wrote = t.last && t.last.authorId === o.me ? msOf(t.last.at) : null;
+  if (wrote !== null && wrote > endedAt) return null;
+  const kind = ENDED_KIND[outcome];
+  const said = kind === 'done' ? words.done : kind === 'failed' ? words.didntFinish : words.stopped;
+  return { kind, words: said, named: false, since: null, line: null };
 }
 
 /** A row's icon: a repository's (its own picture, else its letter), a thing's mark, or the assistant's face. */
@@ -227,6 +371,10 @@ export interface InboxRowOptions {
   openRootId?: string | null;
   /** The person's language (English when none). */
   locale?: string | null;
+  /** The conversation's hand-overs to T3 Code (`conversations.handoffs`): what each row's T3 Code job is doing. */
+  handoffs?: readonly Handoff[];
+  /** The assistant's own work going on in a thread that the list may not know of yet (its live turn, a run). */
+  live?: (rootId: string) => boolean;
 }
 
 function whoOf(id: string, o: InboxRowOptions): string {
@@ -242,6 +390,8 @@ export function inboxRows(
   o: InboxRowOptions,
 ): InboxRow[] {
   const words = o.locale ? inboxWords(o.locale) : INBOX_WORDS;
+  const byRoot = new Map<string, Handoff[]>();
+  for (const h of o.handoffs ?? []) if (h.rootId) byRoot.set(h.rootId, [...(byRoot.get(h.rootId) ?? []), h]);
   return threads.map((t) => {
     const last = t.last;
     let who: string | null;
@@ -262,6 +412,15 @@ export function inboxRows(
       plainLinks(threadTitle(t.text)) ||
       (t.authorId === o.me ? words.yourMessage : messageFromTitle(whoOf(t.authorId, o), o.locale));
     const split = splitRepoTitle(title, t.repo?.name);
+    const handed = byRoot.get(t.rootId) ?? [];
+    const live = o.live?.(t.rootId) ?? false;
+    const status = rowStatus(t, handed, { live, me: o.me, agentName: o.agentName, locale: o.locale });
+    const working =
+      t.working ||
+      live ||
+      !!t.handedOver ||
+      handed.some((h) => h.state !== 'ended' && h.state !== 'needs_ok');
+    const waiting = !!t.waiting || status?.kind === 'waiting';
     return {
       rootId: t.rootId,
       href: chatThreadHref(t.room, t.rootId),
@@ -270,9 +429,10 @@ export function inboxRows(
       line,
       when: doneWhen(t.lastAt, o.now, o.timeZone, o.locale),
       unread: t.rootId === o.openRootId ? 0 : (unread.get(t.rootId) ?? 0),
-      waiting: !!t.waiting,
-      working: t.working,
-      settleable: canSettle(t),
+      waiting,
+      working,
+      status,
+      settleable: canSettle(t) && !working && !waiting,
       markable: t.authorId !== o.me || (!!last && last.authorId !== o.me) || t.replyCount > 0,
       shownWho: last && last.authorId === o.agentId ? null : who,
       titleHead: split.head,
@@ -282,24 +442,43 @@ export function inboxRows(
   });
 }
 
-export type InboxFilter = 'all' | 'unread' | 'waiting';
+export type InboxFilter = 'all' | 'waiting' | 'working' | 'done' | 'unread';
 
-/** The rows a filter shows (CIB-05). */
+/** The filters in the order they show: All, Waiting, Working, Done, Unread. */
+export const INBOX_FILTERS: readonly InboxFilter[] = ['all', 'waiting', 'working', 'done', 'unread'];
+
+const isWorking = (r: Pick<InboxRow, 'status'>) =>
+  r.status?.kind === 'working' || r.status?.kind === 'checks';
+const isEnded = (r: Pick<InboxRow, 'status'>) =>
+  r.status?.kind === 'done' || r.status?.kind === 'failed' || r.status?.kind === 'stopped';
+
+/** The rows a filter shows (CIB-05): Working has work going on or waiting for checks, Done has work that ended. */
 export function inboxFiltered(rows: readonly InboxRow[], filter: InboxFilter): readonly InboxRow[] {
   if (filter === 'unread') return rows.filter((r) => r.unread > 0);
   if (filter === 'waiting') return rows.filter((r) => r.waiting);
+  if (filter === 'working') return rows.filter(isWorking);
+  if (filter === 'done') return rows.filter(isEnded);
   return rows;
 }
 
 /** How many rows each filter would show, for the filters' numbers. */
-export function inboxCounts(rows: readonly InboxRow[]): { unread: number; waiting: number } {
+export function inboxCounts(rows: readonly InboxRow[]): {
+  unread: number;
+  waiting: number;
+  working: number;
+  done: number;
+} {
   let unread = 0;
   let waiting = 0;
+  let working = 0;
+  let done = 0;
   for (const r of rows) {
     if (r.unread > 0) unread++;
     if (r.waiting) waiting++;
+    if (isWorking(r)) working++;
+    if (isEnded(r)) done++;
   }
-  return { unread, waiting };
+  return { unread, waiting, working, done };
 }
 
 /**

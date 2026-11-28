@@ -83,7 +83,7 @@ describe('the rows (CIB-01…CIB-04)', () => {
     expect(within(rowOf(PVE_THREAD) as HTMLElement).getByText('2')).toBeTruthy();
     expect(rowOf(FIRMWARE_THREAD)?.hasAttribute('data-unread')).toBe(false);
     expect(rowLink(FIRMWARE_THREAD)?.getAttribute('aria-label')).toBe(
-      'Is there new firmware for the access points?, working',
+      'Is there new firmware for the access points?, Neo is working',
     );
     // The state sits on the icon: the blue dot for new, the turning ring for work.
     expect(rowOf(PVE_THREAD)?.querySelector('[data-thread-new]')).toBeTruthy();

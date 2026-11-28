@@ -33,7 +33,7 @@ import {
 import { threadSettleOf } from './settle-rules';
 import { repoShortName, threadRepos } from './thread-repo';
 import { threadChoices } from './thread-runtime';
-import { waitingThreads, workingThreads } from './thread-state';
+import { endedJobs, waitingThreads, workingThreads } from './thread-state';
 import { roomTopic } from './title';
 import { chatContextTopic, chatSubjectOf, messageSubjectOf } from './view';
 import { threadWorks, withWork } from './work';
@@ -324,7 +324,7 @@ async function threadsOf(
     personId: room.personId,
   };
   const replied = rows.filter((r) => r.replyCount > 0).map((r) => r.id);
-  const [working, held, waiting, choices, works, lasts, repoOf] = await Promise.all([
+  const [working, held, waiting, choices, works, lasts, repoOf, jobs] = await Promise.all([
     workingThreads(db, where, ids),
     // Work handed over from it still goes on (T3 Code, a council, a delegation): it doesn't settle (DLG-31).
     workingThreads(db, where, ids, { handedOver: true }),
@@ -337,6 +337,8 @@ async function threadsOf(
     lastReplies(db, replied),
     // The repository its work is in, for its row's icon.
     threadRepos(db, where, ids),
+    // How the latest job handed to T3 Code from it ended, for its row's Done (chat-inbox-web.md).
+    endedJobs(db, where, ids),
   ]);
   const icons = await storedRepoIcons(db, room.burrowId, [...repoOf.values()]);
   const due = [...new Set(repoOf.values())].filter((name) => icons.get(repoIconKey(name))?.due);
@@ -361,6 +363,8 @@ async function threadsOf(
     };
     const last = lasts.get(r.id);
     if (last) thread.last = last;
+    const job = jobs.get(r.id);
+    if (job) thread.job = job;
     const repo = repoOf.get(r.id);
     if (repo) {
       const iconUrl = icons.get(repoIconKey(repo))?.iconUrl;

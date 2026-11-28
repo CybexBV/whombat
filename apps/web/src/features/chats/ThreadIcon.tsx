@@ -2,13 +2,21 @@
  * The icon at the start of a thread's row in Chat's and Feedback's lists (app chat-inbox-web.md): what the thread is
  * about at a glance, and its state on the icon's corners. A repository's own icon on a rounded tile (its letter on an
  * avatar tone until the picture arrives, when it fails or when there is none), the thing a thread is about as the
- * sidebar and Overview mark it, else the assistant's face. Something new is a blue dot on the top corner; while the
- * assistant works a small turning ring sits on the bottom corner. Decorative: the row's name says all of it.
+ * sidebar and Overview mark it, else the assistant's face. Something new is a blue dot on the top corner; where the
+ * thread stands is a mark on the bottom corner, told apart by its shape (CTC-09): a filled dot waiting for the person, a
+ * turning ring at work, a dashed ring waiting for checks, a tick done, a ring with a bar where it didn't finish, a square
+ * stopped. Decorative: the row's name says all of it.
  */
 import { HUMAN_INITIALS_COLOR, toneFor } from '@whombat/avatars';
 import { WhombatAvatar } from '@whombat/avatars/react';
 import { BrandMark } from '@whombat/brand/react';
-import { agentFaceOf, type ThreadIconFields, thingGlyph, thingMark } from '@whombat/client';
+import {
+  agentFaceOf,
+  type RowStatusKind,
+  type ThreadIconFields,
+  thingGlyph,
+  thingMark,
+} from '@whombat/client';
 import { useHomeOverview, useTheAgent } from '@whombat/client/react';
 import { thingId } from '@whombat/core';
 import { useState } from 'react';
@@ -24,15 +32,15 @@ export function ThreadIcon({
   burrow,
   row,
   fresh = false,
-  working = false,
+  status = null,
   size = THREAD_ICON,
 }: {
   burrow: string;
   row: ThreadIconFields;
   /** Something in the thread is new. */
   fresh?: boolean;
-  /** The assistant is at it. */
-  working?: boolean;
+  /** Where the thread stands (`InboxRow.status`); null shows no mark. */
+  status?: RowStatusKind | null;
   size?: number;
 }) {
   return (
@@ -55,16 +63,63 @@ export function ThreadIcon({
         <AgentFace burrow={burrow} size={size} />
       )}
       {fresh ? <span className={styles.fresh} data-thread-new="" /> : null}
-      {working ? (
-        <span className={styles.working} data-thread-working="">
-          <svg className={styles.ring} width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <circle className={styles.track} cx="8" cy="8" r="6" />
-            <circle className={styles.arc} cx="8" cy="8" r="6" />
-          </svg>
+      {status ? (
+        <span
+          className={styles.working}
+          data-thread-status={status}
+          data-thread-working={status === 'working' ? '' : undefined}
+        >
+          <StatusMark kind={status} />
         </span>
       ) : null}
     </span>
   );
+}
+
+/** The mark of where a thread stands, 16px, by shape so colour never says it alone. */
+function StatusMark({ kind }: { kind: RowStatusKind }) {
+  const box = { width: 16, height: 16, viewBox: '0 0 16 16' } as const;
+  switch (kind) {
+    case 'working':
+      return (
+        <svg className={styles.ring} {...box} aria-hidden="true">
+          <circle className={styles.track} cx="8" cy="8" r="6" />
+          <circle className={styles.arc} cx="8" cy="8" r="6" />
+        </svg>
+      );
+    case 'waiting':
+      return (
+        <svg className={styles.waitingMark} {...box} aria-hidden="true">
+          <circle cx="8" cy="8" r="6" />
+        </svg>
+      );
+    case 'checks':
+      return (
+        <svg className={styles.checksMark} {...box} aria-hidden="true">
+          <circle cx="8" cy="8" r="6" />
+        </svg>
+      );
+    case 'done':
+      return (
+        <svg className={styles.doneMark} {...box} aria-hidden="true">
+          <circle cx="8" cy="8" r="7" />
+          <path d="M4.8 8.3l2.1 2.1 4.3-4.6" />
+        </svg>
+      );
+    case 'failed':
+      return (
+        <svg className={styles.failedMark} {...box} aria-hidden="true">
+          <circle cx="8" cy="8" r="6" />
+          <path d="M5 8h6" />
+        </svg>
+      );
+    default:
+      return (
+        <svg className={styles.stoppedMark} {...box} aria-hidden="true">
+          <rect x="3" y="3" width="10" height="10" rx="2" />
+        </svg>
+      );
+  }
 }
 
 /**

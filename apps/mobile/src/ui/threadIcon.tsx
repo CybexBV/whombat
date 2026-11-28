@@ -2,13 +2,15 @@
  * The icon at the start of a thread's row in Chat's and Feedback's lists (app chat-inbox-phone.md): what the thread is
  * about at a glance, and its state on the icon's corners. A repository's own icon on a rounded tile (its letter on an
  * avatar tone until the picture arrives, when it fails or when there is none), the thing a thread is about as the app
- * marks it elsewhere, else the assistant's face. Something new is a blue dot on the top corner; while the assistant
- * works a small turning ring sits on the bottom corner. Decorative for screen readers: the row's label says all of it.
+ * marks it elsewhere, else the assistant's face. Something new is a blue dot on the top corner; where the thread stands
+ * is a mark on the bottom corner, told apart by its shape: a filled dot waiting for the person, a turning ring at work,
+ * a dashed ring waiting for checks, a tick done, a ring with a bar where it didn't finish, a square stopped. Decorative
+ * for screen readers: the row's label says all of it.
  *
  * The corner marks sit over the icon, so they live here rather than in the row, which reads top to bottom.
  */
 import { HUMAN_INITIALS_COLOR } from '@whombat/avatars';
-import { agentFaceOf, type ThreadIconFields, thingMark } from '@whombat/client';
+import { agentFaceOf, type RowStatusKind, type ThreadIconFields, thingMark } from '@whombat/client';
 import { useHomeOverview } from '@whombat/client/react';
 import { thingId } from '@whombat/core';
 import { useEffect, useState } from 'react';
@@ -21,7 +23,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { WhombatAvatar } from '../avatars/Avatars';
 import { usePhotoSource } from '../avatars/photo';
 import { useBurrowBase } from '../data/BurrowProvider';
@@ -46,16 +48,16 @@ const hidden = {
   importantForAccessibility: 'no-hide-descendants',
 } as const;
 
-/** A thread's icon with its state: `fresh` (something new) and `working` (the assistant is at it). */
+/** A thread's icon with its state: `fresh` (something new) and `status` (where it stands, `InboxRow.status`). */
 export function ThreadIcon({
   row,
   fresh = false,
-  working = false,
+  status = null,
   size = THREAD_ICON,
 }: {
   row: ThreadIconRow;
   fresh?: boolean;
-  working?: boolean;
+  status?: RowStatusKind | null;
   size?: number;
 }) {
   const theme = useTheme();
@@ -88,7 +90,7 @@ export function ThreadIcon({
           }}
         />
       ) : null}
-      {working ? (
+      {status ? (
         <View
           style={{
             position: 'absolute',
@@ -102,7 +104,7 @@ export function ThreadIcon({
             backgroundColor: theme.colors.bg,
           }}
         >
-          <TurningRing />
+          {status === 'working' ? <TurningRing /> : <StatusMark kind={status} />}
         </View>
       ) : null}
     </View>
@@ -243,7 +245,7 @@ function TurningRing() {
           cx={8}
           cy={8}
           r={6}
-          stroke={theme.colors.ink}
+          stroke={theme.colors.ok}
           strokeWidth={2.4}
           strokeDasharray="12 26"
           strokeLinecap="round"
@@ -251,5 +253,46 @@ function TurningRing() {
         />
       </Svg>
     </Animated.View>
+  );
+}
+
+/** Every mark but the turning ring, 16dp, standing still: colour never says it alone. */
+function StatusMark({ kind }: { kind: Exclude<RowStatusKind, 'working'> }) {
+  const theme = useTheme();
+  return (
+    <Svg width={16} height={16} viewBox="0 0 16 16">
+      {kind === 'waiting' ? (
+        <Circle cx={8} cy={8} r={6} fill={theme.chart.chart1} />
+      ) : kind === 'checks' ? (
+        <Circle
+          cx={8}
+          cy={8}
+          r={6}
+          fill="none"
+          stroke={theme.colors.mut}
+          strokeWidth={2}
+          strokeDasharray="2.4 2.3"
+        />
+      ) : kind === 'done' ? (
+        <>
+          <Circle cx={8} cy={8} r={7} fill={theme.colors.ok} />
+          <Path
+            d="M4.8 8.3l2.1 2.1 4.3-4.6"
+            fill="none"
+            stroke={theme.colors.bg}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </>
+      ) : kind === 'failed' ? (
+        <>
+          <Circle cx={8} cy={8} r={6} fill="none" stroke={theme.colors.warn} strokeWidth={2} />
+          <Path d="M5 8h6" stroke={theme.colors.warn} strokeWidth={2} strokeLinecap="round" />
+        </>
+      ) : (
+        <Rect x={3} y={3} width={10} height={10} rx={2} fill={theme.colors.mut} />
+      )}
+    </Svg>
   );
 }

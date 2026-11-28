@@ -84,7 +84,7 @@ describe('Chat (AP-2404…AP-2406; chat-inbox-web.md)', () => {
     const firmware = await row(chat, /^Is there new firmware for the access points\?/);
     // Working is the turning ring on its icon, and a word in its name.
     expect(firmware.querySelector('[data-thread-working]')).toBeTruthy();
-    expect(firmware.getAttribute('aria-label')).toMatch(/, working$/);
+    expect(firmware.getAttribute('aria-label')).toMatch(/, Neo is working$/);
     // The list has no message box: New chat opens it.
     expect(within(chat).getByRole('button', { name: 'New chat' })).toBeTruthy();
     expect(screen.queryByRole('textbox', { name: 'Ask Neo anything' })).toBeNull();
