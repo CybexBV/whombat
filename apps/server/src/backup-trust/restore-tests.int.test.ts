@@ -1,11 +1,13 @@
 /**
  * Restore tests end to end against the fake hosts service (docs/decisions/backup-trust.md): *Test one now* restores a
- * machine's newest backup as a copy in the copies' range, pulls its network cables, renames and tags it before it
- * starts, waits until it runs and its guest agent answers, then stops and deletes it, and the real machine is only
- * read. A copy that doesn't start raises one problem for the machine. The What's protected page and the machine's page
- * show the result. A machine at the copy's number that doesn't carry the test's marker is never changed, started,
- * stopped or deleted, and a copy whose backup uses parts of the server is deleted without starting. Postgres because
- * every step is a signed commit the runtime picks up again after a restart, and the sweep reads the tests back.
+ * machine's newest backup as a copy in the copies' range, cut off by the restore itself (network cables pulled, no start
+ * with the server, renamed, tagged and marked), waits until it runs and its guest agent answers, then stops and deletes
+ * it, and the real machine is only read. A copy that doesn't start raises one problem for the machine. The What's
+ * protected page and the machine's page show the result. A machine at the copy's number that doesn't carry the test's
+ * marker is never changed, started, stopped or deleted; a copy whose backup uses parts of the server, or whose cables
+ * Proxmox wouldn't pull, is deleted without starting; a helper too old to cut the copy off makes no copy at all; a copy
+ * whose restore answer was lost is found by its marker and removed. Postgres because every step is a signed commit the
+ * runtime picks up again after a restart, and the sweep reads the tests back.
  */
 import { RESTORE_TEST_FAILED_HINT, RESTORE_TEST_TAG } from '@whombat/core';
 import { eq } from 'drizzle-orm';
@@ -96,7 +98,9 @@ function personsMachine(): void {
 }
 
 /** How the restore call answers in a test (null: as Proxmox does). */
-let restoreAnswer: 'refused' | 'lost' | null = null;
+let restoreAnswer: 'refused' | 'lost' | 'unanswered' | null = null;
+/** Changes of the copy's network cards are refused (a card Proxmox won't take). */
+let refuseCards = false;
 
 /** Runs passes until the newest test is finished. */
 async function finished() {
@@ -118,10 +122,18 @@ beforeAll(async () => {
   // A person makes a machine at the number the test chose, just as the restore is asked for.
   fake.on('POST', '/api/v1/servers/shale/backups/restore', () => {
     if (!restoreAnswer) return null;
+    // Asked, but the answer never came and the copy shows up only later.
+    if (restoreAnswer === 'unanswered') return problem(503, 'unavailable', 'The agent didn’t answer.');
     personsMachine();
     return restoreAnswer === 'refused'
       ? problem(409, 'platform_error', 'TASK ERROR: unable to restore')
       : problem(503, 'unavailable', 'The agent didn’t answer.');
+  });
+  fake.on('PUT', `${COPY_PATH}/config`, (r) => {
+    const set = (r.body as { set?: Record<string, string> })?.set ?? {};
+    return refuseCards && Object.keys(set).some((k) => k.startsWith('net'))
+      ? problem(403, 'not_allowed', 'net0: the model must be one of virtio, e1000')
+      : null;
   });
 });
 
@@ -148,8 +160,8 @@ describe('restore tests (backup-trust.md)', () => {
     expect(run.json().running).toMatchObject({ guestId: real.id });
     expect((await request('POST', '/restore-tests/shale/run', {})).statusCode).toBe(409);
 
-    // Restored into the copies' range; marked as this test's copy, its cables pulled and its name changed before it
-    // was asked to start.
+    // Restored into the copies' range, cut off by the restore itself: marked as this test's copy, its cables pulled,
+    // its name changed and kept from starting with the server from the moment it exists, so nothing was left to change.
     const booting = await eventually(async () => {
       await runner().pass();
       const row = await testRow();
@@ -157,6 +169,15 @@ describe('restore tests (backup-trust.md)', () => {
       return row;
     });
     expect(booting).toMatchObject({ copyId: 990000, guestId: real.id, agentExpected: true });
+    const restore = fake.calls('POST', '/api/v1/servers/shale/backups/restore').at(-1);
+    expect(restore?.body).toMatchObject({
+      new_id: 990000,
+      isolate: {
+        name: `whombat-test-of-${real.name}`,
+        marker: `whombat-${booting?.id}`,
+        tag: RESTORE_TEST_TAG,
+      },
+    });
     expect(copyConfig.values.net0).toContain('link_down=1');
     expect(copyConfig.values).toMatchObject({
       name: `whombat-test-of-${real.name}`,
@@ -164,13 +185,9 @@ describe('restore tests (backup-trust.md)', () => {
       description: `whombat-${booting?.id}`,
     });
     expect(copyConfig.values.tags).toContain(RESTORE_TEST_TAG);
-    const puts = fake.calls('PUT', `${COPY_PATH}/config`);
-    expect(puts).toHaveLength(2);
+    expect(fake.calls('PUT', `${COPY_PATH}/config`)).toHaveLength(0);
     const start = fake.calls('POST', `${COPY_PATH}/actions`)[0];
     expect(start?.body).toMatchObject({ action: 'start' });
-    const order = (r: (typeof puts)[number] | undefined) => (r ? fake.requests.indexOf(r) : -1);
-    expect(order(puts[0])).toBeGreaterThanOrEqual(0);
-    expect(order(puts[0])).toBeLessThan(order(start));
 
     // Running, and its guest agent answers: it worked; then it is stopped and deleted.
     await eventually(() => expect(fake.guest('shale', 'pve:990000')?.state).toBe('running'));
@@ -295,6 +312,120 @@ describe('restore tests (backup-trust.md)', () => {
     expect(touches()).toBe(before);
     expect(fake.guest('shale', COPY)).toMatchObject({ name: 'scratch', state: 'running' });
     fake.removeGuest('shale', COPY);
+  });
+
+  it('makes no copy on a server whose helper can’t cut it off from the start', async () => {
+    const real = realMachine();
+    const restores = () => fake.calls('POST', '/api/v1/servers/shale/backups/restore').length;
+    const before = restores();
+    fake.manage.oldHelpers.add('shale');
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      const done = await finished();
+      expect(done).toMatchObject({ outcome: 'skipped', reason: 'old_helper' });
+    } finally {
+      fake.manage.oldHelpers.delete('shale');
+    }
+    expect(restores()).toBe(before);
+    expect(fake.guest('shale', COPY)).toBeNull();
+  });
+
+  it('puts on what of the isolation didn’t take, start with the server first, and a refused card stops the start', async () => {
+    const real = realMachine();
+    fake.configs.delete(`shale/${COPY}`);
+    const copyConfig = fake.configOf('shale', COPY);
+    Object.assign(copyConfig.values, { net0: 'ne2k_pci=BC:24:11:00:00:01,bridge=vmbr9' });
+    const starts = () =>
+      fake
+        .calls('POST', `${COPY_PATH}/actions`)
+        .filter((r) => (r.body as { action?: string })?.action === 'start').length;
+    const startsBefore = starts();
+    const putsBefore = fake.calls('PUT', `${COPY_PATH}/config`).length;
+    fake.manage.holdTasks = true;
+    refuseCards = true;
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      const task = await eventually(async () => {
+        await runner().pass();
+        const row = await latest();
+        expect(row?.step).toBe('restoring');
+        expect(row?.task).toBeTruthy();
+        return String(row?.task);
+      });
+      fake.manage.finishTask(task);
+      await eventually(() => expect(fake.guest('shale', COPY)).toBeTruthy());
+      // Proxmox kept the backup's start with the server and its connected card, though the marker went on.
+      Object.assign(copyConfig.values, { onboot: '1', net0: 'ne2k_pci=BC:24:11:00:00:01,bridge=vmbr9' });
+      fake.manage.holdTasks = false;
+      const done = await finished();
+      expect(done).toMatchObject({ outcome: 'skipped', reason: 'network_kept' });
+    } finally {
+      fake.manage.holdTasks = false;
+      refuseCards = false;
+    }
+    const puts = fake.calls('PUT', `${COPY_PATH}/config`).slice(putsBefore);
+    const sets = puts.map((r) => Object.keys((r.body as { set: Record<string, string> }).set));
+    expect(sets[0]).toEqual(['onboot']);
+    expect(sets[1]).toEqual(['net0']);
+    // Only the cable: the card as it was.
+    expect((puts[1]?.body as { set?: Record<string, string> } | undefined)?.set?.net0).toBe(
+      'ne2k_pci=BC:24:11:00:00:01,bridge=vmbr9,link_down=1',
+    );
+    expect(copyConfig.values.onboot).toBe('0');
+    expect(starts()).toBe(startsBefore);
+    expect(fake.guest('shale', COPY)).toBeNull();
+  });
+
+  it('a copy whose restore answer was lost is found by its marker and removed without starting', async () => {
+    const real = realMachine();
+    const starts = () =>
+      fake
+        .calls('POST', `${COPY_PATH}/actions`)
+        .filter((r) => (r.body as { action?: string })?.action === 'start').length;
+    const startsBefore = starts();
+    const realClock = t.services.clock;
+    restoreAnswer = 'unanswered';
+    let test: Awaited<ReturnType<typeof latest>>;
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      await eventually(async () => {
+        await runner().pass();
+        expect((await latest())?.step).toBe('restoring');
+      });
+      // No copy came for a quarter of an hour: the test gives up, with nothing at the number to remove.
+      t.services.clock = () => new Date(realClock().getTime() + 20 * 60_000);
+      test = await finished();
+      expect(test).toMatchObject({ outcome: 'skipped', reason: 'unreachable', copyId: 990000 });
+    } finally {
+      t.services.clock = realClock;
+      restoreAnswer = null;
+    }
+    // Then the restore that was asked for runs after all: Proxmox writes the copy with the isolation it was given.
+    const asked = fake.calls('POST', '/api/v1/servers/shale/backups/restore').at(-1)?.body as {
+      isolate: { name: string; marker: string };
+    };
+    expect(asked.isolate.marker).toBe(`whombat-${test?.id}`);
+    fake.configs.delete(`shale/${COPY}`);
+    fake.addGuest('shale', {
+      id: COPY,
+      vmid: 990000,
+      name: asked.isolate.name,
+      platform: 'pve',
+      kind: 'vm',
+      state: 'stopped',
+    });
+    Object.assign(fake.configOf('shale', COPY).values, {
+      name: asked.isolate.name,
+      onboot: '0',
+      description: asked.isolate.marker,
+      net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0,link_down=1',
+    });
+    await new RestoreTests(t.services).pass();
+    await eventually(() => expect(fake.guest('shale', COPY)).toBeNull());
+    expect(starts()).toBe(startsBefore);
   });
 
   it('the sweep deletes a copy carrying a test’s marker and nothing that only looks like one', async () => {
