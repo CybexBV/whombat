@@ -2,10 +2,11 @@
  * The restore test job (docs/decisions/backup-trust.md), every minute on the home jobs' tick:
  *
  * 1. moves every test that isn't finished one step on (`restore_tests.step`): choose the newest backup, a storage with
- *    room and a free number for the copy; restore it as a new machine cut off from the start (the restore itself pulls
- *    its network cables, keeps it from starting with the server, names and tags it and writes the test's marker in its
- *    notes); check the copy's own settings again, putting on what didn't take; start it; wait until it runs (and, when
- *    the real machine has a guest agent, until that answers inside the copy); then stop and delete the copy. Each step
+ *    room for it and the memory it needs (both from the backup's own settings) and a free number for the copy; restore
+ *    it as a new machine cut off from the start (the restore itself pulls its network cables, keeps it from starting
+ *    with the server, names and tags it and writes the test's marker in its notes); check the copy's own settings
+ *    again, putting on what didn't take; start it; wait until it runs (and, when the copy's settings switch on a guest
+ *    agent the real machine doesn't show missing, until that answers inside the copy); then stop and delete the copy. Each step
  *    is written down before Proxmox is asked, so a restart carries on. The real machine is only read, never changed,
  *    and a machine at the copy's number without the test's marker is never changed, started, stopped or deleted: a
  *    person's machine can take that number at any time.
@@ -47,6 +48,9 @@ import { loadAgentRow } from '../read/principals';
 import type { Services } from '../services';
 import { beginRestoreTest, stepRestoreTest } from './commands';
 import {
+  agentExpectedOf,
+  agentMayAnswer,
+  backupNeeds,
   bootVerdict,
   carriesMarker,
   chosenGuests,
@@ -59,10 +63,10 @@ import {
   isolationSteps,
   markedTestId,
   nextGuest,
+  overTime,
   roomNeeded,
   storageFor,
   storagesOf,
-  TEST_MAX_MS,
   testDue,
   usesHostParts,
 } from './plan';
@@ -103,6 +107,7 @@ const codeOf = (err: unknown) => (err instanceof HostsError ? err.code : null);
 interface GuestFacts {
   id: string;
   name: string;
+  kind: 'vm' | 'container';
   state: string;
   agent: boolean;
   lock: string | null;
@@ -115,6 +120,7 @@ function guestFacts(raw: unknown): GuestFacts {
   return {
     id: String(g.id ?? ''),
     name: String(g.name ?? ''),
+    kind: g.kind === 'container' ? 'container' : 'vm',
     state: String(g.state ?? ''),
     agent: g.guest_agent === 'running',
     lock: typeof g.lock === 'string' && g.lock ? g.lock : null,
@@ -341,13 +347,8 @@ export class RestoreTests {
   }
 
   async #advance(t: TestRow, as: { burrowId: string; actorId: string }): Promise<void> {
-    const now = this.services.clock();
-    const age = now.getTime() - t.startedAt.getTime();
-    if (t.step !== 'cleaning' && t.step !== 'done' && age > TEST_MAX_MS) {
-      if (t.step === 'pick') await this.#end(as, t, 'skipped', 'unreachable');
-      else await this.#end(as, t, 'failed', 'too_long');
-      return;
-    }
+    const late = overTime(t, this.services.clock());
+    if (late) return this.#end(as, t, late.outcome, late.reason);
     switch (t.step) {
       case 'pick':
         return this.#pick(t, as);
@@ -481,7 +482,7 @@ export class RestoreTests {
         if (codeOf(err) === 'unsupported') return this.#end(as, t, 'skipped', 'other_node');
         throw err;
       }
-      if (usesHostParts(config)) return this.#end(as, t, 'skipped', 'host_parts');
+      if (usesHostParts(config, t.kind)) return this.#end(as, t, 'skipped', 'host_parts');
       const backups = toHostBackupVolumes(
         await hosts.call<unknown>({ path: `${G(t.serverId, t.guestId)}/backups`, actor: ADMIN }),
       ).filter((b) => b.volume);
@@ -489,12 +490,28 @@ export class RestoreTests {
         (a, b) => Date.parse(b.created ?? '') - Date.parse(a.created ?? ''),
       )[0];
       if (!newest) return this.#end(as, t, 'skipped', 'no_backup');
+      // What the restore makes comes from the backup's own settings: the machine today may have lost a big disk since.
+      let saved: HostGuestConfig;
+      try {
+        saved = toHostGuestConfig(
+          await hosts.call<unknown>({
+            path: `${S(t.serverId)}/backups/config`,
+            query: { platform: 'pve', volume: newest.volume },
+            actor: ADMIN,
+          }),
+        );
+      } catch (err) {
+        if (codeOf(err) === 'agent_outdated') return this.#end(as, t, 'skipped', 'old_helper');
+        if (codeOf(err) === 'not_found') return this.#end(as, t, 'skipped', 'no_backup');
+        throw err;
+      }
+      if (usesHostParts(saved, t.kind)) return this.#end(as, t, 'skipped', 'host_parts');
+      const needs = backupNeeds(t.kind, saved.values);
       // Enough free memory for the copy, as the newest report says.
-      const memoryMb = Number(config.values.memory ?? '');
       const { totalGb, usedPct } = server.memory;
-      if (Number.isFinite(memoryMb) && memoryMb > 0 && totalGb !== null && usedPct !== null) {
+      if (totalGb !== null && usedPct !== null) {
         const freeMb = totalGb * 1024 * (1 - usedPct / 100);
-        if (memoryMb > freeMb) return this.#end(as, t, 'skipped', 'no_memory');
+        if (needs.memoryMb > freeMb) return this.#end(as, t, 'skipped', 'no_memory');
       }
       const choices = toHostChoices(
         await hosts.call<unknown>({
@@ -503,15 +520,10 @@ export class RestoreTests {
           actor: ADMIN,
         }),
       );
-      const diskBytes = (config.disks ?? [])
-        .filter((d) => d.media !== 'cdrom' && !d.unused)
-        .reduce((sum, d) => sum + (d.sizeBytes ?? 0), 0);
-      const storage = storageFor(
-        t.kind,
-        choices.storages,
-        storagesOf(config.values),
-        roomNeeded(diskBytes, newest.sizeBytes ?? null),
-      );
+      // Without its disks' sizes or the backup's own, Whombat can't tell that the copy fits.
+      const room = roomNeeded(needs, newest.sizeBytes ?? null);
+      if (room === null) return this.#end(as, t, 'skipped', 'no_space');
+      const storage = storageFor(t.kind, choices.storages, storagesOf(saved.values), room);
       if (!storage) return this.#end(as, t, 'skipped', 'no_space');
       // A helper that can't restore the copy cut off from the start would leave it on the network until it is changed.
       if (!choices.restoreIsolate) return this.#end(as, t, 'skipped', 'old_helper');
@@ -524,7 +536,8 @@ export class RestoreTests {
         storage,
         copyId,
         copyName: restoreTestName(t.guestName),
-        agentExpected: t.kind === 'vm' && original.agent,
+        // Decided for good from the copy's own settings before it starts.
+        agentExpected: t.kind === 'vm' && agentMayAnswer(original),
         task: null,
         tries: 0,
       });
@@ -625,7 +638,7 @@ export class RestoreTests {
       if (claim === 'wait') return;
       if (claim === 'gone' || claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
       // The copy's own settings are the backup's: a hook script or a passed-through device the machine had then.
-      const problem = copyProblem(claim.config, t.copyId, t.id);
+      const problem = copyProblem(claim.config, t.kind, t.copyId, t.id);
       if (problem) return this.#end(as, t, 'skipped', problem);
     } catch (err) {
       if (transient(err) && t.tries + 1 < TRANSIENT_TRIES) {
@@ -649,11 +662,17 @@ export class RestoreTests {
     if (claim === 'wait') return;
     if (claim === 'not_ours') return this.#end(as, t, 'skipped', 'not_ours');
     // Read again right before the start: still marked, still no parts of the server, every cable still out.
-    const problem = copyProblem(claim.config, t.copyId, t.id);
+    const problem = copyProblem(claim.config, t.kind, t.copyId, t.id);
     if (problem) return this.#end(as, t, 'skipped', problem);
     const { copy } = claim;
+    // The copy's own settings say whether it has a guest agent to answer: a VM that never boots must not pass.
+    const agentExpected = agentExpectedOf(
+      t.kind,
+      { ...claim.config.values, ...(claim.config.pending ?? {}) },
+      t.agentExpected,
+    );
     if (copy.state === 'running') {
-      await this.#step(as, t, { step: 'booting', tries: 0 });
+      await this.#step(as, t, { step: 'booting', tries: 0, agentExpected });
       return;
     }
     try {
@@ -665,7 +684,7 @@ export class RestoreTests {
         timeoutMs: 60_000,
       });
       hosts.forget('fleet', `guests:${t.serverId}`);
-      await this.#step(as, t, { step: 'booting', tries: 0 });
+      await this.#step(as, t, { step: 'booting', tries: 0, agentExpected });
     } catch (err) {
       return this.#trouble(as, t, err, 'failed', 'start_failed');
     }
@@ -732,10 +751,11 @@ export class RestoreTests {
     const hosts = hostsFor(this.services);
     if (copy.lock) return;
     if (copy.state !== 'stopped') {
+      // The hosts service stops a VM with force_stop and a container with stop.
       await hosts.call<unknown>({
         method: 'POST',
         path: `${G(serverId, copy.id)}/actions`,
-        body: { action: 'stop', confirm: true },
+        body: { action: copy.kind === 'vm' ? 'force_stop' : 'stop', confirm: true },
         actor: ADMIN,
         timeoutMs: 60_000,
       });

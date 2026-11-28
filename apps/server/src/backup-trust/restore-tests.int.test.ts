@@ -20,7 +20,7 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { eventually } from '../test/collab';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
-import { RestoreTests, restoreTestsFor } from './runner';
+import { failingTests, RestoreTests, restoreTestsFor } from './runner';
 
 const fake = new FakeHostsService();
 const t = useTestServer({
@@ -151,9 +151,14 @@ describe('restore tests (backup-trust.md)', () => {
     expect(on.json()).toMatchObject({ on: true, guests: [] });
     expect(on.json().eligible.map((g: { id: string }) => g.id)).toContain(real.id);
 
-    // The copy's settings as Proxmox restores them: the real machine's network card, starting with the server.
+    // The copy's settings as Proxmox restores them: the real machine's network card, starting with the server, its
+    // guest agent switched on.
     const copyConfig = fake.configOf('shale', 'pve:990000');
-    Object.assign(copyConfig.values, { net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0', onboot: '1' });
+    Object.assign(copyConfig.values, {
+      net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0',
+      onboot: '1',
+      agent: '1',
+    });
 
     const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
     expect(run.statusCode, run.body).toBe(200);
@@ -201,6 +206,12 @@ describe('restore tests (backup-trust.md)', () => {
     });
     expect(done).toMatchObject({ outcome: 'worked', booted: true, step: 'done' });
     expect(fake.guest('shale', 'pve:990000')).toBeNull();
+    // A VM copy is stopped the way the hosts service stops a VM.
+    const actions = fake
+      .calls('POST', `${COPY_PATH}/actions`)
+      .map((r) => (r.body as { action?: string })?.action);
+    expect(actions).toContain('force_stop');
+    expect(actions).not.toContain('stop');
 
     // The real machine was only read.
     for (const method of ['PUT', 'POST', 'DELETE'] as const) {
@@ -226,19 +237,25 @@ describe('restore tests (backup-trust.md)', () => {
 
   it('a copy that won’t start raises one problem for the machine, and the copy still goes', async () => {
     const real = realMachine();
+    let failStarts = true;
     fake.on('POST', '/api/v1/servers/shale/guests/pve:990000/actions', (r) =>
-      (r.body as { action?: string })?.action === 'start'
+      failStarts && (r.body as { action?: string })?.action === 'start'
         ? problem(409, 'platform_error', 'TASK ERROR: start failed')
         : null,
     );
-    const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
-    expect(run.statusCode, run.body).toBe(200);
-    const done = await eventually(async () => {
-      await runner().pass();
-      const row = await latest();
-      expect(row?.finishedAt).toBeTruthy();
-      return row;
-    });
+    let done: Awaited<ReturnType<typeof latest>>;
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      done = await eventually(async () => {
+        await runner().pass();
+        const row = await latest();
+        expect(row?.finishedAt).toBeTruthy();
+        return row;
+      });
+    } finally {
+      failStarts = false;
+    }
     expect(done).toMatchObject({ outcome: 'failed', reason: 'start_failed' });
     expect(fake.guest('shale', 'pve:990000')).toBeNull();
     await runner().pass();
@@ -449,5 +466,127 @@ describe('restore tests (backup-trust.md)', () => {
     expect(fake.guest('shale', 'pve:990003')).toMatchObject({ name: 'whombat-test-of-plex' });
     expect(fake.calls('DELETE', '/api/v1/servers/shale/guests/pve:990003')).toHaveLength(0);
     fake.removeGuest('shale', 'pve:990003');
+  });
+
+  it('checks room and memory against the backup’s own settings, not the machine’s today', async () => {
+    const real = realMachine();
+    const volumes = (fake.manage.backups.get('shale') ?? [])
+      .filter((v) => `pve:${String(v.guest)}` === real.id)
+      .map((v) => String(v.volume));
+    const restores = () => fake.calls('POST', '/api/v1/servers/shale/backups/restore').length;
+    const before = restores();
+    try {
+      // The backup still has a disk the machine lost since.
+      for (const v of volumes)
+        fake.manage.backupConfigs.set(v, { name: real.name, scsi1: 'tank:vm-100-disk-1,size=900T' });
+      expect((await request('POST', '/restore-tests/shale/run', { guest: real.id })).statusCode).toBe(200);
+      expect(await finished()).toMatchObject({ outcome: 'skipped', reason: 'no_space' });
+      // And far more memory than the server has free.
+      for (const v of volumes) fake.manage.backupConfigs.set(v, { name: real.name, memory: '99999999' });
+      expect((await request('POST', '/restore-tests/shale/run', { guest: real.id })).statusCode).toBe(200);
+      expect(await finished()).toMatchObject({ outcome: 'skipped', reason: 'no_memory' });
+      // A helper that can't read the backup's settings: no copy, since Whombat can't tell it fits.
+      fake.manage.backupConfigs.clear();
+      fake.manage.noBackupConfig.add('shale');
+      expect((await request('POST', '/restore-tests/shale/run', { guest: real.id })).statusCode).toBe(200);
+      expect(await finished()).toMatchObject({ outcome: 'skipped', reason: 'old_helper' });
+    } finally {
+      fake.manage.backupConfigs.clear();
+      fake.manage.noBackupConfig.delete('shale');
+    }
+    expect(restores()).toBe(before);
+  });
+
+  it('expects the guest agent the copy’s own settings switch on, so a copy that never boots fails', async () => {
+    const real = realMachine();
+    const machine = fake.guest('shale', real.id);
+    if (!machine) throw new Error('no machine');
+    // The real machine is off, so its agent can't answer now; its backup has the agent switched on.
+    const { state, guest_agent } = machine;
+    machine.state = 'stopped';
+    delete machine.guest_agent;
+    fake.configs.delete(`shale/${COPY}`);
+    Object.assign(fake.configOf('shale', COPY).values, {
+      net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0',
+      agent: '1',
+    });
+    const realClock = t.services.clock;
+    try {
+      expect((await request('POST', '/restore-tests/shale/run', { guest: real.id })).statusCode).toBe(200);
+      const booting = await eventually(async () => {
+        await runner().pass();
+        const row = await latest();
+        expect(row?.step).toBe('booting');
+        expect(row?.runningAt).toBeTruthy();
+        return row;
+      });
+      expect(booting).toMatchObject({ agentExpected: true });
+      // Running for 11 minutes without the agent ever answering: it never finished starting up.
+      t.services.clock = () => new Date(realClock().getTime() + 11 * 60_000);
+      expect(await finished()).toMatchObject({ outcome: 'failed', reason: 'no_boot' });
+    } finally {
+      t.services.clock = realClock;
+      machine.state = state;
+      machine.guest_agent = guest_agent;
+    }
+    expect(fake.guest('shale', COPY)).toBeNull();
+  });
+
+  it('never restores a container that runs as the server’s own root', async () => {
+    const ct = fake
+      .guestsOf('shale')
+      .find((x) => x.platform === 'pve' && x.kind === 'container' && x.last_backup && x.self !== true);
+    if (!ct) throw new Error('no container with a backup on shale');
+    const id = String(ct.id);
+    const restores = () => fake.calls('POST', '/api/v1/servers/shale/backups/restore').length;
+    const before = restores();
+    // Privileged today.
+    fake.configs.delete(`shale/${id}`);
+    expect((await request('POST', '/restore-tests/shale/run', { guest: id })).statusCode).toBe(200);
+    expect(await finished()).toMatchObject({ guestId: id, outcome: 'skipped', reason: 'host_parts' });
+    // Unprivileged today, but not in its backup.
+    fake.configOf('shale', id).values.unprivileged = '1';
+    const volumes = (fake.manage.backups.get('shale') ?? []).filter((v) => `pve:${String(v.guest)}` === id);
+    try {
+      for (const v of volumes) fake.manage.backupConfigs.set(String(v.volume), { hostname: String(ct.name) });
+      expect((await request('POST', '/restore-tests/shale/run', { guest: id })).statusCode).toBe(200);
+      expect(await finished()).toMatchObject({ guestId: id, outcome: 'skipped', reason: 'host_parts' });
+    } finally {
+      fake.manage.backupConfigs.clear();
+    }
+    expect(restores()).toBe(before);
+  });
+
+  it('skips a test whose restore is still running after an hour, raises no problem, and removes the copy later', async () => {
+    const real = realMachine();
+    fake.configs.delete(`shale/${COPY}`);
+    fake.manage.holdTasks = true;
+    const realClock = t.services.clock;
+    let task = '';
+    let test: Awaited<ReturnType<typeof latest>>;
+    try {
+      expect((await request('POST', '/restore-tests/shale/run', { guest: real.id })).statusCode).toBe(200);
+      task = await eventually(async () => {
+        await runner().pass();
+        const row = await latest();
+        expect(row?.step).toBe('restoring');
+        expect(row?.task).toBeTruthy();
+        return String(row?.task);
+      });
+      t.services.clock = () => new Date(realClock().getTime() + 61 * 60_000);
+      test = await finished();
+      expect(test).toMatchObject({ outcome: 'skipped', reason: 'too_long' });
+    } finally {
+      t.services.clock = realClock;
+      fake.manage.holdTasks = false;
+    }
+    // A skipped test raises no problem for the machine.
+    expect(test && failingTests([test], ['shale'])).toEqual([]);
+    // The restore ends after all and the copy carries the test's marker: the sweep removes it, never starting it.
+    fake.manage.finishTask(task);
+    await eventually(() => expect(fake.guest('shale', COPY)).toBeTruthy());
+    expect(fake.configOf('shale', COPY).values.description).toBe(`whombat-${test?.id}`);
+    await new RestoreTests(t.services).pass();
+    await eventually(() => expect(fake.guest('shale', COPY)).toBeNull());
   });
 });
