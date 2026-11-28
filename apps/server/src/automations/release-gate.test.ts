@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_AUTOMATIONS_LATER,
   BEFORE_FIRST_RELEASE,
+  CARE_STEPS_SCHEMA,
   DIRECT_AUTOMATIONS_LATER,
   DIRECT_SCHEMA,
   FIND_MY_AUTOMATIONS_LATER,
@@ -13,6 +14,7 @@ import {
   newerDefinition,
   newerRun,
   rollbackTarget,
+  schemaKnowsCareSteps,
   schemaKnowsDirect,
   schemaKnowsFindMy,
   schemaKnowsThings,
@@ -310,5 +312,29 @@ describe('automations that act without AI or start on Home Assistant or Protect'
     }
     expect(schemaKnowsDirect(null)).toBe(false);
     expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).directReady()).toBe(true);
+  });
+});
+
+describe('a care plan’s app updates and restore tests', () => {
+  const production = { NODE_ENV: 'production' as const, WHOMBAT_RELEASE_ID: NEXT };
+  const update = facts({
+    current: NEXT,
+    lastUpdate: { release: NEXT, from: ME, at: '2026-11-28T06:00:00Z' },
+  });
+  const gate = (schema: string | null) => {
+    const g = new NewerAutomationsGate(production, releases([ME]).lookup, async () => schema);
+    g.follow(() => update);
+    return g;
+  };
+
+  it('are offered only when the release a box would go back to knows them', async () => {
+    expect(await gate(DIRECT_SCHEMA).careStepsReady()).toBe(false);
+    expect(await gate(null).careStepsReady()).toBe(false);
+    expect(await gate(CARE_STEPS_SCHEMA).careStepsReady()).toBe(true);
+    expect(await gate('0049_later').careStepsReady()).toBe(true);
+    expect(schemaKnowsCareSteps('0047_direct_automations')).toBe(false);
+    expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, releases([]).lookup).careStepsReady()).toBe(
+      true,
+    );
   });
 });

@@ -189,6 +189,12 @@ export interface CareFacts {
    * `serverId`: the hosts service's id of the server that shares it (Unraid through Whombat's helper).
    */
   nasShare?: { serverId: string; name: string } | null;
+  /**
+   * The release this Whombat would go back to after a failed update doesn't know the weekly app updates and restore
+   * tests: the plan offers only what that release knows (telling the person about app updates, no restore tests), so a
+   * plan it stored never reaches a release that misreads it.
+   */
+  olderRelease?: boolean;
 }
 
 /** The hint checks a care plan answers (`host.hint.<kind>`): missing backups and snapshots, waiting updates. */
@@ -276,8 +282,9 @@ export function nasShareName(serverId: string): string {
  *   apps that are safe to update by themselves, the others asked as one question; containers `docker run` started:
  *   the person hears when they have updates.
  *
- * Temporary machines are never in it; steps already in place (`has`) are left out. Each step's line is in `locale`
- * (English when none); what the assistant does stays English.
+ * Temporary machines are never in it; steps already in place (`has`) are left out, and so are the app updates and
+ * restore tests while the release the box would go back to doesn't know them (`olderRelease`). Each step's line is in
+ * `locale` (English when none); what the assistant does stays English.
  */
 export function careSteps(facts: CareFacts, window: ChangeWindow, locale?: string | null): CareStep[] {
   const tr = coreTranslator(locale);
@@ -319,7 +326,13 @@ export function careSteps(facts: CareFacts, window: ChangeWindow, locale?: strin
 
   // A backup that was never tried may not come back: once a week one machine's newest backup is restored as a copy with
   // its network off and started, then deleted (backup-trust.md). Only where there are or will be backups to try.
-  if (server.platform === 'proxmox' && pve.length && (storage || has.backup) && !has.restore_test) {
+  if (
+    server.platform === 'proxmox' &&
+    pve.length &&
+    (storage || has.backup) &&
+    !has.restore_test &&
+    !facts.olderRelease
+  ) {
     out.push({
       id: 'restore_test',
       text: tr.t('carePlan.step.restoreTest'),
@@ -364,7 +377,7 @@ export function careSteps(facts: CareFacts, window: ChangeWindow, locale?: strin
   const docker = kept.filter((g) => g.platform === 'docker');
   // Compose apps (or a helper that will report them once it has updated itself) can be updated by Whombat.
   const compose = docker.some((g) => g.app || g.project);
-  if (compose && !has.apps) {
+  if (compose && !has.apps && !facts.olderRelease) {
     out.push({
       id: 'apps',
       text: tr.t('carePlan.step.apps', { time: window.start }),

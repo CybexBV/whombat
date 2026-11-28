@@ -1625,7 +1625,9 @@ Setup and operation: `docs/github.md`.
   — an Unraid server through Whombat's helper, else a TrueNAS through its API — added as storage first with
   `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups, weekly system updates in the quiet hours and,
   on a server with Docker Compose apps, their updates on Sunday night, never a
-  temporary machine. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
+  temporary machine. The app updates and a Proxmox server's weekly restore tests are offered only while the release the
+  box would go back to after a failed update knows them (`NewerAutomationsGate.careStepsReady`, the facts'
+  `olderRelease`), so no stored plan reaches a release that misreads it. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
   that proposes the ones that fit; the plan is a look's `look_plan` card (research key `care:server:<id>`), and Go
   ahead turns on the automations Whombat writes for it before the `look_fix` turn takes the rest. The server this
   Whombat runs on gets its plan once and keeps asking for its updates; a Whombat from before writes its servers down as
