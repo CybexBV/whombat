@@ -9509,6 +9509,7 @@
   "core:protected.reason.no_id": "9c78233c210c08b4",
   "core:protected.reason.no_memory": "2dab6d29db1b2314",
   "core:protected.reason.no_space": "e61497eb373625a7",
+  "core:protected.reason.not_ours": "20e8b84c65d6c1b4",
   "core:protected.reason.other_node": "cb220d00708fe841",
   "core:protected.reason.refused": "4e480954b46ab845",
   "core:protected.reason.restore_failed": "371af4d59277ec51",

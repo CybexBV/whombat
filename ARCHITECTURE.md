@@ -1653,10 +1653,12 @@ Setup and operation: `docs/github.md`.
   without them takes its machine's from `glance.machine`) — cached a minute. Restore tests are a home job every minute
   (`runner.ts`): per Proxmox server switched on (`restore_test_servers`), once a week in the quiet hours it picks the
   machine whose turn it is and walks a `restore_tests` row through its steps, each a `restoreTest.step` commit as the
-  agent: restore the newest backup to a free id in 990000–990999 through the hosts service's restore route, set every
-  network card `link_down=1`, rename and tag it and read that back, start it, wait until it runs (and its guest agent
-  answers), then stop and delete it. Passes never overlap; strays left by an interruption are swept by range and name
-  or tag. The newest failed verdict per machine is a `restore_test.failed` hint in the hosts list while tests are on;
+  agent: restore the newest backup to a free id in 990000–990999 through the hosts service's restore route; once that
+  restore task has finished, mark the copy as this test's (`whombat-<test id>` in its notes) while setting every
+  network card `link_down=1` and renaming it, read that back and refuse a copy whose own settings use parts of the
+  server; start it, wait until it runs (and its guest agent answers), then stop and delete it. Each change, start,
+  stop and delete first reads the copy's settings and goes ahead only when they carry the test's mark. Passes never
+  overlap; strays left by an interruption are swept by range and that mark. The newest failed verdict per machine is a `restore_test.failed` hint in the hosts list while tests are on;
   a machine's page carries its newest result (`HostGuestDetail.restoreTest`). The assistant reads it with
   `whats_protected`.
 - **The Vault** (`apps/server/src/vault/`): the person's logins, API keys and SSH keys for the agent, secrets sealed

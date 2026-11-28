@@ -1,8 +1,8 @@
 /**
  * Restore tests of Proxmox machines, the decisions without I/O (docs/decisions/backup-trust.md): which machines can be
- * tested and whose turn it is, when a test is due, where the copy goes and under which number, what the copy's settings
- * become before it starts (its network cables pulled, its name, no start at boot), whether a machine uses parts of the
- * server itself, and whether a running copy counts as started.
+ * tested and whose turn it is, when a test is due, where the copy goes and under which number, how a copy is proven to
+ * be this test's own, what the copy's settings become before it starts (its network cables pulled, its name, no start at
+ * boot), whether a machine uses parts of the server itself, and whether a running copy counts as started.
  */
 import {
   type ChangeWindow,
@@ -27,6 +27,8 @@ const GIB = 1024 ** 3;
 export const TEST_EVERY_MS = 6 * DAY;
 /** A test that hasn't come to an outcome in an hour failed. */
 export const TEST_MAX_MS = 60 * MIN;
+/** The test's own restore proves the copy is its own only this soon after it finished (then the marker goes on). */
+export const CLAIM_WINDOW_MS = 15 * MIN;
 /** A copy whose guest agent was expected may take this long from running to answering. */
 export const BOOT_WAIT_MS = 10 * MIN;
 /** Without a guest agent to ask, a copy that keeps running this long started (a VM; a container sooner). */
@@ -163,10 +165,10 @@ export function guestNumbers(raw: readonly unknown[]): number[] {
 
 /**
  * Settings that hand a machine parts of the server itself: passed-through PCI and USB devices, parallel ports, shared
- * folders, hook scripts, raw container settings and device nodes. A copy started with them would share them with the
- * real machine.
+ * folders, hook scripts, raw QEMU arguments, raw container settings and device nodes. A copy started with them would
+ * share them with the real machine, or run something on the server itself.
  */
-const HOST_KEYS = /^(hostpci\d+|usb\d+|parallel\d+|virtiofs\d+|dev\d+|hookscript|lxc\..*)$/;
+const HOST_KEYS = /^(hostpci\d+|usb\d+|parallel\d+|virtiofs\d+|dev\d+|hookscript|args|lxc\..*)$/;
 /** Keys that hold a disk, a CD drive or a mount point. */
 const DISK_KEYS = /^(ide|sata|scsi|virtio|mp)\d+$|^(rootfs|efidisk0|tpmstate0)$/;
 
@@ -212,6 +214,62 @@ export function copyOwnsDisks(values: Record<string, string>, copyId: number): b
   return true;
 }
 
+/* Whose copy it is ------------------------------------------------------------------------------------------------------ */
+
+/**
+ * The mark only one test's copy carries in its notes (`whombat-rst_…`, the test's own id): the proof that a machine at
+ * a copy's number is that test's copy, checked before anything is changed, started, stopped or deleted. A person's
+ * machine that took the number never has it. Notes rather than a tag: a cluster may keep tags to a list, and the hosts
+ * service may always write notes.
+ */
+export function copyMarker(testId: string): string {
+  return `whombat-${testId}`;
+}
+
+const MARKER = /^whombat-(rst_[0-9a-z]+)$/;
+
+const notesWords = (values: Record<string, string>) =>
+  (values.description ?? '').split(/\s+/).filter(Boolean);
+
+/** Whether a machine's settings carry the test's marker. */
+export function carriesMarker(values: Record<string, string>, testId: string): boolean {
+  return notesWords(values).includes(copyMarker(testId));
+}
+
+/** The test whose marker a machine carries, if any. */
+export function markedTestId(values: Record<string, string>): string | null {
+  for (const word of notesWords(values)) {
+    const m = MARKER.exec(word);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+const RESTORE_TASKS = new Set(['qmrestore', 'vzrestore']);
+
+/**
+ * Whether the test's own restore task proves that the machine at the copy's number is the copy: a restore of exactly
+ * that number, which finished without error moments ago. A refused or failed restore proves nothing (the number may
+ * have been someone else's all along). The task's times are the server's clock, so “moments ago” counts its length
+ * from when the test began (the restore starts right after), never one clock against the other.
+ */
+export function restoreProves(
+  task: { type: string; guestId?: string | null; status: string; started: string; ended?: string | null },
+  copyId: number,
+  testStartedAt: Date,
+  now: Date,
+): 'yes' | 'running' | 'no' {
+  if (!RESTORE_TASKS.has(task.type)) return 'no';
+  if (Number(String(task.guestId ?? '').replace(/^pve:/, '')) !== copyId) return 'no';
+  if (task.status === 'running') return 'running';
+  if (task.status !== 'ok' && task.status !== 'warning') return 'no';
+  const started = Date.parse(task.started);
+  const ended = Date.parse(task.ended ?? '');
+  if (!Number.isFinite(started) || !Number.isFinite(ended)) return 'no';
+  const endedBy = testStartedAt.getTime() + Math.max(0, ended - started);
+  return now.getTime() - endedBy <= CLAIM_WINDOW_MS ? 'yes' : 'no';
+}
+
 /* The copy's settings ----------------------------------------------------------------------------------------------- */
 
 const NET_KEY = /^net\d+$/;
@@ -233,24 +291,52 @@ export function networkDown(values: Record<string, string>): boolean {
 }
 
 /**
- * What a copy's settings become before it starts: every network card's cable pulled, its name saying what it is, the
- * restore tests' tag, never starting with the server, and not protected from deletion.
+ * What a copy's settings become before it starts: this test's marker as its notes, every network card's cable pulled,
+ * its name saying what it is, never starting with the server, and not protected from deletion.
  */
 export function copySettings(
   kind: 'vm' | 'container',
   values: Record<string, string>,
   copyName: string,
+  marker: string,
 ): Record<string, string> {
   const set: Record<string, string> = {};
+  if (!notesWords(values).includes(marker)) set.description = marker;
   for (const [k, v] of Object.entries(values))
     if (NET_KEY.test(k) && !LINK_DOWN.test(v)) set[k] = linkDown(v);
   const nameKey = kind === 'vm' ? 'name' : 'hostname';
   if (values[nameKey] !== copyName) set[nameKey] = copyName;
-  const tags = (values.tags ?? '').split(/[;, ]+/).filter(Boolean);
-  if (!tags.includes(RESTORE_TEST_TAG)) set.tags = [...tags, RESTORE_TEST_TAG].join(';');
   if (values.onboot && values.onboot !== '0') set.onboot = '0';
   if (values.protection && values.protection !== '0') set.protection = '0';
   return set;
+}
+
+/** The copy's tags with the restore tests' tag added; null when it has it. */
+export function copyTags(values: Record<string, string>): string | null {
+  const tags = (values.tags ?? '').split(/[;, ]+/).filter(Boolean);
+  return tags.includes(RESTORE_TEST_TAG) ? null : [...tags, RESTORE_TEST_TAG].join(';');
+}
+
+/**
+ * Why a copy must not start, from its own settings as read back (those of the backup, which can differ from the
+ * machine's today): it doesn't carry the test's marker, it uses parts of the server itself, a disk isn't its own, or a
+ * network cable is still in. Null: it may start.
+ */
+export function copyProblem(
+  config: {
+    values: Record<string, string>;
+    pending?: Record<string, string>;
+    restricted?: readonly string[];
+  },
+  copyId: number,
+  testId: string,
+): RestoreTestReason | null {
+  const values = { ...config.values, ...(config.pending ?? {}) };
+  if (!carriesMarker(config.values, testId)) return 'not_ours';
+  if (usesHostParts({ values, restricted: config.restricted })) return 'host_parts';
+  if (!copyOwnsDisks(config.values, copyId) || !copyOwnsDisks(values, copyId)) return 'host_parts';
+  if (!networkDown(config.values) || !networkDown(values)) return 'network_kept';
+  return null;
 }
 
 /* Where the copy goes ------------------------------------------------------------------------------------------------- */

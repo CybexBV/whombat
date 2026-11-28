@@ -2,14 +2,21 @@ import { CHANGE_WINDOW_DEFAULT, RESTORE_TEST_TAG } from '@whombat/core';
 import { describe, expect, it } from 'vitest';
 import {
   bootVerdict,
+  CLAIM_WINDOW_MS,
+  carriesMarker,
+  copyMarker,
   copyOwnsDisks,
+  copyProblem,
   copySettings,
+  copyTags,
   eligibleGuests,
   freeCopyId,
   linkDown,
+  markedTestId,
   networkDown,
   nextGuest,
   nextTestAt,
+  restoreProves,
   storageFor,
   storagesOf,
   testDue,
@@ -93,11 +100,13 @@ describe('the copy', () => {
     expect(freeCopyId([101], 990004)).toBe(990005);
   });
 
-  it('pulls every network cable and names, tags and keeps the copy from starting at boot', () => {
+  it('marks, pulls every network cable, names and keeps the copy from starting at boot', () => {
+    const marker = copyMarker('rst_0a1b2c');
     const set = copySettings(
       'vm',
       {
         name: 'plex',
+        description: 'Media server',
         net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0',
         net1: 'virtio=BC:24:11:00:00:02,bridge=vmbr1,link_down=0',
         onboot: '1',
@@ -105,24 +114,27 @@ describe('the copy', () => {
         scsi0: 'local-lvm:vm-990001-disk-0,size=32G',
       },
       'whombat-test-of-plex',
+      marker,
     );
     expect(set.net0).toContain('link_down=1');
     expect(set.net1).not.toContain('link_down=0');
-    expect(set).toMatchObject({
-      name: 'whombat-test-of-plex',
-      onboot: '0',
-      tags: `media;${RESTORE_TEST_TAG}`,
-    });
+    expect(set).toMatchObject({ name: 'whombat-test-of-plex', onboot: '0', description: marker });
     expect(set.scsi0).toBeUndefined();
+    expect(set.tags).toBeUndefined();
+    expect(copyTags({ tags: 'media' })).toBe(`media;${RESTORE_TEST_TAG}`);
+    expect(copyTags({ tags: `media;${RESTORE_TEST_TAG}` })).toBeNull();
     expect(
-      copySettings('container', { hostname: 'pihole', net0: 'name=eth0,bridge=vmbr0' }, 'x').hostname,
+      copySettings('container', { hostname: 'pihole', net0: 'name=eth0,bridge=vmbr0' }, 'x', marker).hostname,
     ).toBe('x');
+    expect(copySettings('vm', { name: 'x', description: marker }, 'x', marker)).toEqual({});
     expect(networkDown({ net0: linkDown('name=eth0,bridge=vmbr0'), memory: '512' })).toBe(true);
     expect(networkDown({ net0: 'name=eth0,bridge=vmbr0' })).toBe(false);
   });
 
   it('refuses machines that use parts of the server itself', () => {
     expect(usesHostParts({ values: { hostpci0: '0000:01:00.0' } })).toBe(true);
+    expect(usesHostParts({ values: { args: '-device vfio-pci,host=01:00.0' } })).toBe(true);
+    expect(usesHostParts({ values: { hookscript: 'local:snippets/hook.pl' } })).toBe(true);
     expect(usesHostParts({ values: { usb0: 'host=1234:5678' } })).toBe(true);
     expect(usesHostParts({ values: { mp0: '/srv/media,mp=/media' } })).toBe(true);
     expect(usesHostParts({ values: { ide2: 'cdrom,media=cdrom' } })).toBe(true);
@@ -153,6 +165,78 @@ describe('the copy', () => {
     expect(copyOwnsDisks({ rootfs: 'local-zfs:subvol-990001-disk-0,size=8G' }, 990001)).toBe(true);
     expect(copyOwnsDisks({ mp0: 'local-zfs:subvol-101-disk-1,mp=/data' }, 990001)).toBe(false);
     expect(copyOwnsDisks({ scsi1: 'local-lvm:vm-101-disk-1' }, 990001)).toBe(false);
+  });
+
+  it('is only ever the copy of the test whose marker it carries', () => {
+    const marker = copyMarker('rst_0a1b2c');
+    expect(carriesMarker({ description: marker }, 'rst_0a1b2c')).toBe(true);
+    expect(carriesMarker({ description: `notes\n${marker}` }, 'rst_0a1b2c')).toBe(true);
+    expect(carriesMarker({ description: marker }, 'rst_ffffff')).toBe(false);
+    expect(carriesMarker({ description: `${marker}x` }, 'rst_0a1b2c')).toBe(false);
+    expect(carriesMarker({ name: 'whombat-test-of-plex', tags: RESTORE_TEST_TAG }, 'rst_0a1b2c')).toBe(false);
+    expect(markedTestId({ description: marker })).toBe('rst_0a1b2c');
+    expect(markedTestId({ name: 'whombat-test-of-plex', tags: RESTORE_TEST_TAG })).toBeNull();
+  });
+
+  it('checks the copy’s own settings before it starts', () => {
+    const marker = copyMarker('rst_0a1b2c');
+    const ready = {
+      description: marker,
+      net0: 'virtio=BC:24:11:00:00:09,bridge=vmbr0,link_down=1',
+      scsi0: 'local-lvm:vm-990001-disk-0',
+    };
+    expect(copyProblem({ values: ready }, 990001, 'rst_0a1b2c')).toBeNull();
+    // A person's machine at the number.
+    expect(copyProblem({ values: { ...ready, description: '' } }, 990001, 'rst_0a1b2c')).toBe('not_ours');
+    // The backup still has a hook script, a raw argument or a passed-through device, though the machine doesn't today.
+    expect(
+      copyProblem({ values: { ...ready, hookscript: 'local:snippets/hook.pl' } }, 990001, 'rst_0a1b2c'),
+    ).toBe('host_parts');
+    expect(
+      copyProblem({ values: ready, restricted: ['args'], pending: { args: '-x' } }, 990001, 'rst_0a1b2c'),
+    ).toBe('host_parts');
+    expect(copyProblem({ values: ready, pending: { usb0: 'host=1-2' } }, 990001, 'rst_0a1b2c')).toBe(
+      'host_parts',
+    );
+    expect(
+      copyProblem({ values: { ...ready, scsi1: 'local-lvm:vm-101-disk-1' } }, 990001, 'rst_0a1b2c'),
+    ).toBe('host_parts');
+    expect(
+      copyProblem(
+        { values: { ...ready, net0: 'virtio=BC:24:11:00:00:09,bridge=vmbr0' } },
+        990001,
+        'rst_0a1b2c',
+      ),
+    ).toBe('network_kept');
+    expect(
+      copyProblem({ values: ready, pending: { net1: 'virtio,bridge=vmbr1' } }, 990001, 'rst_0a1b2c'),
+    ).toBe('network_kept');
+  });
+
+  it('takes the copy only on the proof of the test’s own restore, moments after it finished', () => {
+    const began = new Date('2026-11-29T02:00:00Z');
+    const after = (min: number) => new Date(began.getTime() + min * 60_000);
+    // The server's clock is a day behind: only the restore's length counts.
+    const task = {
+      type: 'qmrestore',
+      guestId: 'pve:990001',
+      status: 'ok',
+      started: '2026-11-28T02:01:00Z',
+      ended: '2026-11-28T02:09:00Z',
+    };
+    expect(restoreProves(task, 990001, began, after(10))).toBe('yes');
+    expect(restoreProves({ ...task, guestId: '990001' }, 990001, began, after(10))).toBe('yes');
+    expect(restoreProves({ ...task, status: 'warning' }, 990001, began, after(10))).toBe('yes');
+    expect(restoreProves(task, 990001, began, after(8 + CLAIM_WINDOW_MS / 60_000 + 1))).toBe('no');
+    expect(restoreProves({ ...task, status: 'running', ended: null }, 990001, began, after(10))).toBe(
+      'running',
+    );
+    // Refused or failed (“already exists”), another number, or not a restore: no proof.
+    expect(restoreProves({ ...task, status: 'error' }, 990001, began, after(10))).toBe('no');
+    expect(restoreProves(task, 990002, began, after(10))).toBe('no');
+    expect(restoreProves({ ...task, type: 'qmstart' }, 990001, began, after(10))).toBe('no');
+    expect(restoreProves({ ...task, guestId: null }, 990001, began, after(10))).toBe('no');
+    expect(restoreProves({ ...task, ended: null }, 990001, began, after(10))).toBe('no');
   });
 
   it('goes where there is room, the machine’s own storage first', () => {
