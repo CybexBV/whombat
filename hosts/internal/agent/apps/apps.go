@@ -78,17 +78,22 @@ type Progress struct {
 	Pending *Pending  `json:"pending,omitempty"`
 }
 
-// Pending is the update being made now: the project and the services
-// replaced together, the image they ran (OldID, kept under Backup), the one
-// they go to (NewID, once pulled) and each container's outcome so far.
+// Pending is the update being made now: the project (its settings as
+// written down for the update) and the services replaced together, the
+// image they ran (OldID, kept under Backup), the one they go to (NewID, once
+// pulled) and each container's outcome so far. Services are started and
+// watched; Idle ones were stopped and are recreated without starting; Scale
+// keeps each service's number of containers.
 type Pending struct {
-	Project  Project   `json:"project"`
-	Services []string  `json:"services"`
-	Apps     []Outcome `json:"apps"`
-	Ref      string    `json:"ref"`
-	OldID    string    `json:"old_id"`
-	NewID    string    `json:"new_id,omitempty"`
-	Backup   string    `json:"backup"`
+	Project  Project        `json:"project"`
+	Services []string       `json:"services"`
+	Idle     []string       `json:"idle,omitempty"`
+	Scale    map[string]int `json:"scale,omitempty"`
+	Apps     []Outcome      `json:"apps"`
+	Ref      string         `json:"ref"`
+	OldID    string         `json:"old_id"`
+	NewID    string         `json:"new_id,omitempty"`
+	Backup   string         `json:"backup"`
 	// Moved: the image's tag may already name the new image.
 	Moved bool `json:"moved,omitempty"`
 }
@@ -184,6 +189,11 @@ func writeJSON(p string, v any) error {
 	if err != nil {
 		return err
 	}
+	return writeFile(p, b)
+}
+
+// writeFile writes a file atomically, readable only by its owner.
+func writeFile(p string, b []byte) error {
 	tmp := p + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
