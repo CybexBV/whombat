@@ -1,41 +1,48 @@
-import { HOST_MONITORING_MINOR } from '@whombat/protocol/session';
+/**
+ * An app before Windows PCs (docs/decisions/windows-servers.md) sees a Windows PC as a standard server without an os
+ * family or its Windows facts, in the fleet, on its page and in live updates. A newer app, the assistant and anything
+ * outside a session get everything.
+ */
+import type { HostFleet, HostServerDetail, RealtimeEvent } from '@whombat/core';
+import { WINDOWS_MINOR } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
-import { hostAnswerFor, needsHostMonitoring } from './older-apps';
+import { beforeWindows, fleetFor, hostsEventFor, serverDetailFor } from './older-apps';
 
-describe('hosts monitoring on older apps', () => {
-  const older = HOST_MONITORING_MINOR - 1;
+const OLD = WINDOWS_MINOR - 1;
+const pc = { id: 'pc-01', name: 'pc-01', platform: 'windows', osFamily: 'windows' } as const;
+const mac = { id: 'studio', name: 'studio', platform: 'macos', osFamily: 'macos' } as const;
+const fleet = { servers: [pc, mac] } as unknown as HostFleet;
+const detail = {
+  server: pc,
+  windows: { edition: 'Windows 11 Pro', volumes: [] },
+} as unknown as HostServerDetail;
 
-  it('gates limit changes, single-check reads and ownership on creation', () => {
-    for (const [op, body] of [
-      ['things.setWatchLimit', { limit: 95 }],
-      ['hosts.getCheck', undefined],
-      ['hosts.createCheck', { owner: 'whombat:connection:example' }],
-    ] as const) {
-      expect(needsHostMonitoring(op, body, older)).toBe(true);
-      expect(needsHostMonitoring(op, body, HOST_MONITORING_MINOR)).toBe(false);
-    }
-    expect(needsHostMonitoring('hosts.createCheck', { name: 'Example' }, older)).toBe(false);
+describe('servers for an app before Windows PCs', () => {
+  it('shows an older app a Windows PC as a standard server and leaves the others alone', () => {
+    const rows = fleetFor(fleet, OLD).servers;
+    expect(rows[0]).toEqual({ id: 'pc-01', name: 'pc-01', platform: 'standard' });
+    expect(rows[1]).toEqual(mac);
+    expect(beforeWindows(mac)).toBe(mac);
   });
 
-  it('keeps the last result and old watch fields', () => {
-    const check = {
-      id: 'example',
-      stale: true,
-      owner: 'whombat:connection:example',
-      last: { at: 'yesterday' },
-    };
-    const listed = { checks: [check] };
-    expect(hostAnswerFor('hosts.listChecks', listed, older)).toEqual({
-      checks: [{ id: 'example', last: { at: 'yesterday' } }],
-    });
-    expect(hostAnswerFor('hosts.listChecks', listed, HOST_MONITORING_MINOR)).toBe(listed);
-    const watch = {
-      checks: [{ check: 'host.disk.space_high', on: true, limit: { value: 95 } }],
-      mayChange: true,
-    };
-    expect(hostAnswerFor('things.watch', watch, older)).toEqual({
-      checks: [{ check: 'host.disk.space_high', on: true }],
-      mayChange: true,
-    });
+  it('drops the Windows facts from a PC’s page for an older app', () => {
+    const old = serverDetailFor(detail, OLD) as unknown as Record<string, unknown>;
+    expect(old.windows).toBeUndefined();
+    expect(old.server).toEqual({ id: 'pc-01', name: 'pc-01', platform: 'standard' });
+  });
+
+  it('maps a live server row for an older app only', () => {
+    const event = { type: 'hosts.server', serverId: 'pc-01', server: pc } as unknown as RealtimeEvent;
+    expect(hostsEventFor(event, OLD)).toMatchObject({ server: { platform: 'standard' } });
+    expect(hostsEventFor(event, WINDOWS_MINOR)).toBe(event);
+    const gone = { type: 'hosts.server', serverId: 'pc-01', server: null } as unknown as RealtimeEvent;
+    expect(hostsEventFor(gone, OLD)).toBe(gone);
+  });
+
+  it('gives a newer app, the assistant and anything outside a session everything', () => {
+    for (const minor of [WINDOWS_MINOR, undefined]) {
+      expect(fleetFor(fleet, minor)).toBe(fleet);
+      expect(serverDetailFor(detail, minor)).toBe(detail);
+    }
   });
 });

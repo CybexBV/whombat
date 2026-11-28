@@ -222,6 +222,12 @@ describe('a care plan per kind of server (care-plan.md)', () => {
     ).toEqual([]);
   });
 
+  it('leaves a Windows PC’s updates to the person (Whombat doesn’t install them)', () => {
+    expect(
+      careSteps(facts({ server: { id: 'pc', name: 'pc', platform: 'windows', self: false } }), W),
+    ).toEqual([]);
+  });
+
   it('leaves out what is in place already', () => {
     const steps = careSteps(
       facts({

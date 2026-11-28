@@ -67,8 +67,15 @@ func TestWindowsDetailAndHints(t *testing.T) {
 	}
 	r.Windows.Defender.RealTime = false
 	hs = windowsHints(r, now)
-	if len(hs) != 1 || hs[0].Kind != HintWindowsProtectionOff || hs[0].Link != LinkProtection {
+	if len(hs) != 1 || hs[0].Kind != HintWindowsProtectionOff || hs[0].Link != LinkProtection ||
+		hs[0].Code != HintWindowsProtectionOff+".realtime" {
 		t.Fatalf("protection off: %+v", hs)
+	}
+	// No antivirus at all: the plain code, whose words say to turn Defender on.
+	r.Windows.Defender = nil
+	r.Windows.SecurityCenter = true
+	if hs := windowsHints(r, now); len(hs) != 1 || hs[0].Code != HintWindowsProtectionOff {
+		t.Fatalf("no antivirus: %+v", hs)
 	}
 	// A PC without BitLocker says nothing about it: null, not an empty list.
 	r.Windows.BitLocker = nil

@@ -163,12 +163,13 @@ func windowsHints(r *proto.Report, now time.Time) []rules.Hint {
 	var out []rules.Hint
 	state, product := ProtectionOf(w)
 	if state == ProtectionOff {
-		detail := "No antivirus is on; turn on Microsoft Defender in Windows Security"
+		code, detail := HintWindowsProtectionOff, "No antivirus is on; turn on Microsoft Defender in Windows Security"
 		if d := w.Defender; d != nil && d.Mode == proto.DefenderNormal {
+			code = HintWindowsProtectionOff + ".realtime"
 			detail = "Turn on real-time protection in Windows Security → Virus & threat protection"
 		}
 		out = append(out, rules.Hint{Kind: HintWindowsProtectionOff, Severity: rules.HintWarning, Entity: "host",
-			Link: LinkProtection, Code: HintWindowsProtectionOff, Title: "Virus protection is off", Detail: detail})
+			Link: LinkProtection, Code: code, Title: "Virus protection is off", Detail: detail})
 	}
 	if d := w.Defender; state == ProtectionOn && product == defenderName && d != nil && !d.SignaturesAt.IsZero() {
 		if age := now.Sub(d.SignaturesAt); age >= SignaturesOldAfter {

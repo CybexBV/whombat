@@ -1025,7 +1025,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'server_command',
     title: 'Run a command on a server',
     description:
-      'Run one shell command on a server as root, with a reason a person reads first. Output is capped. Asks a person first unless the server is set not to ask.',
+      'Run one shell command on a server as root (on a Windows PC a PowerShell command, as SYSTEM), with a reason a person reads first. Output is capped. Asks a person first unless the server is set not to ask.',
     access: 'write',
     sensitive: true,
     inputSchema: obj(
@@ -1120,7 +1120,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'server_update',
     title: 'Install a server’s updates',
     description:
-      'Check a server for operating-system updates, or install the waiting ones (all, or only the packages named) as a task; Whombat says in the chat when it ends. It never restarts the server, changes its repositories or upgrades it to a new release. Installing asks a person first unless the server is set not to ask.',
+      'Check a server for operating-system updates, or install the waiting ones (all, or only the packages named) as a task; Whombat says in the chat when it ends. It never restarts the server, changes its repositories or upgrades it to a new release. Not on a Windows PC: the person installs those in Windows Update. Installing asks a person first unless the server is set not to ask.',
     access: 'write',
     inputSchema: obj(
       {
@@ -1143,7 +1143,7 @@ export const SERVERS_TOOLS: readonly ConnectionToolDef[] = [
     name: 'server_add',
     title: 'Ask the person to add a server',
     description:
-      'Ask the person to add a server (Linux, or a Mac with macOS 13 or later): puts a card in the conversation that opens Add a server filled in; they sign in there. You never get the password.',
+      'Ask the person to add a server (Linux, or a Mac with macOS 13 or later): puts a card in the conversation that opens Add a server filled in; they sign in there. You never get the password. A Windows PC isn’t added this way: tell the person to choose Windows PC in Add a server and paste its line into PowerShell opened as administrator.',
     access: 'read',
     inputSchema: obj(
       {

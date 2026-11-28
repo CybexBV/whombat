@@ -591,6 +591,20 @@ function hintWords(code: string, p: J, f: Fill): Words | null {
         title: f.t('hosts.hint.macos.helper_off.title'),
         detail: str(p.user) ? f.t('hosts.hint.macos.helper_off.detail', { user: str(p.user) }) : '',
       };
+    case 'windows.protection_off':
+      return {
+        title: f.t('hosts.hint.windows.protection_off.title'),
+        detail: f.t(
+          variant === 'realtime'
+            ? 'hosts.hint.windows.protection_off.realtime.detail'
+            : 'hosts.hint.windows.protection_off.detail',
+        ),
+      };
+    case 'windows.signatures_old':
+      return {
+        title: f.t('hosts.hint.windows.signatures_old.title', { days: f.n(p.days) }),
+        detail: f.t('hosts.hint.windows.signatures_old.detail'),
+      };
     default:
       return null;
   }
@@ -685,6 +699,8 @@ const HINT_BASES = [
   'macos.screen_sharing_off',
   'macos.screen_sign_in',
   'macos.helper_no_access',
+  'windows.protection_off',
+  'windows.signatures_old',
 ].sort((a, b) => b.length - a.length);
 
 /** A server's status note by its code (“disk wear”, “CPU temperature”); null when the code is unknown. */

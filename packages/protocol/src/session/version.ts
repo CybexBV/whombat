@@ -91,9 +91,18 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
- * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md); minor 22
+ * is Windows PCs as servers: a server's `windows` platform and os family and its `windows` block, which a box sends only
+ * to a session at minor 22 or later (an older one sees a standard server), and an enrollment's `installCommandWindows`
+ * (Whombat windows-servers.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
+
+/**
+ * Session protocol minor (major 5) with Windows PCs as servers. Older apps parse a server's platform and os family
+ * strictly, so the box shows them a Windows PC as a standard server without its os family.
+ */
+export const WINDOWS_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

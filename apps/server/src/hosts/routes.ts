@@ -86,6 +86,7 @@ import {
 import { serverSettingsFields, settingsTitle } from './merge';
 import { nameClash, renameServer } from './names';
 import { serverNameOf as givenNameOf, loadServerNames } from './names-store';
+import { fleetFor, serverDetailFor } from './older-apps';
 import { canManageServers, ONLY_YOU_CHANGE_SERVERS_TEXT } from './person';
 import { quietAlertById } from './quiet';
 import { HEARTBEAT_RULE } from './quiet-lines';
@@ -1054,7 +1055,7 @@ export const hostsRoutes: RouteDef[] = [
 
   route(api.hosts.fleet, async (ctx) => {
     const g = await guard(ctx);
-    const fleet = await hostsCall(() => g.hosts.fleet());
+    const fleet = fleetFor(await hostsCall(() => g.hosts.fleet()), ctx.protocolMinor);
     const group = ctx.query.group;
     if (!group || group === 'All') return fleet;
     return { ...fleet, servers: fleet.servers.filter((s) => s.group.toLowerCase() === group.toLowerCase()) };
@@ -1096,7 +1097,7 @@ export const hostsRoutes: RouteDef[] = [
       ctx.access.burrow.timeZone,
     ).catch(() => null);
     return {
-      ...detail,
+      ...serverDetailFor(detail, ctx.protocolMinor),
       ...(week ? { uptime: week.uptime } : {}),
       asksFirst: await serverAsksOf(ctx.services.db, ctx.access.burrow.id, serverId),
     };

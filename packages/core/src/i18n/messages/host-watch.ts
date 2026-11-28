@@ -230,6 +230,10 @@ export const HOST_WATCH = splitPairs({
     'Until it’s in a safe folder.',
     'Tot hij in een veilige map staat.',
   ],
+  'hostWatch.name.host.hint.windows.protection_off': ['Virus protection off', 'Virusbescherming uit'],
+  'hostWatch.words.host.hint.windows.protection_off': ['Until it’s on again.', 'Tot hij weer aan staat.'],
+  'hostWatch.name.host.hint.windows.signatures_old': ['Old virus definitions', 'Oude virusdefinities'],
+  'hostWatch.words.host.hint.windows.signatures_old': ['Until they’re updated.', 'Tot ze bijgewerkt zijn.'],
   'hostWatch.name.host.hint.guest.backup_old': [
     'Machines with an old backup',
     'Machines met een oude back-up',

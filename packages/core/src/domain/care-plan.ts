@@ -257,7 +257,7 @@ export function nasShareName(serverId: string): string {
  * - Incus: a daily snapshot of every long-lived machine (the `default` project's), kept 7 days;
  * - QEMU/KVM machines: a weekly backup on Sundays (an automation);
  * - every Linux server but Unraid: system updates on Sundays at the start of the quiet hours, restarting only inside
- *   them (an automation); the server this Whombat runs on asks first, as it always does; a Mac none;
+ *   them (an automation); the server this Whombat runs on asks first, as it always does; a Mac and a Windows PC none;
  * - apps: the person hears when they have updates.
  *
  * Temporary machines are never in it; steps already in place (`has`) are left out.
@@ -315,8 +315,11 @@ export function careSteps(facts: CareFacts, window: ChangeWindow): CareStep[] {
     });
   }
 
-  // Unraid updates itself its own way; a Mac's updates restart the person's own computer (macos-servers.md).
-  if (server.platform !== 'unraid' && server.platform !== 'macos' && !has.updates) {
+  // Unraid updates itself its own way; a Mac's updates restart the person's own computer (macos-servers.md); Whombat
+  // doesn't install a Windows PC's updates (windows-servers.md).
+  const ownUpdates =
+    server.platform === 'unraid' || server.platform === 'macos' || server.platform === 'windows';
+  if (!ownUpdates && !has.updates) {
     out.push({
       id: 'updates',
       text: server.self

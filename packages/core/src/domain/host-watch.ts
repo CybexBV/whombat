@@ -93,6 +93,8 @@ const HINTS_ON: ReadonlySet<string> = new Set([
   // Whombat's root program on a Mac in a folder someone other than root can change: a security opening with one
   // clear step (run the installer again), so it starts on (watch-defaults.md).
   'macos.agent_folder',
+  // A Windows PC with no antivirus on: a security opening the person closes in Windows Security (windows-servers.md).
+  'windows.protection_off',
 ]);
 
 const alert = (
@@ -147,7 +149,7 @@ const hint = (
 });
 
 /**
- * Every alert rule (29) and hint kind (44 of the hosts service, 4 of Whombat's) as a check, in the hosts service's
+ * Every alert rule (30) and hint kind (47 of the hosts service, 4 of Whombat's) as a check, in the hosts service's
  * order: alerts first.
  */
 export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
@@ -352,6 +354,10 @@ export const HOST_WATCH_CHECKS: readonly HostWatchCheck[] = [
     'Until it’s in a safe folder.',
     false,
   ),
+  // Windows PCs (hub/model/windows.go; Whombat windows-servers.md): protection off starts on, old virus definitions off
+  // (Windows updates them by itself).
+  hint('windows.protection_off', 'Virus protection off', 'you', 'fixed', 'Until it’s on again.', false),
+  hint('windows.signatures_old', 'Old virus definitions', 'fyi', 'fixed', 'Until they’re updated.', false),
   // Proxmox VE guests and storage (hub/model/hints.go).
   hint(
     'guest.backup_old',
