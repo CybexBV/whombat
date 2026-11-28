@@ -729,6 +729,11 @@ const POWER_CUT: AutomationDefinition = (() => {
   return parsed.definition;
 })();
 
+const POWER_CUT_DESCRIPTION =
+  'When pve-01’s UPS has been on battery for 10 minutes, Whombat shuts down pve-02, pve-03 and then pve-01 by itself, and tells you.';
+const PORCH_LIGHT_DESCRIPTION =
+  'When someone rings the front door, the porch light goes on right away, without AI.';
+
 const PORCH_STEP = {
   id: 'light',
   kind: 'run_action',
@@ -971,7 +976,7 @@ export function createAutomationFixtures(
   );
   add(
     makeAutomation('aut_porch-light', 'Porch light when someone rings', PORCH_LIGHT, {
-      description: 'When someone rings the front door, the porch light goes on right away, without AI.',
+      description: PORCH_LIGHT_DESCRIPTION,
       lastRun: { ...runSummary(51, 'succeeded', at('11:05')), finishedAt: at('11:05') },
       recentRuns: [
         { ...runSummary(51, 'succeeded', at('11:05')), finishedAt: at('11:05') },
@@ -2052,8 +2057,7 @@ export function createAutomationFixtures(
           planId: PLAN_IDS.powerCut,
           automationId: 'aut_power-cut',
           name: 'When the power goes out, shut down my servers safely',
-          description:
-            'When pve-01’s UPS has been on battery for 10 minutes, Whombat shuts down pve-02, pve-03 and then pve-01 by itself, and tells you.',
+          description: POWER_CUT_DESCRIPTION,
           state: 'waiting',
           definition: POWER_CUT,
           grants: definitionGrants(POWER_CUT),
@@ -2081,8 +2085,7 @@ export function createAutomationFixtures(
   add(
     makeAutomation('aut_power-cut', 'When the power goes out, shut down my servers safely', POWER_CUT, {
       status: 'draft',
-      description:
-        'When pve-01’s UPS has been on battery for 10 minutes, Whombat shuts down pve-02, pve-03 and then pve-01 by itself, and tells you.',
+      description: POWER_CUT_DESCRIPTION,
       createdAt: at('11:13'),
       waitingPlanId: PLAN_IDS.powerCut,
       talk: { conversationId: CHAT, threadRootId: PLAN_THREADS.powerCut },

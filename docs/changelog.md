@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Automations can act without AI, right on your Whombat, even when the internet is down: ask your assistant to shut
   your servers down safely when the power goes out, restart a server or machine, or switch a light when Home Assistant
