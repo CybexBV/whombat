@@ -150,6 +150,12 @@ func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	return slog.New(slog.NewTextHandler(w, opts))
 }
 
+// takeOver makes the agent's folder its own before a command reads or
+// writes the settings in dir (secureDataDir): on Windows an administrator's
+// command would otherwise read what someone else left there, or write where
+// they point it. Tests replace it.
+var takeOver = secureDataDir
+
 // loadOrDefaultConfig reads agent.toml, or returns defaults when the agent
 // is not enrolled (collect and console-test work without enrollment).
 func loadOrDefaultConfig(dir string) (*agent.Config, error) {
@@ -308,6 +314,11 @@ func cmdCollect(args []string) error {
 	asJSON := fs.Bool("json", true, "print the report as JSON")
 	series := fs.Bool("series", false, "also print Report.Series()")
 	fs.Parse(args)
+	// On Windows the collector writes the scripts it runs into the state
+	// folder.
+	if err := takeOver(*dir); err != nil {
+		return err
+	}
 	cfg, err := loadOrDefaultConfig(*dir)
 	if err != nil {
 		return err
