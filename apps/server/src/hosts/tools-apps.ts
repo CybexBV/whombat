@@ -372,7 +372,8 @@ function askReasonsOf(bindings: readonly Pick<AppBinding, 'image' | 'version' | 
  * the same Compose settings (pure).
  */
 export function stillBound(g: HostGuest, b: AppBinding): boolean {
-  if (g.serverId !== b.server || !g.app || g.app.service !== b.service || g.imageId !== b.imageId) return false;
+  if (g.serverId !== b.server || !g.app || g.app.service !== b.service || g.imageId !== b.imageId)
+    return false;
   return !!b.configHash && g.app.configHash === b.configHash;
 }
 
