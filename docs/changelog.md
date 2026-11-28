@@ -20,8 +20,10 @@ them once they have been tried on Beta.
   and it won’t point it out again.
 - Ask your agent “what can the internet reach?” and it answers from the same list.
 - Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
-  page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back
-  by itself when the new one doesn’t start. A database or a new major version always asks, and says why.
+  page and its own page, with Update. Whombat asks first, installs exactly the version it asked about, restarts only
+  that app, and puts the previous version back by itself when the new one doesn’t start, even if the server restarted
+  halfway. A database, a new major version or a version Whombat can’t tell always asks, and says why. If the app
+  changed after you said yes, Whombat leaves it alone and says so.
 - A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
 - Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
   container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says

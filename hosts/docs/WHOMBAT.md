@@ -312,12 +312,14 @@ than this answers 501 `unsupported` “unknown operation”.
 New: **Docker Compose app updates** (Whombat `app-updates.md`;
 `docs/MANAGE.md` 2.11, `docs/REST-API.md` "Manage", Docker Compose app
 updates): `hosts.manage` op `app.update` (`POST /servers/{id}/apps/update
-{apps: ["docker:<name>"…], hold_major?, confirm: true}`, admin), 202 with a
+{apps: ["docker:<name>"…], hold_major?, expect?: [{app, service,
+image_id, digest?, config_hash?}], confirm: true}`, admin), 202 with a
 task `app:<16 hex>` (`hosts.tasks.get` with `?platform=host`; its status
 adds `apps: [{app, service, status, reason, from, to, message}]` once
 ended). `task.finished` names the guest when one app was updated. A Docker
-guest Compose started has `app: {service, version, new_version, blocked,
-updating, last: {status, reason, from, to, at}}`; a server whose agent is
+guest Compose started has `app: {service, version, new_version,
+new_digest, config_hash, blocked, updating, last: {status, reason, from,
+to, at}}`; a server whose agent is
 older answers 409 `agent_outdated`.
 
 New: **backup jobs** (Proxmox VE's scheduled backups, PX-03). Manage
