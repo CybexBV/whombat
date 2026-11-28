@@ -1499,10 +1499,13 @@ describe('Docker Compose app updates (app-updates.md)', () => {
     redis.image_id = `sha256:${'9'.repeat(64)}`;
     try {
       expect((await t.commit(IDS.mara, decideApproval, { number, decision: 'approve' })).status).toBe('ok');
-      await waitFor(async () => {
+      // A refused run ends failed (only a run that worked gets executedAt).
+      const run = await waitFor(async () => {
         const [row] = await t.services.db.select().from(approvals).where(eq(approvals.number, number));
-        return row?.executedAt ?? null;
+        return row && row.execution.state !== 'idle' && row.execution.state !== 'running' ? row : null;
       }, 10_000);
+      expect(run.execution.state).toBe('failed');
+      expect(run.executedAt).toBeNull();
       expect(fake.calls('POST', '/api/v1/servers/basalt/apps/update')).toHaveLength(before);
     } finally {
       redis.image_id = was;
