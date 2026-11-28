@@ -41,7 +41,6 @@ import {
   DeletedAvatar,
   DeletedText,
   EditedLabel,
-  LinkPreviews,
   MessageToolbar,
   PinnedMarker,
   ReactionPills,
@@ -489,7 +488,6 @@ export function MessageRow({
                 conversationId={message.conversationId}
               />
             )}
-            <LinkPreviews previews={message.previews} />
             <ReactionPills reactions={message.reactions} lookup={lookup} onToggle={onReact} />
             <RanOnNotes message={message} />
             {waiting && onAnswer && live ? (

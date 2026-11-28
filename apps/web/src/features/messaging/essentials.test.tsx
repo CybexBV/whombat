@@ -343,14 +343,12 @@ describe('reply in thread', () => {
   });
 });
 
-describe('link previews', () => {
-  it('shows a compact card that opens in a new tab without the opener', async () => {
+describe('links', () => {
+  it('are opened in the message’s text, with no card under it', async () => {
     renderApp(ROOM, seeded());
     const row = await maraRow();
-    const link = within(row).getByRole('link', { name: 'Templates · Typeset docs' });
-    expect(link.getAttribute('href')).toBe('https://typeset.dev/docs/templates');
-    expect(link.getAttribute('target')).toBe('_blank');
-    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
-    expect(within(row).getByText('Typeset')).toBeTruthy();
+    const links = within(row).getAllByRole('link');
+    expect(links.map((a) => a.getAttribute('href'))).toContain('https://typeset.dev/docs/templates');
+    expect(row.querySelector('[data-link-preview]')).toBeNull();
   });
 });

@@ -41,7 +41,6 @@ import {
   DeletedAvatar,
   DeletedText,
   EditedLabel,
-  LinkPreviews,
   MessageToolbar,
   PinnedMarker,
   ReactionPills,
@@ -713,7 +712,6 @@ export function ThreadView({
                             }
                             conversationId={m.conversationId}
                           />
-                          <LinkPreviews previews={m.previews} />
                           <ReactionPills
                             reactions={m.reactions}
                             lookup={lookup}

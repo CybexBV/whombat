@@ -21,11 +21,6 @@ export const Burrow = z.object({
   /** IANA zone used for day grouping and clock times when the viewer has none (seed: Europe/Amsterdam). */
   timeZone: z.string().min(1),
   /**
-   * Link previews under messages (0.26, CT-174): absent or true = on; owners turn them off with `burrows.update`
-   * (`linkPreviewsOn`).
-   */
-  linkPreviews: z.boolean().optional(),
-  /**
    * “Agents may reach your local network” (Whombat resourceful-agents.md RA-41, 0.44.0; local-network.md LN-01, 0.56.0):
    * on a Whombat appliance, the agent's commands and Whombat itself (Vault entries, Connections, SSH, the browser) reach
    * every private address (production servers stay closed). Off: only the Vault's home network list. Absent or true =
@@ -62,9 +57,4 @@ export type Burrow = z.infer<typeof Burrow>;
 /** Whether agents may reach the local network (RA-41, LN-01; the default: yes). */
 export function agentsReachLanOn(burrow: { agentsReachLan?: boolean }): boolean {
   return burrow.agentsReachLan !== false;
-}
-
-/** Whether the burrow shows link previews (the default: yes). */
-export function linkPreviewsOn(burrow: { linkPreviews?: boolean }): boolean {
-  return burrow.linkPreviews !== false;
 }

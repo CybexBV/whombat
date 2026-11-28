@@ -142,8 +142,6 @@ if (!readOnly) {
   services.files.start();
   // Backup files (docs/decisions/backup-file.md BF-10): jobs a stop left running fail, expired files go every 10 minutes.
   backupsFor(services).start();
-  // Stale link-preview cache rows go (docs/decisions/essentials-conversations.md EC-18): hourly.
-  services.linkPreviews.start();
   // Dispatches no runner can take (provider not set up, no runner) get the agent's quiet reply.
   services.runtime.start();
   // Forgotten Hermes sessions, handed to the runner until it takes them (HN-K02; one-person.md OP-S47).

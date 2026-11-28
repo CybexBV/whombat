@@ -392,37 +392,12 @@ export const Conversation = z.object({
   createdAt: Timestamp,
   lastMessageAt: Timestamp.nullable(),
   /**
-   * Link previews in this conversation (0.74, CT-330): absent or true = on (as the burrow says, `Burrow.linkPreviews`);
-   * false = none, and those already under its messages aren't shown. Changed with `conversations.update`
-   * (`conversationLinkPreviewsOn`).
-   */
-  linkPreviews: z.boolean().optional(),
-  /**
    * A DM that is a task chat with the person's Whombat (0.80, CT-337; one-whombat.md ONE-06): title, subject, archived.
    * Null or absent on every other conversation, the default chat included.
    */
   chat: ConversationChat.nullable().optional(),
 });
 export type Conversation = z.infer<typeof Conversation>;
-
-/** Whether a conversation shows link previews (CT-330): unless it or its burrow has them off. */
-export function conversationLinkPreviewsOn(
-  conversation: { linkPreviews?: boolean } | null | undefined,
-  burrow?: { linkPreviews?: boolean } | null,
-): boolean {
-  return conversation?.linkPreviews !== false && burrow?.linkPreviews !== false;
-}
-
-const LINK_PREVIEWS_COPY_KEYS = ['label', 'hint', 'on', 'off', 'burrowOff'] as const;
-
-/** The conversation setting's words (CT-330): the row in its details, and what its toast says. */
-export function linkPreviewsCopy(
-  locale?: string | null,
-): Readonly<Record<(typeof LINK_PREVIEWS_COPY_KEYS)[number], string>> {
-  return coreWords(locale, 'linkPreviews', LINK_PREVIEWS_COPY_KEYS);
-}
-
-export const LINK_PREVIEWS_COPY = linkPreviewsCopy('en');
 
 /** Sidebar / list row with the viewer's unread state. */
 export const ConversationSummary = z.object({

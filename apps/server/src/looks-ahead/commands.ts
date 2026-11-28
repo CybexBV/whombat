@@ -700,7 +700,6 @@ export const reportAhead = defineCommand({
             suggestions,
             // The person's Chat tells them, inbox and push, as any message of the assistant's there.
             dispatch: false,
-            linkPreviews: false,
           });
           told = true;
           promotedAt = ctx.now;
@@ -1080,7 +1079,6 @@ export const promoteAheadFinding = defineCommand({
         mentions: [],
         dispatch: false,
         notify: false,
-        linkPreviews: false,
       });
       if (!rootId) rootId = posted.id;
     }

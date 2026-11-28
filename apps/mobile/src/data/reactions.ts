@@ -9,7 +9,6 @@ import {
   type Emoji,
   emojiByChar,
   emojiGroupLabels,
-  type LinkPreview,
   pushRecentEmoji,
   QUICK_REACTIONS,
   RECENT_EMOJI_MAX,
@@ -138,38 +137,4 @@ export function parseRecentEmoji(raw: string | null): string[] {
 /** The recent list after using `char`, as stored. */
 export function recentAfter(recent: readonly string[], char: string): string[] {
   return pushRecentEmoji(recent, char);
-}
-
-/* Link previews ------------------------------------------------------------------------------------------------- */
-
-export interface PreviewCard {
-  url: string;
-  /** The site's name, else the link's host (`github.com`). */
-  site: string;
-  title: string;
-  description: string | null;
-  accessibilityLabel: string;
-}
-
-/** `github.com` from `https://github.com/…` (no `URL`: React Native's doesn't parse hosts everywhere). */
-export function hostOf(url: string): string {
-  const m = /^https?:\/\/(?:[^@/?#]*@)?(\[[^\]]+\]|[^/?#:]+)/i.exec(url);
-  return (m?.[1] ?? url).replace(/^www\./i, '').toLowerCase();
-}
-
-export function previewCards(previews: readonly LinkPreview[] | undefined, locale?: string): PreviewCard[] {
-  const { t } = mobileTranslator(locale);
-  return (previews ?? [])
-    .filter((p) => /^https?:\/\//i.test(p.url) && p.title.trim())
-    .slice(0, 3)
-    .map((p) => {
-      const site = p.siteName?.trim() || hostOf(p.url);
-      return {
-        url: p.url,
-        site,
-        title: p.title,
-        description: p.description?.trim() || null,
-        accessibilityLabel: t('data.reactions.link', { title: p.title, site }),
-      };
-    });
 }

@@ -1,17 +1,16 @@
 /**
  * What the essentials add around a message on the phone (Whombat essentials items 4, 8, 14; not mocked): reaction pills
- * under it, compact link cards, the failed turn's card with Try again, the “Pinned” mark, “(edited)”, the quiet
+ * under it, the failed turn's card with Try again, the “Pinned” mark, “(edited)”, the quiet
  * tombstone of a deleted thread root and “Saved to your Vault · Plex” (AP-4037). The chat's own language: `sf` cards with a `line` border, mono labels, 44dp
  * targets (AP-500, AP-503, AP-507, AP-508, AP-509).
  */
 
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
-import type { PreviewCard, ReactionPill } from '../data/reactions';
+import type { ReactionPill } from '../data/reactions';
 import type { TurnFailedView } from '../data/turns';
 import type { VaultSavedRow } from '../data/vaultSaved';
 import { useI18n, useMobileT } from '../i18n';
-import { opensInApp, useOpenUrl } from '../navigation/hooks';
 import { Text } from '../theme/Text';
 import { useTheme } from '../theme/theme';
 import { Lock, Pin, Plus } from './icons';
@@ -96,55 +95,6 @@ export function ReactionRow({
           <Plus size={15} color={theme.colors.ink2} strokeWidth={2} />
         </Touchable>
       ) : null}
-    </View>
-  );
-}
-
-/** Compact cards for the links in a message (no images): site, title, two lines of description; a tap opens it. */
-export function LinkPreviews({ cards }: { cards: readonly PreviewCard[] }) {
-  const { t: tMobile } = useMobileT();
-  const theme = useTheme();
-  const openUrl = useOpenUrl();
-  if (cards.length === 0) return null;
-  return (
-    <View style={{ gap: 8 }}>
-      {cards.map((c) => (
-        <Touchable
-          key={c.url}
-          onPress={() => openUrl(c.url)}
-          feedback="wash"
-          ringRadius={14}
-          accessibilityRole="link"
-          accessibilityLabel={c.accessibilityLabel}
-          accessibilityHint={
-            opensInApp(c.url) ? tMobile('ui.opens-in-whombat') : tMobile('ui.opens-in-your-browser')
-          }
-          style={{
-            minHeight: 44,
-            gap: 3,
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: theme.colors.line,
-            borderLeftWidth: 3,
-            borderLeftColor: theme.colors.line2,
-            backgroundColor: theme.colors.sf,
-          }}
-        >
-          <Text size={11} weight={500} mono color={theme.colors.mut} numberOfLines={1}>
-            {c.site}
-          </Text>
-          <Text size={14.5} weight={600} numberOfLines={2}>
-            {c.title}
-          </Text>
-          {c.description ? (
-            <Text size={13.5} lh={1.4} color={theme.colors.ink2} numberOfLines={2}>
-              {c.description}
-            </Text>
-          ) : null}
-        </Touchable>
-      ))}
     </View>
   );
 }

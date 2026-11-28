@@ -68,8 +68,8 @@ describe('the rows (CIB-01…CIB-04)', () => {
     expect(link.textContent).toContain('Looks good.');
     // A thread Neo started, with no reply yet, says who it is from.
     expect(rowOf(BACKUPS)?.textContent).toContain('From Neo');
-    // Beside the icon nothing but words: no link preview, file or card in a row.
-    expect(link.querySelector('[data-message-card], [data-link-preview]')).toBeNull();
+    // Beside the icon nothing but words: no file or card in a row.
+    expect(link.querySelector('[data-message-card]')).toBeNull();
   });
 
   it('marks what is new — the dot, the count and its words — and says what waits, in the row’s name', async () => {

@@ -353,7 +353,6 @@ export async function loadMessages(
     // 0.26 (docs/decisions/essentials-conversations.md): only when set, so older answers read as before.
     ...(row.deletedAt ? { deletedAt: iso(row.deletedAt) } : {}),
     ...(row.pinnedAt ? { pinnedAt: iso(row.pinnedAt), pinnedById: row.pinnedById ?? null } : {}),
-    ...(row.previews?.length && !row.deletedAt ? { previews: row.previews } : {}),
     // What a thread in Chat is about, on its first message (chat-channel.md CHT-05, CT-440); absent otherwise.
     ...subjectField(row),
     // What answered an assistant's reply in Chat (chat-runtime.md CR-07, CT-460); absent otherwise.

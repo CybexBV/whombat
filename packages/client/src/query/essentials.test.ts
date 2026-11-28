@@ -1,5 +1,5 @@
 /**
- * Edits, tombstones, pins and link previews in the cache (contracts 0.26: CT-173, CT-174; AP-440…): `message.updated`
+ * Edits, tombstones and pins in the cache (contracts 0.26: CT-173, CT-174; AP-440…): `message.updated`
  * and `message.deleted` reach the conversation's lists, its thread, the pins pane and search results, and the pins
  * list keeps its order (newest pin first) and its cap.
  */
@@ -135,7 +135,7 @@ describe('realtime', () => {
     return qc;
   }
 
-  it('an edit, a pin and a preview reach the list, the thread, the pins and search', () => {
+  it('an edit and a pin reach the list, the thread, the pins and search', () => {
     const qc = seeded();
     const state = createCacheSyncState(() => Date.parse(t(30)));
     const edited = message('msg_2', {
@@ -144,12 +144,10 @@ describe('realtime', () => {
       editedAt: t(10),
       pinnedAt: t(10),
       pinnedById: 'prn_joris',
-      previews: [{ url: 'https://typeset.dev', title: 'Typeset', description: null, siteName: 'Typeset' }],
     });
     applyRealtimeEvent(qc, { type: 'message.updated', message: edited }, { at: t(10) }, state);
     const list = qc.getQueryData<MessagePage>(keys.list);
     expect(list?.messages[1]?.text).toBe('PDFs ship Friday');
-    expect(list?.messages[1]?.previews?.[0]?.title).toBe('Typeset');
     expect(qc.getQueryData<{ messages: Message[] }>(keys.pins)?.messages.map((m) => m.id)).toEqual([
       'msg_2',
       'msg_root',

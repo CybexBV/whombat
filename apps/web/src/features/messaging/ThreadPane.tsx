@@ -22,7 +22,6 @@ import {
 import {
   type ChatSubject,
   canAskForMore,
-  conversationLinkPreviewsOn,
   isDeletedMessage,
   type Message,
   replySuggestions,
@@ -53,7 +52,7 @@ import roomStyles from './ConversationRoom.module.css';
 import { draftKey, readDraft, useDraft } from './drafts';
 import { HandoffLines } from './Handoff';
 import { JobDetails } from './JobView';
-import { LinkPreviewsShown, MessageEditor } from './MessageParts';
+import { MessageEditor } from './MessageParts';
 import { MoreDetail } from './MoreDetail';
 import { useMessageUrl } from './messageLink';
 import { foldMessages } from './model';
@@ -334,216 +333,210 @@ export function ThreadPane({
           }
         />
       )}
-      <LinkPreviewsShown.Provider value={conversationLinkPreviewsOn(room?.conversation)}>
-        {/* A Chat thread's cards as in a chat with the assistant (“Tonight at 03:00”, AP-1280, AP-2409). */}
-        <CardLookContext.Provider value={chatRoom ? 'chat' : 'room'}>
-          <RanOnMarkedProvider burrow={burrow} enabled={chatRoom === 'chat'}>
-            <ThreadView
-              burrow={burrow}
-              onMenu={actions.onMenu}
-              menuOpenId={actions.menuOpenId}
-              onReact={actions.toggleReaction}
-              pickerOpenId={actions.pickerOpenId}
-              renderEditor={(m) =>
-                m.id === actions.editingId ? (
-                  <MessageEditor
-                    compact
-                    initial={m.text}
-                    mentionTargets={mentionTargets}
-                    allowEmpty={m.attachments.length > 0}
-                    pending={actions.editPending}
-                    error={actions.editError}
-                    onSave={(text) => actions.saveEdit(m, text)}
-                    onCancel={actions.cancelEdit}
-                  />
-                ) : null
-              }
-              onEditLast={() => actions.editLast(messages)}
-              replyFocusKey={replyFocusKey}
-              header={header}
-              headExtra={
-                chatRoom
-                  ? data?.root.subject && renderSubject
-                    ? renderSubject(data.root.subject)
-                    : null
-                  : undefined
-              }
-              repliesLine={!!chatRoom}
-              stageWord={
-                // What goes on from it says more than “Handed over”: the same line as its row's; a list waiting for
-                // Hand over has only that line to say.
-                (stage === 'handedOver' || !stage) && workLine
-                  ? `${workLine.who} · ${workLine.text}`
-                  : stage
-                    ? threadStageWord(stage, words.name)
-                    : null
-              }
-              headAction={
-                <>
-                  {shareable && data && !isDeletedMessage(data.root) && (
-                    <IconButton
-                      label="Share this thread"
-                      onClick={() => setShareScope({ rootId: threadId })}
-                      data-thread-share=""
-                    >
-                      <Icon icon={Share} size={16} />
-                    </IconButton>
-                  )}
-                  {chatRoom && markable && conversationId ? (
-                    <IconButton
-                      label={INBOX_WORDS.markUnread}
-                      onClick={() => {
-                        // An open thread reads itself: it closes, so it stays unread.
-                        marks.markUnread({ conversationId, rootId: threadId });
-                        onClose();
-                      }}
-                      data-thread-unread=""
-                    >
-                      <Icon icon={Mail} size={16} />
-                    </IconButton>
-                  ) : null}
-                  {chatRoom && settleable ? (
-                    <button
-                      type="button"
-                      className={viewStyles.settleButton}
-                      onClick={() => {
-                        // Beside the list the next thread opens, as archiving mail does; otherwise back to the room.
-                        const next = split ? inboxNextAfter(chatRoom, threadId) : null;
-                        settle(chatRoom, threadId);
-                        if (next) void updateSearch((s) => ({ ...s, thread: next, focus: undefined }));
-                        else onClose();
-                      }}
-                      data-thread-settle=""
-                    >
-                      <Icon icon={CircleCheck} size={15} />
-                      {SETTLE_WORDS.settle}
-                    </button>
-                  ) : null}
-                </>
-              }
-              stateLine={
-                chatRoom && settled ? (
-                  <div className={viewStyles.settledLine} data-settled-line="">
-                    <Icon icon={CircleCheck} size={15} />
-                    <span className={viewStyles.settledWhen}>{settledLine(settled.at, now, timeZone)}</span>
-                    <button
-                      type="button"
-                      className={viewStyles.openAgain}
-                      onClick={() => openAgain(chatRoom, threadId)}
-                    >
-                      {SETTLE_WORDS.openAgain}
-                    </button>
-                  </div>
-                ) : null
-              }
-              replyHint={settled ? SETTLE_WORDS.replyOpens : null}
-              focusCard={focusCard}
-              newFrom={newFrom ?? null}
-              rootCard={!!chatRoom}
-              back={back}
-              replyPlaceholder={replyPlaceholder ?? (chatRoom ? CHAT_WORDS.replyTo(words.name) : undefined)}
-              messages={messages}
-              where={data?.where ?? ''}
-              topic={data?.topic ?? null}
-              lookup={lookup}
-              timeZone={timeZone}
-              onClose={onClose}
-              layout={focus ? 'focus' : 'pane'}
-              onFocusChange={onFocusChange}
-              // A Chat or Feedback thread is always full width: no collapse, its back link goes to the room (AP-2415).
-              collapsible={!chatRoom}
-              splitHref={
-                chatRoom ? here({ thread: undefined, focus: undefined }) : here({ focus: undefined })
-              }
-              renderCard={(m, inside) =>
-                m.card ? (
-                  <MessageCard
-                    burrow={burrow}
-                    card={m.card}
-                    messageId={m.id}
-                    conversationId={m.conversationId}
-                    nested={inside}
-                    variant="thread"
-                    attachments={m.attachments}
-                    authorId={m.authorId}
-                  />
-                ) : null
-              }
-              renderAfter={(m) => (
-                <>
-                  {canAskForMore(m, lookup(m.authorId), me) && (
-                    <MoreDetail burrow={burrow} messageId={m.id} />
-                  )}
-                  {quick && m.id === quick.messageId && (
-                    <QuickReplies suggestions={quick.suggestions} onPick={pick} disabled={sender.sending} />
-                  )}
-                  {m.id === jobAfter && jobDetails}
-                </>
-              )}
-              typing={typing}
-              typingAction={typingAction}
-              handoffs={
-                handoffs.length || jobAtEnd ? (
-                  <>
-                    {handoffs.length ? (
-                      <HandoffLines
-                        handoffs={handoffs}
-                        agentName={handedBy ? shortNameOf(handedBy) : (agent?.name ?? 'the agent')}
-                      />
-                    ) : null}
-                    {jobAtEnd && jobDetails}
-                  </>
-                ) : null
-              }
-              handoffCount={handoffs.length + (jobAtEnd ? 1 : 0)}
-              earlier={
-                pages.more ? (
+      {/* A Chat thread's cards as in a chat with the assistant (“Tonight at 03:00”, AP-1280, AP-2409). */}
+      <CardLookContext.Provider value={chatRoom ? 'chat' : 'room'}>
+        <RanOnMarkedProvider burrow={burrow} enabled={chatRoom === 'chat'}>
+          <ThreadView
+            burrow={burrow}
+            onMenu={actions.onMenu}
+            menuOpenId={actions.menuOpenId}
+            onReact={actions.toggleReaction}
+            pickerOpenId={actions.pickerOpenId}
+            renderEditor={(m) =>
+              m.id === actions.editingId ? (
+                <MessageEditor
+                  compact
+                  initial={m.text}
+                  mentionTargets={mentionTargets}
+                  allowEmpty={m.attachments.length > 0}
+                  pending={actions.editPending}
+                  error={actions.editError}
+                  onSave={(text) => actions.saveEdit(m, text)}
+                  onCancel={actions.cancelEdit}
+                />
+              ) : null
+            }
+            onEditLast={() => actions.editLast(messages)}
+            replyFocusKey={replyFocusKey}
+            header={header}
+            headExtra={
+              chatRoom
+                ? data?.root.subject && renderSubject
+                  ? renderSubject(data.root.subject)
+                  : null
+                : undefined
+            }
+            repliesLine={!!chatRoom}
+            stageWord={
+              // What goes on from it says more than “Handed over”: the same line as its row's; a list waiting for
+              // Hand over has only that line to say.
+              (stage === 'handedOver' || !stage) && workLine
+                ? `${workLine.who} · ${workLine.text}`
+                : stage
+                  ? threadStageWord(stage, words.name)
+                  : null
+            }
+            headAction={
+              <>
+                {shareable && data && !isDeletedMessage(data.root) && (
+                  <IconButton
+                    label="Share this thread"
+                    onClick={() => setShareScope({ rootId: threadId })}
+                    data-thread-share=""
+                  >
+                    <Icon icon={Share} size={16} />
+                  </IconButton>
+                )}
+                {chatRoom && markable && conversationId ? (
+                  <IconButton
+                    label={INBOX_WORDS.markUnread}
+                    onClick={() => {
+                      // An open thread reads itself: it closes, so it stays unread.
+                      marks.markUnread({ conversationId, rootId: threadId });
+                      onClose();
+                    }}
+                    data-thread-unread=""
+                  >
+                    <Icon icon={Mail} size={16} />
+                  </IconButton>
+                ) : null}
+                {chatRoom && settleable ? (
                   <button
                     type="button"
-                    className={roomStyles.older}
-                    disabled={pages.loadingEarlier}
-                    onClick={pages.loadEarlier}
-                    data-thread-earlier=""
+                    className={viewStyles.settleButton}
+                    onClick={() => {
+                      // Beside the list the next thread opens, as archiving mail does; otherwise back to the room.
+                      const next = split ? inboxNextAfter(chatRoom, threadId) : null;
+                      settle(chatRoom, threadId);
+                      if (next) void updateSearch((s) => ({ ...s, thread: next, focus: undefined }));
+                      else onClose();
+                    }}
+                    data-thread-settle=""
                   >
-                    {pages.loadingEarlier ? 'Loading…' : LOAD_EARLIER_REPLIES}
+                    <Icon icon={CircleCheck} size={15} />
+                    {SETTLE_WORDS.settle}
                   </button>
-                ) : null
-              }
-              target={target}
-              draft={draft}
-              onDraftChange={(value) => {
-                setDraft(value);
-                if (sender.notice) sender.clearNotice();
-                if (offer.notice) offer.clearNotice();
-                if (!skillsAsked && value.startsWith('/')) setSkillsAsked(true);
-              }}
-              onSend={(text) => void send(text)}
-              onPickFiles={conversationId ? uploads.pick : null}
-              attachments={uploads.attachments}
-              onRemoveAttachment={uploads.remove}
-              onRetryAttachment={uploads.retry}
-              skills={skills}
-              prompts={offer.prompts}
-              mentionables={mentionables}
-              viewerId={me?.id}
-              plainOwn={ownRoom || !!chatRoom}
-              runtimeTool={runtimeTool}
-              notice={sender.notice ?? offer.notice}
-              onNavigate={(href) => navigateHref(href)}
-              status={
-                data ? undefined : error ? (
-                  <ErrorNote
-                    message="This thread is gone, or you’re not in its conversation."
-                    onRetry={() => void refetch()}
-                  />
-                ) : (
-                  <SkeletonRows count={5} avatarSize={32} lines={2} />
-                )
-              }
-            />
-          </RanOnMarkedProvider>
-        </CardLookContext.Provider>
-      </LinkPreviewsShown.Provider>
+                ) : null}
+              </>
+            }
+            stateLine={
+              chatRoom && settled ? (
+                <div className={viewStyles.settledLine} data-settled-line="">
+                  <Icon icon={CircleCheck} size={15} />
+                  <span className={viewStyles.settledWhen}>{settledLine(settled.at, now, timeZone)}</span>
+                  <button
+                    type="button"
+                    className={viewStyles.openAgain}
+                    onClick={() => openAgain(chatRoom, threadId)}
+                  >
+                    {SETTLE_WORDS.openAgain}
+                  </button>
+                </div>
+              ) : null
+            }
+            replyHint={settled ? SETTLE_WORDS.replyOpens : null}
+            focusCard={focusCard}
+            newFrom={newFrom ?? null}
+            rootCard={!!chatRoom}
+            back={back}
+            replyPlaceholder={replyPlaceholder ?? (chatRoom ? CHAT_WORDS.replyTo(words.name) : undefined)}
+            messages={messages}
+            where={data?.where ?? ''}
+            topic={data?.topic ?? null}
+            lookup={lookup}
+            timeZone={timeZone}
+            onClose={onClose}
+            layout={focus ? 'focus' : 'pane'}
+            onFocusChange={onFocusChange}
+            // A Chat or Feedback thread is always full width: no collapse, its back link goes to the room (AP-2415).
+            collapsible={!chatRoom}
+            splitHref={chatRoom ? here({ thread: undefined, focus: undefined }) : here({ focus: undefined })}
+            renderCard={(m, inside) =>
+              m.card ? (
+                <MessageCard
+                  burrow={burrow}
+                  card={m.card}
+                  messageId={m.id}
+                  conversationId={m.conversationId}
+                  nested={inside}
+                  variant="thread"
+                  attachments={m.attachments}
+                  authorId={m.authorId}
+                />
+              ) : null
+            }
+            renderAfter={(m) => (
+              <>
+                {canAskForMore(m, lookup(m.authorId), me) && <MoreDetail burrow={burrow} messageId={m.id} />}
+                {quick && m.id === quick.messageId && (
+                  <QuickReplies suggestions={quick.suggestions} onPick={pick} disabled={sender.sending} />
+                )}
+                {m.id === jobAfter && jobDetails}
+              </>
+            )}
+            typing={typing}
+            typingAction={typingAction}
+            handoffs={
+              handoffs.length || jobAtEnd ? (
+                <>
+                  {handoffs.length ? (
+                    <HandoffLines
+                      handoffs={handoffs}
+                      agentName={handedBy ? shortNameOf(handedBy) : (agent?.name ?? 'the agent')}
+                    />
+                  ) : null}
+                  {jobAtEnd && jobDetails}
+                </>
+              ) : null
+            }
+            handoffCount={handoffs.length + (jobAtEnd ? 1 : 0)}
+            earlier={
+              pages.more ? (
+                <button
+                  type="button"
+                  className={roomStyles.older}
+                  disabled={pages.loadingEarlier}
+                  onClick={pages.loadEarlier}
+                  data-thread-earlier=""
+                >
+                  {pages.loadingEarlier ? 'Loading…' : LOAD_EARLIER_REPLIES}
+                </button>
+              ) : null
+            }
+            target={target}
+            draft={draft}
+            onDraftChange={(value) => {
+              setDraft(value);
+              if (sender.notice) sender.clearNotice();
+              if (offer.notice) offer.clearNotice();
+              if (!skillsAsked && value.startsWith('/')) setSkillsAsked(true);
+            }}
+            onSend={(text) => void send(text)}
+            onPickFiles={conversationId ? uploads.pick : null}
+            attachments={uploads.attachments}
+            onRemoveAttachment={uploads.remove}
+            onRetryAttachment={uploads.retry}
+            skills={skills}
+            prompts={offer.prompts}
+            mentionables={mentionables}
+            viewerId={me?.id}
+            plainOwn={ownRoom || !!chatRoom}
+            runtimeTool={runtimeTool}
+            notice={sender.notice ?? offer.notice}
+            onNavigate={(href) => navigateHref(href)}
+            status={
+              data ? undefined : error ? (
+                <ErrorNote
+                  message="This thread is gone, or you’re not in its conversation."
+                  onRetry={() => void refetch()}
+                />
+              ) : (
+                <SkeletonRows count={5} avatarSize={32} lines={2} />
+              )
+            }
+          />
+        </RanOnMarkedProvider>
+      </CardLookContext.Provider>
     </>
   );
 }

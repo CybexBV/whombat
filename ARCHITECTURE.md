@@ -457,7 +457,7 @@ uses readable ids (`prn_dusty`, `prn_mara`, `cnv_pr482`). URLs use handles and s
   conversation is the person's with the agent; nobody is a member of one. The person's notification level for a room
   is `conversations.notify` ([membership.md](docs/decisions/membership.md)).
 - **Message** — light Markdown parsed by core's `parseMessage()`, with mentions, an optional card (`plan`, `run`,
-  `approval`, `answer`, `digest`…), quick replies, “More detail”, attachments, reactions, link previews, threads
+  `approval`, `answer`, `digest`…), quick replies, “More detail”, attachments, reactions, threads
   (`threadRootId`), edits, deletes and pins. An HTML page (a fenced block, a raw page, an `.html` attachment) or a
   Mermaid diagram shows live in a sandboxed frame: an opaque origin under `PAGE_POLICY` (inline scripts and styles, bundled scripts and embedded assets;
   remote resource requests blocked), the app's theme as the page's first style (`withPageStyle`, `pageThemeCss`),
@@ -620,7 +620,7 @@ Automations. Code finds it by kind
   Outsiders' results carry no attachment ids, and no later step copies files from them. For older rows without a
   dispatch id, collection uses only marked posts within the claim. A result names its turn; templates drop one that
   names another turn, and a result the previous release saved (no turn named) is read as it was. The thread's marked
-  posts offer no shortcuts into the person's turns and create no link previews. Every start marks what outsiders'
+  posts offer no shortcuts into the person's turns. Every start marks what outsiders'
   input wrote and the mark missed (a step's own thread, what the previous release wrote after a rollback), and More
   detail, Try again and the claim read the turn that wrote a message, not only its mark
   (`runtime/outsiders-marks.ts`). The person can start a new turn by replying directly. That turn starts a fresh
@@ -1682,7 +1682,7 @@ Setup and operation: `docs/github.md`.
   where its own step works: every step working, or a later step failing instead, which confirms on its own. A development box and
   tests never probe unless `WHOMBAT_WAY_OUT=on`.
 - **Outbound requests**: any server-side fetch of a URL someone supplied goes through `lib/outbound.ts` (public
-  addresses only, the resolved address pinned, no redirects, a size cap); link previews and the Vault add their own
+  addresses only, the resolved address pinned, no redirects, a size cap); the Vault and pictures add their own
   destination rules. A single UDP datagram and its answer (a console's discovery) go through `outboundDatagram` under
   the same rules.
 

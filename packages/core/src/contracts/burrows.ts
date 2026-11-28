@@ -165,13 +165,11 @@ export const burrowEndpoints = {
     id: 'burrows.update',
     method: 'PATCH',
     path: '/burrows/:burrow',
-    summary: 'Rename the burrow, change its time zone or turn link previews on or off (key burrow.manage).',
+    summary: 'Rename the burrow or change its time zone (key burrow.manage).',
     params: B,
     body: z.object({
       name: BurrowName.optional(),
       timeZone: z.string().min(1).optional(),
-      /** 0.26 (CT-174): link previews under messages; on by default. */
-      linkPreviews: z.boolean().optional(),
     }),
     response: z.object({ burrow: Burrow }),
   }),

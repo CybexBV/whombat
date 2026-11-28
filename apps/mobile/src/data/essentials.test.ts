@@ -18,9 +18,7 @@ import {
   emojiLines,
   emojiPerRow,
   emojiSections,
-  hostOf,
   parseRecentEmoji,
-  previewCards,
   quickReactions,
   reactionPills,
   recentAfter,
@@ -336,50 +334,6 @@ describe('reactions, previews (item 14, AP-507, AP-508)', () => {
     expect(new Set(lines.map((l) => l.key)).size).toBe(lines.length);
     expect(lines.filter((l) => l.kind === 'title').map((l) => l.title)).toEqual(sections.map((s) => s.title));
     expect(emojiLines([], 7)).toEqual([]);
-  });
-
-  it('shows link previews as compact cards, the host when the page names no site', () => {
-    expect(hostOf('https://www.GitHub.com/acme/Whombat/pull/1')).toBe('github.com');
-    expect(
-      previewCards([
-        {
-          url: 'https://github.com/acme/Whombat/pull/1',
-          title: 'Add plan card',
-          description: null,
-          siteName: null,
-        },
-        {
-          url: 'https://example.com',
-          title: 'Example',
-          description: 'An example page.',
-          siteName: 'Example',
-        },
-      ]),
-    ).toEqual([
-      {
-        url: 'https://github.com/acme/Whombat/pull/1',
-        site: 'github.com',
-        title: 'Add plan card',
-        description: null,
-        accessibilityLabel: 'Link: Add plan card, github.com',
-      },
-      {
-        url: 'https://example.com',
-        site: 'Example',
-        title: 'Example',
-        description: 'An example page.',
-        accessibilityLabel: 'Link: Example, Example',
-      },
-    ]);
-    expect(previewCards(undefined)).toEqual([]);
-  });
-
-  it('leaves them out where the room has them off (AP-1102)', () => {
-    const previews = [{ url: 'https://example.com', title: 'Example', description: null, siteName: null }];
-    const [on] = chatItems([msg({ previews })], ctx, { authors: true });
-    expect(on?.previews).toHaveLength(1);
-    const [off] = chatItems([msg({ previews })], ctx, { authors: true, previews: false });
-    expect(off?.previews).toEqual([]);
   });
 });
 

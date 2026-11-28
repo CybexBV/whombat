@@ -56,7 +56,6 @@ export const conversationRoutes = [
     await commitAs(ctx, updateConversation, {
       conversationId: ctx.params.conversationId,
       topic: ctx.body.topic,
-      linkPreviews: ctx.body.linkPreviews,
     });
     const row = await readableConversation(ctx.services.db, ctx.access.burrow.id, ctx.params.conversationId);
     return conversationDetail(ctx.services.db, ctx.access.principal.id, row);

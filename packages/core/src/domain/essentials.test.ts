@@ -12,15 +12,7 @@ import {
 } from './conversation.js';
 import { TurnFailureCode, turnFailureDetail } from './dispatch.js';
 import { LinkRef, linkPath } from './links.js';
-import {
-  addedMentions,
-  canDeleteMessage,
-  canEditMessage,
-  canPinMessage,
-  LINK_PREVIEW_TITLE_MAX,
-  Message,
-  normalizeLinkPreview,
-} from './message.js';
+import { addedMentions, canDeleteMessage, canEditMessage, canPinMessage, Message } from './message.js';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
   dndUntilFor,
@@ -148,28 +140,6 @@ describe('messages (CT-173, CT-174, CT-176)', () => {
     expect(addedMentions(['a'], [])).toEqual([]);
   });
 
-  it('link previews are normalised to the schema or dropped', () => {
-    expect(
-      normalizeLinkPreview({
-        url: 'https://example.com/a',
-        title: '  Example\n  page ',
-        description: '',
-        siteName: 'Example',
-      }),
-    ).toEqual({
-      url: 'https://example.com/a',
-      title: 'Example page',
-      description: null,
-      siteName: 'Example',
-    });
-    const long = normalizeLinkPreview({ url: 'https://e.com', title: 'x'.repeat(500) });
-    expect(long?.title.length).toBe(LINK_PREVIEW_TITLE_MAX);
-    expect(long?.title.endsWith('…')).toBe(true);
-    expect(normalizeLinkPreview({ url: 'https://e.com', title: '   ' })).toBeNull();
-    expect(normalizeLinkPreview({ url: 'ftp://e.com', title: 'x' })).toBeNull();
-    expect(normalizeLinkPreview({ url: 'javascript:alert(1)', title: 'x' })).toBeNull();
-  });
-
   it('a message takes the new fields and a tombstone parses', () => {
     const m = {
       id: 'msg_1',
@@ -194,12 +164,8 @@ describe('messages (CT-173, CT-174, CT-176)', () => {
       deletedAt: T,
       pinnedAt: T,
       pinnedById: mara.id,
-      previews: [{ url: 'https://e.com', title: 'E', description: null, siteName: null }],
     });
     expect(full).toMatchObject({ deletedAt: T, pinnedById: mara.id });
-    expect(Message.safeParse({ ...m, previews: Array(4).fill(full.previews?.[0]) }).success).toBe(false);
-    const js = { url: 'javascript:alert(1)', title: 'x', description: null, siteName: null };
-    expect(Message.safeParse({ ...m, previews: [js] }).success).toBe(false);
   });
 });
 

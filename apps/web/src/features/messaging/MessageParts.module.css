@@ -1,5 +1,5 @@
 /* Message row additions (docs/decisions/essentials-messages.md): hover toolbar, reactions, (edited), the pin marker,
-   the tombstone, link previews and the inline editor. Built in the row's own language (mono meta, sf2 pills, line
+   the tombstone and the inline editor. Built in the row's own language (mono meta, sf2 pills, line
    borders); the mock has none of these. */
 
 /* Toolbar: the old “More actions” button's place (28px buttons at the row's top right), grown to three, and Ask before
@@ -117,13 +117,6 @@
   color: var(--mut);
 }
 
-/* Link previews: compact cards, no images. */
-.previews {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 /* What the Vault took (vault-self-serve.md AP-4007): a quiet line per item, the lock beside it, as a reply's notes. */
 .vaultSaved {
   display: flex;
@@ -158,68 +151,6 @@
 .vaultSavedLink:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
-}
-
-.preview {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  max-width: 520px;
-  padding: 10px 14px 11px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line2);
-  border-radius: var(--radius-button);
-  background: var(--sf);
-}
-
-.preview:hover {
-  border-color: var(--line2);
-}
-
-.previewSite {
-  overflow: hidden;
-  color: var(--mut);
-  font: var(--type-mono-meta-small);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.previewTitle,
-.previewTitle:hover {
-  color: var(--brand);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-decoration: none;
-  overflow-wrap: anywhere;
-}
-
-/* The whole card opens the link. */
-.previewTitle::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-}
-
-.previewTitle:focus-visible {
-  outline: none;
-}
-
-.preview:has(.previewTitle:focus-visible) {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
-.previewDescription {
-  display: -webkit-box;
-  overflow: hidden;
-  color: var(--ink2);
-  font-size: 14px;
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
 }
 
 /* Inline editor: the composer's card, in the row. */

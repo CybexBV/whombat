@@ -45,8 +45,6 @@ export function toBurrow(row: BurrowRow, aiGateway: BurrowAiGateway | null = nul
     slug: row.slug,
     timeZone: row.timeZone,
     createdAt: iso(row.createdAt),
-    // Link previews under messages; absent in the database = on (CT-174, EC-21).
-    linkPreviews: row.linkPreviews !== false,
     // “Agents may reach your local network”; absent in the database = on (resourceful-agents.md RA-41).
     agentsReachLan: row.agentsReachLan !== false,
     aiGateway,

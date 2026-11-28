@@ -30,8 +30,6 @@ export function toConversation(row: ConversationRow): Conversation {
     repoId: row.repoId,
     createdAt: iso(row.createdAt),
     lastMessageAt: isoOrNull(row.lastMessageAt),
-    // Always said, so a client that merges what it had sees “on” again (EC-23).
-    linkPreviews: row.linkPreviews !== false,
     // A task chat's title and subject (one-whombat.md ONE-06, CT-337); absent on every other conversation.
     ...(chat ? { chat } : {}),
   };
