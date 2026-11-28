@@ -263,6 +263,8 @@ const SAYS_ONLY = new Set<AutomationStep['kind']>([
   'post_message',
   'http_callback',
   'connection_actions',
+  // An action done once (a server shut down) isn't done twice when the run goes again.
+  'run_action',
 ]);
 
 /** The line the run's thread gets when its broken review is done again: no try number, as it isn't a try at the fix. */

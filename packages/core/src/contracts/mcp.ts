@@ -212,6 +212,27 @@ export const AgentFindMyPerson = z.object({
 });
 export type AgentFindMyPerson = z.infer<typeof AgentFindMyPerson>;
 
+/** A Home Assistant or UniFi Protect connection a `home_state` or `protect` trigger names. */
+export const AgentHomeConnection = z.object({
+  connectionId: ConnectionId,
+  catalogId: z.enum(['homeassistant', 'unifi_protect']),
+  label: z.string(),
+  /** False while it can't be reached or needs a new token: its triggers wait until it works again. */
+  working: z.boolean(),
+});
+export type AgentHomeConnection = z.infer<typeof AgentHomeConnection>;
+
+/**
+ * A server whose UPS Whombat sees, with the ready-made automation that shuts the servers down safely when the power
+ * has been out a while (`powerCut`, a definition for draft_automation).
+ */
+export const AgentUpsServer = z.object({
+  thing: z.string(),
+  name: z.string(),
+  powerCut: JsonObject,
+});
+export type AgentUpsServer = z.infer<typeof AgentUpsServer>;
+
 /**
  * `look_report`'s input (3.5; Whombat look-research.md LR-05…LR-07): strict, and a fixed look offers no step. Whombat
  * makes the words one line before it keeps them. `steps` (3.11, handle-it.md) is a plan for everything that needs a
@@ -761,7 +782,7 @@ export const MCP_TOOLS = {
     name: 'automation_read',
     title: 'Read automations',
     description:
-      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), the people Find My connections know (findMyPeople, the connectionId, person and name a findmy trigger names), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
+      'The person’s automations and how to write one for draft_automation. Without automationId: each one’s id, name, whether it is on, what it does and its last run, this Whombat’s tracker connections (the connectionId a tracker trigger names), connected mailboxes (mailConnections, the connectionId a mail trigger names), the people Find My connections know (findMyPeople, the connectionId, person and name a findmy trigger names), Home Assistant and UniFi Protect connections (homeConnections, for home_state and protect triggers), servers with a UPS (upsServers, each with a ready-made powerCut automation), and the guide. With automationId: that one, with its live definition, the plan waiting for a yes and its keys, to change it.',
     input: z.object({ automationId: AutomationId.optional() }),
     output: z.object({
       automations: z.array(AgentAutomationSummary).optional(),
@@ -769,6 +790,8 @@ export const MCP_TOOLS = {
       trackerConnections: z.array(AgentTrackerConnection).optional(),
       mailConnections: z.array(AgentMailConnection).optional(),
       findMyPeople: z.array(AgentFindMyPerson).max(500).optional(),
+      homeConnections: z.array(AgentHomeConnection).max(50).optional(),
+      upsServers: z.array(AgentUpsServer).max(20).optional(),
       guide: z.string().optional(),
     }),
     requiredKey: null,

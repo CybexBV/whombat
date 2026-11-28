@@ -1,10 +1,10 @@
 /**
  * Automations the release before them can't run (docs/decisions/automation-recipes.md): one started by incoming mail,
- * by Find My or by something going down or coming back, and one with a step that proposes or makes changes in the
- * person's connected services. That release would run them
- * as the person, read past the outsiders' mark and send them unchanged to older phones, which then refuse the whole
- * Automations list. A box makes, turns on and runs them only when the release it would go back to after a failed update
- * knows them too: that is what this gate tells.
+ * by Find My or by something going down or coming back, one that acts without AI or starts on Home Assistant or UniFi
+ * Protect, and one with a step that proposes or makes changes in the person's connected services. That release would
+ * run them as the person, read past the outsiders' mark and send them unchanged to older phones, which then refuse the
+ * whole Automations list. A box makes, turns on and runs them only when the release it would go back to after a
+ * failed update knows them too: that is what this gate tells.
  *
  * The release it would go back to comes from the manager's update facts: while this release is being tried, the one
  * the box runs as its current release; once it is the current one, the release its last update came from. A release
@@ -14,6 +14,7 @@
  * started its runtime) too.
  */
 import type { UpdateFacts } from '@whombat/control-contracts/local';
+import { hasDirectParts } from '@whombat/core';
 import { eq } from 'drizzle-orm';
 import type { Config } from '../config';
 import type { Database } from '../db/client';
@@ -31,6 +32,9 @@ export const FIND_MY_AUTOMATIONS_LATER = 'Find My automations come with the next
 /** The same about one that starts when something goes down, has a problem or comes back. */
 export const THING_AUTOMATIONS_LATER =
   'Automations that start when something goes down or comes back come with the next update.';
+/** The same about one that acts by itself without AI, or starts on Home Assistant or UniFi Protect. */
+export const DIRECT_AUTOMATIONS_LATER =
+  'Automations that act by themselves or start on Home Assistant or UniFi Protect come with the next update.';
 
 /**
  * The first schema of a release that runs findmy automations (`runtime_releases.schema`): a release the box would go
@@ -43,6 +47,13 @@ export const FIND_MY_SCHEMA = '0017_findmy_places';
  * triggers); the release before it can't read their definitions, yet would go on with a run one of them started.
  */
 export const THING_SCHEMA = '0027_incident_automation_watches';
+
+/**
+ * The first schema of a release that runs automations that act without AI (`run_action` steps, `home_state` and
+ * `protect` triggers, a cooldown): the release before it can't read their definitions, yet would advance a run one of
+ * them started.
+ */
+export const DIRECT_SCHEMA = '0044_direct_automations';
 
 type Json = unknown;
 
@@ -84,6 +95,7 @@ export function newerDefinition(definition: Json): boolean {
     startedByMail(definition) ||
     startedByFindMy(definition) ||
     startedByThing(definition) ||
+    hasDirectParts(definition) ||
     listOf(definition, 'steps').some(
       (s) =>
         kindOf(s) === 'connection_actions' ||
@@ -92,12 +104,16 @@ export function newerDefinition(definition: Json): boolean {
   );
 }
 
+/** A run's trigger kind from Home Assistant or UniFi Protect. */
+const startedByHomeKind = (kind: string): boolean => kind === 'home_state' || kind === 'protect';
+
 /** Whether a run is one of them: started by mail, or of such a definition. */
 export function newerRun(run: { trigger: { kind: string }; definition: Json }): boolean {
   return (
     run.trigger.kind === 'mail' ||
     run.trigger.kind === 'findmy' ||
     run.trigger.kind === 'thing' ||
+    startedByHomeKind(run.trigger.kind) ||
     newerDefinition(run.definition)
   );
 }
@@ -106,6 +122,7 @@ export function newerRun(run: { trigger: { kind: string }; definition: Json }): 
 export function laterWords(definition: Json): string {
   if (startedByMail(definition)) return MAIL_AUTOMATIONS_LATER;
   if (startedByFindMy(definition)) return FIND_MY_AUTOMATIONS_LATER;
+  if (hasDirectParts(definition)) return DIRECT_AUTOMATIONS_LATER;
   return startedByThing(definition) ? THING_AUTOMATIONS_LATER : ACTION_AUTOMATIONS_LATER;
 }
 
@@ -178,6 +195,10 @@ export const schemaKnowsFindMy = (schema: string | null): boolean =>
 export const schemaKnowsThings = (schema: string | null): boolean =>
   schema !== null && schema >= THING_SCHEMA;
 
+/** Whether a recorded schema is `DIRECT_SCHEMA` or later. */
+export const schemaKnowsDirect = (schema: string | null): boolean =>
+  schema !== null && schema >= DIRECT_SCHEMA;
+
 /**
  * Whether this box may make, turn on and run automations the release before them can't run. Off in production until
  * the managed runtime follows the manager's update facts (`follow`) and they name a release that knows them.
@@ -190,6 +211,8 @@ export class NewerAutomationsGate {
   readonly #knowsFindMy = new Set<string>();
   /** Releases found there with a schema that runs thing automations. */
   readonly #knowsThings = new Set<string>();
+  /** Releases found there with a schema that runs automations that act without AI. */
+  readonly #knowsDirect = new Set<string>();
 
   constructor(
     private readonly config: Pick<Config, 'NODE_ENV' | 'WHOMBAT_RELEASE_ID'>,
@@ -232,6 +255,14 @@ export class NewerAutomationsGate {
     return this.#schemaReady(schemaKnowsThings, this.#knowsThings);
   }
 
+  /**
+   * Whether automations that act without AI (or start on Home Assistant or UniFi Protect) may be made, turned on and
+   * run: as `thingsReady`, with `DIRECT_SCHEMA`.
+   */
+  async directReady(): Promise<boolean> {
+    return this.#schemaReady(schemaKnowsDirect, this.#knowsDirect);
+  }
+
   async #schemaReady(knows: (schema: string | null) => boolean, found: Set<string>): Promise<boolean> {
     if (this.config.NODE_ENV !== 'production') return true;
     const target = rollbackTarget(this.#facts?.() ?? null, this.config.WHOMBAT_RELEASE_ID?.trim() || null);
@@ -248,7 +279,8 @@ export class NewerAutomationsGate {
     return (
       !(await this.ready()) ||
       (startedByFindMy(definition) && !(await this.findMyReady())) ||
-      (startedByThing(definition) && !(await this.thingsReady()))
+      (startedByThing(definition) && !(await this.thingsReady())) ||
+      (hasDirectParts(definition) && !(await this.directReady()))
     );
   }
 
@@ -258,7 +290,11 @@ export class NewerAutomationsGate {
     if (!(await this.ready())) return true;
     if ((run.trigger.kind === 'findmy' || startedByFindMy(run.definition)) && !(await this.findMyReady()))
       return true;
-    return (run.trigger.kind === 'thing' || startedByThing(run.definition)) && !(await this.thingsReady());
+    if ((run.trigger.kind === 'thing' || startedByThing(run.definition)) && !(await this.thingsReady()))
+      return true;
+    return (
+      (startedByHomeKind(run.trigger.kind) || hasDirectParts(run.definition)) && !(await this.directReady())
+    );
   }
 
   /** Refuses `definition` with the line the person is told, while such automations wait for the next update. */

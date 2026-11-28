@@ -8,7 +8,9 @@
  * definition (its summary and glance still say what it does) — and a newer app gets everything.
  */
 import type { Automation, AutomationExport, AutomationRun, Message, RealtimeEvent } from '@whombat/core';
+import { hasDirectParts } from '@whombat/core';
 import {
+  AUTOMATIONS_WITHOUT_AI_MINOR,
   FIND_MY_MINOR,
   T3_REVIEW_MORE_ROUNDS_MINOR,
   T3_REVIEW_ROUNDS_MINOR,
@@ -50,6 +52,10 @@ export const readsT3ReviewRounds = (minor: number | undefined) =>
 export const readsMoreT3ReviewRounds = (minor: number | undefined) =>
   minor === undefined || minor >= T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR;
 
+/** Whether a session at `minor` reads automations that act without AI; outside a session, it does. */
+export const readsDirectAutomations = (minor: number | undefined) =>
+  minor === undefined || minor >= AUTOMATIONS_WITHOUT_AI_MINOR;
+
 /** Whether an app at `minor` can't read this many review rounds: none before rounds came, at most three after. */
 function unreadableRounds(definition: unknown, minor: number | undefined): boolean {
   const recipe = (definition as { recipe?: { t3Review?: { maxRounds?: unknown } } } | null)?.recipe;
@@ -61,6 +67,7 @@ function unreadableRounds(definition: unknown, minor: number | undefined): boole
 /** Whether an app at `minor` can't read this definition (or draft). */
 function unreadable(definition: unknown, minor: number | undefined): boolean {
   if (unreadableRounds(definition, minor)) return true;
+  if (!readsDirectAutomations(minor) && hasDirectParts(definition)) return true;
   const triggers = (definition as { triggers?: { kind?: string }[] } | null)?.triggers;
   if (!readsThingAutomations(minor) && Array.isArray(triggers) && triggers.some((t) => t?.kind === 'thing'))
     return true;
@@ -72,7 +79,18 @@ function unreadable(definition: unknown, minor: number | undefined): boolean {
 
 /** An automation as an app at `minor` reads it. */
 export function automationFor(automation: Automation, minor: number | undefined): Automation {
-  if (readsMoreT3ReviewRounds(minor)) return automation;
+  if (readsDirectAutomations(minor)) return automation;
+  // An older app knows no `act` tag: the glance says the rest.
+  const glance = automation.glance
+    ? { ...automation.glance, does: automation.glance.does.filter((d) => d.id !== 'act') }
+    : automation.glance;
+  automation = glance ? { ...automation, glance } : automation;
+  if (readsMoreT3ReviewRounds(minor))
+    return {
+      ...automation,
+      ...(unreadable(automation.definition, minor) ? { definition: null } : {}),
+      ...(unreadable(automation.draft, minor) ? { draft: null } : {}),
+    };
   const source = automation.glance?.source;
   const older =
     (source === 'thing' && !readsThingAutomations(minor)) ||
@@ -88,6 +106,11 @@ export function automationFor(automation: Automation, minor: number | undefined)
 
 /** A run as an app at `minor` reads it. */
 export function runFor(run: AutomationRun, minor: number | undefined): AutomationRun {
+  if (readsDirectAutomations(minor)) return run;
+  // Started by Home Assistant or UniFi Protect: an older app reads the trigger as a message; a direct step is an
+  // earlier step to it (its run step kind falls back by itself).
+  if (run.trigger.kind === 'home_state' || run.trigger.kind === 'protect')
+    run = { ...run, trigger: { ...run.trigger, kind: 'message_posted' } };
   if (readsThingAutomations(minor)) return run;
   const beforeMail = !readsMailAutomations(minor);
   const kind = run.trigger.kind;
@@ -166,7 +189,11 @@ for (const op of [
 
 /** An op's answer as an app at `minor` reads it (every other op's as it is). */
 export function answerFor(op: string, body: unknown, minor: number | undefined): unknown {
-  if (readsMoreT3ReviewRounds(minor) || !body || typeof body !== 'object') return body;
+  if (readsDirectAutomations(minor) || !body || typeof body !== 'object') return body;
+  if (readsMoreT3ReviewRounds(minor)) {
+    const to = ANSWERS[op];
+    return to ? to(body as Answer, minor) : body;
+  }
   const to = ANSWERS[op];
   return to
     ? to(body as Answer, minor)
@@ -177,7 +204,13 @@ export function answerFor(op: string, body: unknown, minor: number | undefined):
 
 /** A live update as an app at `minor` reads it. */
 export function eventFor(event: RealtimeEvent, minor: number | undefined): RealtimeEvent {
-  if (readsMoreT3ReviewRounds(minor)) return event;
+  if (readsDirectAutomations(minor)) return event;
+  if (readsMoreT3ReviewRounds(minor)) {
+    if (event.type === 'automation.updated')
+      return { ...event, automation: automationFor(event.automation, minor) };
+    if (event.type === 'automation.run.updated') return { ...event, run: runFor(event.run, minor) };
+    return event;
+  }
   if (!readsThingAutomations(minor) && (event.type === 'message.created' || event.type === 'message.updated'))
     return { ...event, message: messageFor(event.message) };
   if (event.type === 'automation.updated')

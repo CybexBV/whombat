@@ -91,9 +91,19 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * rounds) to `AutomationRecipe.t3Review` (Whombat report-trackers.md); minor 19 is more news: up to 30 sources,
  * `news.browse` and `news.importSites`, a source's `kind` and a suggestion's `topic` (Whombat weather-news.md); minor 20
  * allows up to 10 review rounds (`t3Review.maxRounds` 4–10, where minor 18 took 1–3; Whombat report-trackers.md); minor
- * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md).
+ * 21 adds multi-language support (`Preferences.locale`, optional `locale` on claim requests; Whombat i18n.md); minor 22
+ * is automations that act without AI: the `run_action` step, the `home_state` and `protect` triggers and run triggers,
+ * `limits.cooldownMinutes` and the `act` tag, which a box sends as they are only to a session at minor 22 or later
+ * (Whombat direct-automations.md).
  */
-export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 21 };
+export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
+
+/**
+ * Session protocol minor (major 5) that reads automations acting without AI (`run_action`, the `home_state` and
+ * `protect` triggers, `limits.cooldownMinutes`, the glance's `act` tag). The box hides such definitions from an older
+ * session, says their runs' triggers as a message and drops the tag.
+ */
+export const AUTOMATIONS_WITHOUT_AI_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

@@ -14,7 +14,7 @@ import {
   RecipeWhen,
   recipeDefinition,
 } from '@whombat/core';
-import { decodeTolerant } from '@whombat/protocol/session';
+import { AUTOMATIONS_WITHOUT_AI_MINOR, decodeTolerant } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
@@ -22,6 +22,7 @@ import {
   eventFor,
   FIND_MY_AUTOMATIONS_MINOR,
   MAIL_AUTOMATIONS_MINOR,
+  runFor,
   T3_REVIEW_MORE_ROUNDS_AUTOMATIONS_MINOR,
   T3_REVIEW_ROUNDS_AUTOMATIONS_MINOR,
 } from './older-apps';
@@ -456,5 +457,64 @@ describe('review rounds an app reads', () => {
         expect(updated(auto(d), minor)).toEqual({ type: 'automation.updated', automation: auto(d) });
         expect(answerFor('automations.export', { definition: d }, minor)).toEqual({ definition: d });
       }
+  });
+});
+
+describe('automations that act without AI, for an app below minor 22', () => {
+  const powerCut = AutomationDefinition.parse({
+    version: 1,
+    conversationId: 'cnv_chat',
+    triggers: [
+      {
+        kind: 'thing',
+        event: 'problem',
+        thing: 'server:nas-01',
+        check: 'host.ups.on_battery',
+        forMinutes: 10,
+      },
+    ],
+    steps: [
+      { id: 'off', kind: 'run_action', thing: 'server:nas-01', thingName: 'nas-01', action: 'shut_down' },
+      { id: 'tell', kind: 'post_message', text: '{{steps.off.text}}' },
+    ],
+  });
+  const direct: Automation = {
+    ...automation,
+    definition: powerCut,
+    draft: powerCut,
+    glance: automation.glance
+      ? {
+          ...automation.glance,
+          source: 'thing',
+          does: [{ id: 'act', label: 'Acts without AI', tone: 'changes' }],
+        }
+      : null,
+  };
+  const older = AUTOMATIONS_WITHOUT_AI_MINOR - 1;
+  const get = (a: Automation, minor: number | undefined) =>
+    (answerFor('automations.get', { automation: a }, minor) as { automation: Automation }).automation;
+  const doorbell: AutomationRun = {
+    ...run,
+    trigger: { ...run.trigger, kind: 'protect', summary: 'Someone rang the doorbell' },
+    steps: [step('off', 0, 'run_action') as AutomationRun['steps'][number]],
+  };
+
+  it('hides the definition and the tag it doesn’t know, and reads a smart home start as a message', () => {
+    const got = get(direct, older);
+    expect(got).toMatchObject({ definition: null, draft: null, glance: { source: 'thing', does: [] } });
+    expect(() => answerFor('automations.export', { definition: powerCut }, older)).toThrow(/Update the app/);
+    expect(runFor(doorbell, older).trigger.kind).toBe('message_posted');
+    // A step kind it doesn't know is an earlier step to it.
+    const OlderStep = AutomationRunStep.extend({
+      kind: z.enum(['dispatch_agent', 'post_message', 'unknown']).catch('unknown'),
+    });
+    expect(OlderStep.parse(doorbell.steps[0]).kind).toBe('unknown');
+  });
+
+  it('gives everything to an app at minor 22 and outside a session', () => {
+    for (const minor of [AUTOMATIONS_WITHOUT_AI_MINOR, undefined]) {
+      expect(get(direct, minor)).toEqual(direct);
+      expect(runFor(doorbell, minor)).toEqual(doorbell);
+    }
   });
 });

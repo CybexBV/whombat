@@ -5,13 +5,45 @@ import { attachments, automationRuns, messages } from '../../db/schema/index';
 import { postMessage } from '../../domain/messages';
 import { linkAttachments } from '../../files/commands';
 import { type AttachmentRow, lockBlob } from '../../files/service';
+import { holdsIncident } from '../../incidents/holds';
 import { loadConversationRow } from '../../read/conversations';
 import { outsidersRun } from '../runs';
-import type { AutomationRunRow } from '../store';
+import type { AutomationRunRow, AutomationStepRow } from '../store';
 import { outsidersStepFiles } from './scope';
-import { block, updateStep } from './state';
+import { block, skipStep, updateStep } from './state';
 import { placeFor } from './thread';
 import type { StepExecution } from './types';
+
+/** The page of the thing a run's trigger is about: a thing trigger's thing, a Home Assistant or Protect connection. */
+function triggerThing(run: AutomationRunRow): string | null {
+  const scope = (run.scope ?? {}) as { kind?: unknown; thing?: unknown; connectionId?: unknown };
+  if (scope.kind === 'thing' && typeof scope.thing === 'string') return scope.thing;
+  if ((scope.kind === 'home_state' || scope.kind === 'protect') && typeof scope.connectionId === 'string')
+    return `connection:${scope.connectionId}`;
+  return null;
+}
+
+/**
+ * Whether a message of an automation that acts without AI stays unsaid (docs/decisions/direct-automations.md): its
+ * trigger's thing is kept quiet now, and no step of the run did anything yet. What it did is always said; news alone
+ * keeps quiet with the thing.
+ */
+async function keptQuiet(
+  ctx: ApplyContext,
+  run: AutomationRunRow,
+  steps: readonly AutomationStepRow[],
+): Promise<boolean> {
+  const direct =
+    run.trigger.kind === 'home_state' ||
+    run.trigger.kind === 'protect' ||
+    run.definition.steps.some((s) => s.kind === 'run_action');
+  if (!direct) return false;
+  const thing = triggerThing(run);
+  if (!thing) return false;
+  const acted = steps.some((s) => (s.output as { ran?: unknown } | null)?.ran === true);
+  if (acted) return false;
+  return holdsIncident(ctx.tx, run.burrowId, thing, ctx.now);
+}
 
 /**
  * Copies of the files that started the run — either from the trigger message in another room or handed over from a
@@ -103,6 +135,10 @@ export async function executePostMessage({
   step,
 }: StepExecution<'post_message'>): Promise<void> {
   const tx = ctx.tx;
+  if (await keptQuiet(ctx, run, steps)) {
+    const why = 'Kept quiet: the thing that started it is being kept quiet.';
+    return skipStep(ctx, run, idx, base, why, { posted: false, quiet: true });
+  }
   const place = await placeFor(ctx, run, step);
   const conversation = await loadConversationRow(tx, place.conversationId);
   if (!conversation) return block(ctx, run, idx, 'That conversation is gone.');

@@ -6,6 +6,7 @@
  */
 export * from './activity';
 export * from './attachments';
+export * from './automation-waits';
 export * from './automations';
 export * from './backup-keys';
 export * from './backup-places';

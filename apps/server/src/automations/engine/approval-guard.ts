@@ -14,11 +14,13 @@ import { trackerWords } from '../../trackers/connection';
 import { trackerReplyPlan } from '../../trackers/reply';
 import { trackerWritePlan } from '../../trackers/write';
 import { keyDecision, publisherCheck } from '../authority';
+import { planDirectAction } from '../direct-action';
 import { MERGE_WORDS, mergePlan } from '../merge';
 import { isAutomationPrincipal } from '../principal';
 import { planConnectionActions } from '../proposed-actions';
 import { CONTINUE_STEP, commentPlan, definitionStep, stepBinding, stepRoomsCheck, stepScope } from '../steps';
 import { pullRequestText } from '../steps/open-pull-request';
+import { runActionProposal } from '../steps/run-action';
 import { type AutomationRunRow, loadRunRow, loadStepRows } from '../store';
 import { branchDecision, branchProposal, resolveStepWorkspace } from '../workspace';
 
@@ -182,6 +184,20 @@ export async function approvalGuard(ctx: ApplyContext, row: ApprovalRow): Promis
       actionsHash: plan.actionsHash,
     };
   }
+  if (step.kind === 'run_action' && row.command?.name === CONTINUE_STEP) {
+    // A person lets it act without AI where their settings ask: the same action on the same thing, which can still run.
+    const plan = await planDirectAction(ctx.tx, ctx.services, run.burrowId, step);
+    if (!plan.ok) {
+      await mark('blocked');
+      return plan.reason;
+    }
+    input = {
+      runId: run.id,
+      stepId: step.id,
+      attempt: stepRow.attempt,
+      proposal: await runActionProposal(ctx.tx, run, step),
+    };
+  }
   if (
     !input ||
     approvalActionHash(row.action, { name: row.command?.name ?? '', input }, binding) !== row.actionHash
@@ -209,6 +225,9 @@ export async function reconcileContinue(db: Db, row: ApprovalRow): Promise<'done
   if ((step.output as { mergeApprovalId?: string }).mergeApprovalId === row.id) return 'done';
   // And a proposed connection-actions approval.
   if ((step.output as { actionsApprovalId?: string }).actionsApprovalId === row.id) return 'done';
+  // And an action without AI that the person's settings ask about.
+  if ((step.output as { approvalId?: string }).approvalId === row.id && step.kind === 'run_action')
+    return 'done';
   if (step.state === 'waiting') return 'not_done';
   return 'unknown';
 }

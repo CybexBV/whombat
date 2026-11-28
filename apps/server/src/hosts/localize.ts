@@ -290,7 +290,11 @@ function alertWords(code: string, p: J, f: Fill): Words | null {
       return { title, detail, bannerTitle: title, bannerDetail: sentence(detail) };
     }
     case 'ups.on_battery': {
-      const title = f.t('hosts.code.ups.on_battery.title', { name: str(p.name) });
+      // The almost empty battery is its own alert on top of the power cut (`low`).
+      const title =
+        p.low === true
+          ? f.t('hosts.code.ups.low_battery.title', { name: str(p.name) })
+          : f.t('hosts.code.ups.on_battery.title', { name: str(p.name) });
       const parts: string[] = [];
       if (num(p.chargePct) !== null) parts.push(f.pct(p.chargePct));
       if (num(p.runtimeSeconds) !== null)

@@ -6,6 +6,12 @@
 import type { AutomationTrigger, GitHubTriggerEvent, TrackerTriggerEvent } from '../domain/automation.js';
 import type { TrackerItemKind } from '../domain/tracker.js';
 import { globMatch } from '../keys/engine.js';
+import {
+  type HomeStateFacts,
+  homeStateTriggerMatches,
+  type ProtectFacts,
+  protectTriggerMatches,
+} from './direct.js';
 import { type FindMyTriggerFacts, findMyTriggerMatches } from './findmy.js';
 import { type MailTriggerFacts, mailTriggerMatches } from './mail.js';
 import { type ThingTriggerFacts, thingTriggerMatches } from './thing.js';
@@ -42,7 +48,11 @@ export type TriggerFacts =
   | MailTriggerFacts
   /** A person's place changed on a Find My connection: the `findmy.place_changed` event. */
   | FindMyTriggerFacts
-  | ThingTriggerFacts;
+  | ThingTriggerFacts
+  /** A Home Assistant entity a live automation names changed state: the `home.state_changed` event. */
+  | HomeStateFacts
+  /** Something UniFi Protect saw on a connection a live automation listens to: the `protect.detected` event. */
+  | ProtectFacts;
 
 export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts): boolean {
   switch (trigger.kind) {
@@ -88,6 +98,10 @@ export function triggerMatches(trigger: AutomationTrigger, facts: TriggerFacts):
       return facts.kind === 'thing' && thingTriggerMatches(trigger, facts);
     case 'findmy':
       return facts.kind === 'findmy' && findMyTriggerMatches(trigger, facts);
+    case 'home_state':
+      return facts.kind === 'home_state' && homeStateTriggerMatches(trigger, facts);
+    case 'protect':
+      return facts.kind === 'protect' && protectTriggerMatches(trigger, facts);
     default:
       return false;
   }

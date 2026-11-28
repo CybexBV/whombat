@@ -1,4 +1,5 @@
 import Fastify, { type FastifyError, type FastifyRequest, type FastifyServerOptions } from 'fastify';
+import { smartHomeTriggersFor } from './automations/home-triggers';
 import { closeConnections } from './connections/pool';
 import { registerDemo } from './demo/routes';
 import { registerFileRoutes } from './files/routes';
@@ -172,6 +173,7 @@ export async function buildApp({ services, logger }: AppDeps) {
     await services.tracker.close();
     await services.gateway.close();
     await protectEventsFor(services).close();
+    await smartHomeTriggersFor(services).close();
     await onePasswordSyncFor(services).close();
     services.guides.close();
     await services.guides.settle();

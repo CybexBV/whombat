@@ -260,6 +260,9 @@ const SOURCE_OF: Record<AutomationTrigger['kind'], AutomationSource> = {
   mail: 'mail',
   findmy: 'findmy',
   thing: 'thing',
+  // Home Assistant and UniFi Protect show as the things they are.
+  home_state: 'thing',
+  protect: 'thing',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
