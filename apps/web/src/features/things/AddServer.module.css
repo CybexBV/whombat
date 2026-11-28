@@ -364,4 +364,12 @@
   .pair {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  /* Three ways in fit a phone's width: each may take two lines rather than push the dialog sideways. */
+  .way[role="tab"] {
+    min-width: 0;
+    padding: 7px 6px;
+    line-height: 1.25;
+    white-space: normal;
+  }
 }
