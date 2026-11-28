@@ -8408,6 +8408,7 @@
   "core:direct.noop.on": "c73dc20508ff4c6c",
   "core:direct.noop.running": "fdf4a971946bb088",
   "core:direct.noop.stopped": "417edf6c67a396e6",
+  "core:direct.powerCut.out": "d23c25c6fa925015",
   "core:direct.problem.entity": "b4de99b35245d595",
   "core:direct.problem.kind": "a3e6e56d78ba9c4d",
   "core:direct.problem.notAllowed": "d5240ea295863641",

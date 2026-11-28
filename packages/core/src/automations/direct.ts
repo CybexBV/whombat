@@ -429,13 +429,16 @@ export interface PowerCutServer {
 /**
  * The ready-made “When the power goes out, shut down my servers safely” (docs/decisions/direct-automations.md): when the
  * UPS on `ups` has kept it going on battery for `minutes` (10 unless given), shut down each of `servers` in turn — the
- * UPS's own server last, as it keeps the others' power — then say so in Chat. Runs on this Whombat, without AI.
+ * UPS's own server last, as it keeps the others' power — then say in Chat, in `locale`, that the power is out and what
+ * happened to each server: its own step's line (shut down, already off, couldn't be reached, not confirmed). The
+ * message claims nothing a step didn't do. Runs on this Whombat, without AI.
  */
 export function powerCutDefinition(input: {
   conversationId: string;
   ups: PowerCutServer;
   servers: readonly PowerCutServer[];
   minutes?: number;
+  locale?: string | null;
 }): AutomationDefinition {
   const others = input.servers.filter((s) => s.thing !== input.ups.thing);
   const last = input.servers.some((s) => s.thing === input.ups.thing) ? [input.ups] : [];
@@ -455,7 +458,7 @@ export function powerCutDefinition(input: {
     id: 'tell',
     name: 'Tell you',
     kind: 'post_message',
-    text: `The power is out at ${input.ups.name}, so I shut the servers down.\n${lines}`,
+    text: `${coreTranslator(input.locale).t('direct.powerCut.out', { name: input.ups.name })}\n${lines}`,
     conversation: 'run',
     thread: 'run',
     attachFrom: [],
