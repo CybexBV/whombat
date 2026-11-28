@@ -1,7 +1,7 @@
 /**
- * The `tufrepo` that signs the dev instance's TUF repository (`$WB_MGD_HOME/env/manager/tuf`, development keys in its
- * `keys/`): `dev/publish-release` publishes releases with it and the dev stack's refresher re-signs the timestamp with
- * it (`tuf-refresh.ts`, IN-224). `$WB_TUFREPO`, else this checkout's `whombat-release-tools` (nix build; quick while
+ * The `tufrepo` of this checkout: whombat-ops `candidate` and `promote` publish to the release repository with it, and
+ * a harness environment's refresher re-signs its TUF repository's timestamp (`$WB_MGD_HOME/env/manager/tuf`,
+ * development keys in its `keys/`) with it (`tuf-refresh.ts`, IN-224). `$WB_TUFREPO`, else this checkout's `whombat-release-tools` (nix build; quick while
  * the build is in the store, so it is resolved again for each use rather than kept).
  */
 import { join } from 'node:path';

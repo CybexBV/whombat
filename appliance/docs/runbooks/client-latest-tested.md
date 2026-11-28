@@ -1,8 +1,8 @@
 # The “latest tested” client job (SUB-09, CT-74, MG-33)
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 Customers' appliances install Claude Code at the **latest version Whombat has tested**. This job follows upstream,
 tests each new release against Whombat's provider tests and publishes it in the signed client channel only when they
@@ -109,9 +109,8 @@ with new bundles, else `refresh` within 5½ days of its expiry: the role lasts 7
 <clone>` uploads its files and pushes its role. The clone and the token come from `~/.config/whombat/releases.env`
 (`WHOMBAT_RELEASES_DIR`, `WHOMBAT_RELEASES_TOKEN`, as for `candidate`; `WB_CLIENTS_GITHUB` and `WB_CLIENTS_RELEASES_ENV`
 override them). When the upload fails (a release publish holds the clone, GitHub is down) the run ends with exit 1 and
-the next run finishes it; by hand: `tufrepo gh-clients --dir <clone>`. A `WB_CLIENTS_REPO` that isn't the clone (DEV's
-repository, before DEV was retired) is published into and mirrored into the clone byte for byte (`clientchannel mirror`),
-as before ONE-01. After `tufrepo gh-clients-env --env prod` (ONE-05) the channel is signed for production boxes.
+the next run finishes it; by hand: `tufrepo gh-clients --dir <clone>`. A `WB_CLIENTS_REPO` that isn't the clone is published into and
+mirrored into the clone byte for byte (`clientchannel mirror`). After `tufrepo gh-clients-env --env prod` (ONE-05) the channel is signed for production boxes.
 
 ## Moving it to CI for production
 

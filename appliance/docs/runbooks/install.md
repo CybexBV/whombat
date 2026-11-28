@@ -1,8 +1,8 @@
 # Installing a Whombat from the ISO
 
 > Commands written `dev/<name>` are the maintainers' (`bin/<name>` in their private whombat-ops). Anyone can run
-> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`, `dev/devbox` is
-> `harness/src/devbox/main.ts`), after `pnpm install --frozen-lockfile` in `harness/`.
+> the same code: `node harness/src/dev/<name>.ts` (`dev/prune` is `prune-copies.ts`), after
+> `pnpm install --frozen-lockfile` in `harness/`.
 
 For the operator who installs a self-installed Whombat and claims it: on a dedicated x86_64 machine (bare metal, the
 main target) or as a virtual machine on any KVM hypervisor (Proxmox VE, Incus, libvirt, …; all on equal terms) (PI-01,
@@ -194,7 +194,7 @@ qm create 9100 --name whombat --ostype l26 \
 
 ### Incus
 
-As the DEV box is created (`dev/devbox`, IN-94). Import the ISO as a volume in a storage pool (here `default`), create
+Import the ISO as a volume in a storage pool (here `default`), create
 an empty VM whose disk boots first and attach the ISO after it:
 
 ```sh
@@ -213,7 +213,7 @@ incus console whombat --type=vga        # the screen, through a SPICE viewer (e.
 - An Incus VM is q35 with OVMF and the host CPU model; `security.secureboot=false` keeps Secure Boot off. Don't add
   a `tpm` device. The root disk is on virtio-scsi (`/dev/sda` in the installer). The `raw.qemu` line adds the
   i6300esb watchdog; without it the q35 chipset's watchdog serves (NX-189).
-- **Network:** the default profile's NIC on `incusbr0` (NAT, as the DEV box) reaches the internet, and a computer or
+- **Network:** the default profile's NIC on `incusbr0` (NAT) reaches the internet, and a computer or
   phone on the host's network can claim the box because they share the host's public address (CC-04). To put the VM on
   the LAN itself, give it a macvlan NIC on the host's network card before the first start (the host then can't reach
   the VM, which nothing needs):
@@ -298,7 +298,7 @@ graphical console keeps failing), with the same words.
    server is out of reach); it tries again by itself, and a restart tries at once (NX-526). There is no recovery key
    to write down (PI-19).
 2. **Claim it.** The console shows “Claim this Whombat” and four letters on a sign. On a computer or phone **on the
-   same network** open `app.whombat.com/claim` (dev: `dev.whombat.com/claim`), sign in, choose the organisation (it
+   same network** open `app.whombat.com/claim`, sign in, choose the organisation (it
    needs self-installation in its plan) and enter the letters. The console celebrates briefly, then shows “This Whombat
    is set up.”, your burrow's name and a wombat fact.
 3. On a VM, close the console.
@@ -334,9 +334,8 @@ plugged in later restarts the graphical console for a moment.
 
 ## No dev instance variant
 
-There is one image (ONE-02, nixos.md NX-522): the installer has no developer option and no DEV ISO exists. A box of the
-development stack (Home) keeps working on the Whombat image while its environment file says `dev`, until it moves to
-production (`updates.md`, “One environment”).
+There is one image (ONE-02, nixos.md NX-522), in one environment, production: the installer has no developer option
+(`updates.md`, “One environment”).
 
 ## Community edition variant (test keys only; the install test)
 
@@ -397,5 +396,5 @@ Everything through `agent-resource` (`/home/me/Code/dashboard/docs/agent-resourc
 `packages.installer-iso-prod` builds when `manifest/prod/licence-keys.json` (the public `lic-prod-…` key set, LC-04) is
 committed and the runtime bundle (PI-07) is the prod runtime; otherwise evaluation stops naming the missing file, or
 with “prod needs the real Whombat runtime bundle, not the stand-in”. The GitHub repository's root and AI client channel
-keys come from `manifest/prod/tuf-root.json` and `client-channel-keys.json` once the cutover commits them (ONE-05),
-from `manifest/dev-instance/` until then (NX-522).
+keys come from `manifest/prod/tuf-root.json` and `client-channel-keys.json` (ONE-05, NX-522); without them evaluation
+stops naming the missing file.

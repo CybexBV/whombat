@@ -2,7 +2,7 @@
  * `release/ship validate <prod id>` (UP-C1, UP-C2; IN-96, IN-116): from the commit that was built, everything that
  * proves the candidate. Side by side under one hold of the heavy lock (`--serial`: one after the other, each taking
  * it): harness/validate → demo in the caller's environment, the live-agent scenarios in their own, and the VM upgrade
- * gates (`--no-lock`). publish-dev doesn't wait for any of it (IN-115). No skew check: clients and the box share one
+ * gates (`--no-lock`). No skew check: clients and the box share one
  * contracts major (Whombat HE-52, IN-413).
  *
  *   gates.json          `harness/validate` with the candidate's pins in the caller's (scripted) environment (every
@@ -12,7 +12,7 @@
  *                       newest PROD releases from the migration baseline on that boxes run, in VMs, through the real
  *                       manager, helper and TUF.
  *
- * What is skipped is recorded (`chain.complete: false`): DEV takes it, `promote-prod` doesn't.
+ * What is skipped is recorded (`chain.complete: false`).
  *
  * A machine that must not run VMs names a command in `WB_UPGRADE_GATES_RUN`: it is called instead of
  * `release/upgrade-gates`, with the same arguments, and runs the gates on a machine that may (`upgradeGatesCommand`).
@@ -42,7 +42,6 @@ import {
 } from './context.ts';
 import { BASELINE_RELEASE, compareIds, fromBaseline, parseReleaseId, prodId, type ReleaseId } from './ids.ts';
 import { LIVE_SCENARIOS, runLive, selectsLive } from './live.ts';
-import type { FleetDevice } from './promote.ts';
 import { type ChainedRecord, nextChain, readRecord, sha256Hex, verifyChain, writeRecord } from './records.ts';
 
 export interface ValidateArgs {
@@ -137,6 +136,20 @@ const prodIdOrNull = (id: string) => {
   const r = parseReleaseId(id);
   return r && fromBaseline(r) ? r : null;
 };
+
+/** One box as production control's operator API lists it (`/v1/operator/devices`). */
+export interface FleetDevice {
+  device: string;
+  state: string;
+  internal?: boolean;
+  lastSeenAt?: number | null;
+  status?: {
+    release?: string;
+    managerVersion?: string;
+    update?: { state?: string; failure?: string | null; failureDetail?: Record<string, unknown> | null };
+    health?: Record<string, string>;
+  };
+}
 
 /**
  * The PROD releases claimed boxes run, newest first. Only claimed boxes count: an unclaimed box nobody set up (a
@@ -602,7 +615,7 @@ export async function validate(ctx: ShipContext, a: ValidateArgs): Promise<{ ok:
     const runner = join(ctx.repo, 'release', 'upgrade-gates');
     if (!existsSync(runner))
       throw new Error(
-        'release/upgrade-gates is not in this tree (UP-C2, agent G): merge it, or --skip-upgrade-gates for a DEV-only run',
+        'release/upgrade-gates is not in this tree (UP-C2, agent G): merge it, or --skip-upgrade-gates',
       );
     const prevBuilds = previous.ids.map((id) => {
       const b = findBuild(ctx, id);

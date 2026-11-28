@@ -18,10 +18,7 @@ export const LIVE_SCENARIOS = ['k-live-agents.scenario.ts', 'k-live-skills.scena
 /** vitest's file filter (a substring) that selects exactly `LIVE_SCENARIOS`. */
 export const LIVE_PATTERN = 'k-live-';
 
-/**
- * +400: +100 is the public DEV stack's range (its template, dev/instance/dev-whombat.env, puts control on 4700), and
- * +200/+300 are the isolated suites'.
- */
+/** +400: +200/+300 are the isolated suites'. */
 export const LIVE_PORT_SHIFT = 400;
 
 /** The live environment's variables, derived from the caller's harness environment. */

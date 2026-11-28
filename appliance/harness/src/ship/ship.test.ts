@@ -17,19 +17,9 @@ import {
   newProdId,
   parseReleaseId,
   prodId,
-  twinIdFor,
 } from './ids.ts';
 import { LIVE_PATTERN, LIVE_SCENARIOS, liveEnv, selectsLive } from './live.ts';
 import { type Compat, migrationsAfter, type ReleaseNotes, renderMarkdown, summarize } from './notes.ts';
-import {
-  currentWaveOf,
-  deviceLine,
-  nextPrevious,
-  planText,
-  rerunAdvice,
-  stallLimitS,
-  unprotectedBoxes,
-} from './promote.ts';
 import { builtFromOf, describeFailure, describePause, releaseRecord, runtimeContractsAt } from './record.ts';
 import {
   AFTER,
@@ -90,25 +80,6 @@ describe('release ids', () => {
     ).toBe('whombat-20260928.6');
   });
 
-  it('gives the twin the day’s highest DEV counter + 1, never a gap below it (MG-50)', () => {
-    const prod = prodId('whombat-20260928.7');
-    expect(twinIdFor(prod, [])).toBe('whombat-dev-20260928.1');
-    // The real run: .1 and .3 published, .2 free but below the newest — TUF would refuse it.
-    expect(twinIdFor(prod, ['whombat-dev-20260928.1', 'whombat-dev-20260928.3'])).toBe(
-      'whombat-dev-20260928.4',
-    );
-    expect(twinIdFor(prod, ['whombat-dev-20260927.8', 'whombat-20260928.6'])).toBe('whombat-dev-20260928.1');
-    expect(twinIdFor(prod, ['whombat-dev-20260928.10', 'whombat-dev-20260928.9'])).toBe(
-      'whombat-dev-20260928.11',
-    );
-  });
-
-  it('refuses when DEV already has a release of a later day, naming --twin', () => {
-    expect(() =>
-      twinIdFor(prodId('whombat-20260928.7'), ['whombat-dev-20260928.3', 'whombat-dev-20260929.2']),
-    ).toThrow(/DEV already has whombat-dev-20260929.2.*--twin whombat-dev-20260929.3/);
-  });
-
   it('orders every whombat- id after every pve- id of its environment, as the helper orders hosts (PI-23)', () => {
     const p = (s: string) => parseReleaseId(s) as NonNullable<ReturnType<typeof parseReleaseId>>;
     expect(p('pve-dev-20261020.7')).toMatchObject({ env: 'dev', gen: 0, day: '20261020', n: 7 });
@@ -126,10 +97,7 @@ describe('release ids', () => {
     );
   });
 
-  it('gives the first twin after pve-dev ids .1 of its day, and builds no pve- id (PI-23)', () => {
-    const prod = prodId('whombat-20261020.1');
-    expect(twinIdFor(prod, ['pve-dev-20261020.7', 'pve-dev-20261021.1'])).toBe('whombat-dev-20261020.1');
-    expect(twinIdFor(prod, ['pve-dev-20261020.7', 'whombat-dev-20261020.2'])).toBe('whombat-dev-20261020.3');
+  it('builds no pve- id (PI-23)', () => {
     expect(prodId('pve-20261002.5').gen).toBe(0);
     expect(() => newProdId('pve-20261020.1')).toThrow(/whombat-YYYYMMDD.N/);
     expect(newProdId('whombat-20261020.1').gen).toBe(1);
@@ -404,7 +372,6 @@ describe('arguments', () => {
       parseShipArgs(['validate', 'whombat-20260929.1', '--previous', 'whombat-20260928.6,whombat-20260928.4'])
         .validate.previous,
     ).toEqual(['whombat-20260928.6', 'whombat-20260928.4']);
-    expect(parseShipArgs(['status', '--dev']).status.dev).toBe(true);
     expect(parseShipArgs(['validate', 'whombat-20260929.7', '--serial']).validate.serial).toBe(true);
     expect(parseShipArgs(['validate', 'whombat-20260929.7']).validate.serial).toBe(false);
   });
@@ -432,34 +399,12 @@ describe('arguments', () => {
       expect(() => parseShipArgs(['build', 'whombat-20260929.1', o, 'x'])).toThrow(
         /the DEV twin went with DEV/,
       );
+    expect(() => parseShipArgs(['status', '--dev'])).toThrow(/DEV is gone/);
+    expect(parseShipArgs(['status']).command).toBe('status');
   });
 });
 
-describe('the fleet check and the plan', () => {
-  const now = 1_790_000_000;
-  const dev = (device: string, manager: string, release: string, seen = now - 60) => ({
-    device,
-    state: 'claimed',
-    lastSeenAt: seen,
-    status: { managerVersion: manager, release },
-  });
-  it('prints a plan with the waves and how to stop', () => {
-    const t = planText({
-      id: 'whombat-20260929.1',
-      cls: 'host',
-      notes: {
-        summary: 's',
-        schema: { from: 49, to: 49 },
-        migrations: [],
-      } as unknown as ReleaseNotes,
-      waves: [{ cohorts: ['internal'], basisPoints: 10_000, minObservationS: 3600 }],
-      devices: [dev('wb-a', '0.1.0', 'whombat-20260928.6')],
-      wavesName: 'default',
-    });
-    expect(t).toContain('1. internal 100 % — observe 1 h');
-    expect(t).toContain('emergency-stop on');
-  });
-
+describe('failures and pauses in words', () => {
   it('renders a failure detail from its fields', () => {
     expect(
       describeFailure({
@@ -546,79 +491,6 @@ describe('what a build is made of', () => {
       runtime: { version: '0.2.0-20260929080000.abcdef1' },
       manager: { version: '0.2.0-20260929080000.1234567' },
     });
-  });
-});
-
-describe('promote-prod’s checks and follow loop (operations review)', () => {
-  const box = (device: string, release: string, backup: string) => ({
-    device,
-    state: 'claimed',
-    status: { release, health: { backup } },
-  });
-  const schemaOf = (r: string) => ({ 'whombat-20260928.6': 49 })[r] ?? null;
-
-  it('names unprotected boxes a contract migration would make wait (F3)', () => {
-    const devices = [
-      box('wb-a', 'whombat-20260928.6', 'unconfigured'),
-      box('wb-b', 'whombat-20260928.6', 'ok'),
-    ];
-    expect(unprotectedBoxes(devices, [{ tag: '0049_x', version: 50, class: 'expand' }], schemaOf)).toEqual(
-      [],
-    );
-    expect(
-      unprotectedBoxes(
-        devices,
-        [
-          { tag: '0049_x', version: 50, class: 'expand' },
-          { tag: '0050_y', version: 51, class: 'contract' },
-        ],
-        schemaOf,
-      ),
-    ).toEqual([{ device: 'wb-a', release: 'whombat-20260928.6', migrations: ['0050_y contract'] }]);
-  });
-
-  it('prints waiting reasons, holds and retryable failures, and gives a stalled wave twice its window (F3)', () => {
-    expect(deviceLine({ device: 'wb-a', state: 'Staged', waiting: { reason: 'checkpoint', since: 1 } })).toBe(
-      'wb-a Staged (waiting: checkpoint)',
-    );
-    expect(deviceLine({ device: 'wb-a', state: 'Downloading', failure: 'no_space' })).toBe(
-      'wb-a Downloading (retrying after no_space)',
-    );
-    expect(deviceLine({ device: 'wb-a', state: 'Failed', failure: 'unhealthy', hold: 'failed_before' })).toBe(
-      'wb-a Failed (held: failed_before, failed: unhealthy)',
-    );
-    const waves = (s: number) => [{ minObservationS: s }];
-    expect(stallLimitS({ currentWave: 0, waves: waves(600) as never }, () => 600)).toBe(3600);
-    expect(stallLimitS({ currentWave: 0, waves: waves(86_400) as never }, () => 86_400)).toBe(172_800);
-  });
-
-  it('says what to run again for an incomplete chain (F14)', () => {
-    const rec = (complete: boolean) => ({ chain: { complete } }) as unknown as ChainedRecord;
-    expect(
-      rerunAdvice(
-        [
-          { stage: 'build', record: rec(true) },
-          { stage: 'dev-soak', record: rec(false) },
-        ],
-        'whombat-20260929.1',
-      ),
-    ).toBe('Run: release/ship publish-dev whombat-20260929.1');
-    expect(rerunAdvice([{ stage: 'build', record: rec(false) }], 'whombat-20260929.1')).toMatch(
-      /^Run: build it again/,
-    );
-  });
-});
-
-describe('the upgrade gates’ previous releases after a promotion (NX-110, UP-C4)', () => {
-  it('makes the promoted release N−1 and the old N−1 N−2', () => {
-    expect(nextPrevious(['whombat-20260928.6', 'whombat-20260928.4'], 'whombat-20260929.1')).toEqual([
-      'whombat-20260929.1',
-      'whombat-20260928.6',
-    ]);
-    expect(nextPrevious(['whombat-20260929.1', 'whombat-20260928.6'], 'whombat-20260929.1')).toEqual([
-      'whombat-20260929.1',
-      'whombat-20260928.6',
-    ]);
   });
 });
 
@@ -824,28 +696,6 @@ describe('the live-agent scenarios in an environment of their own (IN-108)', () 
     expect(passedOnly(live('passed'), ['k-live-agents.scenario.ts'])).toBe(true);
     expect(passedOnly(live('blocked'), ['k-live-agents.scenario.ts'])).toBe(false);
     expect(passedOnly({ ...base, scenarios: [] }, ['k-live-agents.scenario.ts'])).toBe(false);
-  });
-});
-
-describe('the follow loop’s display (PROD step 2)', () => {
-  it('finds the current wave from the waves’ states (control sends no current wave)', () => {
-    const w = (...states: string[]) => ({ waves: states.map((state) => ({ state })) });
-    expect(currentWaveOf(w('promoted', 'promoted', 'promoted', 'promoted', 'active'))).toBe(4);
-    expect(currentWaveOf(w('observing', 'pending'))).toBe(0);
-    expect(currentWaveOf(w('promoted', 'paused', 'pending'))).toBe(1);
-    expect(currentWaveOf(w('promoted', 'promoted'))).toBe(1);
-    expect(currentWaveOf({ currentWave: 2, waves: [] })).toBe(2);
-  });
-
-  it('shows a device without a state on this release by its last report, offline when it went quiet', () => {
-    const now = 1_790_700_000;
-    expect(deviceLine({ device: 'wb-a', state: null }, { lastSeenAt: now - 60, state: 'Healthy' }, now)).toBe(
-      'wb-a (last Healthy)',
-    );
-    expect(
-      deviceLine({ device: 'wb-a', state: null }, { lastSeenAt: now - 3600, state: 'Healthy' }, now),
-    ).toBe('wb-a (last Healthy, offline since 2026-09-29T15:40:00Z)');
-    expect(deviceLine({ device: 'wb-a', state: null }, null, now)).toBe('wb-a (no report on this release)');
   });
 });
 
@@ -1194,9 +1044,9 @@ describe('one environment: the release and the Beta channel (ONE-01…ONE-04)', 
     expect(cloneChannelIds(dir, 'production')).toEqual([]);
   });
 
-  it('checks newer from the ceremony’s root once it is committed, the interim one before (ONE-05)', () => {
+  it('checks newer from the ceremony’s root and refuses a tree without it', () => {
     const dir = tmp();
-    expect(pinnedRoot(dir)).toBe(join(dir, 'manifest', 'dev-instance', 'tuf-root.json'));
+    expect(() => pinnedRoot(dir)).toThrow(/manifest\/prod\/tuf-root.json is missing/);
     mkdirSync(join(dir, 'manifest', 'prod'), { recursive: true });
     writeFileSync(join(dir, 'manifest', 'prod', 'tuf-root.json'), '{}');
     expect(pinnedRoot(dir)).toBe(join(dir, 'manifest', 'prod', 'tuf-root.json'));

@@ -1,7 +1,7 @@
 /**
  * `dev/licence` — the dev appliance's licence (LC-01…LC-10, IN-40): show what the box holds, change the org's
  * entitlement through control's operator API, ask for a renewal now, and set the development timings, so a lapse and a
- * restore can be shown on the dev instance without waiting (the maintainers' dev-instance runbook, “The licence”).
+ * restore can be shown in a harness environment without waiting.
  *
  *   dev/licence [show] [--json]      the pinned key set, the manager's token and high-water mark, the runtime's state
  *   dev/licence set <state> [--plan p] [--devices n] [--connectors n|none]

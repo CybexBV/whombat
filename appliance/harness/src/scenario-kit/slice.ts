@@ -96,7 +96,7 @@ export async function localClaim(): Promise<LocalClaimModule> {
 
 /**
  * The app's claim through control (`packages/client/src/managed/claim.ts`, AP-47): only a box control registered
- * before Whombat Link is claimed this way (the dev box, `devbox/`); every other box on its own page (`localClaim`).
+ * before Whombat Link is claimed this way; every other box on its own page (`localClaim`).
  */
 export interface ClaimCeremonyModule {
   runClaimCeremony(input: {

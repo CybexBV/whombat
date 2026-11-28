@@ -1,11 +1,11 @@
 /**
- * Billing, signups and the operator panel in the dev environment (control BL-12, BL-27, BL-29; IN-69, IN-70):
+ * Billing, signups and the operator panel in a harness environment (control BL-12, BL-27, BL-29; IN-69, IN-70):
  * control's billing settings from the harness's `WB_MGD_*` variables, the panel's allowlist and users file, and the
  * dev operator's permissions. Control reads all of them at start.
  *
  *   WB_MGD_BILLING_PROVIDER            manual (default) | stripe → BILLING_PROVIDER
  *   WB_MGD_STRIPE_SECRET_KEY_FILE      → STRIPE_SECRET_KEY_FILE (a test key: control runs as CONTROL_ENV=local)
- *   WB_MGD_STRIPE_WEBHOOK_SECRET_FILE  → STRIPE_WEBHOOK_SECRET_FILE (written by `dev/stripe setup`)
+ *   WB_MGD_STRIPE_WEBHOOK_SECRET_FILE  → STRIPE_WEBHOOK_SECRET_FILE (control's `pnpm stripe:setup` writes it)
  *   WB_MGD_STRIPE_AUTOMATIC_TAX        → STRIPE_AUTOMATIC_TAX
  *   WB_MGD_SIGNUP_MODE                 → SIGNUP_MODE (the live setting's default only; the panel changes it live)
  *   WB_MGD_TRIAL_JOB_SECONDS           → TRIAL_JOB_SECONDS (the manual trial job's interval, when control has it)
@@ -51,7 +51,7 @@ export function billingEnv(): Record<string, string> {
     ];
     if (missing.length)
       throw new Error(
-        `WB_MGD_BILLING_PROVIDER=stripe needs ${missing.join(' and ')} (existing files; dev/stripe setup writes the webhook secret)`,
+        `WB_MGD_BILLING_PROVIDER=stripe needs ${missing.join(' and ')} (existing files; control's pnpm stripe:setup writes the webhook secret)`,
       );
   }
   const mode = (process.env.WB_MGD_SIGNUP_MODE ?? '').trim();
@@ -116,7 +116,7 @@ export function upsertPanelUser(file: string, user: PanelUser): void {
 }
 
 /**
- * `key=value` lines of a credentials file (`~/.config/whombat/admin-dev-credentials`: `username`, `password`, `hash`,
+ * `key=value` lines of a credentials file (`username`, `password`, `hash`,
  * `allowed`). Only `username`, `hash` and `allowed` are ever returned: the password stays in the file.
  */
 export function readCredentials(file: string): { username?: string; hash?: string; allowed?: string[] } {
@@ -160,7 +160,7 @@ export function ensureOperatorPermissions(local: string, log: Log): void {
 
 /**
  * The panel's users file and allowlist for control (BL-27):
- *   - `WB_MGD_PANEL_USERS_FILE` when set (the dev instance: `dev/panel user`); a missing file means no users yet;
+ *   - `WB_MGD_PANEL_USERS_FILE` when set (control's `pnpm panel:user set` adds users); a missing file means no users yet;
  *   - else, in a local environment, `env/control/panel-users.json` with the user `harness` (acting as the dev operator)
  *     and its random password in `env/control/tokens/panel-harness.password` (0600), for the scenarios;
  *   - else (a public instance without a users file) no users.
@@ -173,7 +173,7 @@ export function preparePanel(state: EnvState, dir: string, log: Log): Record<str
   let usersFile = configuredUsersFile();
   let harnessPasswordFile: string | undefined;
   if (usersFile && !existsSync(usersFile)) {
-    log(`panel: ${usersFile} doesn't exist yet: no panel users (dev/panel user <name>)`);
+    log(`panel: ${usersFile} doesn't exist yet: no panel users (control's pnpm panel:user set)`);
     usersFile = null;
   }
   if (!usersFile && !configuredUsersFile() && !publicUrls) {

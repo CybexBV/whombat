@@ -196,7 +196,7 @@ above.
 ### Publishing for production
 
 There is one app for everyone (Whombat `docs/decisions/one-environment.md`): both publish scripts build for production
-unless told otherwise (`--env prod`: `api.whombat.com` and `app.whombat.com`). The APK and its `latest.json` go into
+(`--env prod`, the default: `api.whombat.com` and `app.whombat.com`). The APK and its `latest.json` go into
 production control's downloads folder; the iPhone app goes to TestFlight (below).
 
 ```sh
@@ -211,8 +211,6 @@ Each published APK's bundle source map and R8 mapping stay beside it, in `<dir>/
 `.mapping.txt` (the newest 30 builds; control serves only the APK `latest.json` names): they turn an error note's
 frames back into the code's. Only a bundle map that run's build wrote is kept (`--skip-build` keeps none and says so);
 R8's mapping whenever it is there.
-
-`--env dev` is still accepted until the move to production is done; it goes with DEV.
 
 ### iOS (macOS)
 
@@ -251,9 +249,9 @@ cd apps/mobile
 npx expo prebuild --platform ios --clean      # adds the WhombatLiveWidget extension target (app.plugin.cjs)
 cd ios && pod install && open Whombat.xcworkspace
 
-# or a Release build for a simulator, against DEV, without Xcode's window (signed: unsigned, the Keychain refuses
+# or a Release build for a simulator, against production, without Xcode's window (signed: unsigned, the Keychain refuses
 # the device key and the app stops at “Sign in again”):
-EXPO_PUBLIC_WHOMBAT_CONTROL_URL=https://api-dev.whombat.com EXPO_PUBLIC_WHOMBAT_UI_URL=https://dev.whombat.com \
+EXPO_PUBLIC_WHOMBAT_CONTROL_URL=https://api.whombat.com EXPO_PUBLIC_WHOMBAT_UI_URL=https://app.whombat.com \
   xcodebuild -workspace Whombat.xcworkspace -scheme Whombat -configuration Release \
   -destination 'id=<simulator udid>' -derivedDataPath build/dd DEVELOPMENT_TEAM=4R8P9MTF9T build
 xcrun simctl install <simulator udid> build/dd/Build/Products/Release-iphonesimulator/Whombat.app

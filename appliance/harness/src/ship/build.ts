@@ -335,12 +335,15 @@ export function findTwin(ctx: ShipContext, prod: string): string | null {
 
 /**
  * The root a build's newer check verifies the published repository from: the GitHub repository's root pinned in the
- * build's own tree, `manifest/prod/tuf-root.json` once the key ceremony committed it (ONE-05), the interim
- * `manifest/dev-instance/tuf-root.json` before (the same repository's earlier root; NX-522).
+ * build's own tree, `manifest/prod/tuf-root.json`.
  */
 export function pinnedRoot(src: string): string {
   const prod = join(src, 'manifest', 'prod', 'tuf-root.json');
-  return existsSync(prod) ? prod : join(src, 'manifest', 'dev-instance', 'tuf-root.json');
+  if (!existsSync(prod))
+    throw new Error(
+      `${prod} is missing: the newer check verifies the release repository from the root pinned there`,
+    );
+  return prod;
 }
 
 /**

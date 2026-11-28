@@ -1,9 +1,7 @@
 /**
  * What every `release/ship` stage works with: where releases are kept, the heavy-work lock, the update channels on
- * GitHub (releases.whombat.com: Beta is the `development` role, Production the `production` role; ONE-03),
- * whombat-cloud's `deploy.sh`, and the DEV instance (its operator API, TUF repository and `WB_MGD_HOME`) only until it
- * is retired (ONE-01: `support --dev` and `release/ship status --dev` read it). Everything can be pointed elsewhere by
- * environment variables (a rehearsal, a stand-in).
+ * GitHub (releases.whombat.com: Beta is the `development` role, Production the `production` role; ONE-03) and
+ * whombat-cloud's `deploy.sh`. Everything can be pointed elsewhere by environment variables (a rehearsal, a stand-in).
  */
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { spawn } from 'node:child_process';
@@ -27,12 +25,6 @@ export interface ShipContext {
   heavyHeld?: boolean;
   /** Logs of this tool's runs. */
   logDir: string;
-  dev: {
-    /** The DEV instance's WB_MGD_HOME (`WB_DEV_HOME`, default ~/.whombat-stack-dev). */
-    home: string;
-    tuf: string;
-    publicUpdates: string;
-  };
   prod: {
     /** The old Hetzner update repository (`WB_UPDATES_URL`): only read, for releases from before ONE-02. */
     updatesUrl: string;
@@ -53,18 +45,12 @@ export const DEFAULT_ROOT = join(homedir(), '.cache', 'whombat-releases');
 
 export function shipContext(outRoot?: string | null): ShipContext {
   const root = expandHome(outRoot ?? process.env.WB_RELEASES_DIR ?? DEFAULT_ROOT);
-  const devHome = expandHome(process.env.WB_DEV_HOME ?? '~/.whombat-stack-dev');
   return {
     root,
     searchRoots: [...new Set([root, DEFAULT_ROOT])],
     repo: REPO_DIR,
     heavyLock: expandHome(process.env.WB_HEAVY_LOCK ?? join(TMP_DIR, 'robust-updates-heavy.lock')),
     logDir: join(TMP_DIR, 'ship'),
-    dev: {
-      home: devHome,
-      tuf: join(devHome, 'env', 'manager', 'tuf'),
-      publicUpdates: process.env.WB_DEV_UPDATES_URL ?? 'https://updates-dev.whombat.com',
-    },
     prod: {
       updatesUrl: process.env.WB_UPDATES_URL ?? 'https://updates.whombat.com',
       releasesUrl: (process.env.WB_RELEASES_URL ?? 'https://releases.whombat.com').replace(/\/+$/, ''),
@@ -195,28 +181,7 @@ export async function tufrepo(ctx: ShipContext, rev: string, repo = ctx.repo): P
   return join(await nixBuild(`${flakeAt(repo, rev)}#whombat-release-tools`, repo), 'bin', 'tufrepo');
 }
 
-/* The DEV instance's operator API ------------------------------------------------------------------------- */
-
-export interface DevControl {
-  adminUrl: string;
-  token: string;
-  /** The public control origin (what boxes and clients use). */
-  publicUrl: string;
-}
-
-export function devControl(ctx: ShipContext): DevControl {
-  const file = join(ctx.dev.home, 'env', 'env.json');
-  if (!existsSync(file)) throw new Error(`no DEV instance at ${ctx.dev.home} (WB_DEV_HOME)`);
-  const env = JSON.parse(readFileSync(file, 'utf8')) as {
-    control?: { adminUrl: string; url: string; operatorTokenFile: string };
-  };
-  if (!env.control) throw new Error(`${file} has no control`);
-  return {
-    adminUrl: env.control.adminUrl,
-    token: readFileSync(env.control.operatorTokenFile, 'utf8').trim(),
-    publicUrl: process.env.WB_DEV_CONTROL_URL ?? 'https://api-dev.whombat.com',
-  };
-}
+/* Control's operator API ------------------------------------------------------------------------------- */
 
 export class OperatorError extends Error {
   readonly status: number;
@@ -229,27 +194,6 @@ export class OperatorError extends Error {
     this.status = status;
     this.body = body;
   }
-}
-
-export async function devOp<T>(c: DevControl, method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${c.adminUrl}/v1/operator${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${c.token}`,
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(30_000),
-  });
-  const text = await res.text();
-  let parsed: unknown = text;
-  try {
-    parsed = text ? JSON.parse(text) : null;
-  } catch {
-    // keep the text
-  }
-  if (!res.ok) throw new OperatorError(res.status, parsed, `${method} /v1/operator${path}`);
-  return parsed as T;
 }
 
 /* Production's operator API through deploy.sh (on the host, over SSH) ------------------------------------- */

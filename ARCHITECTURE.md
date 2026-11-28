@@ -95,7 +95,7 @@ knows the box (`link.mail.set`); control emails the Link account when it hasn't 
 when the owner chose it, the digest sends a count of what waits (`mail.send`, kind `waiting`) unless a mail server of the
 owner's own sends it, and every fixed-word notice goes by email too (kind `notice`). The only recipient is the Link
 account's own email. A box control registered before Link
-(Home, the DEV stack box; `device.json` names an appliance route other than `local`) keeps its claim through control,
+(Home among them; `device.json` names an appliance route other than `local`) keeps its claim through control,
 its reports to control and links to the hosted app; every other box is claimed on and linked to its own pages (its own
 address, else an HTTPS way such as its Tailscale name, else its address on the local network; no address at all while
 nobody can reach it, and loopback only in development), even where the image names a hosted app. The old edition switch and the licence are
@@ -103,8 +103,7 @@ inert: `WHOMBAT_EDITION` is read only where there is no `device.json` (developme
 refuses.
 
 **Own address** (`managed/own-address/`, [own-address.md](docs/decisions/own-address.md)): while Link runs a box also serves
-its page at `<name>.whombat.app` (DEV: `<name>.dev.whombat.app`; a box that hasn't moved yet at `<name>.box.whombat.app`, the
-old zone), with TLS ending on the box. The name is three random words, or one the person chose when they confirmed the box
+its page at `<name>.whombat.app` (a box that hasn't moved yet at `<name>.box.whombat.app`, the old zone), with TLS ending on the box. The name is three random words, or one the person chose when they confirmed the box
 on the account site (`link.name.check`, `label` on `link.confirm`); the rules for names are core's
 `ownAddressNameProblem`, enforced by control. Control gives the name when Link starts and the manager registers it (with
 a manager from before Link the runtime draws it), orders the certificate (ACME TLS-ALPN-01) and watches Certificate
@@ -408,7 +407,7 @@ release's commit carries the release's id as a tag.
 | `apps/runner` | `@whombat/runner` | Claims dispatches, prepares a turn's workspace, runs Hermes turns in the sandbox and the pod, streams progress; the sign-in executor, the Hermes-home service, the agent's gh and git relay. |
 | `apps/agent-net` | `@whombat/agent-net` | The commands' network proxy and its control socket. |
 | `apps/cli` | `@whombat/cli` | The bundle's `whombat` binary (`schema-check`, `migrate`, `version`) and the release library (`@whombat/cli/release`). |
-| `apps/web` | `@whombat/web` | The web app: the box's own page, the hosted UI (app/dev.whombat.com), the visual harness's journeys. Its `package.json` carries the app's version (the APK's too). |
+| `apps/web` | `@whombat/web` | The web app: the box's own page, the hosted UI (app.whombat.com), the visual harness's journeys. Its `package.json` carries the app's version (the APK's too). |
 | `apps/mobile` | `@whombat/mobile` | The Android (and iOS) app: Expo/React Native with a native module for live activities and the home-screen status widget. |
 | `apps/widget` | `@whombat/widget` | The embeddable feedback widget and its embed tree. |
 | `packages/core` | `@whombat/core` | The contracts: domain types, Zod schemas for every operation and frame, the keys engine, approvals and automations logic, message parsing, formatters. Pure: no I/O. |
@@ -2104,7 +2103,7 @@ Setup and operation: `docs/github.md`.
 
 ## Clients (`apps/web`, `apps/mobile`, `packages/client`)
 
-The web app (hosted at app.whombat.com and dev.whombat.com, and served by the box on its direct listener) and the
+The web app (hosted at app.whombat.com, and served by the box on its direct listener) and the
 Android app speak only the encrypted session, through `@whombat/client`, whose reducers apply realtime frames to the
 query cache. An index per query cache follows endpoint entries as they are added and removed, so realtime patches
 visit the affected endpoint's queries. Thread-list events retain unchanged pages and response wrappers. The built page preloads its own root's chunks
@@ -2289,14 +2288,11 @@ structured `code` and `params` to alerts, banners and hints without modifying th
   `WHOMBAT_AGENT_TOOLS` is set, and have no Docker without `WHOMBAT_CONTAINERS_SOCKET`.
 - The demo: on your own database, `pnpm db:reset && pnpm db:seed` loads the mock world as of Wednesday 23 September
   2026 11:22 (Europe/Amsterdam), `--relative` shifts it to today; `WHOMBAT_DEMO=1` makes the scripted Hermes play
-  the storyline. The full environment (relay, control, the manager) is the appliance's dev stack.
-- DEV delivery runs through the appliance's `dev/candidate`: it builds the release's versioned runtime and pin checks
-  together, alongside the backup. The app and runtime share a clean checkout and install when their pins match, and
-  their pages build while services start. Publication waits for the build and a healthy stack; `summary.json` records
-  the time through publication and notes, before Home's next update check
-  ([build-deployment-speed.md](docs/decisions/build-deployment-speed.md)).
-  The environment archive uses up to four gzip compression workers with `pigz` when installed, with ordinary gzip
-  as the fallback; its `.tar.gz` format and restoration are the same.
+  the storyline. The full environment (relay, control, the manager) is the maintainers': the appliance's harness
+  runs it with them.
+- Delivery runs through the maintainers' `candidate` (the appliance's `harness/src/dev/candidate.ts`): it builds the
+  release from one commit of `main`, deploys what production hosts when it changed and publishes the release to Beta;
+  `summary.json` records the time of each step ([build-deployment-speed.md](docs/decisions/build-deployment-speed.md)).
 
 ## Tests and quality gates
 

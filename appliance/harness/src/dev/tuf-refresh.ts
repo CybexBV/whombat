@@ -1,15 +1,15 @@
 /**
  * The dev TUF repository's timestamp, kept fresh (IN-224). Production re-signs its update repository every 6 hours
- * (`tufrepo refresh`, control's `whombat-tuf-timestamp.timer`; PI-11, HZ-16). The dev repository was signed only
- * when something was published into it, so 24 hours after a publish its timestamp expired and the DEV box could verify
- * no assignment until the next publish (2026-10-07). `dev/up` runs this as the service `tuf-refresh` next to the
+ * (`tufrepo refresh`, control's `whombat-tuf-timestamp.timer`; PI-11, HZ-16). Signed only when something is published
+ * into it, the dev repository's timestamp would expire 24 hours after a publish and its box could verify no assignment
+ * until the next one. `dev/up` runs this as the service `tuf-refresh` next to the
  * repository's server (`tuf`).
  *
  * It re-signs whenever the timestamp has 18 hours or less left (a 24-hour timestamp 6 hours old), has expired or can't
  * be read: at start, 6 hours after each refresh, and when the timestamp reaches 18 hours left (a publish in between
  * moves that). So the timestamp keeps at least 18 hours, as production's does and control's `tuf_timestamp_stale`
  * (below 12 hours, UP-G2) expects. Re-signing is `tufrepo refresh --dir <repository>` with the repository's own
- * development keys and the tufrepo `dev/publish-release` signs with (`tufrepo.ts`): snapshot and timestamp always,
+ * development keys and this checkout's tufrepo (`tufrepo.ts`): snapshot and timestamp always,
  * the clients role within 7 days of its expiry and targets within 14. One line per refresh on
  * stdout (`logs/tuf-refresh.log`, `dev/logs tuf-refresh`); a failure is a warning line and another try after 15
  * minutes, and the stack keeps running.

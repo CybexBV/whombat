@@ -228,8 +228,8 @@
       selfInstalledFor =
         system: extra: applianceFor system ([ ./nix/profiles/self-installed.nix ] ++ extra);
       # The Whombat image (ONE-02; PI-10, NX-61): one image for every box, production by default, with the real runtime
-      # bundle. Needs manifest/prod/licence-keys.json; the GitHub repository's root and client channel keys come from
-      # manifest/prod/ once the cutover commits them, from manifest/dev-instance/ until then (prod-instance.nix).
+      # bundle. Needs manifest/prod/'s licence keys, the GitHub repository's root and the client channel keys
+      # (prod-instance.nix).
       applianceSelfProd = selfInstalledFor "x86_64-linux" [ ./nix/profiles/prod-instance.nix ];
       # The community edition (Whombat HE-58, NX-445): no control, relay, licence or remote help; its own TUF repository
       # (test keys only, manifest/community/) and the real runtime bundle.
@@ -954,7 +954,7 @@
               touch $out
             '';
           # Remote help (NX-411…NX-424, ONE-17): the support service's unit, socket and accounts, the runtime's variable, the
-          # CA each image and environment pins, and a prod image never with the DEV CA. Its Go tests run in its build;
+          # CA each image and environment pins, and a prod image never with a refused CA. Its Go tests run in its build;
           # vm-tests/support.nix runs it.
           support-config =
             let
@@ -982,13 +982,9 @@
                 (self.nixosConfigurations.self-installed-prod.extendModules {
                   modules = [ { whombat.support.caKeys = lib.mkForce ca; } ];
                 }).config;
-              devCa = ./manifest/dev-instance/support-ca.pub;
+              refusedCa = ./nix/modules/refused-support-ca.pub;
               testCa = pkgs.writeText "test-support-ca.pub" "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDaV1lsWk1QDBOGwT1AB1WaJbsEzvpIxuyJVBFI6m1TP test\n";
-              devKeyCopy = pkgs.writeText "copied-ca.pub" (builtins.readFile devCa);
-              # The placeholder has no key line yet; once the real DEV key is in, a copy of it is refused too.
-              devHasKey = lib.any (l: lib.hasPrefix "ssh-ed25519 " (lib.trim l)) (
-                lib.splitString "\n" (builtins.readFile devCa)
-              );
+              refusedKeyCopy = pkgs.writeText "copied-ca.pub" (builtins.readFile refusedCa);
             in
             # On every appliance, off without a trace when disabled; never an SSH daemon.
             assert
@@ -1055,15 +1051,13 @@
               && lib.hasInfix "--runtime-uid 951 --manager-uid 950 " sc.ExecStart
               && lib.hasInfix "--ca-keys /etc/whombat/support-ca.pub " sc.ExecStart
               && lib.hasInfix "--look-user whombat-support-look " sc.ExecStart;
-            # The CA each image pins: none on the factory image; on the Whombat image the box's environment picks it, the
-            # DEV file for the development environment (until Home has moved, ONE-02) and production's once it is
-            # committed (ONE-17: manifest/prod/support-ca.pub, made on the Hetzner host), none before; a prod image
-            # refuses the DEV file and any of its keys.
+            # The CA each image pins: none on the factory image; on the Whombat image the box's environment picks it,
+            # production's (ONE-17: manifest/prod/support-ca.pub, made on the Hetzner host), none before it is committed;
+            # a prod image refuses the refused file and any of its keys.
             assert
               c.whombat.support.caKeys == null
               && !(c.environment.etc ? "whombat/support-ca.pub")
-              && (envCa "dev").source == devCa
-              && (envCa "dev").mode == "0444"
+              && envCa "dev" == null
               && (
                 if builtins.pathExists prodCa then
                   (envCa "prod").source == prodCa && prod.whombat.support.caKeys == prodCa
@@ -1071,9 +1065,9 @@
                   envCa "prod" == null && prod.whombat.support.caKeys == null
               )
               && !(failed prod)
-              && failed (prodWith devCa)
+              && failed (prodWith refusedCa)
               && !(failed (prodWith testCa))
-              && (devHasKey -> failed (prodWith devKeyCopy));
+              && failed (prodWith refusedKeyCopy);
             pkgs.runCommand "support-config-check" { } "touch $out";
           appliance-toplevel = self.packages.${system}.appliance-toplevel;
           image-no-secrets = pkgs.callPackage ./nix/checks/image-no-secrets.nix {
@@ -2424,9 +2418,8 @@
               settings = cfg: cfg.environment.etc."whombat/self-provision.json".source;
               hwSelf = (applianceFor system [ { whombat.provisioning.selfRegister = true; } ]).config;
               ga = c.systemd.services.qemu-guest-agent.serviceConfig.ExecStart;
-              # ONE-05: the GitHub repository's root and client channel keys, production's once the cutover commits them.
-              rotated = ./manifest/prod/tuf-root.json;
-              interimRoot = ./manifest/dev-instance/tuf-root.json;
+              # ONE-05: the GitHub repository's root and client channel keys, production's.
+              prodRoot = ./manifest/prod/tuf-root.json;
               prodClients = ./manifest/prod/client-channel-keys.json;
               # Roots of made-up keys (no signatures: only the root role's threshold and keys are read at build time).
               rootOf =
@@ -2480,8 +2473,8 @@
               lib.hasInfix "--allow-rpcs=" ga
               && !(lib.hasInfix "guest-exec" ga)
               && !(lib.hasInfix "guest-file" ga);
-            # What the DEV image gave Home is the Whombat image's (NX-523): the hosts service and the Incus agent, which
-            # starts only inside an Incus VM (NX-290: skipped elsewhere, not failed); no serial console line.
+            # The Whombat image has the hosts service and the Incus agent, which starts only inside an Incus VM (NX-523,
+            # NX-290: skipped elsewhere, not failed); no serial console line.
             assert c.whombat.hosts.enable && c.virtualisation.incus.agent.enable && !hw.virtualisation.incus.agent.enable;
             assert
               c.systemd.services.incus-agent.unitConfig.ConditionPathExists
@@ -2490,23 +2483,18 @@
             # NX-524: no environment and no image names a repository for the merge re-run (Whombat AR-58): what every
             # box carries holds no company's own repository, and every repository has the runtime's default.
             assert !(c.whombat.runtime.environment ? WHOMBAT_MERGE_RERUN);
-            assert lib.all (e: !(c.whombat.environments.${e}.runtime ? WHOMBAT_MERGE_RERUN)) [
-              "dev"
-              "prod"
-            ];
+            assert !(c.whombat.environments.prod.runtime ? WHOMBAT_MERGE_RERUN);
             # NX-516: the own address follows the environment's zone; the image switches nothing on.
             assert lib.all (u: !(c.systemd.services.${u}.environment ? WHOMBAT_OWN_ADDRESS)) [
               "whombat-manager"
               "whombat-manager-recovery"
             ];
-            # NX-520 (LNK-01a), ONE-02: the Whombat image carries production and, until Home has moved, the development
-            # environment; a box is in production unless its file says otherwise, and nothing writes that file any more
-            # (no bridge); the runtime and remote help follow the resolved environment.
+            # NX-520 (LNK-01a), ONE-02: the Whombat image carries one environment, production; nothing writes a box's
+            # environment file (no bridge); the runtime and remote help follow the resolved environment.
             assert
               c.whombat.defaultEnvironment == "prod"
               && c.whombat.environmentBridge == null
-              && c.whombat.environments ? prod
-              && c.whombat.environments ? dev
+              && lib.attrNames c.whombat.environments == [ "prod" ]
               && c.whombat.link.possible;
             assert lib.elem "-/run/whombat/environment/runtime.env"
               c.systemd.services.whombat-server.serviceConfig.EnvironmentFile;
@@ -2518,20 +2506,8 @@
             assert lib.hasInfix "--ca-keys /run/whombat/environment/support-ca.pub "
               c.systemd.services.whombat-support.serviceConfig.ExecStart;
             assert !(hw.environment.etc ? "whombat/environments.json");
-            # ONE-03: a box still in the development environment keeps the Beta channel it followed by default (the
-            # channel bridge, before either manager), never over a choice made; new boxes start on Production.
-            assert
-              let
-                b = c.systemd.services.whombat-channel-bridge;
-              in
-              lib.hasInfix "set-channel development --if-unset" b.script
-              && lib.hasInfix ''.name == "dev"'' b.script
-              && lib.elem "whombat-environment.service" b.after
-              && lib.all (u: lib.elem u b.before) [
-                "whombat-manager.service"
-                "whombat-manager-recovery.service"
-              ]
-              && b.unitConfig.ConditionPathExists == "/persist/whombat/environment.json";
+            # ONE-03: a new box starts on Production; the owner's choice of channel is the helper's.
+            assert !(c.systemd.services ? whombat-channel-bridge);
             # LNK-24, ONE-02: every box takes its channel's newest from the GitHub repository, its layout in both manager
             # units' environment (an earlier known-good manager reads the same manager.json); channel, layout and
             # addresses only together.
@@ -2544,17 +2520,10 @@
               "whombat-manager"
               "whombat-manager-recovery"
             ];
-            # ONE-05: the rotated root once committed, the interim one (the chain's start, one online key) until then; a
-            # production image refuses any other root that one root key alone can replace, and the interim root once it
-            # isn't the one named.
-            assert c.whombat.helper.tufRoot == (if builtins.pathExists rotated then rotated else interimRoot);
-            assert
-              c.whombat.clients.channelKeys == (
-                if builtins.pathExists prodClients then
-                  prodClients
-                else
-                  ./manifest/dev-instance/client-channel-keys.json
-              );
+            # ONE-05: production's root and client channel keys; a production image refuses any root that one root key
+            # alone can replace.
+            assert c.whombat.helper.tufRoot == prodRoot;
+            assert c.whombat.clients.channelKeys == prodClients;
             assert failed [
               pm
               pp
@@ -2562,11 +2531,6 @@
             assert has "two root keys" (withRoot (rootOf 1 1));
             assert has "two root keys" (withRoot (rootOf 2 1));
             assert !(has "two root keys" (withRoot (rootOf 2 3)));
-            assert has "two root keys" [
-              pm
-              pp
-              { whombat.helper.interimRoot = lib.mkForce null; }
-            ] == !(builtins.pathExists rotated);
             # A bridge that rolls back leaves the old repository's verified chain where the earlier manager and helper
             # keep it: the GitHub repository has folders of its own (manager.nix tufDir; the jq below reads the files).
             assert
@@ -2738,9 +2702,7 @@
               # Every box makes its identity itself (LNK-01); its environment decides its env (LNK-01a).
               jq -e '.platform == "self-installed" and .requireSecureBoot == false and (has("luksDevices") | not)
                 and .environment == "prod" and .controlUrl == "" and .environmentDir == "/run/whombat/environment"' ${settings c}
-              jq -e '.v == 1 and .default == "prod" and .environments.dev.deviceEnv == "local"
-                and .environments.dev.controlUrl == "https://api-dev.whombat.com" and .environments.dev.ownAddressZone == "dev.whombat.app"
-                and .environments.dev.files["support-ca.pub"] == "/etc/whombat/environments/dev/support-ca.pub"
+              jq -e '.v == 1 and .default == "prod" and (.environments | keys) == ["prod"]
                 and .environments.prod.deviceEnv == "prod" and .environments.prod.controlUrl == "https://api.whombat.com"
                 and .environments.prod.ownAddressZone == "whombat.app"' ${c.environment.etc."whombat/environments.json".source}
               jq -e '.platform == "factory" and .requireSecureBoot == true and (has("luksDevices") | not)' ${settings hwSelf}
@@ -2808,7 +2770,7 @@
             assert
               !(has "licence" [
                 cp
-                { whombat.licence.keys = ./manifest/dev-instance/licence-keys.json; }
+                { whombat.licence.keys = ./manifest/prod/licence-keys.json; }
               ]);
             # Remote help follows Whombat Link (LNK-07): an image whose boxes can't have it has none.
             assert !c.whombat.link.possible && d.whombat.link.possible;

@@ -120,17 +120,13 @@ describe('web paths on the phone (AP-366)', () => {
 describe('tapping a URL (AP-709)', () => {
   const origins = appOrigins(['https://ui.example.test/']);
 
-  it('knows the build’s UI and Whombat’s own web app, prod and dev', () => {
-    expect(origins).toEqual([
-      'https://ui.example.test',
-      'https://app.whombat.com',
-      'https://dev.whombat.com',
-    ]);
+  it('knows the build’s UI and Whombat’s own web app', () => {
+    expect(origins).toEqual(['https://ui.example.test', 'https://app.whombat.com']);
   });
 
   it.each([
     ['https://app.whombat.com/chat', 'whombat://chat', null],
-    ['https://dev.whombat.com/burrow-hq/runs/12', 'whombat://runs/12', 'burrow-hq'],
+    ['https://ui.example.test/burrow-hq/runs/12', 'whombat://runs/12', 'burrow-hq'],
     ['HTTPS://App.Whombat.com/settings/agent', 'whombat://settings/agent', null],
     ['https://ui.example.test/chat?thread=msg_9', 'whombat://threads/msg_9', null],
     ['https://app.whombat.com/chat?plan=pl_1&step=st_2', 'whombat://plans/pl_1?stepId=st_2', null],

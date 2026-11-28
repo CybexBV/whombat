@@ -1194,9 +1194,9 @@ function filesScreenUrl(path: string, query: Map<string, string>): string {
 
 /**
  * The web app's origins whose links open the app's screens (AP-709): the build's hosted UI (`EXPO_PUBLIC_WHOMBAT_UI_URL`)
- * and Whombat's own, prod and dev, so a link written by either opens on the phone. Lower case, no trailing slash.
+ * and Whombat's own, so a link written by either opens on the phone. Lower case, no trailing slash.
  */
-export const WHOMBAT_WEB_ORIGINS = ['https://app.whombat.com', 'https://dev.whombat.com'] as const;
+export const WHOMBAT_WEB_ORIGINS = ['https://app.whombat.com'] as const;
 
 export function appOrigins(uiOrigins: readonly string[]): string[] {
   return [
