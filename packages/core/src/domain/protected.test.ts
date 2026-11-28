@@ -94,9 +94,9 @@ describe('the page’s groups and lines', () => {
     );
     expect(failing).toContain('Backblaze B2');
     expect(failing).toContain('failed');
-    expect(protectedOffsiteLine({ name: 'x', lastAt: null, failedAt: '2026-11-28T09:00:00Z' }, now, tz, 'nl')).toContain(
-      'mislukt',
-    );
+    expect(
+      protectedOffsiteLine({ name: 'x', lastAt: null, failedAt: '2026-11-28T09:00:00Z' }, now, tz, 'nl'),
+    ).toContain('mislukt');
   });
 
   it('asks in the thing’s own thread, naming it', () => {

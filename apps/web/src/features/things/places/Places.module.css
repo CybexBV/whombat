@@ -139,7 +139,8 @@
   outline-offset: -2px;
 }
 
-/* A row of the place's own (Open to the internet), set apart from the things above it by a rule. */
+/* The first of the place's own rows (Open to the internet, What's protected), set apart from the things above it by a
+   rule. */
 .extra {
   margin-top: 8px;
 }
@@ -279,31 +280,4 @@
 
 .waitingReview:hover {
   text-decoration: underline;
-}
-
-/* What's protected, under the servers: a quiet row like the waiting one, the whole row a link. */
-.protected {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin: 10px 2px 0;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  color: inherit;
-  text-decoration: none;
-}
-
-.protected:hover {
-  background: var(--sf2);
-}
-
-.protected:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
-.protectedChevron {
-  flex: none;
-  color: var(--mut);
 }

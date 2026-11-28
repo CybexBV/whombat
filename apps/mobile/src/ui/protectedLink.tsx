@@ -8,8 +8,8 @@ import { RowChevron } from './ListRow';
 import { Touchable } from './Touchable';
 
 /**
- * The way to What's protected (backup-trust.md): under the servers and under This Whombat's backups, on a Whombat that
- * has it (nothing on an older one).
+ * The way to What's protected (backup-trust.md) under This Whombat's backups, on a Whombat that has it (nothing on an
+ * older one). Under the servers it is a row of the list instead.
  */
 export function ProtectedLink({ onPress, inset = 8 }: { onPress: () => void; inset?: number }) {
   const { rawLocale } = useI18n();
