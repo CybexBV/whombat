@@ -9,6 +9,7 @@ export * from './backupOptions';
 export * from './backupPlaces';
 export * from './backups';
 export * from './changeWindow';
+export * from './protected';
 export * from './chat';
 export * from './chatRuntime';
 export * from './context';
