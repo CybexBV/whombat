@@ -419,7 +419,8 @@ export function ThinkingBubble({
     words
   );
   if (!onStop) return line;
-  // Stop sits at the line's end (MX-09): a 44dp text button, after the words in the reading order.
+  // Stop sits at the line's end, after the words in the reading order: quiet muted text without a border, so it reads
+  // as a way out and not as the thing to press next. The touch target stays 44dp.
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
       {line}
@@ -437,12 +438,10 @@ export function ThinkingBubble({
           borderRadius: 10,
           alignItems: 'center',
           justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: theme.colors.line2,
           opacity: stopping ? 0.5 : 1,
         }}
       >
-        <Text size={13.5} weight={600} color={theme.colors.ink}>
+        <Text size={13} weight={500} color={theme.colors.mut}>
           {turnStopLabel(rawLocale)}
         </Text>
       </Touchable>
