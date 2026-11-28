@@ -83,6 +83,14 @@ export const APPS = splitPairs({
     'De image van {app} staat vast op één precieze versie.',
   ],
   'hosts.apps.refuse.updating': ['{app} is being updated right now.', '{app} wordt nu bijgewerkt.'],
+  'hosts.apps.refuse.tooMany': [
+    'Whombat updates at most ten apps at once, and {app} shares its image with more.',
+    'Whombat werkt maximaal tien apps tegelijk bij, en {app} deelt zijn image met meer.',
+  ],
+  'hosts.apps.refuse.unbound': [
+    'Whombat can’t tell exactly what {app} runs right now, so it can’t update it. Try again in a few minutes.',
+    'Whombat kan nu niet precies zien wat {app} draait en kan de app daarom niet bijwerken. Probeer het over een paar minuten opnieuw.',
+  ],
   'hosts.apps.refuse.noAssistant': [
     'Your assistant isn’t set up yet.',
     'Je assistent is nog niet ingesteld.',

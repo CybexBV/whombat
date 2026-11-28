@@ -1641,16 +1641,20 @@ Setup and operation: `docs/github.md`.
   (`HostGuest.app`: its service, its version and the newer image's, the newer image's digest, Compose's hash of the
   service's settings, `pinned`, whether an update runs, the last one) and runs an update as one host task
   (`app:<id>`): it checks the service, its image and that hash are what the yes was for (`expect`), tags the running
-  image `…:whombat-previous-<service>`, writes down the way back (`progress.json`), pulls exactly the checked digest,
-  tags it as the service's image, recreates the service and every one of the project that shares its image with
-  `up --no-deps --pull never --no-build` and watches them run (healthy when they have a health check) for 30 seconds;
-  when they don't come up it tags the previous image back and recreates them the same way. A runner the server
-  stopped part-way is started again by the agent and finishes the update or goes back. The hub starts it
+  image `…:whombat-previous-<service>`, writes the project's settings down once (`config`, checked against that hash)
+  and the way back (`progress.json`), pulls exactly the checked digest, tags it as the service's image, recreates
+  from that copy the service and every one of the project that shares its image, keeping each one's number of
+  containers (`up --no-deps --pull never --no-build --scale`; a stopped one with `--no-start`, after the others), and
+  watches those that ran (healthy when they have a health check) for 30 seconds; when they don't come up it tags the
+  previous image back and recreates them the same way. The project's own files are noted
+  (`<state>/apps/projects/`), so the next update reads them, not the copy. A runner the server stopped part-way is
+  started again by the agent and, once Docker answers, finishes the update or goes back. The hub starts it
   (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task (`HostTask.apps`).
   Every update asks through the approval card: the assistant's `app_update` asks like a container update, and always
   for a database's, a new major version's or an unknown version's (`ask: true`, `serverAsksApply`), refusing them
-  without a yes whose reasons cover them; `connection_call` writes what was checked into the call when it's asked
-  for (`bindAppUpdateArgs`), and a run whose apps changed since is refused. A page's Update (`hosts.manage` op
+  without a yes whose reasons cover them; `connection_call` writes what was checked, and the reasons the apps ask
+  for, into the call when it's asked for (`bindAppUpdateArgs`; no card when an app can't be bound), and a run whose
+  apps changed since, or a yes not bound to every app it updates, is refused. A page's Update (`hosts.manage` op
   `app.update`) commits that same call for the person in their Chat and opens its card (`approvalNumber`), with a
   snapshot first when the server is a Proxmox guest Whombat watches (`proxmoxGuestOf`). The followed task posts one plain line per app (`appsOutcomeText`), Done recently records it and
   the server is kept quiet while it runs. `app_updates` gives the assistant the same facts; the care plan's `apps`

@@ -1041,7 +1041,8 @@ HS-360…HS-372).
   `ManageRequest.HoldMajor` (`hold_major`) leaves a new major version, or
   one whose version isn't known, alone; `ManageRequest.AppExpect`
   (`app_expect`: `[{app, svc, image_id, digest?, cfg_hash?}]`) is what the
-  yes was for, and the agent updates an app only while it is still so).
+  yes was for, and the agent updates an app only while it is still so;
+  with it, every app named needs an entry with `cfg_hash`).
   It answers with a task `app:<16 hex>` that runs outside the agent and
   survives an agent restart (an update the server cut short is finished or
   undone when the agent runs again); `task.status` takes `app:` ids, `task.list`

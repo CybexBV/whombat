@@ -28,6 +28,8 @@ them once they have been tried on Beta.
   that app, and puts the previous version back by itself when the new one doesn’t start, even if the server restarted
   halfway. A database, a new major version or a version Whombat can’t tell always asks, and says why. If the app
   changed after you said yes, Whombat leaves it alone and says so.
+- An app update also moves the stopped services that share the app’s image, and leaves them stopped. It never starts
+  what you stopped or changes how many copies of a service run.
 - A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
 - Each server, service and device’s History now shows what changed beside what went wrong: a new version, a new
   container image, installed updates and restarts, new firmware, a proxy host or tunnel route edited. Each says

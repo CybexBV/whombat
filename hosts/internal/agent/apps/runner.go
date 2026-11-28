@@ -48,6 +48,9 @@ type Docker interface {
 	// ConfigHash is Compose's hash of a service's settings as the project's
 	// files say them now (`docker compose config --hash`).
 	ConfigHash(ctx context.Context, p Project, service string) (string, error)
+	// Config is the project's settings as Compose reads them now, every
+	// profile's services included (`docker compose config`).
+	Config(ctx context.Context, p Project) ([]byte, error)
 	// Compose runs `docker compose <project args> <args>`, its output to w.
 	Compose(ctx context.Context, p Project, w io.Writer, args ...string) error
 }
@@ -66,8 +69,15 @@ type Runner struct {
 	Poll       time.Duration
 	Settle     time.Duration
 	HealthWait time.Duration
+	// DockerWait is how long finishing a stopped update waits for Docker to
+	// answer after the server started.
+	DockerWait time.Duration
 	// Stat checks the project's folder and files (tests replace it).
 	Stat func(string) (os.FileInfo, error)
+	// Origins is where each project's own files are noted when its
+	// services are recreated from the settings a task wrote down (default:
+	// "projects" beside the task's folder).
+	Origins string
 
 	mu  sync.Mutex
 	log io.Writer
@@ -94,6 +104,12 @@ func (r *Runner) Run(ctx context.Context) error {
 	if r.HealthWait == 0 {
 		r.HealthWait = 5 * time.Minute
 	}
+	if r.DockerWait == 0 {
+		r.DockerWait = 5 * time.Minute
+	}
+	if r.Origins == "" {
+		r.Origins = filepath.Join(filepath.Dir(r.Dir), "projects")
+	}
 	if r.Docker == nil {
 		r.Docker = NewCLI()
 	}
@@ -112,7 +128,12 @@ func (r *Runner) Run(ctx context.Context) error {
 	if prog != nil {
 		tctx, cancel := context.WithTimeout(ctx, PerAppLimit)
 		defer cancel()
-		res = r.resume(tctx, spec, prog)
+		if res, err = r.resume(tctx, spec, prog); err != nil {
+			// The way back stays written down: the agent starts the runner
+			// again, or ends the task with what is known.
+			r.logf("%v", err)
+			return err
+		}
 	} else {
 		limit := Limit(len(spec.Apps))
 		deadline := spec.Started.Add(limit)
@@ -181,13 +202,21 @@ func (r *Runner) run(ctx context.Context, spec *TaskSpec) *TaskResult {
 	return res
 }
 
+// ErrDockerDown: Docker didn't answer in time to finish a stopped update.
+var ErrDockerDown = errors.New("Docker didn’t answer, so the update wasn’t finished yet")
+
 // resume ends a task the server stopped part-way: the update that was
 // being made is kept when its services run the new image well, else put
-// back; the apps not reached stay as they are.
-func (r *Runner) resume(ctx context.Context, spec *TaskSpec, prog *Progress) *TaskResult {
+// back; the apps not reached stay as they are. It returns ErrDockerDown,
+// and no result, when Docker doesn't answer in time.
+func (r *Runner) resume(ctx context.Context, spec *TaskSpec, prog *Progress) (*TaskResult, error) {
 	r.logf("The update was stopped part-way (the server may have restarted); finishing it.")
 	res := &TaskResult{Status: StatusOK, Apps: append([]Outcome{}, prog.Done...)}
 	if pend := prog.Pending; pend != nil {
+		// Docker may still be starting after the server came back.
+		if !r.dockerReady(ctx, pend.Project) {
+			return nil, ErrDockerDown
+		}
 		res.Apps = append(res.Apps, r.finish(ctx, pend)...)
 	}
 	handled := map[string]bool{}
@@ -206,7 +235,27 @@ func (r *Runner) resume(ctx context.Context, spec *TaskSpec, prog *Progress) *Ta
 		}
 	}
 	res.Message = taskMessage(res.Apps)
-	return res
+	return res, nil
+}
+
+// dockerReady waits until Docker answers, at most DockerWait.
+func (r *Runner) dockerReady(ctx context.Context, p Project) bool {
+	deadline := r.Now().Add(r.DockerWait)
+	for {
+		_, err := r.Docker.ProjectContainers(ctx, p.Name)
+		if err == nil {
+			return true
+		}
+		if r.Now().After(deadline) {
+			r.logf("(Docker doesn’t answer: %v)", err)
+			return false
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(r.Poll):
+		}
+	}
 }
 
 // finish settles the update that was being made when the task stopped.
@@ -225,7 +274,7 @@ func (r *Runner) finish(ctx context.Context, pend *Pending) []Outcome {
 			r.logf("(could not remove the tag %s: %v)", pend.Backup, err)
 		}
 	}
-	cs, err := r.serviceContainers(ctx, pend.Project, pend.Services)
+	cs, err := r.serviceContainers(ctx, pend.Project, append(append([]string{}, pend.Services...), pend.Idle...))
 	if err != nil {
 		r.logf("(could not read the containers: %v)", err)
 	}
@@ -253,12 +302,18 @@ func (r *Runner) finish(ctx context.Context, pend *Pending) []Outcome {
 		// The restart counts are taken from the first look: the server's own restart isn't the app's.
 		reason, msg = r.watch(ctx, pend.Project, pend.Services, running, nil)
 		if reason == "" {
-			dropBackup()
-			return outs(proto.AppUpdated, "", "")
+			// The stopped services follow once the others run well (again
+			// when they already did: Compose leaves them as they are).
+			if err := r.up(ctx, pend.Project, pend.Idle, pend.Scale, false); err != nil {
+				reason, msg = proto.AppReasonStart, lastLine(err.Error())
+			} else {
+				dropBackup()
+				return outs(proto.AppUpdated, "", "")
+			}
 		}
 	}
 	r.logf("The update didn’t come up after the restart (%s): putting the previous version back.", reason)
-	if err := r.back(bg, pend.Project, pend.Services, pend.OldID, pend.Ref, map[string]int{}); err != nil {
+	if err := r.back(bg, pend, map[string]int{}); err != nil {
 		return outs(proto.AppFailed, proto.AppReasonBackFail, lastLine(err.Error()))
 	}
 	dropBackup()
@@ -311,7 +366,9 @@ const AppReasonDocker = "docker"
 
 // update updates one app and every other service of its project that runs
 // the same image, together (see the package comment); one outcome per
-// container. done are the outcomes so far (kept with the way back).
+// container. done are the outcomes so far (kept with the way back). A task
+// that says what was checked (expect) binds every app: one it says nothing
+// about isn't updated.
 func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect map[string]proto.AppExpect, done []Outcome) []Outcome {
 	o := Outcome{App: name}
 	fail := func(reason, msg string) []Outcome {
@@ -325,13 +382,14 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	case c == nil:
 		return fail(proto.AppReasonGone, "")
 	}
-	p, ok := ProjectOf(c.Labels)
+	p, ok := r.projectOf(c.Labels)
 	if !ok {
 		return fail(proto.AppReasonNoCompose, "")
 	}
 	o.Service = p.Service
-	exp, bound := expect[name]
-	if bound && !matches(exp, p.Service, *c) {
+	bound := len(expect) > 0
+	exp, said := expect[name]
+	if bound && (!said || !matches(exp, p.Service, *c)) {
 		r.logf("%s isn’t what was said yes to any more (service, image or Compose settings changed).", name)
 		return fail(proto.AppReasonChanged, "")
 	}
@@ -346,17 +404,24 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	o.From = VersionOf(c.Labels, ref)
 
 	// Every service of the project that runs this image goes with it, so
-	// none runs the new version while another runs the old one.
-	group, err := r.group(ctx, p, *c)
+	// none runs the new version while another runs the old one; stopped
+	// ones too, so none starts on it later untried.
+	group, stray, err := r.group(ctx, p, *c)
 	if err != nil {
 		return fail(AppReasonDocker, lastLine(err.Error()))
 	}
+	if stray != "" {
+		r.logf("%s belongs to a service updated with %s but runs another image.", stray, name)
+		return fail(proto.AppReasonChanged, "")
+	}
 	services := []string{}
+	scale := map[string]int{}
 	outs := []Outcome{}
 	for _, m := range group {
 		if !slices.Contains(services, m.Service) {
 			services = append(services, m.Service)
 		}
+		scale[m.Service]++
 		if bound && m.Name != name {
 			e, ok := expect[m.Name]
 			if !ok || !matches(e, m.Service, m.Container) {
@@ -379,6 +444,16 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		}
 		return out
 	}
+	// A service that was running is started again and watched; one that was
+	// stopped is recreated and stays stopped.
+	run, idle := []string{}, []string{}
+	for _, s := range services {
+		if slices.ContainsFunc(group, func(m member) bool { return m.Service == s && meantToRun(m.Status) }) {
+			run = append(run, s)
+		} else {
+			idle = append(idle, s)
+		}
+	}
 
 	// Compose's settings must be what runs: then recreating changes nothing
 	// but the image.
@@ -400,6 +475,20 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 			return all(proto.AppFailed, proto.AppReasonChanged, "", "")
 		}
 	}
+	// The settings are written down once, now: the services are recreated,
+	// and put back, from that copy, so an edit made to the project's files
+	// while the image downloads changes nothing. The copy must say exactly
+	// what runs.
+	rp, err := r.resolve(ctx, p)
+	if err != nil {
+		return all(proto.AppFailed, AppReasonDocker, "could not write down the Compose settings: "+lastLine(err.Error()), "")
+	}
+	for s, want := range hashes {
+		if h, err := r.Docker.ConfigHash(ctx, rp, s); err != nil || h != want {
+			r.logf("The written-down settings of %s aren’t the ones it runs with: leaving it as it is.", s)
+			return all(proto.AppFailed, AppReasonDocker, "Compose didn’t write down the settings "+s+" runs with", "")
+		}
+	}
 
 	r.logf("Updating %s (Compose project %s, services %s) from %s.", name, p.Name, strings.Join(services, ", "), orUnknown(o.From))
 	// The previous image keeps a tag of its own until the new one is known
@@ -409,7 +498,7 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		return all(proto.AppFailed, AppReasonDocker, lastLine(err.Error()), "")
 	}
 	bg := context.WithoutCancel(ctx)
-	pend := &Pending{Project: p, Services: services, Apps: outs, Ref: ref, OldID: oldID, Backup: backup}
+	pend := &Pending{Project: rp, Services: run, Idle: idle, Scale: scale, Apps: outs, Ref: ref, OldID: oldID, Backup: backup}
 	// The progress is written again with this app's outcome once update
 	// returns: until then a stop is checked again from the way back.
 	dropBackup := func() {
@@ -420,7 +509,7 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	// Exactly the image the person said yes to; without a digest (the
 	// registry didn't say which), the tag's newest.
 	pull := ref
-	if bound && exp.Digest != "" {
+	if said && exp.Digest != "" {
 		pull = Repo(ref) + "@" + exp.Digest
 	} else {
 		pend.Moved = true // pulling a tag moves it
@@ -467,6 +556,10 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		return all(proto.AppHeld, "", "", to)
 	}
 	pend.NewID, pend.Moved = newID, true
+	// A finished stop names the version it went to.
+	for i := range pend.Apps {
+		pend.Apps[i].To = to
+	}
 	if err := r.save(done, pend); err != nil {
 		restore()
 		dropBackup()
@@ -483,20 +576,21 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	for _, m := range group {
 		before[m.ID] = m.RestartCount
 	}
-	r.logf("$ docker compose up -d --no-deps --pull never --no-build -- %s", strings.Join(services, " "))
-	upErr := r.up(ctx, p, services)
-	reason, msg := proto.AppReasonStart, ""
-	if upErr == nil {
-		reason, msg = r.watch(ctx, p, services, newID, before)
-		if reason == "" {
-			dropBackup()
-			return all(proto.AppUpdated, "", "", to)
+	reason, msg := "", ""
+	if err := r.up(ctx, rp, run, scale, true); err != nil {
+		reason, msg = proto.AppReasonStart, lastLine(err.Error())
+	} else if reason, msg = r.watch(ctx, rp, run, newID, before); reason == "" {
+		// The stopped services follow once the others run well.
+		if err := r.up(ctx, rp, idle, scale, false); err != nil {
+			reason, msg = proto.AppReasonStart, lastLine(err.Error())
 		}
-	} else {
-		msg = lastLine(upErr.Error())
+	}
+	if reason == "" {
+		dropBackup()
+		return all(proto.AppUpdated, "", "", to)
 	}
 	r.logf("%s didn’t come up (%s): putting %s back.", name, reason, orUnknown(o.From))
-	if err := r.back(bg, p, services, oldID, ref, before); err != nil {
+	if err := r.back(bg, pend, before); err != nil {
 		// The previous image keeps its own tag, so a person can still go back by hand.
 		return all(proto.AppFailed, proto.AppReasonBackFail, lastLine(err.Error()), to)
 	}
@@ -504,13 +598,19 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	return all(proto.AppRolledBack, reason, msg, to)
 }
 
+// meantToRun: a container in this state was running before the update.
+func meantToRun(status string) bool {
+	return status == "running" || status == "restarting" || status == "paused"
+}
+
 // matches reports whether a container is still what was checked: the same
-// service, the same image, the same Compose settings.
+// service, the same image, the same Compose settings. What was checked must
+// name all three.
 func matches(e proto.AppExpect, service string, c Container) bool {
 	if e.Service != service || e.ImageID == "" || e.ImageID != c.ImageID {
 		return false
 	}
-	return e.ConfigHash == "" || e.ConfigHash == ConfigHashOf(c.Labels)
+	return e.ConfigHash != "" && e.ConfigHash == ConfigHashOf(c.Labels)
 }
 
 // member is one container that is updated with an app.
@@ -519,37 +619,135 @@ type member struct {
 	Service string
 }
 
-// group is the app's container and every other running container of its
-// project from the same image (the same reference, the same image id); the
-// app's own first.
-func (r *Runner) group(ctx context.Context, p Project, c Container) ([]member, error) {
-	out := []member{{Container: c, Service: p.Service}}
+// group is the app's container and every other container of its project
+// from the same image (the same reference, the same image id), running or
+// not; the app's own first. stray names a container of one of those
+// services that runs another image: recreating the service would replace it
+// too.
+func (r *Runner) group(ctx context.Context, p Project, c Container) (out []member, stray string, err error) {
+	out = []member{{Container: c, Service: p.Service}}
 	cs, err := r.Docker.ProjectContainers(ctx, p.Name)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+	others := []Container{}
 	for _, x := range cs {
-		if x.Name == c.Name || x.Ref != c.Ref || x.ImageID != c.ImageID || x.Status != "running" {
+		if x.Name == c.Name {
 			continue
 		}
-		q, ok := ProjectOf(x.Labels)
-		if !ok || q.Name != p.Name || q.Dir != p.Dir || !slices.Equal(q.Files, p.Files) {
+		q, ok := r.projectOf(x.Labels)
+		if !ok || q.Name != p.Name || q.Dir != p.Dir || !slices.Equal(q.Files, p.Files) ||
+			x.Ref != c.Ref || x.ImageID != c.ImageID {
+			others = append(others, x)
 			continue
 		}
 		out = append(out, member{Container: x, Service: q.Service})
 	}
-	return out, nil
+	for _, x := range others {
+		if slices.ContainsFunc(out, func(m member) bool { return m.Service == x.Labels[LabelService] }) {
+			return nil, x.Name, nil
+		}
+	}
+	return out, "", nil
 }
 
-// up recreates the services from the image their tag names now: Compose
-// neither pulls nor builds.
-func (r *Runner) up(ctx context.Context, p Project, services []string) error {
-	args := append([]string{"up", "--detach", "--no-deps", "--pull", "never", "--no-build", "--"}, services...)
-	err := r.Docker.Compose(ctx, p, r.writer(), args...)
+// resolvedPrefix starts the name of a Compose file a task wrote down.
+const resolvedPrefix = "compose-"
+
+// origin is a project's own folder and files, noted when its services are
+// recreated from the settings a task wrote down.
+type origin struct {
+	Dir      string   `json:"dir"`
+	Files    []string `json:"files"`
+	EnvFiles []string `json:"env_files,omitempty"`
+}
+
+// resolve writes the project's settings down, as Compose reads them now
+// (every profile's services, so none is taken for a leftover), into a file
+// of the task's own, and notes the project's own files. It returns the
+// project as recreated from that file: the same name and folder.
+func (r *Runner) resolve(ctx context.Context, p Project) (Project, error) {
+	b, err := r.Docker.Config(ctx, p)
+	if err != nil {
+		return Project{}, err
+	}
+	if len(bytes.TrimSpace(b)) == 0 {
+		return Project{}, errors.New("compose said no settings")
+	}
+	f := filepath.Join(r.Dir, resolvedPrefix+p.Name+"-"+p.Service+".yaml")
+	if err := writeFile(f, b); err != nil {
+		return Project{}, err
+	}
+	if err := os.MkdirAll(r.Origins, 0o700); err != nil {
+		return Project{}, err
+	}
+	if err := writeJSON(filepath.Join(r.Origins, p.Name+".json"), origin{Dir: p.Dir, Files: p.Files, EnvFiles: p.EnvFiles}); err != nil {
+		return Project{}, err
+	}
+	rp := p
+	rp.Files = []string{f}
+	return rp, nil
+}
+
+// projectOf reads a container's Compose labels (ProjectOf). Compose names
+// the file a container was created from in its labels: for one recreated
+// from settings a task wrote down, that is the task's file, and the
+// project's own files are the ones noted for it then.
+func (r *Runner) projectOf(labels map[string]string) (Project, bool) {
+	p, ok := ProjectOf(labels)
+	if !ok || len(p.Files) != 1 || !r.written(p.Files[0]) {
+		return p, ok
+	}
+	var o origin
+	if err := readJSON(filepath.Join(r.Origins, p.Name+".json"), &o); err == nil && o.Dir == p.Dir && len(o.Files) > 0 {
+		p.Files, p.EnvFiles = o.Files, o.EnvFiles
+	}
+	return p, true
+}
+
+// written reports whether a Compose file is one an app task wrote down.
+func (r *Runner) written(f string) bool {
+	task := filepath.Dir(f)
+	return filepath.Dir(task) == filepath.Dir(r.Dir) && strings.HasPrefix(filepath.Base(task), "app-") &&
+		strings.HasPrefix(filepath.Base(f), resolvedPrefix)
+}
+
+// up recreates the services from the image their tag names now, each with
+// as many containers as it had: started (and so watched afterwards), or left
+// stopped. Compose neither pulls, builds nor removes other containers.
+func (r *Runner) up(ctx context.Context, p Project, services []string, scale map[string]int, start bool) error {
+	if len(services) == 0 {
+		return nil
+	}
+	args := func(newer bool) []string {
+		a := []string{"up"}
+		if start {
+			a = append(a, "--detach")
+		} else {
+			a = append(a, "--no-start")
+		}
+		a = append(a, "--no-deps")
+		if newer {
+			a = append(a, "--pull", "never")
+		}
+		a = append(a, "--no-build")
+		if newer {
+			a = append(a, "--remove-orphans=false")
+		}
+		for _, s := range services {
+			if n := scale[s]; n > 0 {
+				a = append(a, "--scale", fmt.Sprintf("%s=%d", s, n))
+			}
+		}
+		return append(append(a, "--"), services...)
+	}
+	r.logf("$ docker compose %s", strings.Join(args(true), " "))
+	err := r.Docker.Compose(ctx, p, r.writer(), args(true)...)
 	if err != nil && unknownFlag(err) {
-		// Compose before --pull: the image is there, so it isn't pulled anyway.
-		args = append([]string{"up", "--detach", "--no-deps", "--no-build", "--"}, services...)
-		err = r.Docker.Compose(ctx, p, r.writer(), args...)
+		// Compose before --pull (or docker-compose 1, which doesn't read
+		// COMPOSE_REMOVE_ORPHANS either): the image is there, so it isn't
+		// pulled anyway.
+		err = r.Docker.Compose(ctx, p, r.writer(), args(false)...)
 	}
 	return err
 }
@@ -563,18 +761,21 @@ func (r *Runner) retag(ctx context.Context, id, ref string) error {
 }
 
 // back puts the previous image back: it is the services' image again, and
-// they are recreated from it without pulling, then watched again.
-func (r *Runner) back(ctx context.Context, p Project, services []string, oldID, ref string, before map[string]int) error {
+// they are recreated from it, from the settings written down, without
+// pulling; those that ran are watched again.
+func (r *Runner) back(ctx context.Context, pend *Pending, before map[string]int) error {
 	wctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	if err := r.Docker.Tag(wctx, oldID, ref); err != nil {
+	if err := r.Docker.Tag(wctx, pend.OldID, pend.Ref); err != nil {
 		return err
 	}
-	r.logf("$ docker compose up -d --no-deps --pull never --no-build -- %s", strings.Join(services, " "))
-	if err := r.up(wctx, p, services); err != nil {
+	if err := r.up(wctx, pend.Project, pend.Services, pend.Scale, true); err != nil {
 		return err
 	}
-	if reason, msg := r.watch(wctx, p, services, oldID, before); reason != "" {
+	if err := r.up(wctx, pend.Project, pend.Idle, pend.Scale, false); err != nil {
+		return err
+	}
+	if reason, msg := r.watch(wctx, pend.Project, pend.Services, pend.OldID, before); reason != "" {
 		if msg == "" {
 			msg = "the previous version didn’t come up either (" + reason + ")"
 		}
@@ -585,7 +786,8 @@ func (r *Runner) back(ctx context.Context, p Project, services []string, oldID, 
 
 func unknownFlag(err error) bool {
 	s := strings.ToLower(err.Error())
-	return strings.Contains(s, "unknown flag") || strings.Contains(s, "no such option") || strings.Contains(s, "unrecognized")
+	return strings.Contains(s, "unknown flag") || strings.Contains(s, "no such option") || strings.Contains(s, "unrecognized") ||
+		strings.Contains(s, "must not have an argument")
 }
 
 // serviceContainers are the project's containers of these services.
@@ -610,6 +812,9 @@ func (r *Runner) serviceContainers(ctx context.Context, p Project, services []st
 // takes them from the first look. It returns "" when the app is up, else
 // the reason and Docker's words.
 func (r *Runner) watch(ctx context.Context, p Project, services []string, imageID string, before map[string]int) (reason, msg string) {
+	if len(services) == 0 {
+		return "", ""
+	}
 	start := r.Now()
 	var upSince time.Time
 	restarts := map[string]int{}

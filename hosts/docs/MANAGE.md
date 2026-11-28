@@ -893,7 +893,9 @@ known, for a person (every run whose yes didn't cover one). `AppExpect`
 (`app_expect`; `[{app, svc, image_id, digest?, cfg_hash?}]`, at most one
 per app named) is what the yes was for: the service, the image it ran,
 the newer image's digest, the settings' hash. With it the agent updates
-an app only while it is so; without it (an older hub) it pulls the tag.
+an app only while it is so: an app named without an entry, or an entry
+without `cfg_hash`, is `changed`. Without any (an older Whombat) it pulls
+the tag, still only while the settings are what runs.
 It answers at once with a task `app:<16 hex>`; one app task at a time.
 Refused before anything runs: no such container `not_found`, not a Compose
 app, pinned, one of Whombat's own services `not_allowed`, not Linux
@@ -916,14 +918,21 @@ an app half updated is worse than a slow update. Per app, in order:
    was created from. Gone, no Compose, a file missing or not absolute,
    pinned: `failed`. Another service or image than its `app_expect`:
    `failed` `changed`.
-2. The group: every running container of the project with the same
-   reference, image, folder and files (services sharing an image move
+2. The group: every container of the project, running or not, with the
+   same reference, image, folder and files (services sharing an image move
    together). With `app_expect`, each one needs its own, else `changed`;
-   apps of the group named too are reported with it.
+   a container of one of those services on another image is `changed`
+   too; apps of the group named too are reported with it. A container
+   recreated from a task's copy (step 3) names that copy as its file: its
+   project's own files are read from `<state_dir>/apps/projects/<project>.json`.
 3. `docker compose --project-name … --project-directory … --file …
    --env-file … config --hash=<service>` for each service must equal its
    container's `config-hash` label (and `cfg_hash` when given): anything
-   else in the files changed since the yes, `changed`.
+   else in the files changed since the yes, `changed`. Then `… --profile '*'
+   config` is written down in the task's folder (`compose-<project>-<service>.yaml`,
+   root only), its own `--hash` must give the same, and the project's files
+   are noted; every `up` below runs from that copy with the same name,
+   folder and env files.
 4. Tag the running image `<repo>:whombat-previous-<service>` and write
    `progress.json` (the services, the old image id, the reference, the
    tag) before anything moves.
@@ -935,19 +944,25 @@ an app half updated is worse than a slow update. Per app, in order:
    side: the old image is tagged back (even past the deadline), nothing
    restarts: `held`.
 7. Tag the new image as the reference, then `docker compose … up --detach
-   --no-deps --pull never --no-build -- <services>` (without `--pull` on
-   an older Compose), then watch the services' containers: running for
-   30 s, healthy when they have a health check (5 minutes at most);
-   exited, dead, two restarts since before the update or unhealthy fails.
+   --no-deps --pull never --no-build --remove-orphans=false --scale
+   <service>=<n> -- <services>` for the services that ran (without `--pull`
+   and `--remove-orphans=false` on an older Compose; `n` the containers
+   each has), then watch their
+   containers: running for 30 s, healthy when they have a health check (5
+   minutes at most); exited, dead, two restarts since before the update or
+   unhealthy fails. Then the services that were stopped the same way with
+   `--no-start` instead of `--detach`: they stay stopped.
 8. Works: the backup tag goes, `updated`. Fails: the old image id is
-   tagged as the reference again and the same `up` recreates them,
+   tagged as the reference again and the same `up`s recreate them,
    watched the same way: `rolled_back`; when that fails too, `failed`
    with reason `back_failed` and the backup tag stays for a person.
 
 **When the server stops it part-way** (a restart, the unit killed): the
 broker finds the runner gone, no `result.json` and an update in
 `progress.json`, and starts the runner again in `whombat-app-<hex>-<n>
-.service` (twice at most). It doesn't start new apps: when the services
+.service` (twice at most). It first waits up to five minutes for Docker
+to answer; when it doesn't, the runner ends without a result and keeps
+`progress.json` for the next try. It doesn't start new apps: when the services
 still run the old image it puts the tag back (`failed` `interrupted`);
 when they run the new one it watches them again (restarts counted from
 that look) and keeps it (`updated`) or goes back (`rolled_back`); apps

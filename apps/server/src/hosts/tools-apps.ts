@@ -12,8 +12,9 @@
  * yes said it may be a new major version.
  *
  * The yes is bound to what was checked (`expect`): the call carries, per app, its service, the image it runs, Compose's
- * hash of its settings and the exact newer image, read when it was asked for (`bindAppUpdateArgs`). The update refuses an
- * app that changed since, and the agent deploys exactly that image.
+ * hash of its settings and the exact newer image, read when it was asked for (`bindAppUpdateArgs`). No card is made for
+ * an app Whombat can't bind, and a yes that isn't bound to every app it updates runs nothing. The update refuses an app
+ * that changed since, and the agent deploys exactly that image.
  *
  * A snapshot first (`snapshot: true`): when the server is a Proxmox VM or container Whombat watches, Whombat takes a
  * snapshot of it and waits for it before the update starts. The task is followed: one plain line in the chat when it
@@ -92,18 +93,26 @@ export interface AppBinding {
 /** Why an update asks first: a database, a new major version, or versions that aren't known (it may be a new major). */
 export type AppAskFirst = AppCardReason;
 
-/** Why one app's update asks first, from what was read of it (pure). */
-export function bindingReasons(b: Pick<AppBinding, 'image' | 'version' | 'newVersion'>): AppAskFirst[] {
+/**
+ * Why one app's update asks first, from what was read of it (pure). Without the newer image's digest the agent takes
+ * whatever its tag names by then, so its version isn't known either.
+ */
+export function bindingReasons(
+  b: Pick<AppBinding, 'image' | 'version' | 'newVersion' | 'digest'>,
+): AppAskFirst[] {
   const out: AppAskFirst[] = [];
   if (isDatabaseImage(b.image)) out.push('database');
   if (isMajorJump(b.version, b.newVersion)) out.push('major');
-  else if (!versionWords(b.version) || !versionWords(b.newVersion)) out.push('version_unknown');
+  else if (!versionWords(b.version) || !versionWords(b.newVersion) || !b.digest) out.push('version_unknown');
   return out;
 }
 
-/** What is read of one app for a call (pure). Null when Whombat can't tell which image it runs. */
+/**
+ * What is read of one app for a call (pure). Null when Whombat can't tell which image it runs or with which Compose
+ * settings: then nothing can be bound to it.
+ */
 export function bindingOf(g: HostGuest): AppBinding | null {
-  if (!g.app || !/^sha256:[0-9a-f]{64}$/.test(g.imageId ?? '')) return null;
+  if (!g.app?.configHash || !/^sha256:[0-9a-f]{64}$/.test(g.imageId ?? '')) return null;
   return {
     app: g.id,
     service: g.app.service,
@@ -117,13 +126,19 @@ export function bindingOf(g: HostGuest): AppBinding | null {
 }
 
 /** The facts the ask-first reasons come from, for an app Whombat can't bind (pure). */
-function bindingFacts(g: HostGuest): Pick<AppBinding, 'image' | 'version' | 'newVersion'> {
-  return { image: g.image, version: g.app?.version ?? null, newVersion: g.app?.newVersion ?? null };
+function bindingFacts(g: HostGuest): Pick<AppBinding, 'image' | 'version' | 'newVersion' | 'digest'> {
+  return {
+    image: g.image,
+    version: g.app?.version ?? null,
+    newVersion: g.app?.newVersion ?? null,
+    digest: g.app?.newDigest ?? null,
+  };
 }
 
 /**
- * The apps a call updates: the ones named and every other Compose app of the same project that runs the same image —
- * the agent updates and puts those back together, so the card names them too (pure).
+ * The apps a call updates: the ones named and every other Compose app of the same project that runs the same image,
+ * running or not, healthy or not — the agent updates and puts those back together, so the card names them too (pure).
+ * It can be more than one update takes (`APP_UPDATE_MAX`): the caller refuses then, naming the app.
  */
 export function withSharedImage(all: readonly HostGuest[], picked: readonly HostGuest[]): HostGuest[] {
   const out = [...picked];
@@ -135,16 +150,56 @@ export function withSharedImage(all: readonly HostGuest[], picked: readonly Host
         x.app &&
         !x.app.blocked &&
         !x.labels?.['whombat.service'] &&
-        x.state === 'running' &&
         x.project === g.project &&
         x.imageId === g.imageId
       )
         out.push(x);
   }
-  return out.slice(0, APP_UPDATE_MAX);
+  return out;
 }
 
-/** The `expect` a call carries, read back; null when it carries none or it isn't Whombat's shape. */
+/** The app whose shared image makes an update more than one takes, or null (pure). */
+export function tooManyWith(picked: readonly HostGuest[], apps: readonly HostGuest[]): HostGuest | null {
+  if (apps.length <= APP_UPDATE_MAX) return null;
+  return (
+    picked.find((g) => apps.filter((x) => x.project === g.project && x.imageId === g.imageId).length > 1) ??
+    picked[0] ??
+    null
+  );
+}
+
+/** Why Whombat can't bind a yes to an app, for the agent; null when it can (pure). */
+export function unboundText(g: HostGuest, hasApps: boolean): string | null {
+  if (bindingOf(g)) return null;
+  const state = appUpdateState(g, hasApps);
+  if (state === 'outdated')
+    return 'This server’s helper is older than app updates; it gets the newer one by itself, then this works.';
+  if (state === 'none')
+    return `${g.name} wasn’t started with Docker Compose, so Whombat can’t update it (Whombat can update apps started with Docker Compose).`;
+  return `Whombat can’t tell exactly which image ${g.name} runs or with which Compose settings, so it can’t update it now. Try again once app_updates lists it again.`;
+}
+
+/** Why an update of these apps is more than one takes, for the agent (pure). */
+export const tooManyText = (g: HostGuest) =>
+  `${g.name} and the services that share its image are more than ${APP_UPDATE_MAX} apps, which is the most one update takes.`;
+
+/**
+ * Why a call isn't bound when it is asked for: what the agent hears, and the failure it reads as (`unreachable` when the
+ * apps couldn't be read).
+ */
+export class AppBindError extends Error {
+  constructor(
+    readonly reason: 'invalid_arguments' | 'unreachable',
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * The `expect` a call carries, read back; null when it carries none or it isn't Whombat's shape (every app with its
+ * service, image and Compose settings).
+ */
 export function parseBindings(raw: unknown): AppBinding[] | null {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > APP_UPDATE_MAX) return null;
   const text = (v: unknown, max: number) => (typeof v === 'string' && v && v.length <= max ? v : null);
@@ -155,14 +210,15 @@ export function parseBindings(raw: unknown): AppBinding[] | null {
     const service = text(o.service, 200);
     const imageId = text(o.imageId, 80);
     const image = text(o.image, 300);
-    if (!app || !service || !imageId || image === null) return null;
+    const configHash = text(o.configHash, 128);
+    if (!app || !service || !imageId || image === null || !configHash) return null;
     out.push({
       app,
       service,
       imageId,
       image,
       digest: text(o.digest, 80),
-      configHash: text(o.configHash, 128),
+      configHash,
       version: text(o.version, 64),
       newVersion: text(o.newVersion, 64),
     });
@@ -216,8 +272,7 @@ export function cardReasons(guests: readonly HostGuest[]): AppCardReason[] {
 
 /** The ask-first reasons of these apps (pure). */
 export function askReasons(guests: readonly HostGuest[]): AppAskFirst[] {
-  const out = new Set(guests.flatMap(askFirstOf));
-  return APP_CARD_REASONS.filter((r) => out.has(r));
+  return askReasonsOf(guests.map(bindingFacts));
 }
 
 /** Whether a yes that said `said` covers `reason`: one that may be a new major version covers a version not known. */
@@ -239,34 +294,71 @@ export function findApp(all: readonly HostGuest[], raw: string): HostGuest | und
 
 /**
  * Binds an `app_update` call to what Whombat reads now, when it is asked for: the apps it names and those that share
- * their image, and what each one is (`expect`). Anything an agent put in `expect` itself is dropped; when the apps can't
- * be read the call goes without, and is bound when it runs.
+ * their image, what each one is (`expect`), and every reason the card must say, besides the agent's own. Anything an
+ * agent put in `expect` itself is dropped. When an app can't be bound, or the apps can't be read, it throws
+ * `AppBindError` and no card is made.
  */
 export async function bindAppUpdateArgs(
   services: Services,
   args: Readonly<Record<string, unknown>>,
 ): Promise<Record<string, unknown>> {
+  return bindAppArgs(args, async (server) => {
+    const hosts = hostsFor(services);
+    if (!hosts.present) throw new Error('no hosts service');
+    const { id } = await resolveServer({ hosts }, server);
+    return { id, all: await dockerGuests(hosts, WHOMBAT_ACTOR, id) };
+  });
+}
+
+/** `bindAppUpdateArgs` with the server's apps read by `read` (a server it doesn't know: `ConnectionArgumentError`). */
+export async function bindAppArgs(
+  args: Readonly<Record<string, unknown>>,
+  read: (server: string) => Promise<{ id: string; all: HostGuest[] }>,
+): Promise<Record<string, unknown>> {
   const { expect: _theirs, ...rest } = args;
   const server = typeof args.server === 'string' ? args.server : '';
   const named = Array.isArray(args.apps) ? args.apps.filter((a): a is string => typeof a === 'string') : [];
+  // The tool refuses these itself, before anything is asked.
   if (!server.trim() || !named.length) return rest;
-  try {
-    const hosts = hostsFor(services);
-    if (!hosts.present) return rest;
-    const { id } = await resolveServer({ hosts }, server);
-    const all = await dockerGuests(hosts, WHOMBAT_ACTOR, id);
-    const picked: HostGuest[] = [];
-    for (const raw of named) {
-      const g = findApp(all, raw);
-      if (!g) return rest;
-      if (!picked.includes(g)) picked.push(g);
-    }
-    const apps = withSharedImage(all, picked);
-    const expect = apps.flatMap((g) => bindingOf(g) ?? []);
-    return { ...rest, apps: apps.map((g) => g.id), ...(expect.length ? { expect } : {}) };
-  } catch {
-    return rest;
+  const { id, all } = await read(server).catch((err: unknown) => {
+    if (err instanceof ConnectionArgumentError) throw new AppBindError('invalid_arguments', err.message);
+    throw new AppBindError(
+      'unreachable',
+      'Whombat can’t read this server’s apps right now, so it didn’t ask.',
+    );
+  });
+  const hasApps = agentReportsApps(all);
+  const picked: HostGuest[] = [];
+  for (const raw of named) {
+    const g = findApp(all, raw);
+    if (!g)
+      throw new AppBindError(
+        'invalid_arguments',
+        `There’s no app “${raw}” on ${id}. app_updates lists them.`,
+      );
+    if (!picked.includes(g)) picked.push(g);
   }
+  const apps = withSharedImage(all, picked);
+  const many = tooManyWith(picked, apps);
+  if (many) throw new AppBindError('invalid_arguments', tooManyText(many));
+  const expect: AppBinding[] = [];
+  for (const g of apps) {
+    const b = bindingOf(g);
+    if (!b) throw new AppBindError('invalid_arguments', unboundText(g, hasApps) ?? '');
+    expect.push(b);
+  }
+  // The card says every reason the apps ask for, so a yes covers them; the agent's own stay.
+  const theirs = Array.isArray(args.reasons)
+    ? args.reasons.filter((r): r is string => typeof r === 'string')
+    : [];
+  const reasons = [...new Set([...theirs, ...askReasonsOf(expect)])];
+  return { ...rest, apps: apps.map((g) => g.id), expect, ...(reasons.length ? { reasons } : {}) };
+}
+
+/** The ask-first reasons of what was read of these apps (pure). */
+function askReasonsOf(bindings: readonly Pick<AppBinding, 'image' | 'version' | 'newVersion' | 'digest'>[]) {
+  const out = new Set(bindings.flatMap(bindingReasons));
+  return APP_CARD_REASONS.filter((r) => out.has(r));
 }
 
 /**
@@ -275,7 +367,7 @@ export async function bindAppUpdateArgs(
  */
 export function stillBound(g: HostGuest, b: AppBinding): boolean {
   if (!g.app || g.app.service !== b.service || g.imageId !== b.imageId) return false;
-  return !b.configHash || !g.app.configHash || g.app.configHash === b.configHash;
+  return !!b.configHash && g.app.configHash === b.configHash;
 }
 
 /**
@@ -452,13 +544,32 @@ export const APP_TOOLS: Adapter = {
             throw new ConnectionArgumentError(`${g.name} is being updated right now.`);
           if (!picked.includes(g)) picked.push(g);
         }
-        // What the update is bound to: what was read when it was asked for, else what is read now. An app that isn't
-        // that any more, or a service that has started running the same image since, isn't updated.
+        // What the update is bound to: what was read when it was asked for, else (no person was asked) what is read now.
+        // A yes runs only bound to every app it updates. An app that isn't that any more, or a service that has come to
+        // share its image since, isn't updated.
         const now = withSharedImage(all, picked);
+        const many = tooManyWith(picked, now);
+        if (many) return output({ error: tooManyText(many), code: 'too_many' }, true);
+        if (s.call.approvalId && !given)
+          return output(
+            {
+              error: 'Whombat couldn’t tell what this yes was for, so nothing was updated.',
+              code: 'not_bound',
+              next: 'Call app_update again; it asks the person again where it must.',
+            },
+            true,
+          );
+        if (!given)
+          for (const g of now) {
+            const why = unboundText(g, hasApps);
+            if (why) return output({ error: why, code: 'not_bound' }, true);
+          }
         const bindings = given ?? now.flatMap((g) => bindingOf(g) ?? []);
         const apps = given ? picked : now;
         const changed =
-          (given !== null && now.some((g) => !picked.includes(g))) ||
+          (given !== null &&
+            (now.some((g) => !picked.includes(g)) ||
+              apps.some((g) => !bindings.some((b) => b.app === g.id)))) ||
           bindings.some((b) => {
             const g = apps.find((x) => x.id === b.app);
             return !g || !stillBound(g, b);

@@ -208,6 +208,18 @@ func (c *CLI) ConfigHash(ctx context.Context, p Project, service string) (string
 	return parseConfigHash(string(out), service)
 }
 
+// Config reads `docker compose --profile * config`: the project's settings
+// as Compose reads them now, every service of every profile, with the
+// variables filled in.
+func (c *CLI) Config(ctx context.Context, p Project) ([]byte, error) {
+	cmd := c.composeCmd(ctx)
+	if cmd == nil {
+		return nil, ErrNoCompose
+	}
+	argv := append(append(append([]string{}, cmd...), p.Args()...), "--profile", "*", "config")
+	return c.output(ctx, argv...)
+}
+
 // parseConfigHash finds the service's hash in `config --hash` output.
 func parseConfigHash(out, service string) (string, error) {
 	for _, line := range strings.Split(out, "\n") {
