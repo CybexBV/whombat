@@ -33,6 +33,12 @@ export const HostGuestApp = z.object({
   blocked: z.string().max(32).nullable(),
   updating: z.boolean(),
   last: HostAppLast.nullable(),
+  /**
+   * The newer image's registry digest (`sha256:…`) and Compose's hash of the service's settings, when the agent says
+   * them: an update carries them back, so it deploys exactly what was checked and refuses when the app changed.
+   */
+  newDigest: z.string().max(80).nullable().optional(),
+  configHash: z.string().max(128).nullable().optional(),
 });
 export type HostGuestApp = z.infer<typeof HostGuestApp>;
 
@@ -59,11 +65,74 @@ export const APP_ASK_REASONS = ['database', 'major'] as const;
 export type AppAskReason = (typeof APP_ASK_REASONS)[number];
 
 /**
- * Database images by name, compared with the image's last path part without its tag (`library/postgres:16` →
- * `postgres`, `tensorchord/pgvecto-rs:pg14-v0.2.0` → `pgvecto-rs`).
+ * What keeps data an update can change: databases, search and vector stores, queues and object stores. Matched as a
+ * word of the image's last path part, its digits at the end left off (`vchord-postgres` → `postgres`, `cp-kafka` →
+ * `kafka`, `mysql8` → `mysql`).
  */
-const DATABASE_IMAGES =
-  /^(postgres(ql)?|postgis|pgvecto-rs|pgvector|timescaledb.*|mariadb|mysql|percona.*|mongo(db)?|redis|redis-stack.*|valkey|keydb|dragonfly|couchdb|cassandra|scylla|influxdb|elasticsearch|opensearch|clickhouse(-server)?|neo4j|etcd|cockroach|questdb|surrealdb|rethinkdb|arangodb|memgraph|immich-postgres|postgres-[a-z0-9-]+)$/i;
+const DATABASE_WORDS = new Set([
+  'postgres',
+  'postgresql',
+  'postgis',
+  'pgvector',
+  'pgvecto',
+  'vchord',
+  'vectorchord',
+  'timescaledb',
+  'mariadb',
+  'mysql',
+  'percona',
+  'mssql',
+  'mongo',
+  'mongodb',
+  'redis',
+  'valkey',
+  'keydb',
+  'dragonfly',
+  'dragonflydb',
+  'couchdb',
+  'couchbase',
+  'cassandra',
+  'scylla',
+  'scylladb',
+  'influxdb',
+  'elasticsearch',
+  'opensearch',
+  'solr',
+  'meilisearch',
+  'typesense',
+  'clickhouse',
+  'neo4j',
+  'etcd',
+  'cockroach',
+  'cockroachdb',
+  'questdb',
+  'surrealdb',
+  'rethinkdb',
+  'arangodb',
+  'memgraph',
+  'qdrant',
+  'weaviate',
+  'chroma',
+  'chromadb',
+  'milvus',
+  'rabbitmq',
+  'kafka',
+  'zookeeper',
+  'minio',
+]);
+
+/** Words that make an image a tool beside a database, not the database (`postgres-exporter`, `mongo-express`). */
+const NOT_DATABASE_WORDS = new Set([
+  'exporter',
+  'express',
+  'commander',
+  'admin',
+  'ui',
+  'web',
+  'insight',
+  'backup',
+  'backups',
+]);
 
 /** An image reference's repository without registry, tag or digest, lower case: `ghcr.io/a/b:1` → `a/b`. */
 export function imageRepo(image: string): string {
@@ -79,10 +148,14 @@ export function imageRepo(image: string): string {
   return parts.join('/');
 }
 
-/** Whether an image is a database's, by its name. */
+/** Whether an image is a database's, by a word of its name. */
 export function isDatabaseImage(image: string): boolean {
-  const last = imageRepo(image).split('/').at(-1) ?? '';
-  return DATABASE_IMAGES.test(last);
+  const repo = imageRepo(image);
+  // Microsoft's SQL Server is `mssql/server`: its name is the folder's.
+  if (/(^|\/)mssql\/(.+\/)?server$/.test(repo)) return true;
+  const words = (repo.split('/').at(-1) ?? '').split(/[-_.]+/).map((w) => w.replace(/\d+$/, ''));
+  if (words.some((w) => NOT_DATABASE_WORDS.has(w))) return false;
+  return words.some((w) => DATABASE_WORDS.has(w));
 }
 
 /** A version as people read it: without a leading `v`. */
