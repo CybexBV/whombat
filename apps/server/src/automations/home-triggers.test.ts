@@ -3,10 +3,12 @@
  * the entities and states live automations name, and only changes into or out of those states are signed.
  */
 import { describe, expect, it } from 'vitest';
+import { clockAheadOf } from '../things/kinds/ha-socket';
 import {
   forgetUnwatched,
   HOME_CHANGE_FRESH_MS,
   homeChangesOf,
+  homeGoneOf,
   type KnownEntity,
   listenedOf,
 } from './home-triggers';
@@ -109,6 +111,68 @@ describe('homeChangesOf', () => {
       homeChangesOf(known, watched, { a: { 'binary_sensor.water_leak': { s: 'on', lc: back } } }, NOW),
     ).toEqual([]);
     expect(known.get('binary_sensor.water_leak')?.changedAt).toBe(back);
+  });
+});
+
+describe('Home Assistant’s own clock', () => {
+  const watched = new Map([['binary_sensor.water_leak', new Set(['on'])]]);
+  const BOX = Date.parse('2026-11-28T21:00:00Z');
+  const AHEAD = 10 * 60_000;
+
+  it('reads how far Home Assistant’s clock is ahead from the time its answer says', () => {
+    expect(clockAheadOf(new Date(BOX + AHEAD).toUTCString(), BOX)).toBe(AHEAD);
+    expect(clockAheadOf(new Date(BOX - AHEAD).toUTCString(), BOX)).toBe(-AHEAD);
+    expect(clockAheadOf(undefined, BOX)).toBeNull();
+    expect(clockAheadOf('soon', BOX)).toBeNull();
+  });
+
+  it('judges a change heard at a reconnect by Home Assistant’s time, not the box’s', () => {
+    // Home Assistant's clock runs ten minutes ahead; the door opened five minutes ago by its own clock.
+    const lc = (BOX + AHEAD - 5 * 60_000) / 1000;
+    const known = () =>
+      new Map<string, KnownEntity>([['binary_sensor.water_leak', { state: 'off', name: 'Water leak' }]]);
+    const again = { a: { 'binary_sensor.water_leak': { s: 'on', lc } } };
+    // By the box's clock it would look like news (it seems to be from the future).
+    expect(homeChangesOf(known(), watched, again, BOX)).toHaveLength(1);
+    expect(homeChangesOf(known(), watched, again, BOX + AHEAD)).toEqual([]);
+    // When Home Assistant didn't say its time, a change heard only at a reconnect starts nothing.
+    expect(homeChangesOf(known(), watched, again, null)).toEqual([]);
+    // A live change is still news.
+    const live = { c: { 'binary_sensor.water_leak': { '+': { s: 'on', lc } } } };
+    expect(homeChangesOf(known(), watched, live, null)).toHaveLength(1);
+  });
+});
+
+describe('homeGoneOf', () => {
+  const watched = new Map([
+    ['binary_sensor.water_leak', new Set(['on'])],
+    ['binary_sensor.front_door', new Set(['on'])],
+  ]);
+
+  it('forgets an entity Home Assistant removed, so one that comes back is a first sight', () => {
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'on', name: 'Water leak' }],
+      ['binary_sensor.front_door', { state: 'off', name: 'Front door' }],
+    ]);
+    expect(homeGoneOf(known, watched, { r: ['binary_sensor.water_leak', 'light.porch'] }, false)).toEqual([
+      'binary_sensor.water_leak',
+    ]);
+    expect([...known.keys()]).toEqual(['binary_sensor.front_door']);
+    const back = { a: { 'binary_sensor.water_leak': { s: 'off', lc: Date.now() / 1000 } } };
+    expect(homeChangesOf(known, watched, back)).toEqual([]);
+  });
+
+  it('counts an entity the first list after subscribing leaves out as gone', () => {
+    const known = new Map<string, KnownEntity>([
+      ['binary_sensor.water_leak', { state: 'on', name: 'Water leak' }],
+      ['binary_sensor.front_door', { state: 'off', name: 'Front door' }],
+    ]);
+    const first = { a: { 'binary_sensor.front_door': { s: 'off' } } };
+    expect(homeGoneOf(known, watched, first, true)).toEqual(['binary_sensor.water_leak']);
+    expect(known.has('binary_sensor.water_leak')).toBe(false);
+    // Only the first list says what is there: a later addition says nothing about the others.
+    expect(homeGoneOf(known, watched, first, false)).toEqual([]);
+    expect(known.has('binary_sensor.front_door')).toBe(true);
   });
 });
 

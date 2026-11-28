@@ -129,15 +129,16 @@ const timeOf = (v: unknown): number | null =>
  * brought up to date and the changes that matter come back. Home Assistant sends every followed entity once (`a`) when
  * the subscription starts and then only what changed (`c`, the new state under `+.s`, its time under `+.lc`). An entity
  * seen for the first time invents no change; one seen again after a reconnect with another state did change meanwhile,
- * but only a change younger than two minutes by its own `lc` (at `now`) is signed: a door opened while Home Assistant
- * was away for an hour is no news at reconnect. A change matters when it goes to a state a trigger names, or leaves one
- * (a wait for `forMinutes` ends then). Attributes alone change nothing.
+ * but only a change younger than two minutes by its own `lc` is signed: a door opened while Home Assistant was away for
+ * an hour is no news at reconnect. `now` is Home Assistant's own time now (its clock, not the box's, as `lc` is), null
+ * when it didn't say: then no change heard only at a reconnect is signed. A change matters when it goes to a state a
+ * trigger names, or leaves one (a wait for `forMinutes` ends then). Attributes alone change nothing.
  */
 export function homeChangesOf(
   known: Map<string, KnownEntity>,
   watched: ReadonlyMap<string, ReadonlySet<string>>,
   event: unknown,
-  now: number = Date.now(),
+  now: number | null = Date.now(),
 ): HomeChange[] {
   const e = (event ?? {}) as Record<string, unknown>;
   const changes: HomeChange[] = [];
@@ -155,8 +156,12 @@ export function homeChangesOf(
     known.set(entity, { state: to, name, changedAt });
     if (!before || lower(before.state) === lower(to)) return;
     if (!states.has(lower(to)) && !states.has(lower(before.state))) return;
-    // Heard again after a reconnect: only when Home Assistant says it changed just now (it always says when).
-    if (again && (timeOf(lc) === null || now - (timeOf(lc) as number) * 1000 > HOME_CHANGE_FRESH_MS)) return;
+    // Heard again after a reconnect: only when Home Assistant says, by its own clock, that it changed just now.
+    if (
+      again &&
+      (now === null || timeOf(lc) === null || now - (timeOf(lc) as number) * 1000 > HOME_CHANGE_FRESH_MS)
+    )
+      return;
     changes.push({ entity, name, from: before.state, to, ...(changedAt !== null ? { changedAt } : {}) });
   };
   const added = e.a && typeof e.a === 'object' ? (e.a as Record<string, Record<string, unknown> | null>) : {};
@@ -175,10 +180,33 @@ export function homeChangesOf(
 }
 
 /**
+ * The followed entities one `subscribe_entities` event says are gone (pure): those Home Assistant removed (`r`), and,
+ * for `full` (the first event after subscribing, which lists every followed entity there is), those it doesn't list.
+ * They are forgotten in `known`: one that comes back is a first sight, not a change from before it went.
+ */
+export function homeGoneOf(
+  known: Map<string, KnownEntity>,
+  watched: ReadonlyMap<string, unknown>,
+  event: unknown,
+  full: boolean,
+): string[] {
+  const e = (event ?? {}) as Record<string, unknown>;
+  const gone = new Set<string>();
+  if (Array.isArray(e.r)) for (const id of e.r) if (typeof id === 'string' && watched.has(id)) gone.add(id);
+  const listed = e.a && typeof e.a === 'object' ? (e.a as Record<string, unknown>) : null;
+  if (full && listed) for (const id of watched.keys()) if (!(id in listed)) gone.add(id);
+  for (const id of gone) known.delete(id);
+  return [...gone];
+}
+
+/**
  * Forgets what was heard of entities no longer followed: followed again later, an entity's first state is a first
  * sight, not a change from a state long gone.
  */
-export function forgetUnwatched(heard: Map<string, unknown>, watched: ReadonlyMap<string, unknown>): void {
+export function forgetUnwatched(
+  heard: { keys(): Iterable<string>; delete(entity: string): boolean },
+  watched: ReadonlyMap<string, unknown>,
+): void {
   for (const entity of [...heard.keys()]) if (!watched.has(entity)) heard.delete(entity);
 }
 
@@ -276,7 +304,11 @@ class HomeFollower {
   #closed = false;
   /** Subscribed and given every entity's state once: its states are current. */
   #live = false;
+  /** How far Home Assistant's clock is ahead of the box's, as this socket's answer said; null when it didn't. */
+  #clockAhead: number | null = null;
   readonly #known = new Map<string, KnownEntity>();
+  /** Followed entities Home Assistant removed, or didn't list when the subscription started. */
+  readonly #gone = new Set<string>();
   readonly #signedAt = new Map<string, number[]>();
   #watched: Map<string, Set<string>>;
   #key: string;
@@ -301,6 +333,7 @@ class HomeFollower {
     this.#watched = watched;
     forgetUnwatched(this.#known, watched);
     forgetUnwatched(this.#signedAt, watched);
+    forgetUnwatched(this.#gone, watched);
     const key = [...watched.keys()].sort().join(',');
     if (key === this.#key) return;
     this.#key = key;
@@ -310,9 +343,14 @@ class HomeFollower {
     this.#ha?.close();
   }
 
-  /** The entity's state now and when it changed; null when Whombat doesn't know it (not connected, or not said). */
-  current(entity: string): HomeEntityNow | null {
-    const known = this.#live ? this.#known.get(entity) : undefined;
+  /**
+   * The entity's state now and when it changed; `gone` when Home Assistant removed it or doesn't have it; null when
+   * Whombat doesn't know it (not connected, or not said).
+   */
+  current(entity: string): HomeEntityNow | 'gone' | null {
+    if (!this.#live) return null;
+    if (this.#gone.has(entity)) return 'gone';
+    const known = this.#known.get(entity);
     return known ? { state: known.state, changedAt: known.changedAt ?? null } : null;
   }
 
@@ -341,6 +379,7 @@ class HomeFollower {
       return;
     }
     this.#ha = ha;
+    this.#clockAhead = ha.clockAheadMs ?? null;
     this.#openedAt = Date.now();
     void ha.closed.then(() => {
       if (this.#ha === ha) this.#again();
@@ -366,7 +405,15 @@ class HomeFollower {
 
   #event(event: unknown): void {
     if (this.#closed) return;
-    const changes = homeChangesOf(this.#known, this.#watched, event, this.services.clock().getTime());
+    // The first event after subscribing lists every followed entity Home Assistant has.
+    const full = !this.#live;
+    if (full) this.#gone.clear();
+    for (const id of homeGoneOf(this.#known, this.#watched, event, full)) this.#gone.add(id);
+    const added = (event as { a?: unknown } | null)?.a;
+    if (added && typeof added === 'object') for (const id of Object.keys(added)) this.#gone.delete(id);
+    // Home Assistant's own time now, so its `last_changed` is never judged by another clock.
+    const haNow = this.#clockAhead === null ? null : this.services.clock().getTime() + this.#clockAhead;
+    const changes = homeChangesOf(this.#known, this.#watched, event, haNow);
     this.#live = true;
     const now = Date.now();
     const kept = changes.filter((c) => {
@@ -492,10 +539,11 @@ export class SmartHomeTriggers {
   }
 
   /**
-   * An entity's state now, for a delayed start at its time: the state and Home Assistant's time of its last change, or
-   * null when Whombat doesn't know it now (Home Assistant can't be reached, or isn't followed).
+   * An entity's state now, for a delayed start at its time: the state and Home Assistant's time of its last change,
+   * `gone` when Home Assistant removed it or doesn't have it, or null when Whombat doesn't know it now (Home Assistant
+   * can't be reached, or isn't followed).
    */
-  current(connectionId: string, entity: string): HomeEntityNow | null {
+  current(connectionId: string, entity: string): HomeEntityNow | 'gone' | null {
     return this.#followers.get(connectionId)?.current(entity) ?? null;
   }
 

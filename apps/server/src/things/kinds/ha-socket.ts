@@ -50,6 +50,17 @@ export interface HaLive extends HaCommands {
   ping(timeoutMs?: number): Promise<boolean>;
   /** Settles once the socket closed, whoever closed it. */
   readonly closed: Promise<void>;
+  /**
+   * How far Home Assistant's clock is ahead of this box's (ms; behind when below 0), from the time its answer to the
+   * socket said (`Date`); null when it said none. Its own times (`last_changed`) are judged against its own clock.
+   */
+  readonly clockAheadMs?: number | null;
+}
+
+/** How far the clock behind an HTTP `Date` header is ahead of `now` (ms), or null when the header isn't a time. */
+export function clockAheadOf(date: string | string[] | undefined, now: number): number | null {
+  const said = typeof date === 'string' ? Date.parse(date) : Number.NaN;
+  return Number.isFinite(said) ? said - now : null;
 }
 
 /** Home Assistant refused the token (`auth_invalid`). */
@@ -294,7 +305,7 @@ async function openSocket(
   services: Services,
   row: CatalogConnectionRow,
   deadlineMs: number,
-): Promise<MessageBuffer> {
+): Promise<MessageBuffer & { clockAheadMs: number | null }> {
   const httpUrl = `${row.baseUrl.replace(/\/+$/, '')}/api/websocket`;
   return externalEffect(
     'things.read',
@@ -312,6 +323,10 @@ async function openSocket(
         headers: { 'User-Agent': 'Whombat' },
       });
       const buffer = bufferMessages(ws);
+      let clockAheadMs: number | null = null;
+      ws.once('upgrade', (res) => {
+        clockAheadMs = clockAheadOf(res.headers.date, services.clock().getTime());
+      });
       await new Promise<void>((resolve, reject) => {
         ws.once('open', () => resolve());
         ws.once('error', (err) => reject(err));
@@ -325,7 +340,7 @@ async function openSocket(
           ),
         );
       });
-      return buffer;
+      return { ...buffer, clockAheadMs };
     },
     { idempotent: true },
   );
@@ -341,14 +356,14 @@ export async function openHomeAssistant(
 ): Promise<HaLive> {
   const attempt = async (force: boolean) => {
     const token = await tokenOf(services, row, force);
-    let buffer: MessageBuffer;
+    let buffer: MessageBuffer & { clockAheadMs: number | null };
     try {
       buffer = await openSocket(services, row, deadlineMs);
     } catch (err) {
       throw problemOf(err, 'Home Assistant');
     }
     try {
-      return await haSession(buffer, token);
+      return { ...(await haSession(buffer, token)), clockAheadMs: buffer.clockAheadMs };
     } catch (err) {
       buffer.ws.terminate();
       throw err;
