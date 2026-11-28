@@ -7,14 +7,14 @@ import { accountSitePage, accountSiteUrl, controlEnv } from './services.ts';
 const doorHelp =
   'Usage of relay:\n  -door-listen string\n  -door-zone string\n  -door-proxy-protocol-from value\n';
 
-describe('the own address on the dev stack (plan §4, MG-161)', () => {
+describe('the own address in a harness environment (plan §4, MG-161)', () => {
   it('passes the door to a relay that has one, and none otherwise', () => {
     expect(relayDoorArgs({}, doorHelp)).toEqual({ args: [] });
     expect(
       relayDoorArgs(
         {
           WB_MGD_DOOR_LISTEN: '100.64.0.5:4712',
-          WB_MGD_DOOR_ZONE: 'dev.whombat.app',
+          WB_MGD_DOOR_ZONE: 'box.example.com',
           WB_MGD_DOOR_PROXY_FROM: '100.64.0.9/32',
         },
         doorHelp,
@@ -24,33 +24,30 @@ describe('the own address on the dev stack (plan §4, MG-161)', () => {
         '-door-listen',
         '100.64.0.5:4712',
         '-door-zone',
-        'dev.whombat.app',
+        'box.example.com',
         '-door-proxy-protocol-from',
         '100.64.0.9/32',
       ],
     });
-    // The zone defaults to DEV's; a relay from before the door gets nothing and says so.
-    expect(relayDoorArgs({ WB_MGD_DOOR_LISTEN: '127.0.0.1:4712' }, doorHelp).args).toEqual([
-      '-door-listen',
-      '127.0.0.1:4712',
-      '-door-zone',
-      'dev.whombat.app',
-    ]);
+    // A door needs its zone named; a relay from before the door gets nothing and says so.
+    expect(() => relayDoorArgs({ WB_MGD_DOOR_LISTEN: '127.0.0.1:4712' }, doorHelp)).toThrow(
+      /WB_MGD_DOOR_ZONE/,
+    );
     // Several zones go to a relay that takes a list, and stop a relay that takes one.
     expect(
       relayDoorArgs(
-        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'whombat.app,box.whombat.app' },
+        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'box.example.com,example.net' },
         `${doorHelp}  -door-zones value\n`,
       ).args,
-    ).toEqual(['-door-listen', '127.0.0.1:4712', '-door-zones', 'whombat.app,box.whombat.app']);
+    ).toEqual(['-door-listen', '127.0.0.1:4712', '-door-zones', 'box.example.com,example.net']);
     expect(() =>
       relayDoorArgs(
-        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'whombat.app,box.whombat.app' },
+        { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'box.example.com,example.net' },
         doorHelp,
       ),
     ).toThrow(/one zone only/);
     const old = relayDoorArgs(
-      { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712' },
+      { WB_MGD_DOOR_LISTEN: '127.0.0.1:4712', WB_MGD_DOOR_ZONE: 'box.example.com' },
       'Usage of relay:\n  -listen string\n',
     );
     expect(old.args).toEqual([]);
@@ -60,15 +57,15 @@ describe('the own address on the dev stack (plan §4, MG-161)', () => {
   it('gives control its zone and switch only when set', () => {
     expect(ownAddressControlEnv({})).toEqual({});
     expect(
-      ownAddressControlEnv({ WB_MGD_OWN_ADDRESS_ZONE: 'dev.whombat.app', WB_MGD_OWN_ADDRESS_LBL: 'off' }),
+      ownAddressControlEnv({ WB_MGD_OWN_ADDRESS_ZONE: 'box.example.com', WB_MGD_OWN_ADDRESS_LBL: 'off' }),
     ).toEqual({
-      OWN_ADDRESS_ZONE: 'dev.whombat.app',
+      OWN_ADDRESS_ZONE: 'box.example.com',
       OWN_ADDRESS_LBL: 'off',
     });
     expect(() => ownAddressControlEnv({ WB_MGD_OWN_ADDRESS_LBL: 'yes' })).toThrow(/on or off/);
   });
 
-  it('gives control Link’s daily label cap when set (DEV runs with 2)', () => {
+  it('gives control Link’s daily label cap when set', () => {
     expect(ownAddressControlEnv({ WB_MGD_LINK_LABELS_PER_DAY: '2' })).toEqual({ LINK_LABELS_PER_DAY: '2' });
     expect(() => ownAddressControlEnv({ WB_MGD_LINK_LABELS_PER_DAY: 'two' })).toThrow(/whole number/);
   });
@@ -100,10 +97,10 @@ describe('the own address on the dev stack (plan §4, MG-161)', () => {
     });
 
     it('carries the stack’s settings through', () => {
-      process.env.WB_MGD_OWN_ADDRESS_ZONE = 'dev.whombat.app';
+      process.env.WB_MGD_OWN_ADDRESS_ZONE = 'box.example.com';
       process.env.WB_MGD_OWN_ADDRESS_LBL = 'on';
       const e = controlEnv({} as EnvState, '/nonexistent');
-      expect(e.OWN_ADDRESS_ZONE).toBe('dev.whombat.app');
+      expect(e.OWN_ADDRESS_ZONE).toBe('box.example.com');
       expect(e.OWN_ADDRESS_LBL).toBe('on');
       delete process.env.WB_MGD_OWN_ADDRESS_ZONE;
       delete process.env.WB_MGD_OWN_ADDRESS_LBL;

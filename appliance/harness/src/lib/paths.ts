@@ -92,20 +92,20 @@ export const ports = {
  * manager, JWKS) stays on loopback either way; only what clients see and what control signs changes.
  */
 export interface PublicUrls {
-  /** Hosted UI origin, e.g. https://dev.whombat.com (magic links, CORS, the relay's allowed origin). */
+  /** Hosted UI origin, e.g. https://app.example.com (magic links, CORS, the relay's allowed origin). */
   web: string;
-  /** Control origin, e.g. https://api.whombat.com (the tickets' issuer, the web build's control URL). */
+  /** Control origin, e.g. https://api.example.com (the tickets' issuer, the web build's control URL). */
   control: string;
-  /** Relay origin, e.g. https://relay.whombat.com (the worker URL wss://…/v1/connect and its own origin). */
+  /** Relay origin, e.g. https://relay.example.com (the worker URL wss://…/v1/connect and its own origin). */
   relay: string;
   /**
-   * The Feedback widget's origin, e.g. https://embed.whombat.com (`WB_MGD_PUBLIC_EMBED`, FD-31, IN-54): the snippet
+   * The Feedback widget's origin, e.g. https://embed.example.com (`WB_MGD_PUBLIC_EMBED`, FD-31, IN-54): the snippet
    * base, control's `CONTROL_EMBED_ORIGINS`. Null: not set, no embed origin (the runtime falls back to the web origin).
    */
   embed: string | null;
   /**
-   * The operator panel's origin, e.g. https://admin-dev.whombat.com (`WB_MGD_PUBLIC_ADMIN`, IN-69): shown by `dev/up`,
-   * `dev/status` and `dev/panel`; the tunnel routes it to the panel listener. Null: not set.
+   * The operator panel's origin, e.g. https://admin.example.com (`WB_MGD_PUBLIC_ADMIN`, IN-69): shown by `dev/up` and
+   * `dev/status`; the tunnel routes it to the panel listener. Null: not set.
    */
   admin: string | null;
   webauthnRpId: string;
@@ -183,7 +183,7 @@ function agentsModeFromEnv(): AgentsMode {
 export const agentsMode: AgentsMode = agentsModeFromEnv();
 
 /**
- * The dev runtime's Google (IN-49): `real` (Google itself; each Whombat's own OAuth client, the public dev instance),
+ * The dev runtime's Google (IN-49): `real` (Google itself; each Whombat's own OAuth client, a public environment),
  * `fake` (the runtime's `WHOMBAT_GOOGLE=fake`: connect completes as you@example.com without Google, runtime MR-64) or
  * `off`. `WB_MGD_GOOGLE`; unset leaves `WHOMBAT_GOOGLE` unset, which the runtime reads as `real`. Scenarios that need
  * Google switch their own environment to `fake` (scenario m) and never run against a public instance.

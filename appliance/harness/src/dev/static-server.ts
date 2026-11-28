@@ -1,6 +1,6 @@
 /**
  * Serves a directory read-only over HTTP on loopback: the dev TUF repository's metadata and targets for the real
- * manager (IN-15) and the DEV instance's private ISO links. This is the development copy of the update service's
+ * manager (IN-15) and its private ISO links. This is the development copy of the update service's
  * server: the production one (`whombat-updates` on the Hetzner host, HZ-15) is closed and lives in control's repository
  * (`src/updates/static-server.ts`, Whombat hermes-engine.md HE-63), where `deploy.sh updates` ships it from. Keep the
  * two in step.

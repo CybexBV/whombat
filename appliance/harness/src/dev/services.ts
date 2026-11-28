@@ -127,8 +127,8 @@ export async function startControl(state: EnvState, src: SourceState, log: Log):
     ...(!existsSync(discoveryKey) && devInit.includes('discovery.key') ? ['the discovery key'] : []),
     // Same for the licence keyring (CL-39: dev-init adds it to an existing `.local/`, IN-39).
     ...(knowsLicence && !existsSync(licenceKeys) ? ['the licence keyring'] : []),
-    // And the DEV support CA (remote help, control CL-129, IN-385): dev-init makes `support-ca.key` and the line DEV
-    // images pin, `support-ca.pub`, when they are missing.
+    // And the environment's support CA (remote help, control CL-129, IN-385): dev-init makes `support-ca.key` and its
+    // public line, `support-ca.pub`, when they are missing.
     ...(devInit.includes('support-ca.key') && !existsSync(join(local, 'support-ca.key'))
       ? ['the support CA']
       : []),
@@ -205,8 +205,7 @@ export async function startControl(state: EnvState, src: SourceState, log: Log):
 }
 
 /**
- * Control's environment (IN-07 and later): everything but the panel's, which `preparePanel` adds. Also what control's
- * own scripts run with (`dev/stripe setup`).
+ * Control's environment (IN-07 and later): everything but the panel's, which `preparePanel` adds.
  */
 /** The account site's https origin control is given (`UI_URL`): `WB_MGD_UI_URL`, else `https://localhost:<web port>`. */
 export function accountSiteUrl(): string {
@@ -277,8 +276,8 @@ export function controlEnv(state: EnvState, local: string): Record<string, strin
     // `dev/licence` (CL-41: local and dev only, at least 60 s).
     ...(existsSync(licenceKeys) ? { LICENCE_KEYS_FILE: licenceKeys } : {}),
     ...licenceControlEnv(state),
-    // Remote help (IN-385, control CL-129): the DEV support CA signs support certificates of 8 hours (control's
-    // default is 4), so a working day of `dev/support` is one visit per Whombat. A control without the key file answers
+    // Remote help (IN-385, control CL-129): the environment's support CA signs support certificates of 8 hours
+    // (control's default is 4), so a working day of support is one visit per Whombat. A control without the key file answers
     // support.open 503; one before remote help ignores both.
     ...(existsSync(supportCa) ? { SUPPORT_CA_KEY_FILE: supportCa, SUPPORT_CERT_TTL_S: '28800' } : {}),
     // The feedback drop (Whombat FD-40, IN-54): on (control's default outside prod, set so it doesn't depend on it),
@@ -319,8 +318,8 @@ export function controlEnv(state: EnvState, local: string): Record<string, strin
 }
 
 /**
- * The panel answers from loopback (the default allowlist; on the dev instance loopback is outside the allowlist, so a
- * bare 403 is expected there too): `GET /v1/operator/session` without a cookie is 401.
+ * The panel answers from loopback (the default allowlist; with an allowlist that leaves loopback out a bare 403 is
+ * expected too): `GET /v1/operator/session` without a cookie is 401.
  */
 async function checkPanel(
   panel: NonNullable<EnvState['panel']>,
@@ -763,7 +762,7 @@ export function hostsArgs(agentDist: string, agentPort: number = ports.hostsAgen
 
 /**
  * The hosts service (`whombat-hosts serve --headless`, NX-155) from the pinned whombat-hosts clone: the hub, and the
- * agents for amd64 and arm64 its install command hands out (unsigned, as on DEV boxes: no agent self-update). Before
+ * agents for amd64 and arm64 its install command hands out (unsigned: no agent self-update). Before
  * the runtime, which gets its socket and token file only when it runs.
  */
 export async function startHosts(state: EnvState, src: SourceState, log: Log): Promise<void> {
@@ -898,7 +897,7 @@ export async function startRealManager(
       logFile: mlog,
     });
     // A local environment with live agents gets the client channel the latest tested job last published (IN-107), so
-    // scenario k runs in a fresh environment; the public dev instance has its own job and is never seeded.
+    // scenario k runs in a fresh environment; a public environment is never seeded.
     if ((state.agents ?? 'scripted') === 'live' && !publicUrls)
       await seedClientChannel(tuf, bin, dir, mlog, log);
   }
@@ -909,9 +908,9 @@ export async function startRealManager(
       `manager: no AI client installs: ${join(persistLayout().root, 'whombat', 'clients')} has a dot-directory; set WB_MGD_CLIENTS_ROOT to a plain path`,
     );
   if (!running(state, 'tuf')) {
-    // Private ISO links (PI-06) on updates-dev as on production's update server: with this key beside the repository
-    // (never inside it: the server serves the repository) `/install/<version>/<file>` answers links signed with
-    // `static-server.ts install-link`; without it `/install/` is 404 (dev-instance.md “A DEV ISO to download”).
+    // Private ISO links (PI-06) as on production's update server: with this key beside the repository (never inside
+    // it: the server serves the repository) `/install/<version>/<file>` answers links signed with
+    // `static-server.ts install-link`; without it `/install/` is 404.
     const installKey = join(dirname(tuf), 'install-link.key');
     const pid = spawnService(
       'node',
@@ -1463,7 +1462,7 @@ export function runtimeEnv(state: EnvState): Record<string, string> {
     ...(agentsOf(state) === 'scripted' ? { WHOMBAT_ALLOW_SCRIPTED: '1' } : {}),
     // Small event retention so scenario (d) can reach the floor (IN-14).
     WHOMBAT_SESSION_EVENTS_MAX_COUNT: '200',
-    // GitHub (IN-137): off for the scripted environments; `WB_MGD_GITHUB=real` (the public dev instance) reaches the real
+    // GitHub (IN-137): off for the scripted environments; `WB_MGD_GITHUB=real` (a public environment) reaches the real
     // GitHub the way a box does, through each person's own sign-in (Whombat EA-10, PV-06).
     WHOMBAT_GITHUB: process.env.WB_MGD_GITHUB?.trim() === 'real' ? 'gh' : 'off',
     // Website feedback (IN-54): `on` in managed mode is the encrypted drop (FD-25): no public route on the runtime,
@@ -2178,7 +2177,7 @@ export async function controlHealth(state: EnvState): Promise<boolean> {
 
 /**
  * Control's APNs settings from the stack's (IN-518): the key file and its id, the team, and the app's bundle id as the
- * topic. The host defaults to Apple's production service, since the iPhones that use DEV run TestFlight builds, which
+ * topic. The host defaults to Apple's production service, since TestFlight builds of the app
  * get production tokens (a sandbox token there is refused as a bad device token); `WB_MGD_APNS_HOST` for a build run
  * from Xcode.
  */

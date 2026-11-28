@@ -462,8 +462,7 @@ if [ -z "$reuse" ]; then
   nix-store --add-root "$out/gcroots/manager" --realise "$manager" >/dev/null
 fi
 
-# The ISO only on request (UP-X15): release/build iso <out> builds it later, promote-prod and dev/devbox when
-# they need it.
+# The ISO only on request (UP-X15): release/build iso <out> builds it later (release/ship iso).
 ! $want_iso || build_iso "$out"
 
 say "done: $out"

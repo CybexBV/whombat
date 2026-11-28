@@ -7,13 +7,13 @@
  *   release/ship validate <id> [--skip-gates] [--scenarios <pattern>] [--jobs N] [--no-demo]
  *                      [--skip-upgrade-gates] [--rerun-gates] [--rerun-upgrade-gates] [--serial] [--previous <id>,<id>]
  *                      [--cloud <whombat-cloud commit>] [--out-root DIR]
- *   release/ship status [--dev] [--out-root DIR]
+ *   release/ship status [--out-root DIR]
  *   release/ship prune [--dry-run] [--out-root DIR]: old release folders go (prune.ts)
  *
  * `publish-dev`, `promote-prod` and `all` went with DEV and the Hetzner update repository (ONE-01, ONE-19): a release
  * goes to Beta with whombat-ops `candidate` and to Production with whombat-ops `promote <id> --yes`. So did build's
  * DEV twin and its options (`--dev-only`, `--twin`, `--reuse-host-twin`, `--dev-allow-downgrade-from`,
- * `--ahead-of-line`, `--override-input`) and `iso --dev|--both`.
+ * `--ahead-of-line`, `--override-input`), `iso --dev|--both` and `status --dev`.
  */
 export type Command = 'build' | 'validate' | 'status' | 'iso' | 'prune';
 
@@ -46,7 +46,6 @@ export interface Parsed {
     /** `--cloud`: the whombat-cloud commit control and the relay run at, instead of what the release records say. */
     cloud: string | null;
   };
-  status: { dev: boolean };
   prune: { dryRun: boolean };
 }
 
@@ -68,7 +67,7 @@ const RETIRED: Record<string, string> = {
   all: 'release/ship all went with DEV (ONE-01): whombat-ops candidate builds and publishes to Beta, whombat-ops promote <id> --yes moves it to Production',
 };
 
-/** Build's options for the DEV twin, gone with it (ONE-01). */
+/** Options that went with DEV: build's DEV twin, `iso --dev|--both`, `status --dev`. */
 const GONE_OPTIONS = [
   '--dev-only',
   '--twin',
@@ -98,7 +97,7 @@ const OPTIONS: Record<Command, { flags: string[]; valued: string[]; repeat?: str
     ],
     valued: ['--scenarios', '--jobs', '--previous', '--cloud', '--out-root'],
   },
-  status: { flags: ['--dev'], valued: ['--out-root'] },
+  status: { flags: [], valued: ['--out-root'] },
   iso: { flags: [], valued: ['--out-root'] },
   prune: { flags: ['--dry-run'], valued: ['--out-root'] },
 };
@@ -122,9 +121,11 @@ export function parseShipArgs(argv: readonly string[]): Parsed {
         throw new Error(`${a} needs a value`);
       if (values.has(a) && !spec.repeat?.includes(a)) throw new Error(`${a} given twice`);
       values.set(a, [...(values.get(a) ?? []), v]);
-    } else if (GONE_OPTIONS.includes(a) && command !== 'status')
+    } else if (GONE_OPTIONS.includes(a))
       throw new Error(
-        `release/ship ${command} ${a}: the DEV twin went with DEV (ONE-01); there is one release`,
+        command === 'status'
+          ? `release/ship status ${a}: DEV is gone; status shows production and the pipeline`
+          : `release/ship ${command} ${a}: the DEV twin went with DEV (ONE-01); there is one release`,
       );
     else if (a.startsWith('-')) throw new Error(`release/ship ${command}: unknown option ${a}`);
     else if (id === null && command !== 'status' && command !== 'prune') id = a;
@@ -166,7 +167,6 @@ export function parseShipArgs(argv: readonly string[]): Parsed {
       previous: one('--previous')?.split(',').filter(Boolean) ?? null,
       cloud: one('--cloud'),
     },
-    status: { dev: flags.has('--dev') },
     prune: { dryRun: flags.has('--dry-run') },
   };
 }

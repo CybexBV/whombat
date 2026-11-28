@@ -176,7 +176,7 @@ func (r *Runner) Run(ctx context.Context, c Command, stdout, stderr io.Writer) i
 	return o.code
 }
 
-// report is `dev/devbox diag`'s set (harness/src/devbox/main.ts) without the Incus internals.
+// report is every section a first look at a box needs, in one go.
 func (r *Runner) report(o *out) {
 	b := r.cfg.Bins
 	o.section("units")
