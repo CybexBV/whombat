@@ -3,6 +3,13 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## Unreleased
+
+- Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
+  page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back
+  by itself when the new one doesn’t start. A database or a new major version always asks, and says why.
+- A server’s care plan can update its apps on Sunday night: the safe ones by themselves, the others as one question.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,

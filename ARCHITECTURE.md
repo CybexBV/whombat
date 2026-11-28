@@ -1575,12 +1575,28 @@ Setup and operation: `docs/github.md`.
   machines, the storages that take backups) and core's `careSteps` picks the dialogs' defaults for its kind — nightly
   Proxmox backups (to a Backup Server or a storage on the network, else to a backup place that shares a folder over NFS
   — an Unraid server through Whombat's helper, else a TrueNAS through its API — added as storage first with
-  `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups and weekly system updates in the quiet hours, never a
+  `backup_place_nfs` and `proxmox_storage_add`), daily Incus snapshots, weekly QEMU/KVM backups, weekly system updates in the quiet hours and,
+  on a server with Docker Compose apps, their updates on Sunday night, never a
   temporary machine. `care.start` posts the assistant's line in the server's thread and wakes a `look` turn there
   that proposes the ones that fit; the plan is a look's `look_plan` card (research key `care:server:<id>`), and Go
   ahead turns on the automations Whombat writes for it before the `look_fix` turn takes the rest. The server this
   Whombat runs on gets its plan once and keeps asking for its updates; a Whombat from before writes its servers down as
   known once. An older server's research is offered the same steps when its lines are missing backups or updates.
+- **Docker Compose app updates** (`hosts/internal/agent/apps`, `apps/server/src/hosts/tools-apps.ts`, `app-ask.ts`,
+  [app-updates.md](docs/decisions/app-updates.md)): Whombat's helper reports each container Compose started as an app
+  (`HostGuest.app`: its service, its version and the newer image's, `pinned`, whether an update runs, the last one) and
+  runs an update as one host task (`app:<id>`): it tags the running image `…:whombat-previous-<service>`, pulls the
+  service's image, recreates only that service and watches it run (healthy when it has a health check) for 30 seconds,
+  and when it doesn't come up tags the previous image back and recreates it without pulling. The hub starts it
+  (`POST /servers/{id}/apps/update`, Full control) and puts each app's outcome on the ended task (`HostTask.apps`).
+  Every update asks through the approval card: the assistant's `app_update` asks like a container update, and always
+  for a database's or a new major version's (`ask: true`, `serverAsksApply`), refusing them without a yes whose
+  reasons cover them; a page's Update (`hosts.manage` op `app.update`) commits that same call for the person in their
+  Chat and opens its card (`approvalNumber`), with a snapshot first when the server is a Proxmox guest Whombat watches
+  (`proxmoxGuestOf`). The followed task posts one plain line per app (`appsOutcomeText`), Done recently records it and
+  the server is kept quiet while it runs. `app_updates` gives the assistant the same facts; the care plan's `apps`
+  automation runs it on Sunday night with `hold_major`. The web's apps list and a service's page (when it runs in a
+  Compose container) and the phone's list and app screen draw it from `@whombat/client/hosts` (`appUpdateRow`).
 - **The Vault** (`apps/server/src/vault/`): the person's logins, API keys and SSH keys for the agent, secrets sealed
   and write-only. Each entry has one switch for the agent (`vault_entries.agent_on_at`, with an API's variable and an
   SSH key's servers beside it); `vault.giveKey` and `vault.takeKey` set it. An entry switched on reaches the agent only
@@ -1654,7 +1670,7 @@ Setup and operation: `docs/github.md`.
   one or none when the hub couldn't make it) stays in `quiet_maintenance_left`,
   written with the change, until the hub confirms it is gone; whether or not the hub muted them, the server's open alerts are held with the window
   (`NoticeQuiet.held`, no longer asking for attention, out of the Inbox), and Undo on one ends the window. Whombat's own
-  restarts (`guest_power`, `server_power`) and update installs (`server_update`, until 15 minutes after its task ends)
+  restarts (`guest_power`, `server_power`) and update installs (`server_update`, `app_update`, until 15 minutes after its task ends)
   keep the server or machine quiet the same way, in a window of their own beside the person's, noted “Whombat is
   updating it” (the same work again on this Whombat moves its end; a later end gets a new maintenance window); End now
   ends every window holding the thing. GitHub's and Website feedback's quiet rows stay through the hourly sweep while they are
