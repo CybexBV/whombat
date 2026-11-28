@@ -157,7 +157,8 @@ func plainHTTPAllowed(host string) bool {
 	return ip != nil && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast())
 }
 
-// samePlace: the copy would be where the backups go already (the same storage, bucket and folder).
+// samePlace: the copy would be where the backups go already (the same storage, bucket and folder, written the same
+// way; another address for it is caught by the repository's id).
 func samePlace(repo string, d *state.Destination) bool {
 	if d == nil {
 		return false
@@ -232,12 +233,27 @@ func Set(ctx context.Context, c *state.Config, req Request) (*Place, error) {
 	}
 	defer unpin()
 	target.PasswordFile = source.PasswordFile
-	if _, _, err := target.Paired(source, c.StateDir); errors.Is(err, restic.ErrCopyCredentials) {
+	// Only whether one restic copy can hold both places is checked here: what pairing started goes at once.
+	_, unpair, err := target.Paired(source, c.StateDir)
+	unpair()
+	if errors.Is(err, restic.ErrCopyCredentials) {
 		return nil, stepErr(StepPair, err)
 	}
 	cfg, err := target.Config(ctx)
 	switch {
 	case err == nil:
+		mainID := main.RepositoryID
+		if mainID == "" {
+			mc, err := source.Config(ctx)
+			if err != nil {
+				return nil, stepErr(StepMain, err)
+			}
+			mainID = mc.ID
+		}
+		// Another address for the same storage, bucket and folder passes the address check: the ids tell.
+		if cfg.ID == mainID {
+			return nil, stepErr(StepSame, errors.New("the second place is the main place's repository"))
+		}
 		place.RepositoryID = cfg.ID
 	case errors.Is(err, restic.ErrWrongPassword):
 		return nil, stepErr(StepRepository, err)
