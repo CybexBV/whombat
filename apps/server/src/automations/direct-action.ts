@@ -4,15 +4,18 @@
  * lines and Done recently), with no AI turn. A server's power goes through the Servers connection (`server_power`,
  * `guest_power`), Home Assistant through its `request` tool (`POST /api/services/<domain>/<service>`). Turning the
  * automation on was the person's yes for exactly this; a call the person's own rules make ask (a server set to “Ask
- * me first”, the server this Whombat runs on, a tool set to ask) asks on the approval card. A thing already so is a
- * quiet no-op with its own line.
+ * me first”, the server this Whombat runs on, a tool set to ask), a scene or a script saved before they were taken out,
+ * and every action of a test run ask on the approval card. A thing already so is a quiet no-op with its own line; a
+ * server Whombat can't reach is left alone and said so.
  */
 import {
   type AutomationStep,
   type CatalogEntry,
   catalogEntry,
   type DirectOutcome,
+  directActionAsksEachTime,
   directActionProblem,
+  directActionRepeatable,
   directActionText,
   directDoneLine,
   directTargetKind,
@@ -35,7 +38,7 @@ import type { Services } from '../services';
 import { clock } from '../things/words';
 import { automationAgent, publisherCheck } from './authority';
 import type { LeasedRun } from './engine/step-ops';
-import type { AutomationStepRow } from './store';
+import type { AutomationRunRow, AutomationStepRow } from './store';
 
 type RunActionStep = Extract<AutomationStep, { kind: 'run_action' }>;
 type ToolRow = typeof connectionTools.$inferSelect;
@@ -49,7 +52,7 @@ export type DirectPlan =
       entry: CatalogEntry;
       tool: ToolRow;
       args: Record<string, unknown>;
-      /** The person's own rules ask for a fresh yes on this call. */
+      /** The person's own rules ask for a fresh yes on this call, or it starts a scene or a script. */
       asks: boolean;
       /** A server the call names that runs this Whombat, or a server Whombat hasn't seen: the card says so. */
       server: { id: string; name: string } | null;
@@ -103,7 +106,9 @@ export async function planDirectAction(
   locale?: string | null,
 ): Promise<DirectPlan> {
   const t = (key: Parameters<typeof tServer>[1], vars?: Record<string, string>) => tServer(locale, key, vars);
-  const problem = directActionProblem(step, locale);
+  // Drafts are refused a scene or a script by the definition's own check; one an automation saved before that may
+  // still run, asking each time.
+  const problem = directActionProblem(step, locale, { saved: true });
   if (problem) return { ok: false, reason: problem, fatal: true };
   const call = directCall(step);
   if (!call) return { ok: false, reason: t('automations.direct.cantDirect'), fatal: true };
@@ -175,9 +180,20 @@ export async function planDirectAction(
     entry,
     tool,
     args: call.args,
-    asks: decided.tier === 'ask',
+    asks: decided.tier === 'ask' || directActionAsksEachTime(step),
     server: server ? { id: server.id, name: server.name } : null,
   };
+}
+
+/**
+ * Whether this try needs the person's yes on the card: their rules ask, it starts a scene or a script, or it is a test
+ * run (“Try it” acts for real, so it never acts unattended).
+ */
+export function directAsks(
+  plan: Extract<DirectPlan, { ok: true }>,
+  run: Pick<AutomationRunRow, 'test'>,
+): boolean {
+  return plan.asks || run.test;
 }
 
 /* Already so ------------------------------------------------------------------------------------------------------------ */
@@ -188,14 +204,15 @@ const rec = (v: unknown): Record<string, unknown> =>
   v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
 
 /**
- * Whether the thing is already as the step would leave it (a server off, a light on), read just before: the quiet
- * no-op. Null when it isn't, or Whombat can't tell (then the action runs; doing it twice does no harm).
+ * Whether the thing is already as the step would leave it (a light on), read just before: the quiet no-op. `unreachable`
+ * for a server the hosts service can't reach: it may be off or only cut off, so nothing is sent and the step doesn't
+ * count as done. Null when it isn't, or Whombat can't tell (then the action runs; doing it twice does no harm).
  */
 async function alreadySo(
   services: Services,
   plan: Extract<DirectPlan, { ok: true }>,
   step: RunActionStep,
-): Promise<DirectOutcome | null> {
+): Promise<DirectOutcome | 'unreachable' | null> {
   const kind = directTargetKind(step);
   try {
     if (kind === 'server' && step.action === 'shut_down') {
@@ -204,7 +221,7 @@ async function alreadySo(
       const server = (Array.isArray(fleet.servers) ? fleet.servers : [])
         .map(rec)
         .find((s) => String(s.id ?? '').toLowerCase() === id);
-      return server?.status === 'offline' ? { kind: 'noop', already: 'off' } : null;
+      return server?.status === 'offline' ? 'unreachable' : null;
     }
     if (kind === 'entity' && step.target && (step.action === 'turn_on' || step.action === 'turn_off')) {
       const domain = entityDomain(step.target);
@@ -287,8 +304,8 @@ export async function runDirectAction(
   const out = row.output as { approvalId?: string; callId?: string; target?: string };
   const plan = await planDirectAction(db, services, run.burrowId, step, locale);
   if (!plan.ok) return void (await cannot(lease, row, step, plan.reason, plan.fatal));
-  // A call the person's rules ask for runs only with the yes this attempt got.
-  if (plan.asks && !out.approvalId)
+  // A call that asks (the person's rules, a scene or a script, a test run) runs only with the yes this attempt got.
+  if (directAsks(plan, run) && !out.approvalId)
     return void (await lease.commit({ op: 'settle', idx: row.idx, state: 'pending', from: ['running'] }));
   const agent = await automationAgent(db, run.burrowId);
   if (!agent) return void (await cannot(lease, row, step, t('automations.direct.noAssistant'), false));
@@ -299,6 +316,18 @@ export async function runDirectAction(
   const at = () => clock(services.clock(), burrow?.timeZone ?? 'UTC');
 
   const already = await alreadySo(services, plan, step);
+  if (already === 'unreachable') {
+    const line = t('automations.direct.unreachable', { name: step.thingName, time: at() });
+    await lease.commit({
+      op: 'settle',
+      idx: row.idx,
+      state: step.otherwise === 'skip' ? 'skipped' : 'failed',
+      error: line.slice(0, 1000),
+      output: { ran: false, text: line.slice(0, 500), summary: line.slice(0, 500) },
+      from: ['running'],
+    });
+    return;
+  }
   if (already) {
     const line = directDoneLine(step, already, at(), locale);
     await lease.commit({
@@ -345,18 +374,17 @@ export async function runDirectAction(
       what: isEnglish(locale) ? lowerFirst(what) : what,
       reason,
     });
+    // An action that didn't answer in time may have happened: one that isn't the same done twice (a restart, a scene or
+    // a script) isn't tried again, a person checks.
+    const unsure = timedOut && !directActionRepeatable(step);
     await lease.commit({
       op: 'settle',
       idx: row.idx,
-      // A restart that didn't answer in time may have happened: doing it again would restart twice.
-      state:
-        timedOut && step.action === 'restart'
-          ? 'uncertain'
-          : step.otherwise === 'skip'
-            ? 'skipped'
-            : 'failed',
-      error: (timedOut && step.action === 'restart'
-        ? t('automations.direct.maybeRestarted', { reason })
+      state: unsure ? 'uncertain' : step.otherwise === 'skip' ? 'skipped' : 'failed',
+      error: (unsure
+        ? t(step.action === 'restart' ? 'automations.direct.maybeRestarted' : 'automations.direct.maybeRan', {
+            reason,
+          })
         : line
       ).slice(0, 1000),
       output: { ran: false, text: line.slice(0, 500), summary: line.slice(0, 500) },

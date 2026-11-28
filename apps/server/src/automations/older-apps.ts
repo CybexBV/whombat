@@ -122,8 +122,11 @@ export function runFor(run: AutomationRun, minor: number | undefined): Automatio
       (beforeMail && kind === 'mail')
         ? { ...run.trigger, kind: 'message_posted' }
         : run.trigger,
+    // An app from before mail automations knows neither step kind, and has no fallback of its own for them.
     steps: beforeMail
-      ? run.steps.map((s) => (s.kind === 'connection_actions' ? { ...s, kind: 'unknown' } : s))
+      ? run.steps.map((s) =>
+          s.kind === 'connection_actions' || s.kind === 'run_action' ? { ...s, kind: 'unknown' } : s,
+        )
       : run.steps,
   };
 }

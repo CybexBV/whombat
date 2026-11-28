@@ -40,5 +40,17 @@ export const AUTOMATIONS = splitPairs({
     '{reason} It may or may not have restarted. Check, then say what happened.',
     '{reason} Misschien is hij herstart, misschien niet. Kijk het na en zeg wat er gebeurde.',
   ],
+  'automations.direct.maybeRan': [
+    '{reason} It may or may not have happened. Check, then say what happened.',
+    '{reason} Misschien is het gebeurd, misschien niet. Kijk het na en zeg wat er gebeurde.',
+  ],
   'automations.direct.askedFirst': ['Asked you first: {what}', 'Eerst aan jou gevraagd: {what}'],
+  'automations.direct.unreachable': [
+    'Couldn’t reach {name} at {time}, so nothing was sent to it.',
+    'Whombat kon {name} om {time} niet bereiken, dus er is niets naar gestuurd.',
+  ],
+  'automations.direct.maybeDone': [
+    'Whombat stopped partway through this, so it may not have happened; check, then say what happened.',
+    'Whombat stopte halverwege, dus misschien is het niet gebeurd; kijk het na en zeg wat er gebeurde.',
+  ],
 });

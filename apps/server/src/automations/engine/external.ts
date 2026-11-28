@@ -16,6 +16,8 @@ import { and, eq } from 'drizzle-orm';
 import { mergeTarget } from '../../commands/prs';
 import { repos } from '../../db/schema/index';
 import { type GhPullRequest, GitHubError, GitHubNotConnectedError } from '../../github/adapter';
+import { tServer } from '../../i18n/catalog';
+import { burrowLocale } from '../../i18n/locale';
 import { ApiError } from '../../lib/errors';
 import { OutboundError, outboundRequest } from '../../lib/outbound';
 import { githubScope } from '../../managed/providers/github-adapter';
@@ -100,11 +102,22 @@ async function recoverExternal(
     await replyOnTracker(lease, row, step);
     return true;
   }
-  // Setting a state again does no harm (a second shut down finds it off), so it is simply done now; a restart may have
-  // happened already, so a person checks that one.
-  if (step.kind === 'run_action' && directActionRepeatable(step.action)) {
-    await runDirectAction(lease, row, step);
-    return true;
+  // An action that comes out the same done twice (a second shut down finds it off) is simply done now. Any other (a
+  // restart, a scene or a script) may have happened already: it isn't done again, and a person checks.
+  if (step.kind === 'run_action') {
+    if (directActionRepeatable(step)) {
+      await runDirectAction(lease, row, step);
+      return true;
+    }
+    const locale = await burrowLocale(services, run.burrowId);
+    await lease.commit({
+      op: 'settle',
+      idx: row.idx,
+      state: 'uncertain',
+      error: tServer(locale, 'automations.direct.maybeDone'),
+      from: ['running'],
+    });
+    return false;
   }
   // Recovery: a step this process didn't start is from a crashed one, or one an update restarted. Reconcile from the
   // mirror, else from GitHub, else a person decides.

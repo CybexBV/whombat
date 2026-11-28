@@ -511,6 +511,15 @@ describe('automations that act without AI, for an app below minor 22', () => {
     expect(OlderStep.parse(doorbell.steps[0]).kind).toBe('unknown');
   });
 
+  it('names a direct step unknown to an app from before mail automations, as it does proposed actions', () => {
+    const runs = answerFor('automations.runs', { runs: [doorbell] }, MAIL_AUTOMATIONS_MINOR - 1) as {
+      runs: AutomationRun[];
+    };
+    expect(runs.runs[0]?.steps.map((s) => s.kind)).toEqual(['unknown']);
+    // An app from after mail automations falls back by itself, so it gets the step as it is.
+    expect(runFor(doorbell, older).steps.map((s) => s.kind)).toEqual(['run_action']);
+  });
+
   it('gives everything to an app at minor 22 and outside a session', () => {
     for (const minor of [AUTOMATIONS_WITHOUT_AI_MINOR, undefined]) {
       expect(get(direct, minor)).toEqual(direct);

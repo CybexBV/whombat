@@ -279,7 +279,7 @@ function doesLine(step: AutomationStep, names: PlanNames, tr: CoreTranslator): A
       return line(step.name ?? tr.t('plan.does.wait', { span: minutes(tr, step.minutes) }));
     // Said from the step itself, never from its name: the card must say exactly what runs.
     case 'run_action':
-      return line(directActionText(step, tagOf(tr)), directActionDetail(tagOf(tr)));
+      return line(directActionText(step, tagOf(tr)), directActionDetail(tagOf(tr), step));
     // A check named as a question (“Did the review approve it?”) is a gate between steps, not work the person reads.
     case 'condition':
       return step.name?.trim().endsWith('?')
@@ -888,7 +888,7 @@ export function automationFlow(
         items.push({
           ...base,
           icon: 'act',
-          details: [stop(directActionDetail(tagOf(tr)))],
+          details: [stop(directActionDetail(tagOf(tr), step))],
           marks: [{ label: tr.t('flow.mark.withoutAi'), tone: 'changes' }],
         });
         break;
