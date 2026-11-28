@@ -269,6 +269,11 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 	if copyCfg.ID == mainCfg.ID || copyCfg.ID == main.RepositoryID {
 		return nil, stepErr(StepSame, errors.New("the second place is the main place's repository"))
 	}
+	// The copy is the repository set up at that address. One made there since (the folder emptied and made again, or the
+	// address leading to other storage now) is neither copied into nor cleared until the place is set up again.
+	if p.RepositoryID != "" && copyCfg.ID != p.RepositoryID {
+		return nil, stepErr(StepRepository, errors.New("the second place holds another repository than the one set up"))
+	}
 	all, err := source.Snapshots(ctx, manifest.TagProduct)
 	if err != nil {
 		return nil, stepErr(StepMain, err)
@@ -290,7 +295,7 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 	if err != nil {
 		return nil, err
 	}
-	inCopy := checkpointIDs(there)
+	inCopy, list := checkpointIDs(there), there
 	st.Head = headOf(c, inCopy)
 	if len(snaps) == 0 {
 		// Nothing of this box's at the main place yet: nothing to copy, so no copy is said to have worked, and the copy,
@@ -314,7 +319,7 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 		if err != nil {
 			return nil, err
 		}
-		inCopy = checkpointIDs(after)
+		inCopy, list = checkpointIDs(after), after
 		for _, sn := range pick {
 			if !inCopy[sn.Tag(manifest.TagIDPrefix)] {
 				return nil, stepErr(StepCopy, errors.New("not every backup arrived in the copy"))
@@ -323,7 +328,7 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 		res.Copied, res.Newest = len(pick), pick[len(pick)-1].Tag(manifest.TagIDPrefix)
 	}
 	if st.Clearing == nil || now.Sub(st.Clearing.At) >= ClearEvery || now.Before(st.Clearing.At) {
-		st.Clearing = clearCopy(ctx, c, target, forgetHosts(c, snaps), now)
+		st.Clearing = clearCopy(ctx, c, target, list, keys, now)
 		if !st.Clearing.OK {
 			logf("offsite: clearing old copies failed: %s", st.Clearing.Error)
 		} else {
@@ -414,23 +419,6 @@ func stillAtMain(ids []string, main []restic.Snapshot) []string {
 	return out
 }
 
-// forgetHosts are the machines whose snapshots clearing may touch in the copy: this box and the boxes it was brought
-// back from, read from main, the main place's backups this box trusts. A bucket folder that another Whombat copies
-// into too keeps that Whombat's backups.
-func forgetHosts(c *state.Config, main []restic.Snapshot) []string {
-	var hosts []string
-	if c.ApplianceID != "" {
-		hosts = append(hosts, c.ApplianceID)
-	}
-	for _, sn := range main {
-		if sn.Hostname != "" && !contains(hosts, sn.Hostname) {
-			hosts = append(hosts, sn.Hostname)
-		}
-	}
-	sort.Strings(hosts)
-	return hosts
-}
-
 // headOf is the newest of this box's own checkpoints that is in the copy (nil when none is).
 func headOf(c *state.Config, have map[string]bool) *kit.Head {
 	chain, _ := state.Chain(c)
@@ -444,14 +432,25 @@ func headOf(c *state.Config, have map[string]bool) *kit.Head {
 }
 
 // clearCopy applies the person's keep windows to the copy: it keeps what the main place keeps, by the same rule (the
-// space limit is the main place's alone; the bucket's size is the person's bill there). Only the snapshots of hosts
-// are touched; without a host to name nothing is cleared (it would be everyone's).
-func clearCopy(ctx context.Context, c *state.Config, target restic.Repo, hosts []string, now time.Time) *Clearing {
-	if len(hosts) == 0 {
-		return &Clearing{At: now, OK: false, Error: "no machine name to clear by"}
+// space limit is the main place's alone; the bucket's size is the person's bill there). The rule runs over this box's
+// own backups in the copy alone, those whose signed manifests its backup list trusts, and only those it doesn't keep are
+// removed, each by its id: a Whombat this one was brought back from that still copies into the same folder under its
+// old machine name keeps every backup it made after that, and none of another's counts towards this box's windows.
+func clearCopy(ctx context.Context, c *state.Config, target restic.Repo, there []restic.Snapshot, keys listing.Keys,
+	now time.Time) *Clearing {
+	own, err := listing.Trusted(ctx, c, target, there, keys)
+	if err != nil {
+		return &Clearing{At: now, OK: false, Error: state.OneLine(err.Error(), 300)}
 	}
-	p := state.LoadPolicy(c)
-	if _, err := target.ForgetHosts(ctx, manifest.TagProduct, hosts, p.Keep.ForgetArgs()); err != nil {
+	drop := state.LoadPolicy(c).Keep.Expired(own, now)
+	if len(drop) == 0 {
+		return &Clearing{At: now, OK: true}
+	}
+	ids := make([]string, len(drop))
+	for i, sn := range drop {
+		ids[i] = sn.ID
+	}
+	if _, err := target.ForgetSnapshots(ctx, ids); err != nil {
 		return &Clearing{At: now, OK: false, Error: state.OneLine(err.Error(), 300)}
 	}
 	return &Clearing{At: now, OK: true}

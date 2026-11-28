@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/CybexBV/whombat/appliance/backup/internal/state"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/manifest"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/restic"
 )
@@ -70,21 +69,5 @@ func TestClearedFollowsTheMainPlace(t *testing.T) {
 	}
 	if got := stillAtMain([]string{"a", "old", "a"}, main); !slices.Equal(got, []string{"a"}) {
 		t.Fatalf("still at the main place: %v", got)
-	}
-}
-
-// Clearing names this box and the boxes it was brought back from, never anyone else's machine in the same folder.
-func TestForgetHostsAreThisBoxs(t *testing.T) {
-	t0 := time.Date(2026, 11, 28, 3, 0, 0, 0, time.UTC)
-	c := &state.Config{ApplianceID: "apl-new"}
-	main := []restic.Snapshot{snap("a", "apl-old", t0), snap("b", "apl-new", t0), snap("c", "apl-old", t0)}
-	if got := forgetHosts(c, main); !slices.Equal(got, []string{"apl-new", "apl-old"}) {
-		t.Fatalf("hosts: %v", got)
-	}
-	if got := forgetHosts(&state.Config{}, nil); got != nil {
-		t.Fatalf("hosts without a name: %v", got)
-	}
-	if cl := clearCopy(t.Context(), &state.Config{}, restic.Repo{}, nil, t0); cl.OK {
-		t.Fatal("cleared everyone's backups without a host to name")
 	}
 }

@@ -45,7 +45,7 @@ export const BACKUP_OFFSITE_WORDS = treeCatalogs(
       read: 'The key can’t read files back from that bucket. Give it permission to read.',
       delete:
         'The key can’t delete files in that bucket. Whombat needs that to clear old copies, so give it permission to delete.',
-      repository: 'That folder already holds backups this Whombat can’t open. Choose another folder.',
+      repository: 'That folder holds backups that aren’t this Whombat’s copy. Choose another folder.',
       same: 'That’s where your backups go already. Choose another place for the copy.',
       pair: 'Your backups already go to a bucket with another key. A copy in a second bucket needs the same key.',
       main: 'Whombat couldn’t read the backups at their main place, so nothing was copied.',
@@ -129,7 +129,7 @@ export const BACKUP_OFFSITE_WORDS = treeCatalogs(
       read: 'Met deze sleutel kun je geen bestanden uit die bucket lezen. Geef hem leesrechten.',
       delete:
         'Met deze sleutel kun je geen bestanden in die bucket verwijderen. Whombat heeft dat nodig om oude kopieën op te ruimen, dus geef hem verwijderrechten.',
-      repository: 'In die map staan al back-ups die deze Whombat niet kan openen. Kies een andere map.',
+      repository: 'In die map staan back-ups die niet de kopie van deze Whombat zijn. Kies een andere map.',
       same: 'Daar gaan je back-ups al naartoe. Kies een andere plek voor de kopie.',
       pair: 'Je back-ups gaan al naar een bucket met een andere sleutel. Een kopie in een tweede bucket heeft dezelfde sleutel nodig.',
       main: 'Whombat kon de back-ups op hun vaste plek niet lezen, dus er is niets gekopieerd.',

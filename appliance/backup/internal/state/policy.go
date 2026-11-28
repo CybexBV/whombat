@@ -7,8 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"sort"
 	"time"
 	_ "time/tzdata" // the person's zone on a box whose own is UTC
+
+	"github.com/CybexBV/whombat/appliance/backup/pkg/restic"
 )
 
 // Policy is the person's backup options (BK-37, Whombat backup-options.md BKO-02): how often, in which time zone,
@@ -240,6 +244,60 @@ func (k PolicyKeep) ForgetArgs() []string {
 		args = append(args, "--keep-within-monthly", fmt.Sprintf("%dm", k.MonthlyMonths))
 	}
 	return args
+}
+
+// Expired are the snapshots of snaps that the keep windows don't keep, by restic's own rule for ForgetArgs' flags
+// (restic 0.18 `forget`, one group): counted back from the newest snapshot not dated ahead of now (now when all are),
+// every snapshot within AllDays, the newest of each day, ISO week and month within the other windows, by each
+// snapshot's own clock, and the oldest of all when a window reaches back to it. A clearing that may touch only some of a
+// repository's snapshots (the copy's, where another Whombat may write too) names what goes by id, so the rule runs here
+// over exactly that set, never over everything a machine name matches.
+func (k PolicyKeep) Expired(snaps []restic.Snapshot, now time.Time) []restic.Snapshot {
+	list := slices.Clone(snaps)
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Time.After(list[j].Time) })
+	latest := now
+	for _, sn := range list {
+		if !sn.Time.After(now) {
+			latest = sn.Time
+			break
+		}
+	}
+	type window struct {
+		from   time.Time
+		on     bool
+		bucket func(time.Time) int
+		last   int
+	}
+	windows := []window{
+		{latest.AddDate(0, 0, -k.DailyDays), k.DailyDays > 0, func(t time.Time) int {
+			return t.Year()*10000 + int(t.Month())*100 + t.Day()
+		}, -1},
+		{latest.AddDate(0, 0, -7*k.WeeklyWeeks), k.WeeklyWeeks > 0, func(t time.Time) int {
+			y, w := t.ISOWeek()
+			return y*100 + w
+		}, -1},
+		{latest.AddDate(0, -k.MonthlyMonths, 0), k.MonthlyMonths > 0, func(t time.Time) int {
+			return t.Year()*100 + int(t.Month())
+		}, -1},
+	}
+	all := latest.AddDate(0, 0, -k.AllDays)
+	var out []restic.Snapshot
+	for nr, sn := range list {
+		keep := k.AllDays > 0 && sn.Time.After(all)
+		for i := range windows {
+			w := &windows[i]
+			if !w.on || !sn.Time.After(w.from) {
+				continue
+			}
+			if b := w.bucket(sn.Time); b != w.last || nr == len(list)-1 {
+				keep, w.last = true, b
+			}
+		}
+		if !keep {
+			out = append(out, sn)
+		}
+	}
+	return out
 }
 
 // LimitLadder is how the space limit thins old backups when the repository is over it (Whombat backup-options.md

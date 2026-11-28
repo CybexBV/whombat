@@ -321,11 +321,13 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   owns. The backup service keeps it (`appliance/backup/internal/offsite`, `GET|PUT|DELETE /v1/offsite`,
   `POST /v1/offsite/copy`): setting it writes, reads and deletes a small file with the key, then opens or makes the
   copy's repository with the main one's password and chunker; the key is sealed like the main destination's. After each
-  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` checks by both
-  repositories' ids that the copy isn't the main place, then runs `restic copy` of this Whombat's checkpoints (those its
+  backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` checks by the
+  repositories' ids that the copy isn't the main place and is still the one set up, then runs `restic copy` of this
+  Whombat's checkpoints (those its
   backup list trusts, `listing.Trusted`) not in the bucket's own list, read on every run, which is also all its status
-  says is there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (its machines' snapshots
-  only) by the same keep windows at most every 23 hours; with none of its own at the main place a run copies and clears
+  says is there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (the copy's snapshots it
+  trusts, by restic's keep rule worked out over just those, `PolicyKeep.Expired`, removed by id) by the same keep
+  windows at most every 23 hours; with none of its own at the main place a run copies and clears
   nothing; nothing is copied during a restore. A REST main place over https is reached through a relay on a private
   socket that trusts only its certificate authority (`pkg/restic/relay.go`), so restic's `--cacert` stays the copy's;
   the setup's S3 check never follows a redirect. The runtime reads its document

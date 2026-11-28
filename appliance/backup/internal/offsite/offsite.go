@@ -239,6 +239,11 @@ func Set(ctx context.Context, c *state.Config, req Request) (*Place, error) {
 	if errors.Is(err, restic.ErrCopyCredentials) {
 		return nil, stepErr(StepPair, err)
 	}
+	if err != nil {
+		// Anything else that keeps one copy from reaching both places (the main place's own certificate authority
+		// unreadable, no room for the relay) would fail every copy: refused now rather than kept.
+		return nil, stepErr(StepMain, err)
+	}
 	cfg, err := target.Config(ctx)
 	switch {
 	case err == nil:

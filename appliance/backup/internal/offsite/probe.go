@@ -29,7 +29,7 @@ const (
 	StepWrite      = "write"      // the key can't save files there
 	StepRead       = "read"       // the key can't read them back
 	StepDelete     = "delete"     // the key can't delete (restic needs it for its locks, Whombat to clear old copies)
-	StepRepository = "repository" // the folder holds backups this Whombat's password doesn't open
+	StepRepository = "repository" // the folder holds backups that aren't this Whombat's copy (its password doesn't open them, or another repository replaced the copy)
 	StepSame       = "same"       // it is where the backups go already
 	StepPair       = "pair"       // the main place needs other credentials of the same kind (two buckets, two keys)
 	StepMain       = "main"       // the main place's backups couldn't be read
@@ -45,7 +45,7 @@ var Reasons = map[string]string{
 	StepWrite:      "The key can't save files in that bucket. Give it permission to write.",
 	StepRead:       "The key can't read files back from that bucket. Give it permission to read.",
 	StepDelete:     "The key can't delete files in that bucket. Whombat needs that to clear old copies; give it permission to delete.",
-	StepRepository: "That folder already holds backups this Whombat can't open. Choose another folder.",
+	StepRepository: "That folder holds backups that aren't this Whombat's copy. Choose another folder.",
 	StepSame:       "That's where your backups go already. Choose another place for the copy.",
 	StepPair:       "Your backups already go to a bucket with another key. Whombat can keep a copy in a second bucket only with the same key.",
 	StepMain:       "Whombat couldn't read the backups at their main place, so nothing was copied.",

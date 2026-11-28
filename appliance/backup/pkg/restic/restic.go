@@ -640,6 +640,19 @@ func (r Repo) ForgetHosts(ctx context.Context, tag string, hosts []string, keep 
 	return out.String(), err
 }
 
+// ForgetSnapshots removes exactly the snapshots ids and prunes what nothing names any more: a repository other machines
+// write into too is cleared by the caller's own choice of snapshots, never by a filter that may match theirs. ids must
+// name at least one snapshot.
+func (r Repo) ForgetSnapshots(ctx context.Context, ids []string) (string, error) {
+	if len(ids) == 0 {
+		return "", errors.New("restic forget: no snapshots named")
+	}
+	args := append([]string{"forget", "--prune"}, ids...)
+	var out bytes.Buffer
+	_, err := r.unlocked(ctx, &out, args...)
+	return out.String(), err
+}
+
 // StoredSize is the size of the data the repository's snapshots reference as it is stored, compressed and
 // deduplicated (`restic stats --mode raw-data`): what the space limit is measured against where the box can't
 // list the destination's files itself.

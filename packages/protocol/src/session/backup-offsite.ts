@@ -25,8 +25,9 @@ export type BackupOffsiteProvider = z.infer<typeof BackupOffsiteProvider>;
  * What failed, setting the place up or copying to it: the app and the Inbox say it in the person's language. `reach`
  * nobody answered at the address; `bucket` no bucket of that name; `keys` the key or its secret was refused; `region`
  * the bucket is in another region; `write`, `read`, `delete` the key may not do that there; `repository` the folder holds
- * backups this Whombat can't open; `same` it is where the backups go already; `pair` the backups go to a bucket with
- * another key; `main` the backups at their main place couldn't be read; `copy` the copy itself stopped.
+ * backups that aren't this Whombat's copy (it can't open them, or another repository replaced the copy); `same` it is
+ * where the backups go already; `pair` the backups go to a bucket with another key; `main` the backups at their main
+ * place couldn't be read; `copy` the copy itself stopped.
  */
 export const BackupOffsiteStep = z.enum([
   'reach',
