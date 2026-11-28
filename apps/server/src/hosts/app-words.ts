@@ -87,6 +87,8 @@ export function appOutcomeLine(
           return t('hosts.apps.noFiles');
         case 'no_cli':
           return t('hosts.apps.noCli');
+        case 'compose_old':
+          return t('hosts.apps.composeOld');
         case 'gone':
           return t('hosts.apps.gone');
         case 'back_failed':

@@ -108,6 +108,13 @@ describe('the line when an app update ended', () => {
     expect(appOutcomeLine({ app: 'Immich', status: 'failed', reason: 'interrupted' }, 'nas')).toContain(
       'nas',
     );
+    // An older Docker Compose that would download images itself: the server needs a newer one, in both languages.
+    for (const locale of ['en', 'nl']) {
+      const old = appOutcomeLine({ app: 'Immich', status: 'failed', reason: 'compose_old' }, 'nas', locale);
+      expect(old).toContain('Docker Compose');
+      expect(old).toContain('nas');
+      expect(old).not.toBe(appOutcomeLine({ app: 'Immich', status: 'failed' }, 'nas', locale));
+    }
   });
 
   it('keeps to four apps and counts the rest', () => {

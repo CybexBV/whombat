@@ -39,6 +39,10 @@ export const APPS = splitPairs({
     'I couldn’t update {app}: Docker Compose isn’t installed on {server}.',
     'Ik kon {app} niet bijwerken: Docker Compose is niet geïnstalleerd op {server}.',
   ],
+  'hosts.apps.composeOld': [
+    'I couldn’t update {app}: {server} needs a newer Docker Compose for that. Nothing changed.',
+    'Ik kon {app} niet bijwerken: {server} heeft daarvoor een nieuwere Docker Compose nodig. Er is niets veranderd.',
+  ],
   'hosts.apps.gone': ['{app} isn’t on {server} any more.', '{app} staat niet meer op {server}.'],
   'hosts.apps.backFailed': [
     '{app} {to} didn’t start, and putting the previous version back didn’t work either: it needs a look.',
