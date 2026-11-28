@@ -9,7 +9,7 @@ import {
   truenasProtection,
 } from './protection';
 import { failingTests } from './runner';
-import { offsiteOf, pveProtection } from './view';
+import { offsiteOf, placeChosenAt, pveProtection, sameMachineState, whombatProtection } from './view';
 
 const d = (s: string) => new Date(s);
 
@@ -203,5 +203,74 @@ describe('a Proxmox machine’s backups', () => {
     expect(pveProtection({ ...read, listsRead: false }).state).toBe('unseen');
     expect(pveProtection({ ...read, newest: { ...onPbs, storage: undefined } }).state).toBe('unseen');
     expect(pveProtection({ ...read, newest: null }).state).toBe('unseen');
+  });
+});
+
+describe('this Whombat’s own backups', () => {
+  const status = (over: Partial<Parameters<typeof whombatProtection>[0]> = {}) =>
+    ({
+      state: 'protected',
+      destination: { configured: true, kind: 'rest', repositoryId: 'repo-b' },
+      lastSuccess: { at: '2026-11-28T03:00:00Z' },
+      lastFailure: null,
+      ...over,
+    }) as Parameters<typeof whombatProtection>[0];
+
+  it('knows when backups started going to the place in use', () => {
+    const sets = [
+      { repositoryId: 'repo-a', at: '2026-11-01T10:00:00.000Z' },
+      // The same place followed to a new address: not a change.
+      { repositoryId: 'repo-a', at: '2026-11-10T10:00:00.000Z' },
+      { repositoryId: 'repo-b', at: '2026-11-27T10:00:00.000Z' },
+    ];
+    expect(placeChosenAt(sets, 'repo-b')).toBe('2026-11-27T10:00:00.000Z');
+    expect(placeChosenAt(sets.slice(0, 2), 'repo-a')).toBe('2026-11-01T10:00:00.000Z');
+    // Back to an earlier place: from then.
+    expect(
+      placeChosenAt([...sets, { repositoryId: 'repo-a', at: '2026-11-28T10:00:00.000Z' }], 'repo-a'),
+    ).toBe('2026-11-28T10:00:00.000Z');
+    // Set some other way: Whombat can't tell.
+    expect(placeChosenAt(sets, 'repo-c')).toBeNull();
+    expect(placeChosenAt([], 'repo-b')).toBeNull();
+  });
+
+  it('is copied only once a backup worked at the place in use', () => {
+    expect(whombatProtection(status(), '2026-11-27T10:00:00.000Z')).toEqual({
+      state: 'copied',
+      lastAt: '2026-11-28T03:00:00Z',
+    });
+    expect(whombatProtection(status({ destination: { configured: true, kind: 'local' } }), null).state).toBe(
+      'local',
+    );
+    // Before the first backup there, and every backup there failing: a plan and the failure.
+    expect(whombatProtection(status({ lastSuccess: null }), '2026-11-27T10:00:00.000Z')).toEqual({
+      state: 'none',
+      lastAt: null,
+      planned: true,
+    });
+    const failing = status({
+      state: 'failing',
+      lastFailure: { at: '2026-11-28T09:00:00Z' },
+    } as Partial<Parameters<typeof whombatProtection>[0]>);
+    expect(whombatProtection(failing, '2026-11-28T08:00:00.000Z')).toEqual({
+      state: 'none',
+      lastAt: null,
+      planned: true,
+      failedAt: '2026-11-28T09:00:00Z',
+    });
+    expect(whombatProtection(status({ destination: { configured: false } }), null)).toEqual({
+      state: 'none',
+      lastAt: null,
+    });
+  });
+});
+
+describe('Incus and QEMU/KVM machines', () => {
+  it('are kept on the same machine only by a snapshot or a backup that worked', () => {
+    expect(sameMachineState('incus', { snapshots: 2, last: null })).toBe('local');
+    expect(sameMachineState('incus', { snapshots: 0, last: null })).toBe('none');
+    expect(sameMachineState('libvirt', { last: { result: 'ok' } })).toBe('local');
+    expect(sameMachineState('libvirt', { last: { result: 'error' } })).toBe('none');
+    expect(sameMachineState('libvirt', { last: null })).toBe('none');
   });
 });
