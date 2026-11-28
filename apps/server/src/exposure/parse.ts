@@ -58,7 +58,7 @@ export type Blind =
   | { code: 'funnel_allowed'; who: string }
   | { code: 'policy_unread' };
 
-/** Host and port of a URL or `host:port` (“http://192.168.1.20:2283” → 192.168.1.20, 2283). */
+/** Host and port of a URL or `host:port` (“http://10.100.0.20:2283” → 10.100.0.20, 2283). */
 export function hostPort(target: string): { host: string | null; port: number | null } {
   const t = target.trim();
   if (!t) return { host: null, port: null };
@@ -131,7 +131,7 @@ export function npmOpenings(s: NpmSnapshot): SourceOpenings {
 
 export interface TunnelRoute {
   hostname: string;
-  /** “http://192.168.1.20:8123”, “ssh://nas:22”. */
+  /** “http://10.100.0.20:8123”, “ssh://nas:22”. */
   service: string;
   path: string | null;
 }

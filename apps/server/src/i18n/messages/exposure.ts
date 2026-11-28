@@ -150,6 +150,12 @@ export const EXPOSURE = splitPairs({
     'Het leidt naar {what}. Is dat de bedoeling?',
   ],
   'phrase.exposure.newBadge': ['New opening: {address}', 'Nieuwe opening: {address}'],
+  // A port forward's line names the port: “Port” is said in the reader's language too.
+  'phrase.exposure.newPortTitle': [
+    'Port {port} is open to the internet now',
+    'Poort {port} is nu vanaf internet bereikbaar',
+  ],
+  'phrase.exposure.newPortBadge': ['New opening: Port {port}', 'Nieuwe opening: poort {port}'],
   'phrase.exposure.seeOpen': ['See what’s open', 'Bekijk wat open is'],
   'phrase.exposure.untilClosed': ['Until it’s closed.', 'Tot het dicht is.'],
   'phrase.exposure.check': [

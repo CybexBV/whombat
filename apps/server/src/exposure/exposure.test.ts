@@ -59,7 +59,7 @@ const ctx = (over: Partial<OpeningCtx> = {}): OpeningCtx => ({
     kind: 'nginx_proxy_manager',
     id: 'con_npm',
     name: 'Nginx Proxy Manager',
-    manageUrl: 'http://192.168.1.2:81/',
+    manageUrl: 'http://10.100.0.2:81/',
   },
   links: NO_LINKS,
   meant: new Set(),
@@ -70,8 +70,8 @@ const ctx = (over: Partial<OpeningCtx> = {}): OpeningCtx => ({
 const raw = (over: Partial<RawOpening> = {}): RawOpening => ({
   how: 'proxy',
   address: 'photos.example.com',
-  target: 'http://192.168.1.20:2283',
-  targetHost: '192.168.1.20',
+  target: 'http://10.100.0.20:2283',
+  targetHost: '10.100.0.20',
   targetPort: 2283,
   https: 'yes',
   guard: 'none',
@@ -84,15 +84,15 @@ describe('what counts as open', () => {
     expect(isPublicName('*.example.com')).toBe(true);
     expect(isPublicName('nas.local')).toBe(false);
     expect(isPublicName('router.home.arpa')).toBe(false);
-    expect(isPublicName('192.168.1.20')).toBe(false);
+    expect(isPublicName('10.100.0.20')).toBe(false);
     expect(isPublicName('box.tail1234.ts.net')).toBe(false);
     expect(isPublicName('localhost')).toBe(false);
   });
 
   it('reads a target’s host and port', () => {
-    expect(hostPort('http://192.168.1.20:8080')).toEqual({ host: '192.168.1.20', port: 8080 });
+    expect(hostPort('http://10.100.0.20:8080')).toEqual({ host: '10.100.0.20', port: 8080 });
     expect(hostPort('https://nas.lan')).toEqual({ host: 'nas.lan', port: 443 });
-    expect(hostPort('192.168.1.30:22')).toEqual({ host: '192.168.1.30', port: 22 });
+    expect(hostPort('10.100.0.30:22')).toEqual({ host: '10.100.0.30', port: 22 });
     expect(hostPort('')).toEqual({ host: null, port: null });
   });
 });
@@ -133,9 +133,9 @@ describe('Cloudflare', () => {
       source: 'cloudflare',
       config: {
         ingress: [
-          { hostname: 'ha.example.com', service: 'http://192.168.1.10:8123' },
-          { hostname: 'pve.example.com', service: 'https://192.168.1.5:8006' },
-          { hostname: 'inside.local', service: 'http://192.168.1.9' },
+          { hostname: 'ha.example.com', service: 'http://10.100.0.10:8123' },
+          { hostname: 'pve.example.com', service: 'https://10.100.0.5:8006' },
+          { hostname: 'inside.local', service: 'http://10.100.0.9' },
           { service: 'http_status:404' },
         ],
       },
@@ -181,26 +181,26 @@ describe('routers', () => {
           interface: 'wan',
           protocol: 'TCP',
           'destination.port': '32400',
-          target: '192.168.1.40',
+          target: '10.100.0.40',
           'local-port': '32400',
           'source.network': 'any',
           descr: 'Plex',
         },
-        { interface: 'lan', protocol: 'UDP', 'destination.port': '53', target: '192.168.1.3' },
-        { interface: 'wan', disabled: '1', 'destination.port': '22', target: '192.168.1.5' },
-        { interface: 'wan', nordr: '1', 'destination.port': '80', target: '192.168.1.5' },
+        { interface: 'lan', protocol: 'UDP', 'destination.port': '53', target: '10.100.0.3' },
+        { interface: 'wan', disabled: '1', 'destination.port': '22', target: '10.100.0.5' },
+        { interface: 'wan', nordr: '1', 'destination.port': '80', target: '10.100.0.5' },
         {
           interface: 'wan',
           protocol: 'TCP',
           destination: { port: '3389' },
-          target: '192.168.1.50',
+          target: '10.100.0.50',
           source: { network: '203.0.113.0/24' },
         },
       ],
     });
     expect(rows.map((o) => [o.address, o.target, o.guard, o.label])).toEqual([
-      ['32400', '192.168.1.40:32400', 'none', 'Plex'],
-      ['3389', '192.168.1.50:3389', 'some_addresses', undefined],
+      ['32400', '10.100.0.40:32400', 'none', 'Plex'],
+      ['3389', '10.100.0.50:3389', 'some_addresses', undefined],
     ]);
     expect(opnsenseUpnp([{ id: 'miniupnpd', running: true }])).toBe(true);
     expect(opnsenseUpnp([{ id: 'unbound', running: true }])).toBe(false);
@@ -214,7 +214,7 @@ describe('routers', () => {
           name: 'Plex',
           enabled: true,
           dst_port: '32400',
-          fwd: '192.168.1.40',
+          fwd: '10.100.0.40',
           fwd_port: '32400',
           proto: 'tcp',
           src: 'any',
@@ -223,7 +223,7 @@ describe('routers', () => {
           name: 'Off',
           enabled: false,
           dst_port: '80',
-          fwd: '192.168.1.41',
+          fwd: '10.100.0.41',
           fwd_port: '80',
           proto: 'tcp_udp',
         },
@@ -234,8 +234,8 @@ describe('routers', () => {
     expect(unifiUpnp({ data: [{ key: 'mgmt' }, { key: 'usg', upnp_enabled: true }] })).toBe(true);
     expect(unifiUpnp({ data: [{ key: 'usg' }] })).toBeNull();
     expect(unifiSiteName({ data: [{ id: 'uuid', internalReference: 'default' }] })).toBe('default');
-    expect(unifiLegacyBase({ baseUrl: 'https://192.168.1.1/proxy/network/integration' })).toBe(
-      'https://192.168.1.1/proxy/network/api',
+    expect(unifiLegacyBase({ baseUrl: 'https://10.100.0.1/proxy/network/integration' })).toBe(
+      'https://10.100.0.1/proxy/network/api',
     );
   });
 
@@ -256,7 +256,7 @@ describe('an opening in words', () => {
   const links: Links = {
     connections: new Map([
       [
-        '192.168.1.20:2283',
+        '10.100.0.20:2283',
         {
           thing: 'connection:con_immich',
           name: 'Immich',
@@ -266,7 +266,7 @@ describe('an opening in words', () => {
         },
       ],
       [
-        '192.168.1.5:8006',
+        '10.100.0.5:8006',
         {
           thing: 'connection:con_pve',
           name: 'Proxmox',
@@ -276,7 +276,7 @@ describe('an opening in words', () => {
       ],
     ]),
     machines: new Map([
-      ['192.168.1.40', { thing: 'server:media-01', name: 'media-01', href: '/things/server%3Amedia-01' }],
+      ['10.100.0.40', { thing: 'server:media-01', name: 'media-01', href: '/things/server%3Amedia-01' }],
     ]),
   };
 
@@ -288,7 +288,7 @@ describe('an opening in words', () => {
     expect(o.via).toContain('Nginx Proxy Manager');
     expect(o.risk).toBeUndefined();
     expect(o.id).toBe(openingId('con_npm', raw()));
-    expect(o.id).not.toBe(openingId('con_npm', raw({ target: 'http://192.168.1.21:2283' })));
+    expect(o.id).not.toBe(openingId('con_npm', raw({ target: 'http://10.100.0.21:2283' })));
     expect(o.watch).toMatchObject({
       thing: 'connection:con_npm',
       check: EXPOSURE_NEW_CHECK,
@@ -299,7 +299,7 @@ describe('an opening in words', () => {
         how: 'port_forward',
         address: '32400',
         port: 32400,
-        targetHost: '192.168.1.40',
+        targetHost: '10.100.0.40',
         targetPort: 32400,
         protocol: 'TCP',
       }),
@@ -319,11 +319,10 @@ describe('an opening in words', () => {
   it('highlights only what is certain, one at a time', () => {
     const c = ctx({ links });
     expect(
-      riskOf(raw({ targetHost: '192.168.1.5', targetPort: 8006 }), linkOf(links, '192.168.1.5', 8006), c)
-        ?.kind,
+      riskOf(raw({ targetHost: '10.100.0.5', targetPort: 8006 }), linkOf(links, '10.100.0.5', 8006), c)?.kind,
     ).toBe('admin_open');
     expect(
-      riskOf(raw({ targetHost: '192.168.1.5', targetPort: 8006, guard: 'cloudflare_access' }), null, c),
+      riskOf(raw({ targetHost: '10.100.0.5', targetPort: 8006, guard: 'cloudflare_access' }), null, c),
     ).toBeNull();
     expect(riskOf(raw({ how: 'port_forward', port: 3389, targetPort: 3389 }), null, c)?.kind).toBe(
       'admin_open',
@@ -476,6 +475,10 @@ describe('Something new is open to the internet', () => {
     expect(localizePhrase(n.detail ?? '', 'nl-NL')).toContain('media-01');
     expect(localizePhrase(n.detail ?? '', 'nl-NL')).not.toBe(n.detail);
     expect(localizePhrase('See what’s open', 'nl-NL', { button: true })).not.toBe('See what’s open');
+    // A port forward's line says “Port” in Dutch too, keeping the number.
+    const port = newOpeningNotice('con_unifi', raw({ how: 'port_forward', address: '32400' }), null);
+    expect(localizePhrase(port.title, 'nl-NL')).toMatch(/^Poort 32400 /);
+    expect(localizePhrase(port.badge ?? '', 'nl-NL')).toContain('poort 32400');
   });
 
   it('raises a line only for what is new, once per opening', () => {

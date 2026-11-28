@@ -84,7 +84,7 @@ export const ExposureOpening = z.object({
   title: z.string().min(1).max(240),
   /** Where it comes from: “Through Nginx Proxy Manager”, “Port forward on UniFi”. */
   via: z.string().min(1).max(160),
-  /** What it leads to as the source says it (“192.168.1.20:2283”, “http://homeassistant:8123”). */
+  /** What it leads to as the source says it (“10.100.0.20:2283”, “http://homeassistant:8123”). */
   target: z.string().max(200).optional(),
   /** The server, guest or connection it leads to, when Whombat knows it by its address. */
   leadsTo: z
