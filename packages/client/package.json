@@ -30,6 +30,7 @@
     "./voice/react": "./src/voice/react.ts",
     "./voice/fake": "./src/voice/fake.ts",
     "./weather-news/fake": "./src/weatherNewsFake.ts",
+    "./protected/fake": "./src/protectedFake.ts",
     "./remote-help/fake": "./src/managed/remote-help-fake.ts",
     "./backup-places/fake": "./src/managed/backup-places-fake.ts",
     "./host/fake": "./src/host/fake.ts",

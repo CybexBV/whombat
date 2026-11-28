@@ -47,6 +47,7 @@ import { InlineRename } from '../ui/inlineRename';
 import { hasNativeMenu, MenuSheet, NativeMenu } from '../ui/nativeMenu';
 import { PlacesButton, SHELL_TARGET } from '../ui/places';
 import { Button, SkeletonRows } from '../ui/primitives';
+import { ProtectedLink } from '../ui/protectedLink';
 import { useBottomRoom } from '../ui/screenBottom';
 import { StatusMark } from '../ui/statusMark';
 import { Touchable } from '../ui/Touchable';
@@ -231,6 +232,9 @@ export function PlaceScreen({ navigation, route }: Props) {
           ) : null}
           {place === 'servers' && lists.hosts && lists.pendingServers ? (
             <WaitingCard pending={lists.pendingServers} onReview={add} />
+          ) : null}
+          {place === 'servers' && rows.length ? (
+            <ProtectedLink onPress={() => navigation.navigate('Protected', { back: words.title })} />
           ) : null}
         </View>
       </ScrollView>

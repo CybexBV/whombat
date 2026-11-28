@@ -13,6 +13,7 @@ export const PROTECTED_MESSAGES = splitPairs({
     'Als een machine kapotgaat, wat raak je dan kwijt?',
   ],
   'protected.empty': ['Nothing to show yet.', 'Nog niets te zien.'],
+  'protected.loading': ['Reading what’s protected', 'Lezen wat beschermd is'],
   'protected.loadFailed': [
     'This page couldn’t load. Try again.',
     'Deze pagina kon niet laden. Probeer het opnieuw.',

@@ -393,6 +393,7 @@ export function protectedPageWords(locale?: string | null) {
     intro: tr.t('protected.intro'),
     ask: (assistant: string) => tr.t('protected.askButton', { assistant }),
     empty: tr.t('protected.empty'),
+    loading: tr.t('protected.loading'),
     loadFailed: tr.t('protected.loadFailed'),
     failed: tr.t('protected.failed'),
     unread: (names: string) => tr.t('protected.unread', { names }),
