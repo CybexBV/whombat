@@ -3,7 +3,7 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
-## Unreleased
+## 28 November 2026
 
 - Whombat can update your Docker Compose apps: an app with a newer version says “Update available” on its server’s
   page and its own page, with Update. Whombat asks first, restarts only that app, and puts the previous version back
