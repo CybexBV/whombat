@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"rackoon/internal/proto"
 )
@@ -98,5 +99,65 @@ func TestRemoteVersion(t *testing.T) {
 	}
 	if _, err := u.remoteVersion(context.Background(), ref, "sha256:gone"); err == nil {
 		t.Error("a missing manifest is an error")
+	}
+}
+
+// A stopped service that shares a running one's image isn't checked itself:
+// it carries that image's newer facts, so an update binds both to one image.
+func TestStoppedSiblingNewerFacts(t *testing.T) {
+	const ref = "ghcr.io/example/app:release"
+	imageID := "sha256:" + strings.Repeat("a", 64)
+	digest := "sha256:" + strings.Repeat("d", 64)
+	labels := func(service string) map[string]string {
+		return map[string]string{"com.docker.compose.project": "app", "com.docker.compose.service": service,
+			"com.docker.compose.project.working_dir": "/srv/app", "com.docker.compose.config-hash": strings.Repeat("c", 64)}
+	}
+	list := []map[string]any{
+		{"Id": strings.Repeat("1", 64), "Names": []string{"/app_web"}, "Image": ref, "ImageID": imageID, "State": "running",
+			"Labels": labels("web"), "HostConfig": map[string]string{"NetworkMode": "bridge"}},
+		{"Id": strings.Repeat("2", 64), "Names": []string{"/app_worker"}, "Image": ref, "ImageID": imageID, "State": "exited",
+			"Labels": labels("worker"), "HostConfig": map[string]string{"NetworkMode": "bridge"}},
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"Version":"29.8.1","ApiVersion":"1.56"}`))
+	})
+	mux.HandleFunc("/containers/json", func(w http.ResponseWriter, r *http.Request) { json.NewEncoder(w).Encode(list) })
+	mux.HandleFunc("/containers/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/json") {
+			json.NewEncoder(w).Encode(map[string]any{"State": map[string]any{"Status": "running"}, "Config": map[string]any{"Image": ref}})
+			return
+		}
+		w.Write([]byte(`{}`))
+	})
+	sock := serveUnix(t, mux)
+	c := newTestCollector()
+	d := c.docker
+	d.socket = sock
+	d.client = unixHTTPClient(sock, 5*time.Second)
+	yes := true
+	c.images.checked[imageCand{Ref: ref, ImageID: imageID}.key()] = imageCheck{at: time.Now(), update: &yes, remote: digest,
+		version: "v2.4.0", versionRead: true}
+	if err := d.run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	p := d.snapshot()
+	if p == nil {
+		t.Fatal("no snapshot")
+	}
+	g := map[string]proto.Guest{}
+	for _, x := range p.Guests {
+		g[x.ID] = x
+	}
+	web, worker := g["app_web"], g["app_worker"]
+	if web.App == nil || web.App.NewDigest != digest || web.UpdateAvailable == nil || !*web.UpdateAvailable {
+		t.Fatalf("web: %+v %+v", web, web.App)
+	}
+	if worker.App == nil || worker.App.NewDigest != digest || worker.App.NewVersion != "v2.4.0" {
+		t.Fatalf("worker: %+v", worker.App)
+	}
+	// The stopped one isn't offered as an update of its own, nor checked itself.
+	if worker.UpdateAvailable != nil || len(d.runningImages()) != 1 {
+		t.Fatalf("worker update %v, checked %v", worker.UpdateAvailable, d.runningImages())
 	}
 }

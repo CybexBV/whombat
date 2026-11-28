@@ -3,6 +3,8 @@ package apps
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -53,10 +55,20 @@ type Docker interface {
 	Config(ctx context.Context, p Project) ([]byte, error)
 	// Compose runs `docker compose <project args> <args>`, its output to w.
 	Compose(ctx context.Context, p Project, w io.Writer, args ...string) error
+	// UpPullNever reports whether this Compose's `up` takes `--pull never`
+	// (an older one doesn't).
+	UpPullNever(ctx context.Context) (bool, error)
+	// ImageUsed reports whether a tag names an image ("sha256:…") or a
+	// container, running or not, was created from it.
+	ImageUsed(ctx context.Context, id string) (bool, error)
 }
 
 // ErrNoCompose: neither `docker compose` nor docker-compose is installed.
 var ErrNoCompose = errors.New("docker compose isn’t installed")
+
+// ErrComposeOld: this Compose can't be told not to pull, and the settings
+// ask it to pull an image it has.
+var ErrComposeOld = errors.New("it needs a newer Docker Compose")
 
 // Runner runs one app task: `whombat-agent app-task --dir DIR`.
 type Runner struct {
@@ -81,6 +93,8 @@ type Runner struct {
 
 	mu  sync.Mutex
 	log io.Writer
+	// pullNever: whether this Compose takes `up --pull never`, once known.
+	pullNever *bool
 }
 
 // Run runs the task to its end and writes result.json. A task that has
@@ -292,6 +306,7 @@ func (r *Runner) finish(ctx context.Context, pend *Pending) []Outcome {
 			}
 		}
 		dropBackup()
+		r.dropPulled(bg, pend.NewID, pend.OldID)
 		return outs(proto.AppFailed, proto.AppReasonInterrupted, "")
 	}
 	reason, msg := proto.AppReasonInterrupted, ""
@@ -317,6 +332,7 @@ func (r *Runner) finish(ctx context.Context, pend *Pending) []Outcome {
 		return outs(proto.AppFailed, proto.AppReasonBackFail, lastLine(err.Error()))
 	}
 	dropBackup()
+	r.dropPulled(bg, pend.NewID, pend.OldID)
 	return outs(proto.AppRolledBack, reason, msg)
 }
 
@@ -490,10 +506,25 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		}
 	}
 
+	// Exactly the image the person said yes to: the digest the apps of this
+	// image were bound to (a stopped one may not know it, a running one
+	// does); without one (the registry didn't say which), the tag's newest.
+	digest, one := boundDigest(expect, group)
+	if !one {
+		r.logf("The services that run %s’s image were said yes to with different newer images.", name)
+		return all(proto.AppFailed, proto.AppReasonChanged, "", "")
+	}
+	// Compose must start the services, and put them back, without pulling:
+	// known before anything changes.
+	if why := r.composePulls(ctx, rp); why != "" {
+		r.logf("This Docker Compose can’t be told not to download images, and the settings ask it to (%s): leaving %s as it is.", why, name)
+		return all(proto.AppFailed, proto.AppReasonComposeOld, why, "")
+	}
+
 	r.logf("Updating %s (Compose project %s, services %s) from %s.", name, p.Name, strings.Join(services, ", "), orUnknown(o.From))
 	// The previous image keeps a tag of its own until the new one is known
 	// to work, and the way back is written down before anything changes.
-	backup := BackupTag(ref, p.Service)
+	backup := BackupTag(ref, p.Name, p.Service)
 	if err := r.Docker.Tag(ctx, oldID, backup); err != nil {
 		return all(proto.AppFailed, AppReasonDocker, lastLine(err.Error()), "")
 	}
@@ -506,11 +537,9 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 			r.logf("(could not remove the tag %s: %v)", backup, err)
 		}
 	}
-	// Exactly the image the person said yes to; without a digest (the
-	// registry didn't say which), the tag's newest.
 	pull := ref
-	if said && exp.Digest != "" {
-		pull = Repo(ref) + "@" + exp.Digest
+	if digest != "" {
+		pull = Repo(ref) + "@" + digest
 	} else {
 		pend.Moved = true // pulling a tag moves it
 	}
@@ -546,6 +575,9 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		dropBackup()
 		return all(proto.AppCurrent, "", "", o.From)
 	}
+	// An image pulled for an update that doesn't run it goes again, unless
+	// something else uses it.
+	dropPulled := func() { r.dropPulled(bg, newID, oldID) }
 	to := VersionOf(newLabels, ref)
 	if holdMajor && (o.From == "" || to == "" || MajorJump(o.From, to)) {
 		// Nobody said yes to a new major version, and this may be one: the
@@ -553,6 +585,7 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		r.logf("%s → %s may be a new major version: leaving it for a person to decide.", orUnknown(o.From), orUnknown(to))
 		restore()
 		dropBackup()
+		dropPulled()
 		return all(proto.AppHeld, "", "", to)
 	}
 	pend.NewID, pend.Moved = newID, true
@@ -563,11 +596,13 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 	if err := r.save(done, pend); err != nil {
 		restore()
 		dropBackup()
+		dropPulled()
 		return all(proto.AppFailed, AppReasonDocker, "could not write down the way back: "+lastLine(err.Error()), "")
 	}
 	if err := r.Docker.Tag(ctx, newID, ref); err != nil {
 		restore()
 		dropBackup()
+		dropPulled()
 		return all(proto.AppFailed, AppReasonDocker, lastLine(err.Error()), "")
 	}
 	// The restart counts before the update: a container that crashed and
@@ -595,7 +630,92 @@ func (r *Runner) update(ctx context.Context, name string, holdMajor bool, expect
 		return all(proto.AppFailed, proto.AppReasonBackFail, lastLine(err.Error()), to)
 	}
 	dropBackup()
+	dropPulled()
 	return all(proto.AppRolledBack, reason, msg, to)
+}
+
+// boundDigest is the newer image the apps of a group were said yes to: the
+// one digest their bindings carry ("" when none does); one is false when
+// they carry different ones.
+func boundDigest(expect map[string]proto.AppExpect, group []member) (digest string, one bool) {
+	for _, m := range group {
+		d := expect[m.Name].Digest
+		switch {
+		case d == "":
+		case digest == "":
+			digest = d
+		case d != digest:
+			return "", false
+		}
+	}
+	return digest, true
+}
+
+// dropPulled removes an image an update pulled and doesn't run: only when no
+// tag names it and no container, running or not, was created from it (and
+// Docker itself refuses while a container uses it). The previous image is
+// never removed.
+func (r *Runner) dropPulled(ctx context.Context, id, oldID string) {
+	if id == "" || id == oldID || !strings.HasPrefix(id, "sha256:") {
+		return
+	}
+	used, err := r.Docker.ImageUsed(ctx, id)
+	if err != nil || used {
+		if err != nil {
+			r.logf("(could not tell whether the image it pulled is used: %v)", err)
+		}
+		return
+	}
+	if err := r.Docker.Untag(ctx, id); err != nil {
+		r.logf("(could not remove the image it pulled: %v)", err)
+	}
+}
+
+// composePulls says why this Compose would pull while starting a project's
+// services ("" when it won't): one that takes `--pull never` never does; an
+// older one pulls what the settings' pull_policy asks it to.
+func (r *Runner) composePulls(ctx context.Context, p Project) string {
+	if r.pullNever == nil {
+		ok, err := r.Docker.UpPullNever(ctx)
+		if err != nil {
+			// Not known: the settings decide, as for an older Compose.
+			r.logf("(could not tell whether Compose takes --pull never: %v)", err)
+			return pullingPolicy(p)
+		}
+		r.pullNever = &ok
+	}
+	if *r.pullNever {
+		return ""
+	}
+	return pullingPolicy(p)
+}
+
+// pullingPolicy is the first pull_policy in a project's settings that has
+// Compose pull an image it already has ("always", "daily", "build", …; ""
+// when none does). Settings it can't read count as pulling.
+func pullingPolicy(p Project) string {
+	if len(p.Files) == 0 {
+		return "its settings can’t be read"
+	}
+	for _, f := range p.Files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			return "its settings can’t be read"
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			key, value, ok := strings.Cut(strings.TrimSpace(line), ":")
+			if !ok || strings.Trim(key, `"'`) != "pull_policy" {
+				continue
+			}
+			v := strings.ToLower(strings.Trim(strings.TrimSpace(value), `"',`))
+			switch v {
+			case "never", "missing", "if_not_present":
+			default:
+				return "pull_policy: " + v
+			}
+		}
+	}
+	return ""
 }
 
 // meantToRun: a container in this state was running before the update.
@@ -657,6 +777,7 @@ const resolvedPrefix = "compose-"
 // origin is a project's own folder and files, noted when its services are
 // recreated from the settings a task wrote down.
 type origin struct {
+	Name     string   `json:"name"`
 	Dir      string   `json:"dir"`
 	Files    []string `json:"files"`
 	EnvFiles []string `json:"env_files,omitempty"`
@@ -681,7 +802,7 @@ func (r *Runner) resolve(ctx context.Context, p Project) (Project, error) {
 	if err := os.MkdirAll(r.Origins, 0o700); err != nil {
 		return Project{}, err
 	}
-	if err := writeJSON(filepath.Join(r.Origins, p.Name+".json"), origin{Dir: p.Dir, Files: p.Files, EnvFiles: p.EnvFiles}); err != nil {
+	if err := writeJSON(filepath.Join(r.Origins, originFile(p)), origin{Name: p.Name, Dir: p.Dir, Files: p.Files, EnvFiles: p.EnvFiles}); err != nil {
 		return Project{}, err
 	}
 	rp := p
@@ -699,10 +820,17 @@ func (r *Runner) projectOf(labels map[string]string) (Project, bool) {
 		return p, ok
 	}
 	var o origin
-	if err := readJSON(filepath.Join(r.Origins, p.Name+".json"), &o); err == nil && o.Dir == p.Dir && len(o.Files) > 0 {
+	if err := readJSON(filepath.Join(r.Origins, originFile(p)), &o); err == nil && o.Name == p.Name && o.Dir == p.Dir && len(o.Files) > 0 {
 		p.Files, p.EnvFiles = o.Files, o.EnvFiles
 	}
 	return p, true
+}
+
+// originFile names the note of a project's own files by its name and its
+// folder: two folders can hold projects of the same name.
+func originFile(p Project) string {
+	sum := sha256.Sum256([]byte(p.Dir))
+	return p.Name + "-" + hex.EncodeToString(sum[:8]) + ".json"
 }
 
 // written reports whether a Compose file is one an app task wrote down.
@@ -745,8 +873,12 @@ func (r *Runner) up(ctx context.Context, p Project, services []string, scale map
 	err := r.Docker.Compose(ctx, p, r.writer(), args(true)...)
 	if err != nil && unknownFlag(err) {
 		// Compose before --pull (or docker-compose 1, which doesn't read
-		// COMPOSE_REMOVE_ORPHANS either): the image is there, so it isn't
-		// pulled anyway.
+		// COMPOSE_REMOVE_ORPHANS either) pulls an image it has only when the
+		// settings' pull_policy says so; then it would bring a newer image
+		// back over the one this task chose (going back too), so it isn't run.
+		if why := pullingPolicy(p); why != "" {
+			return fmt.Errorf("%w (%s)", ErrComposeOld, why)
+		}
 		err = r.Docker.Compose(ctx, p, r.writer(), args(false)...)
 	}
 	return err

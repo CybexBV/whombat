@@ -57,6 +57,12 @@ describe('which images are databases', () => {
       'bitnami/mongodb:7.0',
       'mysql8:latest',
       'mcr.microsoft.com/mssql/server:2022-latest',
+      // A project's own database by a bare word, and stores that keep messages or files.
+      'ghcr.io/example/myapp-db:2',
+      'example/paperless_db:1',
+      'nats:2.10',
+      'docker.redpanda.com/redpandadata/redpanda:v24.2',
+      'dxflrs/garage:v1.0.1',
     ])
       expect(isDatabaseImage(db), db).toBe(true);
     for (const plain of [
@@ -68,6 +74,12 @@ describe('which images are databases', () => {
       'mongo-express:1',
       'redislabs/redisinsight:2',
       'ghcr.io/example/server:1',
+      // Tools beside them stay tools.
+      'ghcr.io/example/myapp-db-ui:2',
+      'natsio/prometheus-nats-exporter:0.15',
+      'docker.redpanda.com/redpandadata/console:v2.7',
+      'example/garage-webui:1',
+      'dbgate/dbgate:5',
     ])
       expect(isDatabaseImage(plain), plain).toBe(false);
   });

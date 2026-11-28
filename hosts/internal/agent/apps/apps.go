@@ -425,17 +425,22 @@ func MajorJump(from, to string) bool {
 }
 
 // BackupTag is the tag the previous image keeps while an app is updated
-// ("ghcr.io/immich-app/immich-server:whombat-previous-immich-server"), so
-// nothing prunes it before the update is known to work.
-func BackupTag(ref, service string) string {
-	clean := strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
-			return r
-		}
-		return '-'
-	}, service)
-	tag := "whombat-previous-" + clean
+// ("ghcr.io/immich-app/immich-server:whombat-previous-immich.immich-server"),
+// so nothing prunes it before the update is known to work. It names the
+// project and the service: two projects that run the same image keep a
+// previous image each. Compose's project names have no dot, so the dot
+// between them can't make two pairs read the same.
+func BackupTag(ref, project, service string) string {
+	clean := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '.', r == '-':
+				return r
+			}
+			return '-'
+		}, s)
+	}
+	tag := "whombat-previous-" + clean(project) + "." + clean(service)
 	if len(tag) > 128 {
 		tag = tag[:128]
 	}

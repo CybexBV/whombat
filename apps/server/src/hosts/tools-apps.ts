@@ -11,10 +11,11 @@
  * again. An app whose new version turns out to be a major one, or isn't known, stays as it is (`hold_major`) unless the
  * yes said it may be a new major version.
  *
- * The yes is bound to what was checked (`expect`): the call carries, per app, its service, the image it runs, Compose's
- * hash of its settings and the exact newer image, read when it was asked for (`bindAppUpdateArgs`). No card is made for
- * an app Whombat can't bind, and a yes that isn't bound to every app it updates runs nothing. The update refuses an app
- * that changed since, and the agent deploys exactly that image.
+ * The yes is bound to what was checked (`expect`): the call carries, per app, the server's own id, its service, the image
+ * it runs, Compose's hash of its settings and the exact newer image, read when it was asked for (`bindAppUpdateArgs`).
+ * No card is made for an app Whombat can't bind, and a yes that isn't bound to every app it updates runs nothing. The
+ * update refuses an app that changed since, or a server that has come to go by the name since, and the agent deploys
+ * exactly that image.
  *
  * A snapshot first (`snapshot: true`): when the server is a Proxmox VM or container Whombat watches, Whombat takes a
  * snapshot of it and waits for it before the update starts. The task is followed: one plain line in the chat when it
@@ -75,11 +76,13 @@ const SNAPSHOT_WAIT_MS = 3 * 60_000;
 export const appName = (guestId: string) => guestId.replace(/^docker:/, '');
 
 /**
- * What one app was when the call was asked for: its service, the image it runs, Compose's hash of its settings, the
- * newer image (its registry digest, null when the registry didn't say) and the facts the card's reasons came from. The
- * update deploys exactly this and refuses when the app is something else by then.
+ * What one app was when the call was asked for: the server it runs on (the hosts service's own id, not a name a person
+ * can give to another server), its service, the image it runs, Compose's hash of its settings, the newer image (its
+ * registry digest, null when the registry didn't say) and the facts the card's reasons came from. The update deploys
+ * exactly this and refuses when the app is something else by then.
  */
 export interface AppBinding {
+  server: string;
   app: string;
   service: string;
   imageId: string;
@@ -114,6 +117,7 @@ export function bindingReasons(
 export function bindingOf(g: HostGuest): AppBinding | null {
   if (!g.app?.configHash || !/^sha256:[0-9a-f]{64}$/.test(g.imageId ?? '')) return null;
   return {
+    server: g.serverId,
     app: g.id,
     service: g.app.service,
     imageId: g.imageId as string,
@@ -198,7 +202,7 @@ export class AppBindError extends Error {
 
 /**
  * The `expect` a call carries, read back; null when it carries none or it isn't Whombat's shape (every app with its
- * service, image and Compose settings).
+ * server, service, image and Compose settings).
  */
 export function parseBindings(raw: unknown): AppBinding[] | null {
   if (!Array.isArray(raw) || raw.length === 0 || raw.length > APP_UPDATE_MAX) return null;
@@ -206,13 +210,15 @@ export function parseBindings(raw: unknown): AppBinding[] | null {
   const out: AppBinding[] = [];
   for (const item of raw) {
     const o = obj(item);
+    const server = text(o.server, 200);
     const app = text(o.app, 200);
     const service = text(o.service, 200);
     const imageId = text(o.imageId, 80);
     const image = text(o.image, 300);
     const configHash = text(o.configHash, 128);
-    if (!app || !service || !imageId || image === null || !configHash) return null;
+    if (!server || !app || !service || !imageId || image === null || !configHash) return null;
     out.push({
+      server,
       app,
       service,
       imageId,
@@ -362,13 +368,22 @@ function askReasonsOf(bindings: readonly Pick<AppBinding, 'image' | 'version' | 
 }
 
 /**
- * Whether an app is still what the call was bound to: the same service runs the same image from the same Compose
- * settings (pure).
+ * Whether an app is still what the call was bound to: on the same server, the same service runs the same image from
+ * the same Compose settings (pure).
  */
 export function stillBound(g: HostGuest, b: AppBinding): boolean {
-  if (!g.app || g.app.service !== b.service || g.imageId !== b.imageId) return false;
+  if (g.serverId !== b.server || !g.app || g.app.service !== b.service || g.imageId !== b.imageId)
+    return false;
   return !!b.configHash && g.app.configHash === b.configHash;
 }
+
+/**
+ * Whether what a call was bound to was read on this server (pure). The call names its server as the agent or the page
+ * said it, and a person can give that name to another server meanwhile (a name of their own, or a server removed and
+ * another added under its name): the yes is for the one read then.
+ */
+export const boundToServer = (bindings: readonly AppBinding[], serverId: string) =>
+  bindings.every((b) => b.server === serverId);
 
 /**
  * Takes a snapshot and waits for it to finish: listening starts before the snapshot is asked for, so one that ends at
@@ -512,6 +527,18 @@ export const APP_TOOLS: Adapter = {
       async () => {
         const srv = await resolveServer(s, server);
         const { id } = srv;
+        // The name the call says may belong to another server by now: the yes isn't for that one.
+        if (given && !boundToServer(given, id))
+          return output(
+            {
+              error: s.call.approvalId
+                ? `The person said yes for another server than the one called ${srv.label} now, so nothing was updated.`
+                : `These apps were read on another server than the one called ${srv.label} now, so nothing was updated.`,
+              code: 'changed',
+              next: 'Read app_updates again; if an update is still there, call app_update again (it asks the person again where it must).',
+            },
+            true,
+          );
         const all = await dockerGuests(s.hosts, s.actor('viewer'), id);
         const hasApps = agentReportsApps(all);
         const picked: HostGuest[] = [];

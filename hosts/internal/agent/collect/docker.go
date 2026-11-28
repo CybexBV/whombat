@@ -548,13 +548,17 @@ func (d *dockerCollector) run(ctx context.Context) error {
 			g.DiskUsedBytes = ptr(sz)
 		}
 		var newer imageResult
+		cand := imageCand{Ref: e.Image, ImageID: e.ImageID}
 		if e.State == "running" {
-			cand := imageCand{Ref: e.Image, ImageID: e.ImageID}
 			running = append(running, cand)
 			if u, ok := updates[cand.key()]; ok {
 				g.UpdateAvailable = copyPtr(u.update)
 				newer = u
 			}
+		} else if u, ok := updates[cand.key()]; ok {
+			// A stopped container isn't checked itself; one from the same
+			// image that runs was, and an update takes both to that image.
+			newer = u
 		}
 		g.App = composeApp(e.Labels, ex.image, e.Image, newer)
 		if sr := stats[i]; sr.st != nil && sr.err == nil {

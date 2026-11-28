@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -246,6 +247,47 @@ func (c *CLI) composeCmd(ctx context.Context) []string {
 		}
 	})
 	return c.compose
+}
+
+// pullFlagRe finds `--pull` among the options `compose up --help` lists
+// (`--quiet-pull` is another option).
+var pullFlagRe = regexp.MustCompile(`(?m)^\s*--pull[\s=]`)
+
+// UpPullNever reads `compose up --help`: a Compose that lists `--pull`
+// takes `--pull never`.
+func (c *CLI) UpPullNever(ctx context.Context) (bool, error) {
+	cmd := c.composeCmd(ctx)
+	if cmd == nil {
+		return false, ErrNoCompose
+	}
+	out, err := c.output(ctx, append(append([]string{}, cmd...), "up", "--help")...)
+	if err != nil {
+		return false, err
+	}
+	return upTakesPull(string(out)), nil
+}
+
+func upTakesPull(help string) bool { return pullFlagRe.MatchString(help) }
+
+// ImageUsed reports whether a tag names the image or a container, running or
+// not, was created from it.
+func (c *CLI) ImageUsed(ctx context.Context, id string) (bool, error) {
+	out, err := c.output(ctx, c.docker, "image", "inspect", "--format", "{{json .RepoTags}}", "--", id)
+	if err != nil {
+		return false, err
+	}
+	var tags []string
+	if err := json.Unmarshal(out, &tags); err != nil {
+		return false, err
+	}
+	if len(tags) > 0 {
+		return true, nil
+	}
+	out, err = c.output(ctx, c.docker, "ps", "--all", "--quiet", "--filter", "ancestor="+id)
+	if err != nil {
+		return false, err
+	}
+	return len(strings.TrimSpace(string(out))) > 0, nil
 }
 
 func (c *CLI) Compose(ctx context.Context, p Project, w io.Writer, args ...string) error {

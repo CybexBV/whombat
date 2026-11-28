@@ -70,6 +70,8 @@ export type AppAskReason = (typeof APP_ASK_REASONS)[number];
  * `kafka`, `mysql8` → `mysql`).
  */
 const DATABASE_WORDS = new Set([
+  // A bare `db` word part names a project's own database (`myapp-db`, `paperless_db`).
+  'db',
   'postgres',
   'postgresql',
   'postgis',
@@ -117,8 +119,11 @@ const DATABASE_WORDS = new Set([
   'milvus',
   'rabbitmq',
   'kafka',
+  'redpanda',
+  'nats',
   'zookeeper',
   'minio',
+  'garage',
 ]);
 
 /** Words that make an image a tool beside a database, not the database (`postgres-exporter`, `mongo-express`). */
@@ -129,6 +134,7 @@ const NOT_DATABASE_WORDS = new Set([
   'admin',
   'ui',
   'web',
+  'webui',
   'insight',
   'backup',
   'backups',
