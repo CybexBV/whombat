@@ -3,7 +3,9 @@
  * machine's newest backup as a copy in the copies' range, pulls its network cables, renames and tags it before it
  * starts, waits until it runs and its guest agent answers, then stops and deletes it, and the real machine is only
  * read. A copy that doesn't start raises one problem for the machine. The What's protected page and the machine's page
- * show the result. Postgres because every step is a signed commit the runtime picks up again after a restart.
+ * show the result. A machine at the copy's number that doesn't carry the test's marker is never changed, started,
+ * stopped or deleted, and a copy whose backup uses parts of the server is deleted without starting. Postgres because
+ * every step is a signed commit the runtime picks up again after a restart, and the sweep reads the tests back.
  */
 import { RESTORE_TEST_FAILED_HINT, RESTORE_TEST_TAG } from '@whombat/core';
 import { eq } from 'drizzle-orm';
@@ -16,7 +18,7 @@ import { IDS, TEST_BURROW_ID } from '../seed/test-world';
 import { eventually } from '../test/collab';
 import { useTestServer } from '../test/harness';
 import { sessionFor } from '../test/tokens';
-import { restoreTestsFor } from './runner';
+import { RestoreTests, restoreTestsFor } from './runner';
 
 const fake = new FakeHostsService();
 const t = useTestServer({
@@ -67,6 +69,45 @@ async function latest() {
 
 const runner = () => restoreTestsFor(t.services);
 
+const COPY = 'pve:990000';
+const COPY_PATH = `/api/v1/servers/shale/guests/${COPY}`;
+
+/** The calls that would change, start, stop or delete the machine at the copy's first number. */
+function touches(): number {
+  return (
+    fake.calls('PUT', `${COPY_PATH}/config`).length +
+    fake.calls('POST', `${COPY_PATH}/actions`).length +
+    fake.calls('DELETE', COPY_PATH).length
+  );
+}
+
+/** A person's own machine at the copy's first number. */
+function personsMachine(): void {
+  fake.configs.delete(`shale/${COPY}`);
+  if (!fake.guest('shale', COPY))
+    fake.addGuest('shale', {
+      id: COPY,
+      vmid: 990000,
+      name: 'scratch',
+      platform: 'pve',
+      kind: 'vm',
+      state: 'running',
+    });
+}
+
+/** How the restore call answers in a test (null: as Proxmox does). */
+let restoreAnswer: 'refused' | 'lost' | null = null;
+
+/** Runs passes until the newest test is finished. */
+async function finished() {
+  return eventually(async () => {
+    await runner().pass();
+    const row = await latest();
+    expect(row?.finishedAt).toBeTruthy();
+    return row;
+  });
+}
+
 beforeAll(async () => {
   await fake.start();
   cookie = (await sessionFor(t.services, IDS.mara)).cookie;
@@ -74,6 +115,14 @@ beforeAll(async () => {
   // The home jobs start it with the runtime; here only its problems are needed.
   runner().start();
   fake.manage.taskMs = 5;
+  // A person makes a machine at the number the test chose, just as the restore is asked for.
+  fake.on('POST', '/api/v1/servers/shale/backups/restore', () => {
+    if (!restoreAnswer) return null;
+    personsMachine();
+    return restoreAnswer === 'refused'
+      ? problem(409, 'platform_error', 'TASK ERROR: unable to restore')
+      : problem(503, 'unavailable', 'The agent didn’t answer.');
+  });
 });
 
 afterAll(async () => {
@@ -99,7 +148,8 @@ describe('restore tests (backup-trust.md)', () => {
     expect(run.json().running).toMatchObject({ guestId: real.id });
     expect((await request('POST', '/restore-tests/shale/run', {})).statusCode).toBe(409);
 
-    // Restored into the copies' range; its cables pulled and its name changed before it was asked to start.
+    // Restored into the copies' range; marked as this test's copy, its cables pulled and its name changed before it
+    // was asked to start.
     const booting = await eventually(async () => {
       await runner().pass();
       const row = await testRow();
@@ -108,9 +158,19 @@ describe('restore tests (backup-trust.md)', () => {
     });
     expect(booting).toMatchObject({ copyId: 990000, guestId: real.id, agentExpected: true });
     expect(copyConfig.values.net0).toContain('link_down=1');
-    expect(copyConfig.values).toMatchObject({ name: `whombat-test-of-${real.name}`, onboot: '0' });
+    expect(copyConfig.values).toMatchObject({
+      name: `whombat-test-of-${real.name}`,
+      onboot: '0',
+      description: `whombat-${booting?.id}`,
+    });
     expect(copyConfig.values.tags).toContain(RESTORE_TEST_TAG);
-    expect(fake.calls('PUT', '/api/v1/servers/shale/guests/pve:990000/config')).toHaveLength(1);
+    const puts = fake.calls('PUT', `${COPY_PATH}/config`);
+    expect(puts).toHaveLength(2);
+    const start = fake.calls('POST', `${COPY_PATH}/actions`)[0];
+    expect(start?.body).toMatchObject({ action: 'start' });
+    const order = (r: (typeof puts)[number] | undefined) => (r ? fake.requests.indexOf(r) : -1);
+    expect(order(puts[0])).toBeGreaterThanOrEqual(0);
+    expect(order(puts[0])).toBeLessThan(order(start));
 
     // Running, and its guest agent answers: it worked; then it is stopped and deleted.
     await eventually(() => expect(fake.guest('shale', 'pve:990000')?.state).toBe('running'));
@@ -180,5 +240,83 @@ describe('restore tests (backup-trust.md)', () => {
     expect((await hostsFor(t.services).fleet()).hints.some((h) => h.kind === RESTORE_TEST_FAILED_HINT)).toBe(
       false,
     );
+  });
+
+  it('a copy whose backup uses parts of the server is deleted without ever starting', async () => {
+    const real = realMachine();
+    // The machine has no hook script today, but its backup does: the copy's own settings tell.
+    fake.configs.delete(`shale/${COPY}`);
+    Object.assign(fake.configOf('shale', COPY).values, {
+      net0: 'virtio=BC:24:11:00:00:01,bridge=vmbr0',
+      hookscript: 'local:snippets/hook.pl',
+    });
+    const starts = () =>
+      fake
+        .calls('POST', `${COPY_PATH}/actions`)
+        .filter((r) => (r.body as { action?: string })?.action === 'start').length;
+    const startsBefore = starts();
+    const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+    expect(run.statusCode, run.body).toBe(200);
+    const done = await finished();
+    expect(done).toMatchObject({ outcome: 'skipped', reason: 'host_parts', copyId: 990000 });
+    expect(starts()).toBe(startsBefore);
+    expect(fake.guest('shale', COPY)).toBeNull();
+  });
+
+  it('never touches a person’s machine at the copy’s number when the restore is refused', async () => {
+    const real = realMachine();
+    const before = touches();
+    restoreAnswer = 'refused';
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      const done = await finished();
+      expect(done).toMatchObject({ outcome: 'skipped', reason: 'refused', copyId: 990000 });
+    } finally {
+      restoreAnswer = null;
+    }
+    expect(touches()).toBe(before);
+    expect(fake.guest('shale', COPY)).toMatchObject({ name: 'scratch', state: 'running' });
+    fake.removeGuest('shale', COPY);
+  });
+
+  it('never touches a machine at the copy’s number when the restore’s answer was lost', async () => {
+    const real = realMachine();
+    const before = touches();
+    restoreAnswer = 'lost';
+    try {
+      const run = await request('POST', '/restore-tests/shale/run', { guest: real.id });
+      expect(run.statusCode, run.body).toBe(200);
+      const done = await finished();
+      expect(done).toMatchObject({ outcome: 'skipped', reason: 'not_ours', copyId: 990000 });
+    } finally {
+      restoreAnswer = null;
+    }
+    expect(touches()).toBe(before);
+    expect(fake.guest('shale', COPY)).toMatchObject({ name: 'scratch', state: 'running' });
+    fake.removeGuest('shale', COPY);
+  });
+
+  it('the sweep deletes a copy carrying a test’s marker and nothing that only looks like one', async () => {
+    const rows = await t.services.db
+      .select()
+      .from(restoreTests)
+      .where(eq(restoreTests.burrowId, TEST_BURROW_ID));
+    const earlier = rows.find((r) => r.copyId === 990000 && r.finishedAt);
+    if (!earlier) throw new Error('no finished test');
+    const left = { platform: 'pve', kind: 'vm', state: 'stopped' };
+    fake.configs.delete(`shale/${COPY}`);
+    fake.addGuest('shale', { ...left, id: COPY, vmid: 990000, name: 'whombat-test-of-plex' });
+    fake.configOf('shale', COPY).values.description = `whombat-${earlier.id}`;
+    // Named and tagged like a copy, but no test made it.
+    fake.addGuest('shale', { ...left, id: 'pve:990003', vmid: 990003, name: 'whombat-test-of-plex' });
+    fake.configOf('shale', 'pve:990003').values.tags = RESTORE_TEST_TAG;
+    // A runner of its own: the shared one looked the server over minutes ago.
+    await new RestoreTests(t.services).pass();
+    // The delete is a task of its own.
+    await eventually(() => expect(fake.guest('shale', COPY)).toBeNull());
+    expect(fake.guest('shale', 'pve:990003')).toMatchObject({ name: 'whombat-test-of-plex' });
+    expect(fake.calls('DELETE', '/api/v1/servers/shale/guests/pve:990003')).toHaveLength(0);
+    fake.removeGuest('shale', 'pve:990003');
   });
 });

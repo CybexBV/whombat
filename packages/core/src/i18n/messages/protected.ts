@@ -122,6 +122,10 @@ export const PROTECTED_MESSAGES = splitPairs({
   ],
   'protected.reason.no_id': ['no free number for the copy', 'geen vrij nummer voor de kopie'],
   'protected.reason.refused': ['Proxmox refused it', 'Proxmox weigerde het'],
+  'protected.reason.not_ours': [
+    'Whombat couldn’t be sure the copy was its own, so it left it alone',
+    'Whombat wist niet zeker of de kopie echt van Whombat was en heeft hem met rust gelaten',
+  ],
 
   'protected.problem.startTitle': [
     'The backup of {name} didn’t start when Whombat tried it',

@@ -52,7 +52,8 @@ export type RestoreTestOutcome = z.infer<typeof RestoreTestOutcome>;
  * it started but never finished booting (its guest agent never answered), or it took too long. Skipped (nothing is
  * wrong with the backup): no backup to test, not enough free space or memory, it uses parts of the server itself (a passed-through
  * device, a host folder, a hook script), Proxmox wouldn't disconnect its network, Manage is off, the server isn't
- * reachable, the machine is on another node, a guest id for the copy wasn't free, or Proxmox refused something else.
+ * reachable, the machine is on another node, a guest id for the copy wasn't free, Proxmox refused something else, or
+ * Whombat couldn't prove the machine at the copy's number was its copy (then it left that machine alone).
  */
 export const RESTORE_TEST_REASONS = [
   'restore_failed',
@@ -70,6 +71,7 @@ export const RESTORE_TEST_REASONS = [
   'other_node',
   'no_id',
   'refused',
+  'not_ours',
 ] as const;
 export const RestoreTestReason = z.enum(RESTORE_TEST_REASONS);
 export type RestoreTestReason = z.infer<typeof RestoreTestReason>;
