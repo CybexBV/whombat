@@ -34,7 +34,12 @@
  * (BP-07, SL-D55), never Whombat's rules.
  */
 import type { DispatchContext } from '@whombat/core/contracts';
-import { describeScheduleWhen, EXPOSURE_NEW_CHECK, SERVICE_TEST_CHECK, shortNameOf } from '@whombat/core/domain';
+import {
+  describeScheduleWhen,
+  EXPOSURE_NEW_CHECK,
+  SERVICE_TEST_CHECK,
+  shortNameOf,
+} from '@whombat/core/domain';
 import { formatClock, formatDate, formatShortWeekday } from '@whombat/core/text';
 import { defuseDelimiters } from './defuse';
 
