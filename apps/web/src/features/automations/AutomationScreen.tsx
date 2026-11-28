@@ -30,6 +30,7 @@ import {
   MessageCircle,
   MessageSquare,
   Play,
+  Power,
   Reply,
   Zap,
 } from 'lucide-react';
@@ -439,6 +440,7 @@ const FLOW_ICONS: Record<Exclude<AutomationFlowIcon, 'agent'>, LucideIcon> = {
   report: FileText,
   reply: Reply,
   call: Link,
+  act: Power,
 };
 
 const MARK = { plain: undefined, changes: styles.markChanges, merges: styles.markMerges } as const;

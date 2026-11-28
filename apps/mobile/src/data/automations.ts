@@ -332,6 +332,9 @@ export function stepOutcome(
       if (typeof o.summary === 'string' && o.summary.trim()) return o.summary.trim();
       if (typeof o.reason === 'string' && o.reason.trim()) return o.reason.trim();
       return null;
+    case 'run_action':
+      // What it did and how it came out, in one line (“Shut down nas-01 at 21:14 — it’s switching off.”).
+      return typeof o.summary === 'string' && o.summary.trim() ? o.summary.trim() : null;
     case 'github_comment':
       if (typeof o.reason === 'string' && o.reason.trim()) return o.reason.trim();
       return step.state === 'succeeded' && typeof o.number === 'number'
@@ -369,6 +372,7 @@ const SAYS_IN_WORDS: ReadonlySet<AutomationRunStep['kind']> = new Set([
   'tracker_reply',
   'tracker_decision',
   'connection_actions',
+  'run_action',
 ]);
 
 /** `words`: the tracker's as the automation keeps them (`automationTrackerWords`), for its tracker steps. */
