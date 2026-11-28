@@ -99,6 +99,22 @@ export const HOME = splitPairs({
     'No backup has finished for longer than it should. The backups made before are still there.',
     'Er is al langer dan zou moeten geen back-up afgerond. De back-ups van eerder zijn er nog.',
   ],
+  'home.offsite.failingTitle': [
+    'The copy of your backups somewhere else isn’t working',
+    'De kopie van je back-ups op een andere plek werkt niet',
+  ],
+  'home.offsite.lateTitle': [
+    'The copy of your backups somewhere else is behind',
+    'De kopie van je back-ups op een andere plek loopt achter',
+  ],
+  'home.offsite.lateWhy': [
+    'Nothing has been copied to {place} for more than two days.',
+    'Er is al meer dan twee dagen niets naar {place} gekopieerd.',
+  ],
+  'home.offsite.fine': [
+    'Your backups here are fine; only the copy at {place} is behind.',
+    'Je back-ups hier zijn in orde; alleen de kopie op {place} loopt achter.',
+  ],
   'home.restore.waitingTitle': [
     'Finish bringing your Whombat back',
     'Maak het terugzetten van je Whombat af',

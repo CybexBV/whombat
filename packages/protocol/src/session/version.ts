@@ -101,7 +101,10 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * as they are only to a session at minor 22 or later (Whombat direct-automations.md); Windows PCs as
  * servers: a server's `windows` platform and os family and its `windows` block, which a box sends only to a session at
  * minor 22 or later (an older one sees a standard server), and an enrollment's `installCommandWindows` (Whombat
- * windows-servers.md).
+ * windows-servers.md); the copy of
+ * the backups somewhere else: `backup.offsite`, `backup.setOffsite`, `backup.removeOffsite`, `backup.copyOffsite`, the
+ * backup summary's `offsite`, the recovery material's `offsite` (sent only to a session at minor 22 or later, which
+ * reads it) and `backup.adopt`'s `from` (Whombat offsite-copy.md).
  */
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
 
@@ -129,6 +132,13 @@ export const AUTOMATIONS_WITHOUT_AI_MINOR = 22;
  * strictly, so the box shows them a Windows PC as a standard server without its os family.
  */
 export const WINDOWS_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) with the copy of the backups somewhere else. An app below it reads the recovery
+ * material strictly, so a box leaves the material's `offsite` out for it; an app asks the `backup.*Offsite` ops only of a
+ * box at this minor or later.
+ */
+export const OFFSITE_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

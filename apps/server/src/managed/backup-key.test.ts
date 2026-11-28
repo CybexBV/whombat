@@ -2,6 +2,7 @@
  * The passkey backup key's pure parts (backup-passkey.md): what makes the box lock again, where bringing it back
  * stands, how pushes are split, and the Inbox's one ask.
  */
+import { createHash } from 'node:crypto';
 import { BACKUP_PASSKEY_HREF, isBackupPasskeyHref } from '@whombat/protocol/session';
 import { describe, expect, it } from 'vitest';
 import {
@@ -49,6 +50,28 @@ describe('what makes the box lock again', () => {
     expect(secretsDigest(moved)).toBe(secretsDigest(material));
     expect(secretsDigest({ ...material, restPassword: 'new' })).not.toBe(secretsDigest(material));
     expect(secretsDigest({ ...material, manifestKey: 'ed25519:new' })).not.toBe(secretsDigest(material));
+  });
+
+  it('a copy somewhere else asks for a new paper copy; without one a saved paper copy stays good', () => {
+    // The digest of a box without a second place is the one it had before there were second places.
+    const before = [
+      ...['repo-1', 'repo-secret', 'ed25519:abc', 'home-3fkq', 'rest-secret'],
+      ...[null, null, null, null, null, null],
+    ];
+    expect(secretsDigest(material)).toBe(createHash('sha256').update(JSON.stringify(before)).digest('hex'));
+    const offsite = {
+      provider: 'b2',
+      repository: 's3:https://s3.eu-central-003.backblazeb2.com/my-backups/home',
+      s3AccessKeyId: 'KEYID',
+      s3SecretAccessKey: 'b2-secret',
+      repositoryId: 'copy-1',
+    };
+    const withCopy = { ...material, offsite };
+    expect(secretsDigest(withCopy)).not.toBe(secretsDigest(material));
+    expect(secretsDigest({ ...material, offsite: { ...offsite, s3SecretAccessKey: 'new' } })).not.toBe(
+      secretsDigest(withCopy),
+    );
+    expect(lockDigest(withCopy)).not.toBe(lockDigest(material));
   });
 
   it('the job locks at once, after the report changes, and when the retry is due', () => {

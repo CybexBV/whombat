@@ -49,6 +49,7 @@ import {
   AUTOMATIONS_WITHOUT_AI_MINOR,
   EXPOSURE_MINOR,
   LOCALE_MINOR,
+  OFFSITE_MINOR,
   OUTSIDE_CHANGES_MINOR,
   SESSION_PROTOCOL,
   T3_REVIEW_MORE_ROUNDS_MINOR,
@@ -94,6 +95,7 @@ describe('the edition (CT-1300, CT-1301)', () => {
     expect(APP_UPDATES_MINOR).toBe(22);
     expect(OUTSIDE_CHANGES_MINOR).toBe(22);
     expect(WINDOWS_MINOR).toBe(22);
+    expect(OFFSITE_MINOR).toBe(22);
     expect(LOCAL_CLAIM_PROVE_MINOR).toBe(1);
     const hello = {
       t: 'hello',

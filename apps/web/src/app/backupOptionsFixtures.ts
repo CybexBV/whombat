@@ -14,6 +14,7 @@ import {
   type BackupBringBackState,
   type BackupCheckpoint,
   type BackupFoundKit,
+  type BackupOffsite,
   type BackupPolicy,
   kitMaterialOf,
 } from '@whombat/protocol/session';
@@ -67,6 +68,8 @@ export interface FakeBackupPatch {
   serviceDown?: boolean;
   /** The places that kept backups before the one in use (the overview's `earlierPlaces`). */
   earlierPlaces?: { placeId: string; name: string }[];
+  /** The copy somewhere else: none (offered), copying fine, or failing three times over (null: none). */
+  offsite?: 'ok' | 'failing' | null;
 }
 
 /** A repository as the backup service shows it: the host (`rest:https://backup.example.com/x/` → backup.example.com). */
@@ -100,6 +103,10 @@ const OPS = new Set([
   'backup.restore',
   'backup.restoreState',
   'backup.finishRestore',
+  'backup.offsite',
+  'backup.setOffsite',
+  'backup.removeOffsite',
+  'backup.copyOffsite',
 ]);
 
 const MB = 1_000_000;
@@ -109,9 +116,9 @@ const GB = 1_000_000_000;
 const SERVICE_DOWN =
   'Your Whombat’s backup service isn’t answering right now. It usually comes back by itself; try again in a minute.';
 
-const err = (status: number, code: string, message: string): Answer => ({
+const err = (status: number, code: string, message: string, details?: unknown): Answer => ({
   status,
-  body: { error: { code, message } },
+  body: { error: { code, message, ...(details === undefined ? {} : { details }) } },
 });
 const ok = (body: unknown): Answer => ({ status: 200, body });
 
@@ -204,6 +211,46 @@ export function createFakeBackupOptions(options: FakeBackupOptionsOptions = {}):
   let lastAt: number | null = null;
   let serviceDown = false;
   let earlierPlaces: { placeId: string; name: string }[] = [];
+  /** The copy somewhere else (offsite-copy.md): its first copy finishes a few seconds after it was set up. */
+  let offsite: (BackupOffsite & { setAt: number }) | null = null;
+  const offsiteFixture = (kind: 'ok' | 'failing'): BackupOffsite & { setAt: number } => {
+    const copied = new Date(at(now(), 0, 3).getTime() + 10 * 60_000).toISOString();
+    return {
+      provider: 'b2',
+      display: 's3.eu-central-003.backblazeb2.com/blackbox-copy/home',
+      endpoint: 's3.eu-central-003.backblazeb2.com',
+      bucket: 'blackbox-copy',
+      folder: 'home',
+      region: null,
+      state: kind,
+      configuredAt: new Date(now() - 20 * 86_400_000).toISOString(),
+      lastCopyAt: kind === 'ok' ? copied : new Date(now() - 2 * 86_400_000).toISOString(),
+      newestInCopyAt: kind === 'ok' ? at(now(), 0, 3).toISOString() : at(now(), 2, 3).toISOString(),
+      newestBackupAt: at(now(), 0, 3).toISOString(),
+      backupsInCopy: list.length,
+      failedAttempts: kind === 'failing' ? 3 : 0,
+      lastFailure: kind === 'failing' ? { at: new Date(now() - 3600_000).toISOString(), step: 'keys' } : null,
+      nextTryAt: kind === 'failing' ? new Date(now() + 2 * 3600_000).toISOString() : null,
+      lastClearedAt: null,
+      setAt: 0,
+    };
+  };
+  /** The copy as the backup service says it now (its first copy done once a few seconds passed). */
+  const offsiteNow = (): BackupOffsite | null => {
+    if (!offsite) return null;
+    const { setAt, ...copy } = offsite;
+    if ((copy.state === 'first' || copy.state === 'copying') && setAt && now() - setAt > 4000) {
+      offsite = {
+        ...offsite,
+        state: 'ok',
+        lastCopyAt: new Date(now()).toISOString(),
+        newestInCopyAt: copy.newestBackupAt,
+        backupsInCopy: list.length,
+      };
+      return offsiteNow();
+    }
+    return copy;
+  };
   let bringBack: BackupBringBack = {
     state: options.bringBackAtStart ?? 'ready',
     setup: (options.bringBackAtStart ?? 'ready') === 'ready' ? 'verified' : 'none',
@@ -377,6 +424,7 @@ export function createFakeBackupOptions(options: FakeBackupOptionsOptions = {}):
         bringBack: protectedNow
           ? { ...bringBack, nasCopyAt: bringBack.lockedAt }
           : { state: 'none', passkeys: 0, lockedAt: null, nasCopyAt: null, paperAt: null },
+        offsite: protectedNow ? offsiteNow() : null,
       },
     };
   };
@@ -393,6 +441,7 @@ export function createFakeBackupOptions(options: FakeBackupOptionsOptions = {}):
       if (patch.nearKits) options.nearKits = patch.nearKits;
       if (patch.serviceDown !== undefined) serviceDown = patch.serviceDown;
       if (patch.earlierPlaces) earlierPlaces = patch.earlierPlaces;
+      if (patch.offsite !== undefined) offsite = patch.offsite ? offsiteFixture(patch.offsite) : null;
     },
     follow(state, destination) {
       protectedNow = state !== 'unprotected';
@@ -416,6 +465,59 @@ export function createFakeBackupOptions(options: FakeBackupOptionsOptions = {}):
         return Promise.resolve(ok(restoreState()));
       }
       if (op === 'backup.status') return Promise.resolve(ok(status()));
+      if (op === 'backup.offsite') return Promise.resolve(ok({ offsite: offsiteNow() }));
+      // A bucket named with “wrong-key” refuses the key, so the form's sentence for a failed step can be seen.
+      if (op === 'backup.setOffsite') {
+        const bucket = String(input.bucket ?? '');
+        if (bucket.includes('wrong-key'))
+          return Promise.resolve(
+            err(409, 'conflict', 'The storage didn’t accept the key.', {
+              code: 'backup_offsite_failed',
+              step: 'keys',
+            }),
+          );
+        const endpoint = String(input.endpoint ?? '').replace(/^https?:\/\//, '');
+        const folder = String(input.folder ?? '');
+        offsite = {
+          provider: (input.provider as BackupOffsite['provider']) ?? 's3',
+          display: [endpoint, bucket, folder].filter(Boolean).join('/'),
+          endpoint,
+          bucket,
+          folder,
+          region: typeof input.region === 'string' ? input.region : null,
+          state: 'first',
+          configuredAt: new Date(now()).toISOString(),
+          lastCopyAt: null,
+          newestInCopyAt: null,
+          newestBackupAt: list[0]?.createdAt ?? null,
+          backupsInCopy: 0,
+          failedAttempts: 0,
+          lastFailure: null,
+          nextTryAt: null,
+          lastClearedAt: null,
+          setAt: now(),
+        };
+        return new Promise((resolve) => setTimeout(() => resolve(ok({ offsite: offsiteNow() })), 900));
+      }
+      if (op === 'backup.removeOffsite') {
+        offsite = null;
+        return Promise.resolve(ok({ offsite: null }));
+      }
+      if (op === 'backup.copyOffsite') {
+        if (!offsite)
+          return Promise.resolve(
+            err(409, 'conflict', 'There’s no copy to make.', { code: 'backup_offsite_none' }),
+          );
+        offsite = {
+          ...offsite,
+          state: 'copying',
+          failedAttempts: 0,
+          lastFailure: null,
+          nextTryAt: null,
+          setAt: now(),
+        };
+        return Promise.resolve(ok({ queued: true }));
+      }
       // Back up now answers once the backup is made (a moment here).
       if (op === 'backup.runNow') {
         if (!protectedNow) return Promise.resolve(err(409, 'backup_unprotected', 'No destination.'));

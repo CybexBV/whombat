@@ -9,7 +9,7 @@ package api
 //	POST   /v1/drills             runtime           check one backup now {checkpointId, own} → 202 {queued}
 //	POST   /v1/local/copy         runtime           copy the box's own backups to the destination → {copied}
 //	DELETE /v1/local              runtime           remove the box's own backups → {ok}
-//	POST   /v1/adopt              runtime           join an earlier Whombat's backups {material, replace?} → {oldApplianceId, checkpoints}
+//	POST   /v1/adopt              runtime           join an earlier Whombat's backups {material, replace?, from?} → {oldApplianceId, from, checkpoints}
 //	GET    /v1/quarantine         runtime, manager  where a restore is (@whombat/protocol BackupRestoreState)
 //	POST   /v1/quarantine/resolve runtime           {item, resolution, note?} → the state
 //	POST   /v1/quarantine/release runtime           end the quarantine (the database is writable already) {checkpointId?}
@@ -209,14 +209,19 @@ var checkpointID = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 // chose to bring an earlier Whombat back onto this one although it has backups of its own: they stay where they are
 // (the place this box used until now keeps them, nothing is deleted), the place becomes the earlier Whombat's, and
 // the restore that follows replaces what is on this box (set aside until the restore is finished, then removed).
+//
+// From picks the place: "" tries the main place and then the second place (the copy somewhere else) when the kit
+// names one, "main" or "offsite" only that one.
 type AdoptRequest struct {
 	Material json.RawMessage `json:"material"`
 	Replace  bool            `json:"replace,omitempty"`
+	From     string          `json:"from,omitempty"`
 }
 
-// AdoptResult names the Whombat the backups are from and lists them.
+// AdoptResult names the Whombat the backups are from, the place they were found ("main" or "offsite") and lists them.
 type AdoptResult struct {
 	OldApplianceID string          `json:"oldApplianceId"`
+	From           string          `json:"from"`
 	Checkpoints    []listing.Entry `json:"checkpoints"`
 }
 
@@ -239,10 +244,7 @@ func (s *Server) adopt(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "conflict", "a restore is going already", "")
 		return
 	}
-	_, err = dest.Configure(r.Context(), s.Cfg, dest.Request{Repository: m.Repository, AdoptPassword: m.RepositoryPassword,
-		AdoptManifestKey: m.ManifestKey, AdoptHead: m.Head, AdoptEarlier: m.Adopted, RESTUser: m.RESTUser,
-		RESTPassword: m.RESTPassword, S3AccessKeyID: m.S3AccessKeyID, S3SecretAccessKey: m.S3SecretAccessKey,
-		S3Region: m.S3Region, SFTPUser: m.SFTPUser, SFTPHostKey: m.SFTPHostKey, SFTPPrivateKey: m.SFTPPrivateKey})
+	from, _, err := dest.Adopt(r.Context(), s.Cfg, m, req.From, nil)
 	var ie *dest.InputError
 	switch {
 	case errors.As(err, &ie):
@@ -269,7 +271,7 @@ func (s *Server) adopt(w http.ResponseWriter, r *http.Request) {
 	}
 	// The earlier Whombat's backups, and those of the Whombats it was brought back from, each up to its cut-off; each
 	// entry names the Whombat whose key signed it (applianceId).
-	out := AdoptResult{OldApplianceID: m.ApplianceID, Checkpoints: []listing.Entry{}}
+	out := AdoptResult{OldApplianceID: m.ApplianceID, From: from, Checkpoints: []listing.Entry{}}
 	for _, e := range res.Checkpoints {
 		if !e.Own {
 			out.Checkpoints = append(out.Checkpoints, e)

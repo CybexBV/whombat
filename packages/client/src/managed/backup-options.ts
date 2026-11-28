@@ -22,6 +22,7 @@ import {
 } from '@whombat/protocol/session';
 import { clientTree } from '../i18n/catalog';
 import { BACKUP_OPTIONS_WORDS } from '../i18n/messages/backupOptions';
+import { type OffsiteLine, offsiteLine } from './backup-offsite';
 import { ago } from './status-copy';
 
 /* Words ------------------------------------------------------------------------------------------------------- */
@@ -324,6 +325,8 @@ export interface BackupHero {
   wayBackReady: boolean;
   /** The passkey's one calm line: no passkey holds the key to these backups yet. */
   askPasskey: boolean;
+  /** The copy somewhere else, under the main place's line; null when there is none (or the box doesn't say). */
+  offsite: OffsiteLine | null;
 }
 
 /** How far back a custom policy reaches, without “up to” (“3 months”); null for the dialog's two choices. */
@@ -394,7 +397,7 @@ function spanOf(days: number, unit: 'day' | 'week', locale?: string | null): str
 export interface BackupHeroInput {
   status: BackupServiceStatus | null;
   /** The summary (`appliance.status`'s or `backup.overview`'s): what the last backup left out, bringing it back. */
-  summary?: Pick<BackupStatus, 'incomplete' | 'bringBack'> | null;
+  summary?: Pick<BackupStatus, 'incomplete' | 'bringBack' | 'offsite'> | null;
   policy: BackupPolicy | null;
   list: BackupCheckpointsOutput | null;
   /** The place's name (“BlackBox”), or the destination's display. */
@@ -584,6 +587,7 @@ export function backupHero(input: BackupHeroInput): BackupHero {
               ? T.wayBack.paper
               : null,
     askPasskey: backupPasskeyAsked(input.summary),
+    offsite: input.summary?.offsite ? offsiteLine(input.summary.offsite, locale) : null,
   };
 }
 

@@ -5,6 +5,7 @@
 export * from './agent';
 export * from './agentServices';
 export * from './backupLook';
+export * from './backupOffsite';
 export * from './backupOptions';
 export * from './backupPlaces';
 export * from './backups';

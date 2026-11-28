@@ -812,6 +812,12 @@ const TABLE = {
   // still one).
   'backup.overview': READ,
   'backup.letAssistantSetUp': RECEIPT,
+  // The copy somewhere else (offsite-copy.md): setting it carries the bucket's key and checks the bucket, never repeated
+  // on its own; forgetting it stops copying (the copies stay in the bucket), harmless to repeat; copying now only asks.
+  'backup.offsite': READ,
+  'backup.setOffsite': NEVER,
+  'backup.removeOffsite': DESTRUCTIVE,
+  'backup.copyOffsite': RECEIPT,
   // The passkey backup key (backup-passkey.md): `set` is secret and hands the box a key it locks with at once, so a
   // client never resends it by itself; removing one takes a way back away (harmless to repeat); the paper copy's
   // confirmation is harmless to repeat; finding envelopes on the network reads.

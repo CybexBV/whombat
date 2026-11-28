@@ -189,9 +189,13 @@ export function nasDigest(material: Material): string {
 
 /**
  * The details' secrets and the repository they open: what a paper copy holds that must still be true. Not where the
- * repository is (bring back finds a place by its repository), nor the generation, the head or when they were read.
+ * repository is (bring back finds a place by its repository), nor the generation, the head or when they were read. The
+ * copy somewhere else counts once there is one (offsite-copy.md): a paper copy without it can't bring the box back when
+ * the main place is lost with it, so a new or changed copy asks for a new paper copy. Without one the digest is what it
+ * was before, so no paper copy saved then turns old.
  */
 export function secretsDigest(material: Material): string {
+  const o = material.offsite;
   return sha(
     JSON.stringify([
       material.repositoryId,
@@ -205,6 +209,15 @@ export function secretsDigest(material: Material): string {
       material.sftpUser ?? null,
       material.sftpPrivateKey ?? null,
       material.sftpHostKey ?? null,
+      ...(o
+        ? [
+            o.repository,
+            o.repositoryId,
+            o.s3AccessKeyId ?? null,
+            o.s3SecretAccessKey ?? null,
+            o.s3Region ?? null,
+          ]
+        : []),
     ]),
   );
 }

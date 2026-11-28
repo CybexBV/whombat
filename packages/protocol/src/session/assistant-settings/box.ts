@@ -55,6 +55,14 @@ export const BOX_SETTINGS = {
   // The person's own yes at the claim: the assistant acts on it, it never gives it.
   'backup.letAssistantSetUp': never('appliance.backups', 'Say yes to backups at the claim'),
   'backup.overview': read('appliance.backups', 'Read the backups, the places and the options'),
+  // The copy somewhere else: the bucket's key is the person's to type, on the page; the assistant reads how it does.
+  'backup.offsite': read('appliance.backups', 'Read how the copy of the backups somewhere else is doing'),
+  'backup.setOffsite': never(
+    'appliance.backups',
+    'Keep a copy of the backups somewhere else (it needs a key)',
+  ),
+  'backup.removeOffsite': ask('appliance.backups', 'Stop keeping a copy of the backups somewhere else'),
+  'backup.copyOffsite': change('appliance.backups', 'Copy the backups somewhere else now'),
   // Only finds the earlier Whombat's locked backup details next to its backups; nothing opens them without a passkey.
   'backup.findKits': read(
     'appliance.backups',

@@ -4,6 +4,7 @@
  */
 import type { MessageCatalog } from '@whombat/core/i18n';
 import { BACKUP_LOOK_WORDS } from './backupLook';
+import { BACKUP_OFFSITE_WORDS } from './backupOffsite';
 import { BACKUP_OPTIONS_WORDS } from './backupOptions';
 import { BACKUP_PLACES_WORDS } from './backupPlaces';
 import { BACKUP_SETUP_WORDS } from './backupSetup';
@@ -29,6 +30,7 @@ const AREAS = [
   PASSKEY_SETUP_WORDS,
   KIT_BACKUP_WORDS,
   BACKUP_LOOK_WORDS,
+  BACKUP_OFFSITE_WORDS,
   BACKUP_OPTIONS_WORDS,
   BACKUP_PLACES_WORDS,
   BACKUP_SETUP_WORDS,

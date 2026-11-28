@@ -33,6 +33,7 @@ import {
   LOCALE_MINOR,
   negotiateCapabilities,
   negotiateVersion,
+  OFFSITE_MINOR,
   ONEPASSWORD_SYNC_MINOR,
   OUTSIDE_CHANGES_MINOR,
   protocolAtLeast,
@@ -112,6 +113,7 @@ describe('version negotiation', () => {
     expect(APP_UPDATES_MINOR).toBe(22);
     expect(OUTSIDE_CHANGES_MINOR).toBe(22);
     expect(WINDOWS_MINOR).toBe(22);
+    expect(OFFSITE_MINOR).toBe(22);
     expect(negotiateVersion([{ major: 5, minor: 99 }])).toEqual({ major: 5, minor: SESSION_PROTOCOL.minor });
     // An app from before a minor's additions talks at its own.
     expect(negotiateVersion([{ major: 5, minor: 0 }])).toEqual({ major: 5, minor: 0 });

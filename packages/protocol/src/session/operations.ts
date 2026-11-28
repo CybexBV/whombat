@@ -38,6 +38,16 @@ import {
   BackupLookOutput,
 } from './backup-look.js';
 import {
+  BackupCopyOffsiteInput,
+  BackupCopyOffsiteOutput,
+  BackupOffsiteInput,
+  BackupOffsiteOutput,
+  BackupRemoveOffsiteInput,
+  BackupRemoveOffsiteOutput,
+  BackupSetOffsiteInput,
+  BackupSetOffsiteOutput,
+} from './backup-offsite.js';
+import {
   BackupAdoptInput,
   BackupAdoptOutput,
   BackupCheckInput,
@@ -762,6 +772,11 @@ const SESSION_SPECS = [
   // Backups v2 (CT-1691, CT-1694): the Backups page in one read, and the claim's “Let {assistant} set it up”.
   session('backup.overview', BackupOverviewInput, BackupOverviewOutput, 'app', false),
   session('backup.letAssistantSetUp', BackupLetAssistantSetUpInput, BackupLetAssistantSetUpOutput, 'app'),
+  // The copy somewhere else (Whombat offsite-copy.md): `setOffsite` carries the bucket's key (secret).
+  session('backup.offsite', BackupOffsiteInput, BackupOffsiteOutput, 'app', false),
+  session('backup.setOffsite', BackupSetOffsiteInput, BackupSetOffsiteOutput, 'app', true, false, true),
+  session('backup.removeOffsite', BackupRemoveOffsiteInput, BackupRemoveOffsiteOutput, 'app'),
+  session('backup.copyOffsite', BackupCopyOffsiteInput, BackupCopyOffsiteOutput, 'app'),
   // The passkey as the key to the backups (Whombat backup-passkey.md). `set` carries the backup key (secret); finding
   // envelopes on the network is a read.
   session(

@@ -55,6 +55,8 @@ type Repo struct {
 	// CheckWithCache: `check` uses the cache (CacheDir) instead of a temporary one of its own, so the index and
 	// trees already there aren't downloaded again; what it reads that isn't there is still read from the destination.
 	CheckWithCache bool
+	// From is the source of a copy (`Paired`): its credentials join this repository's in restic's environment.
+	From *Repo
 }
 
 // How long restic waits for another restic's lock: a person waiting on a call (zero RetryLock) gets an answer soon,
@@ -120,7 +122,7 @@ func (r Repo) env() []string {
 	if r.CacheDir != "" {
 		e = append(e, "RESTIC_CACHE_DIR="+r.CacheDir)
 	}
-	return e
+	return append(e, r.sourceEnv()...)
 }
 
 func (r Repo) args(a []string) []string {
@@ -134,6 +136,7 @@ func (r Repo) args(a []string) []string {
 	if r.SFTP != nil {
 		pre = append(pre, "-o", "sftp.command="+r.SFTP.Command())
 	}
+	pre = append(pre, r.sourceArgs()...)
 	wait := r.RetryLock
 	if wait <= 0 {
 		wait = InteractiveRetryLock
@@ -159,7 +162,11 @@ func detached() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true}
 // secrets are the values that must never appear in an error message.
 func (r Repo) secrets() []string {
 	var s []string
-	for _, v := range []string{r.RESTPassword, r.S3SecretAccessKey, r.S3AccessKeyID} {
+	vals := []string{r.RESTPassword, r.S3SecretAccessKey, r.S3AccessKeyID}
+	if r.From != nil {
+		vals = append(vals, r.From.RESTPassword, r.From.S3SecretAccessKey, r.From.S3AccessKeyID)
+	}
+	for _, v := range vals {
 		if len(v) >= 4 {
 			s = append(s, v)
 		}
@@ -322,6 +329,8 @@ func (w *retryWatch) String() string { w.mu.Lock(); defer w.mu.Unlock(); return 
 type Config struct {
 	Version int    `json:"version"`
 	ID      string `json:"id"`
+	// ChunkerPolynomial is how the repository cuts files into chunks: a copy made with the same one stays deduplicated.
+	ChunkerPolynomial string `json:"chunker_polynomial"`
 }
 
 // Init creates the repository and returns its id.

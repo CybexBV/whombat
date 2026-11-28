@@ -75,6 +75,10 @@ function fixtureSession(options: WebFixtureOptions, voice: FakeVoice | null = nu
   // Backup options and the list of backups (backup-options.md AP-6800): blackbox's, like the mocks.
   const backups = createFakeBackupOptions({ available: options.backupOptions !== false });
   if (options.backupFake) backups.set(options.backupFake);
+  // The copy somewhere else for review shots (`ok` or `failing`); none by default, so Backups offers it.
+  const offsite = import.meta.env.VITE_FIXTURE_OFFSITE;
+  if ((offsite === 'ok' || offsite === 'failing') && options.backupFake?.offsite === undefined)
+    backups.set({ offsite });
   // Getting one thing back from a backup (backup-look.md AP-6940).
   const look = createFakeBackupLook({ available: options.backupOptions !== false });
   const handle: FakeHandler = (op, input, context) =>

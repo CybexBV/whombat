@@ -9,7 +9,9 @@
 //	    s3:    -s3-key-id ID -s3-secret-file F [-s3-region R]
 //	    sftp:  -sftp-user U [-sftp-host-key "ssh-ed25519 AAAA…"|SHA256:…]   (no host key: trust on first use)
 //	    disk:  (the disk labelled WHOMBAT-BACKUP; -init prepares an empty one)
-//	destination adopt -kit FILE                     join an existing repository (replacement)
+//	destination adopt -kit FILE [-from main|offsite]  join an existing repository (replacement): the main place, else
+//	                                                the kit's second place
+//	offsite set|remove|status|copy [-if-due]         the second place: a copy of the backups somewhere else
 //	ssh-public-key [-json]                          the box's SFTP key (made on first use)
 //	kit-material                                    the recovery kit's backup section (JSON)
 //	snapshots [-json]                               authentic checkpoints and the chain report
@@ -85,7 +87,7 @@ func main() {
 	_ = global.Parse(os.Args[1:])
 	args := global.Args()
 	if len(args) == 0 {
-		die(64, "usage: whombat-backup [-config F] run|status|destination|ssh-public-key|kit-material|snapshots|drill|serve|disk-init|disk-attach|disk-scan|quarantine|coverage")
+		die(64, "usage: whombat-backup [-config F] run|status|destination|offsite|ssh-public-key|kit-material|snapshots|drill|serve|disk-init|disk-attach|disk-scan|quarantine|coverage")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -161,6 +163,8 @@ func main() {
 		cmdRestoreEnd(ctx, cfg, args[1:])
 	case "restore-recover":
 		cmdRestoreRecover(ctx, cfg, args[1:])
+	case "offsite":
+		cmdOffsite(ctx, cfg, args[1:])
 	case "peek-sweep":
 		peek.Sweep(ctx, cfg) // at boot: a backup opened for reading closes (its database and files go)
 	default:
@@ -168,12 +172,16 @@ func main() {
 	}
 }
 
-// timerRun: a run the timers start (`run -if-due`, `drill -if-due`), which nobody waits on.
+// timerRun: a run the timers start (`run -if-due`, `drill -if-due`, `offsite copy -if-due`), which nobody waits on.
 func timerRun(args []string) bool {
-	if args[0] != "run" && args[0] != "drill" {
+	rest := args[1:]
+	switch {
+	case args[0] == "offsite" && len(args) > 1 && args[1] == "copy":
+		rest = args[2:]
+	case args[0] != "run" && args[0] != "drill":
 		return false
 	}
-	for _, a := range args[1:] {
+	for _, a := range rest {
 		if a == "-if-due" || a == "--if-due" || a == "-if-due=true" || a == "--if-due=true" {
 			return true
 		}
@@ -445,6 +453,7 @@ func cmdDestination(ctx context.Context, cfg *state.Config, args []string) {
 	sftpUser := fs.String("sftp-user", "", "SFTP user")
 	sftpHostKey := fs.String("sftp-host-key", "", `the server's host key ("ssh-ed25519 AAAA…") or its fingerprint (SHA256:…); none = trust on first use`)
 	kitFile := fs.String("kit", "", "recovery kit (adopt)")
+	from := fs.String("from", "", "adopt: main or offsite (default: the main place, then the kit's second place)")
 	_ = fs.Parse(args[1:])
 	req := dest.Request{Repository: *repo, RESTUser: *user, RESTPassword: readSecret(*pwFile), AllowInit: *initRepo,
 		S3AccessKeyID: *s3ID, S3SecretAccessKey: readSecret(*s3Secret), S3Region: *s3Region,
@@ -468,14 +477,21 @@ func cmdDestination(ctx context.Context, cfg *state.Config, args []string) {
 		}
 		// Everything from the kit: the repository, its password, the destination's credentials, the old
 		// appliance's manifest key (the checkpoints a quarantine restore trusts), the newest checkpoint it knew and
-		// the Whombats it was brought back from.
-		req = dest.Request{Repository: m.Repository, AdoptPassword: m.RepositoryPassword, AdoptManifestKey: m.ManifestKey,
-			AdoptHead: m.Head, AdoptEarlier: m.Adopted, RESTUser: m.RESTUser, RESTPassword: m.RESTPassword, S3AccessKeyID: m.S3AccessKeyID,
-			S3SecretAccessKey: m.S3SecretAccessKey, S3Region: m.S3Region, SFTPUser: m.SFTPUser,
-			SFTPHostKey: m.SFTPHostKey, SFTPPrivateKey: m.SFTPPrivateKey, CACert: req.CACert, AllowLocal: true}
-		if *repo != "" { // the same repository reached another way (e.g. a copy on a local path)
-			req.Repository = *repo
+		// the Whombats it was brought back from. The main place first, then the kit's second place (or only the one
+		// -from names).
+		cacert := req.CACert
+		from, d, err := dest.Adopt(ctx, cfg, m, *from, func(r *dest.Request) {
+			r.CACert, r.AllowLocal = cacert, true
+			if *repo != "" { // the same repository reached another way (e.g. a copy on a local path)
+				r.Repository = *repo
+			}
+		})
+		if err != nil {
+			die(1, "%v", err)
 		}
+		fmt.Printf("joined the backups at the %s place: %s, repository %s — issue a new recovery kit\n", from,
+			d.Display(), d.RepositoryID)
+		return
 	default:
 		die(64, "destination set|adopt")
 	}

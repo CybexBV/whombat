@@ -47,6 +47,7 @@ import { iso } from '../lib/time';
 import { forgetOnePasswordBases } from '../vault/onepassword/restore';
 import { LIST, port, READ, reason } from './backup';
 import { noteBroughtBack, placeMovedTo, withBringBack } from './backup-key';
+import { withOffsite } from './backup-offsite';
 import { backupDownText } from './backup-port';
 import { boxBackupStatus } from './box-backup';
 import type { SessionOpContext } from './dispatcher';
@@ -314,7 +315,10 @@ export const BACKUP_OPTIONS_HANDLERS: Readonly<Record<string, Handler>> = {
     const service = status ?? null;
     return {
       status: service,
-      summary: await withBringBack(c.services, summarizeBackup(service, BackupScope.options), service),
+      summary: await withOffsite(
+        c.services,
+        await withBringBack(c.services, summarizeBackup(service, BackupScope.options), service),
+      ),
       places: places ? { places: places.places, currentPlaceId: places.currentPlaceId } : null,
       checkpoints,
       policy,
@@ -432,11 +436,13 @@ export const BACKUP_OPTIONS_HANDLERS: Readonly<Record<string, Handler>> = {
       throw new ApiError('conflict', reason(res.body), { details: { code: 'backup_has_own' } });
     if (res.status !== 200)
       throw new ApiError('conflict', reason(res.body), { details: { code: 'backup_adopt_failed' } });
-    const out = res.body as { oldApplianceId?: unknown; checkpoints?: unknown };
+    const out = res.body as { oldApplianceId?: unknown; from?: unknown; checkpoints?: unknown };
     const list = BackupCheckpointList.shape.checkpoints.safeParse(out.checkpoints);
     if (!list.success || typeof out.oldApplianceId !== 'string') throw notUnderstood();
     await boxBackupStatus(c.services, { fresh: true });
-    return { oldApplianceId: out.oldApplianceId, ...pageOf(list.data, undefined) };
+    // Found at the kit's second place when its main place didn't answer (offsite-copy.md); an older service says nothing.
+    const from = out.from === 'offsite' || out.from === 'main' ? { from: out.from } : {};
+    return { oldApplianceId: out.oldApplianceId, ...from, ...pageOf(list.data, undefined) };
   },
 
   'backup.restore': async (c, input: { checkpointId: string }) => {

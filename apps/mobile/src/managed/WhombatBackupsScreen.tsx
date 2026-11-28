@@ -1,9 +1,9 @@
 /**
  * This Whombat → Backups. On a Whombat that lists its backups (Whombat backup-options.md; backup-options-android.md
  * AP-6850; app backup-v2.md AP-6880…): the top card, NEEDS YOU, BACKUPS · N, the line about asking the assistant and
- * Details (`BackupsOverview`), then ON YOUR NETWORK, “Bring back a Whombat you had” while it started fresh and MOVE TO
- * ANOTHER WHOMBAT (the backup file); one backup opens its page and Options the options screen. In the demo world the
- * same parts over the demo's box (AP-6864). While the backup service isn't answering the same page says so on the top
+ * Details (`BackupsOverview`), then ON YOUR NETWORK, A COPY SOMEWHERE ELSE (`BackupOffsite`), “Bring back a Whombat you
+ * had” while it started fresh and MOVE TO ANOTHER WHOMBAT (the backup file); one backup opens its page and Options the
+ * options screen. In the demo world the same parts over the demo's box (AP-6864). While the backup service isn't answering the same page says so on the top
  * card and keeps what it knows (`backupPageShown`). A box from before (`unknown_op`), or one without a destination yet,
  * shows what it showed before:
  *
@@ -57,6 +57,7 @@ import { BackBar, LargeTitle, Screen } from '../ui/headers';
 import { Button, ErrorState, Loading } from '../ui/primitives';
 import { useBottomRoom } from '../ui/screenBottom';
 import { BackupDestinationForm, backupErrorText, savedNotes } from './BackupDestination';
+import { BackupOffsiteCard } from './BackupOffsite';
 import { BackupPlacesCard, CurrentPlaceRow } from './BackupPlaces';
 import {
   BackupDetailsCard,
@@ -244,7 +245,10 @@ function BackupsParts({
   );
 }
 
-/** The demo world's Backups (AP-6864): the new parts over the demo's box; places, kit and file are a Whombat's. */
+/**
+ * The demo world's Backups (AP-6864): the new parts and the copy somewhere else over the demo's box; places, kit and file
+ * are a Whombat's.
+ */
 function DemoBackups({ navigation }: Props) {
   const { rawLocale } = useI18n();
   const managedCopyHere = managedCopy(rawLocale);
@@ -259,7 +263,9 @@ function DemoBackups({ navigation }: Props) {
         <LargeTitle title={thisWhombatText(rawLocale).parts.backups} />
         <View style={{ paddingHorizontal: 16, gap: 14, paddingTop: 8 }}>
           {session ? (
-            <BackupsParts session={session} passkey={null} paper={null} />
+            <BackupsParts session={session} passkey={null} paper={null}>
+              <BackupOffsiteCard session={session} />
+            </BackupsParts>
           ) : (
             <ErrorState text={managedTextHere.loadError} />
           )}
@@ -359,6 +365,7 @@ function ManagedBackups({ route, navigation }: Props) {
               onChanged={reload}
             >
               <BackupPlacesCard onChanged={reload} onKit={onKit} />
+              <BackupOffsiteCard session={managed.session} />
               <Card>
                 <BackupActions
                   unprotected={false}

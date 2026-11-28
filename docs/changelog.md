@@ -5,6 +5,10 @@ them once they have been tried on Beta.
 
 ## 28 November 2026
 
+- Keep a copy of your backups somewhere else: under Settings → This Whombat → Backups you can add a bucket at
+  Backblaze, Cloudflare, Hetzner, Amazon or any other S3 storage. Whombat checks it first, copies each new backup
+  there and clears old ones by the same rule. If a fire or a theft takes your Whombat and its backups together, a new
+  Whombat comes back from the copy. When the copy keeps failing, your Inbox says so.
 - Does it really work? Nextcloud, Immich, Paperless-ngx, Jellyfin, Plex and Home Assistant pages can test whether
   the service really works, by opening a file, your newest photo or document, a library's newest item or a sensor's
   latest reading. Run now says where it got stuck, and whether the sign-in Whombat uses lost access or the service

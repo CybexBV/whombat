@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/CybexBV/whombat/appliance/backup/internal/listing"
+	"github.com/CybexBV/whombat/appliance/backup/internal/offsite"
 	"github.com/CybexBV/whombat/appliance/backup/internal/state"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/kit"
 	"github.com/CybexBV/whombat/appliance/backup/pkg/manifest"
@@ -511,5 +512,7 @@ func Material(c *state.Config) (*kit.Material, error) {
 	if keys, err := listing.LoadKeys(c); err == nil {
 		m.Adopted = keys.Carried()
 	}
+	// The second place, so the kit (and the passkey's copy of it) can bring the box back when the main place is gone.
+	m.Offsite = offsite.KitSection(c)
 	return m, m.Validate()
 }

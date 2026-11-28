@@ -63,6 +63,7 @@ import {
   BackupCheckpointsOutput,
   BackupConfigureDestinationInput,
   BackupConfigureDestinationOutput,
+  BackupCopyOffsiteOutput,
   BackupFindKitsOutput,
   BackupFinishRestoreInput,
   BackupFinishRestoreOutput,
@@ -78,6 +79,7 @@ import {
   BackupLookInput,
   BackupLookOutput,
   BackupMoveLocalOutput,
+  BackupOffsiteOutput,
   BackupOverviewOutput,
   BackupPaperCopyConfirmInput,
   BackupPaperCopyConfirmOutput,
@@ -92,10 +94,13 @@ import {
   BackupPolicyOutput,
   BackupRecoveryMaterial,
   BackupRemoveLocalOutput,
+  BackupRemoveOffsiteOutput,
   BackupRestoreInput,
   BackupRestoreOutput,
   BackupRestoreStateOutput,
   BackupRunNowOutput,
+  BackupSetOffsiteInput,
+  BackupSetOffsiteOutput,
   BackupSetPolicyInput,
   BackupSetPolicyOutput,
   BackupSshPublicKey,
@@ -800,6 +805,19 @@ export const sessionOps = {
    */
   backupOverview: (s: ApplianceSession, o?: CallOptions) =>
     run(s, 'backup.overview', {}, BackupOverviewOutput, o),
+  /*
+   * The copy somewhere else (Whombat offsite-copy.md): a bucket the person owns that the backups are copied to. A box
+   * below `OFFSITE_MINOR` answers `unknown_op`; the page then doesn't offer it.
+   */
+  backupOffsite: (s: ApplianceSession, o?: CallOptions) =>
+    run(s, 'backup.offsite', {}, BackupOffsiteOutput, o),
+  /** A `secret` op: the bucket's key goes to the box, never into a receipt. The box checks the bucket first. */
+  backupSetOffsite: (s: ApplianceSession, input: z.input<typeof BackupSetOffsiteInput>, o?: CallOptions) =>
+    run(s, 'backup.setOffsite', BackupSetOffsiteInput.parse(input), BackupSetOffsiteOutput, o),
+  backupRemoveOffsite: (s: ApplianceSession, o?: CallOptions) =>
+    run(s, 'backup.removeOffsite', {}, BackupRemoveOffsiteOutput, o),
+  backupCopyOffsite: (s: ApplianceSession, o?: CallOptions) =>
+    run(s, 'backup.copyOffsite', {}, BackupCopyOffsiteOutput, o),
   /** One page of the list, newest first (CT-1690): `cursor` is the last page's `nextCursor`. */
   backupCheckpoints: (
     s: ApplianceSession,
