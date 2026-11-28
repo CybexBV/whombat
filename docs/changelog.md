@@ -3,6 +3,16 @@
 New things and fixes you can notice, newest first. Every Whombat on Beta gets them within the hour; Production gets
 them once they have been tried on Beta.
 
+## 28 November 2026
+
+- New page: What’s protected. It lists everything that holds data (your Whombat, servers, machines and services like
+  Home Assistant) and says whether a copy is on another machine, only on the same machine, or not backed up as far
+  as Whombat can see. Open it under Servers or Settings → This Whombat → Backups, and ask your assistant to set up
+  backups for anything that isn’t safe yet.
+- Whombat can test your Proxmox backups: once a week in the quiet hours it restores one machine’s backup as a copy with
+  its network off, checks that it starts, and deletes it again. Your real machine isn’t touched. Turn on “Test my
+  backups” on the What’s protected page; the result shows on the machine’s page.
+
 ## 27 November 2026
 
 - Whombat speaks Dutch too: choose Nederlands under Settings → You → Language to switch the app, your assistant,

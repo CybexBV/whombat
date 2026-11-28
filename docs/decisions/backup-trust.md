@@ -1,0 +1,49 @@
+# Backups you can trust: What's protected and restore tests (PRT)
+
+Part of John's “look-after” build of 2026-11-28 (feature council: backups you can trust). Backups were set up one by
+one, and nothing said whether all the data was covered, whether a copy sat on the same machine as the data, or whether a
+backup would actually come back. Now one page answers “if a machine breaks, what would I lose?”, and Whombat can prove,
+once a week, that a Proxmox machine's backup really starts.
+
+Contracts (additive): `@whombat/core` `domain/protected.ts` (`ProtectedView`, `ProtectedRow`, `RestoreTestServer`,
+`RestoreTestResult` and the shared words), `api.protected.get`, `api.restoreTests.set`, `api.restoreTests.run`,
+`HostGuestDetail.restoreTest`, the care step `restore_test`, the server hint `restore_test.failed`, the assistant's
+`whats_protected`. Session protocol minor 22 (`PROTECTED_MINOR`): an app shows the page's links only on a Whombat that
+answers it. Migration `0044_restore_tests`. No change to the hosts service or its agents.
+
+## What the person sees
+
+| # | Decision | Why |
+|---|---|---|
+| PRT-01 | **One page, “What’s protected”** (`/protected` on the web, `whombat://protected` on the phone), reached from under the Servers list and from This Whombat → Backups. One row for each thing that holds data: this Whombat, each server, each Proxmox, Incus and QEMU/KVM machine, and each connection that keeps data (Home Assistant, Immich, Paperless, Nextcloud, a NAS, the media and code services). A row links to its page. | The question is about everything at once; the answers were spread over a dozen pages. |
+| PRT-02 | **Three groups, worst first inside each**: *Copied to another machine*, *Only on the same machine*, *Not backed up that Whombat can see*. A last backup that failed comes first, with the one before it. A copy older than eight days is amber. | The difference that matters when a machine dies is “is the copy somewhere else?”, not “is there a backup job?”. |
+| PRT-03 | **Whombat says what it can't see.** “Nothing backs it up” only where Whombat reads the backups and finds none; where it reads no backup facts (a server's own disks, a service without its own) the row says “Whombat can’t see its backups” and sits in the third group. Things Whombat couldn't read this time are named in one line. | Saying “not backed up” about a backup Whombat can't see would be false; hiding it would be worse. |
+| PRT-04 | **A service without backup facts of its own takes its machine's**: Paperless on CT 131 is as safe as CT 131 (“With pve-02 · CT 131 · …”). One with its own facts (Home Assistant's backups and where they were uploaded, a Synology's Hyper Backup, a TrueNAS's replication and cloud sync) keeps the better of its own and its machine's. | Most services live inside a backed-up machine; the person shouldn't see them as unprotected. |
+| PRT-05 | ***Ask {assistant} to set up backups*** on every row of the last two groups starts a chat in that thing's own thread (the server's, or the connection's) with a plain question that names it and what Whombat sees. The assistant proposes with the care plans and backup places it has. | One press from the worry to the fix, in the place that thing is talked about. |
+| PRT-06 | **This Whombat's row shows its off-site copy** when the backup status carries one (“Off-site (Backblaze) · last copy 2 hours ago”); without it the row is as before. | The off-site work lands separately; the page reads it when it is there. |
+| PRT-07 | **Restore tests are a switch per Proxmox server**, “Test my backups”, off until the person (or a care plan's Go ahead) turns it on, with which machines (all, including new ones, until some are chosen), the last result, when the next test starts, and *Test one now*. | Proving a backup works is the step people never take by hand. |
+| PRT-08 | **Once a week in the quiet hours** Whombat tests one machine: the one with a backup whose turn it is (never tested first, then the one tested longest ago). A test runs at most an hour. | One machine a week covers a home lab in a few weeks without loading the server. |
+| PRT-09 | **The result is a fact** on the machine's page (“Restore test: worked on Sunday (took 4 min)”) and on its row; a test that couldn't run says why (“there wasn’t enough free space”). | People trust what they can read next to the machine. |
+| PRT-10 | **A failed test opens one problem for that machine** (“The backup of plex didn’t start when Whombat tried it”), which starts on in What Whombat watches (data is at risk and Whombat says which and why) but exists only while restore tests are on; it ends when a later test of that machine works, or when tests are switched off. A test that couldn't run (no space, no backup, the machine uses parts of the server) is no problem. | Data at risk is the bar for starting on; not being able to test isn't data at risk. |
+| PRT-11 | **“Test my backups” is a line of a Proxmox server's care plan** (Go ahead turns the switch on), offered once the plan has its backups. | One yes for looking after a server, as the care plan does already. |
+| PRT-12 | **The assistant reads it all with `whats_protected`** (personal chat only), optionally about one thing; it switches tests with the settings skill (`restoreTests.set`) and starts one with `restoreTests.run`. | “What would I lose if pve-01 died?” is a question people ask in Chat. |
+
+## How a restore test runs (the real machine is never touched)
+
+| # | Decision | Why |
+|---|---|---|
+| PRT-20 | **A copy, never the machine**: the newest backup is restored with the hosts service's existing routes as a new guest in a range nobody picks (990000–990999), named `whombat-test-of-<name>` and tagged `whombat-restore-test`. The real machine is only read. | Proxmox's restore can overwrite a guest; restoring to a fresh id in a reserved range never can. |
+| PRT-21 | **Its network is off before it starts**: every network card gets `link_down=1`, it doesn't start with the server and its protection is off; Whombat reads the settings back and starts nothing unless every card is down. A machine that uses parts of the server itself (passed-through devices, USB, host folders) is never tested. | A copy with the same MAC and addresses on the network would fight the real machine. |
+| PRT-22 | **It checks there is room first**: the storage the backup goes to must have the disks plus a margin and stay under 90 % full; the server must have the memory free. Otherwise the test is skipped and says why. | A test must never fill a disk or starve the real machines. |
+| PRT-23 | **Worked means it ran, and booted when it can tell**: running and, when the machine has the QEMU guest agent, its agent answering within 10 minutes; a container running for a minute; a VM without the agent running for two minutes. It stopped by itself, never started, or never finished starting up is a failure. | Running is the honest floor; the guest agent proves the system booted. |
+| PRT-24 | **Then it is stopped and deleted**, tried again for a while if Proxmox refuses. Every pass sweeps copies left behind by an interrupted test (in the range and named or tagged as copies, never anything else) on servers with tests. | A restart or a crash mid-test must not leave a running copy behind. |
+| PRT-25 | **Only on the cluster node Whombat talks to**, one test per server at a time; a machine on another node is skipped (“it runs on another server of the cluster”). | The hosts service restores on its own node. |
+| PRT-26 | **Not now:** Incus and QEMU/KVM restore tests, files-level checks inside a copy, testing Proxmox Backup Server's own datastore, Docker containers' volumes on the page, an off-site copy of servers. | Proxmox first: it is where most people's machines are and the routes exist. |
+
+## Server details
+
+| # | Detail | Why |
+|---|---|---|
+| PRT-S01 | Migration `0044_restore_tests` (expand): `restore_test_servers` (per Whombat and server: on, chosen guests, when changed), `restore_tests` (one row per test with its step, copy id, task, outcome and reason; one unfinished test per server by a unique partial index), `catalog_connections.protection` (a service's own backup facts, written by the health pass from what its kind reads). | Every step is a commit, so a restart picks a test up where it was. |
+| PRT-S02 | The runner (`backup-trust/runner.ts`) is a home job every minute: it advances running tests step by step (`restoreTest.step`, as the agent), starts a due weekly test, sweeps strays every ten minutes and gives the hosts service's hint list its problems. Passes never overlap. The person's switch and *Test one now* are `restoreTests.set` and `restoreTest.begin` through the pipeline. | All writes through the commit pipeline; reading Proxmox never holds the lock. |
+| PRT-S03 | The page is built on the server (`backup-trust/view.ts`) from what Whombat already reads: Proxmox backup jobs and each machine's backups (where the storage is shared or a Backup Server it is a copy elsewhere), Incus snapshots and QEMU/KVM backups (same machine), the box's backup status, and connections' protection; kept for a minute. | No new reads of the servers for a page view. |

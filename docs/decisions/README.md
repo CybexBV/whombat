@@ -297,6 +297,8 @@ How the split was made: `docs.md`.
 - `backup-look.md` — getting one thing back from a backup: the box opens it for reading, lists it, and brings the picked things back through the backup file's restorer (only adds); the assistant's `backup_bring_back`.
 - `backup-passkey.md` — the passkey as the key to the backups: arming in one touch, locking again, the copy next to the backups (the place's kit user), bring back from the account or the network, the paper copy, the Inbox's ask.
 - `backup-places.md` — a NAS or server that keeps this Whombat's backups: the backup app, cleanup, places, moving, by hand.
+- `backup-trust.md` — What's protected (everything that holds data and where its copy is) and weekly restore tests of
+  Proxmox machines on a copy with its network off.
 
 ## Server internals
 
