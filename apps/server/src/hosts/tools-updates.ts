@@ -7,9 +7,9 @@
  *
  * Install asks a person first through the catalog's sensitive rule unless the server is set not to ask, and always on
  * the server this Whombat runs on (`serverAsksApply`: an upgrade there can restart Whombat's own database); Check never
- * asks. The hub runs Check as operator and Install as admin (SWU-07), with `confirm` (the yes already happened). The
- * task is followed: the chat gets one plain message when it ends (`follow.ts`), and the change is in Done recently
- * without Undo.
+ * asks. The hub runs Check as operator and Install as admin (installing needs Full control), with `confirm` (the yes
+ * already happened). The task is followed: the chat gets one plain message when it ends (`follow.ts`), and the change
+ * is in Done recently without Undo.
  *
  * `canInstall` comes from the server's detail read as admin, the switches the install meets (task-feedback.md TF-01);
  * when they look off, `next` leaves the last word to the install itself (TF-03).
@@ -104,7 +104,7 @@ export function updatesSummary(
     : personInstalls
       ? null
       : canInstall === false
-        ? // A reading never decides that the install is impossible (task-feedback.md TF-03): the hub checks it live.
+        ? // A reading never decides that the install is impossible (task-feedback.md): the hub checks it live.
           `Full control looks off on ${serverId}; server_update install says for sure, in plain words when it can’t.`
         : r.updates
           ? 'server_update install installs them (all, or the packages you name). It asks a person first unless the server is set not to ask, and never restarts the server.'

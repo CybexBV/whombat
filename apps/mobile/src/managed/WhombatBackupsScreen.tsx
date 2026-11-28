@@ -3,9 +3,9 @@
  * AP-6850; app backup-v2.md AP-6880…): the top card, NEEDS YOU, BACKUPS · N, the line about asking the assistant and
  * Details (`BackupsOverview`), then ON YOUR NETWORK, A COPY SOMEWHERE ELSE (`BackupOffsite`), “Bring back a Whombat you
  * had” while it started fresh and MOVE TO ANOTHER WHOMBAT (the backup file); one backup opens its page and Options the
- * options screen. In the demo world the same parts over the demo's box (AP-6864). While the backup service isn't answering the same page says so on the top
- * card and keeps what it knows (`backupPageShown`). A box from before (`unknown_op`), or one without a destination yet,
- * shows what it showed before:
+ * options screen. In the demo world the same parts over the demo's box. While the backup service isn't answering the
+ * same page says so on the top card and keeps what it knows (`backupPageShown`). A box from before (`unknown_op`), or
+ * one without a destination yet, shows what it showed before:
  *
  * This Whombat → Backups (managed only; this-whombat-sections-android.md AP-1246), the web's Backups part (Whombat
  * this-whombat-sections.md AP-1228) on its own screen: BACKUPS — where they stand (“Unprotected” without a
@@ -247,8 +247,8 @@ function BackupsParts({
 }
 
 /**
- * The demo world's Backups (AP-6864): the new parts and the copy somewhere else over the demo's box; places, kit and file
- * are a Whombat's.
+ * The demo world's Backups: the new parts and the copy somewhere else over the demo's box; places, kit and file are
+ * a Whombat's.
  */
 function DemoBackups({ navigation }: Props) {
   const { rawLocale } = useI18n();

@@ -587,7 +587,7 @@ const WINDOWS_FILES = ['whombat-agent-windows-amd64.exe', 'whombat-agent-windows
  * What `dev/sign-agents` wrote to nix/packages/hosts/agent-manifest.json (rackoon-sign's manifest, NX-158): the agents'
  * version and the key's fingerprint, refused when it isn't for whombat-hosts `rev` (its version ends in the short rev,
  * nix/packages/hosts/default.nix) or doesn't sign both Linux agents (and both macOS agents when it signs one; the
- * helper's zip may be there too, NX-515; both Windows agents when it signs one). The build checks the sums and
+ * Whombat Helper's zip may be there too; both Windows agents when it signs one). The build checks the sums and
  * signatures.
  */
 export function signedAgents(manifestJson: string, rev: string): { version: string; key: string } {
