@@ -112,6 +112,10 @@ export const AUTOMATION_VIEWS = splitPairs({
     'A thread in {room} each time it runs',
     'Elke keer dat het draait een thread in {room}',
   ],
+  'plan.thread.none': [
+    'Nothing in Chat: each run is on this automation’s page',
+    'Niets in Chat: elke run staat op de pagina van deze automatisering',
+  ],
   'plan.posts.comment': ['Comments on GitHub on {repo}', 'Reageert op GitHub in {repo}'],
   'plan.posts.openPr': ['Opens a pull request on {repo}', 'Opent een pull request in {repo}'],
   'plan.posts.from': ['From {branch}', 'Vanaf {branch}'],
@@ -192,6 +196,16 @@ export const AUTOMATION_VIEWS = splitPairs({
     { one: 'Maximaal {count} oplossing per dag', other: 'Maximaal {count} oplossingen per dag' },
   ],
   'plan.limit.tokens': ['At most {tokens} tokens a day', 'Maximaal {tokens} tokens per dag'],
+  'plan.limit.cooldown': [
+    {
+      one: 'Waits {count} minute after a run before it starts again',
+      other: 'Waits {count} minutes after a run before it starts again',
+    },
+    {
+      one: 'Wacht na een run {count} minuut voordat het weer start',
+      other: 'Wacht na een run {count} minuten voordat het weer start',
+    },
+  ],
 
   // A change, the card's words, its state
   'plan.change.prompt': ['What {agent} is asked in “{step}”', 'Wat {agent} wordt gevraagd in “{step}”'],
@@ -388,9 +402,9 @@ export const AUTOMATION_VIEWS = splitPairs({
   'homeWhen.detail': ['In {connection}', 'In {connection}'],
 
   // A UniFi Protect trigger
-  'protectWhen.doorbell': ['the doorbell', 'de deurbel'],
   'protectWhen.camera': ['a camera', 'een camera'],
-  'protectWhen.ring': ['When someone rings {camera}', 'Als iemand aanbelt bij {camera}'],
+  'protectWhen.ring': ['When someone rings the doorbell', 'Als iemand aanbelt'],
+  'protectWhen.ringAt': ['When someone rings the doorbell at {camera}', 'Als iemand aanbelt bij {camera}'],
   'protectWhen.person': ['When {camera} sees a person', 'Als {camera} een persoon ziet'],
   'protectWhen.vehicle': ['When {camera} sees a vehicle', 'Als {camera} een voertuig ziet'],
   'protectWhen.animal': ['When {camera} sees an animal', 'Als {camera} een dier ziet'],

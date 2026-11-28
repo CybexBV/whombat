@@ -159,6 +159,19 @@ describe('the run_action step', () => {
     const item = flow.find((i) => i.kind === 'step' && i.icon === 'act');
     expect(item).toBeDefined();
     expect(automationGlance(def, names).does.map((d) => d.id)).toContain('act');
+    // It posts nothing in Chat unless a step says something.
+    const posts = (d: AutomationDefinition) =>
+      planSections(d, definitionGrants(d), names).find((s) => s.id === 'posts')?.lines[0]?.text;
+    const told = AutomationDefinition.parse(
+      definition([step({}), { id: 'tell', kind: 'post_message', text: '{{steps.act.text}}' }]),
+    );
+    expect(posts(def)).not.toBe(posts(told));
+    expect(posts(told)).toContain('Chat');
+    // A cooldown it has is on the card.
+    const limits = (d: AutomationDefinition) =>
+      planSections(d, definitionGrants(d), names).find((s) => s.id === 'limits')?.lines.length;
+    const calm = AutomationDefinition.parse({ ...definition([step({})]), limits: { cooldownMinutes: 30 } });
+    expect(limits(calm)).toBe((limits(def) ?? 0) + 1);
   });
 });
 
@@ -255,7 +268,8 @@ describe('the protect trigger', () => {
   });
 
   it('in words', () => {
-    expect(protectWhenText(ring)).toBe('When someone rings Front door');
+    expect(protectWhenText(ring)).toContain('Front door');
+    expect(protectWhenText({ event: 'ring' })).not.toBe(protectWhenText(ring));
     expect(protectWhenText(smoke)).toBe('When a camera hears a smoke alarm');
     expect(protectSightingSummary({ event: 'ring', cameraName: null })).toBe('Someone rang the doorbell');
     expect(protectSightingSummary({ event: 'person', cameraName: 'Garden' })).toBe('Garden sees a person');

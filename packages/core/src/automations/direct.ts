@@ -299,7 +299,8 @@ const PROTECT_SAW: Record<ProtectEvent, string> = {
 
 /** “Someone rang Front door”, “Garden sees a person”: a run's trigger in its history and `{{trigger.text}}`. */
 export function protectSightingSummary(d: Pick<ProtectDetected, 'event' | 'cameraName'>): string {
-  if (d.event === 'ring') return `Someone rang ${d.cameraName ?? 'the doorbell'}`;
+  if (d.event === 'ring')
+    return d.cameraName ? `Someone rang the doorbell at ${d.cameraName}` : 'Someone rang the doorbell';
   return `${d.cameraName ?? 'A camera'} ${PROTECT_SAW[d.event]}`;
 }
 
@@ -328,10 +329,11 @@ export function protectWhenText(
   locale?: string | null,
 ): string {
   const tr = coreTranslator(locale);
-  const camera =
-    trigger.cameraName ??
-    (trigger.event === 'ring' ? tr.t('protectWhen.doorbell') : tr.t('protectWhen.camera'));
-  return tr.t(`protectWhen.${trigger.event}`, { camera });
+  if (trigger.event === 'ring')
+    return trigger.cameraName
+      ? tr.t('protectWhen.ringAt', { camera: trigger.cameraName })
+      : tr.t('protectWhen.ring');
+  return tr.t(`protectWhen.${trigger.event}`, { camera: trigger.cameraName ?? tr.t('protectWhen.camera') });
 }
 
 /** Under the plan card's line: which Protect (“On UniFi Protect”); null when unknown. */

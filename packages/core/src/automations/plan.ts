@@ -32,6 +32,7 @@ import {
 } from '../i18n/catalog.js';
 import { formatLocaleNumber } from '../i18n/format.js';
 import {
+  cooldownOf,
   directActionDetail,
   directActionText,
   homeTriggerDetail,
@@ -291,6 +292,9 @@ function doesLine(step: AutomationStep, names: PlanNames, tr: CoreTranslator): A
 
 /** Where its runs go in Chat: a thread per item, under the message, or a new one each time. */
 function threadLine(definition: AutomationDefinition, names: PlanNames, tr: CoreTranslator): string {
+  // Steps that only act or wait post nothing: their runs are on the automation's page.
+  if (definition.steps.every((s) => s.kind === 'run_action' || s.kind === 'wait' || s.kind === 'condition'))
+    return tr.t('plan.thread.none');
   const room = names.conversationTitle(definition.conversationId) ?? tr.t('plan.chat');
   const kinds = new Set(definition.triggers.map((t) => t.kind));
   const github = definition.triggers.filter((t) => t.kind === 'github');
@@ -441,6 +445,8 @@ function limitsLines(definition: AutomationDefinition, tr: CoreTranslator): Auto
     const tokens = formatLocaleNumber(l.maxTokensPerDay, tr.locale);
     lines.push(line(tr.t('plan.limit.tokens', { tokens })));
   }
+  const cooldown = cooldownOf(definition);
+  if (cooldown > 0) lines.push(line(tr.tp('plan.limit.cooldown', cooldown)));
   return lines;
 }
 
