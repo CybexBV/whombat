@@ -142,6 +142,8 @@ export const SECRET_OPS = [
   'backup.passkeyKey.set',
   'backup.passkeyKey.verifyBegin',
   'backup.passkeyKey.verifyConfirm',
+  // The key of the bucket that keeps a copy of the backups somewhere else (Whombat offsite-copy.md).
+  'backup.setOffsite',
   'backups.create',
   'backups.inspect',
   'backups.restore',
