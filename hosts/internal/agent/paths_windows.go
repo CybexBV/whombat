@@ -7,7 +7,7 @@ import (
 
 // Default locations on Windows: everything the agent keeps is under
 // %ProgramData%\Whombat, which the installer and the agent keep to SYSTEM and
-// the administrators (SecureDir), with the executable in
+// the administrators (winpc.SecureDataDir), with the executable in
 // %ProgramFiles%\Whombat.
 var (
 	DefaultConfigDir = filepath.Join(WindowsDataDir, "agent")

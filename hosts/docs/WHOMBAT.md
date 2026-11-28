@@ -892,7 +892,8 @@ Two ways in (Whombat SI-01), the same installer:
   the agent's `.exe` against the SHA-256 it carries for the PC's
   architecture, installs it as `%ProgramFiles%\Whombat\whombat-agent.exe`,
   keeps its identity and settings in `%ProgramData%\Whombat` (SYSTEM and
-  Administrators only), registers the service `whombat-agent` (LocalSystem,
+  Administrators only; the agent takes the folder over and refuses links
+  in it), registers the service `whombat-agent` (LocalSystem,
   automatic, restarted on failure), enrolls and prints one line. Run again,
   it updates the agent in place. `& "$env:ProgramFiles\Whombat\whombat-agent.exe"
   uninstall` removes the service and the program and keeps the identity
