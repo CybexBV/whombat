@@ -29,8 +29,12 @@ export const DIRECT_COOLDOWN_DEFAULT_MINUTES = 10;
 
 /** Home Assistant domains a step may switch on and off. */
 const SWITCHED = new Set(['light', 'switch', 'fan', 'input_boolean']);
-/** Home Assistant domains a step may only start (turn on). */
-const STARTED = new Set(['scene', 'script']);
+/**
+ * Home Assistant domains whose `turn_on` does whatever the person put inside (a script, a scene): that can disarm an
+ * alarm or open a door, and nothing here can see it. No new step names one; a step saved before they were taken out
+ * asks the person each time (`directActionAsksEachTime`).
+ */
+const UNSEEN = new Set(['scene', 'script']);
 
 const SENSITIVE_DOMAIN = new RegExp(`^(${HA_SENSITIVE_DOMAINS})$`);
 const SENSITIVE_WORDS = new RegExp(HA_SENSITIVE_WORDS, 'i');
@@ -63,9 +67,15 @@ export const DIRECT_NOT_ALLOWED = coreTranslator('en').t('direct.problem.notAllo
 
 /**
  * Why a `run_action` step can't be a step (plain words, in `locale`; English when none), or null. Checks the shape
- * only: the server checks that the connection is Home Assistant and that the thing is still there.
+ * only: the server checks that the connection is Home Assistant and that the thing is still there. `saved`: the step of
+ * an automation already saved, about to run, rather than one being drafted: a scene or a script it starts may still run,
+ * with the person's yes each time.
  */
-export function directActionProblem(step: RunActionStep, locale?: string | null): string | null {
+export function directActionProblem(
+  step: RunActionStep,
+  locale?: string | null,
+  opts: { saved?: boolean } = {},
+): string | null {
   const tr = coreTranslator(locale);
   const kind = directTargetKind(step);
   if (!kind) return tr.t('direct.problem.kind');
@@ -80,7 +90,8 @@ export function directActionProblem(step: RunActionStep, locale?: string | null)
     SENSITIVE_WORDS.test(step.targetName ?? '')
   )
     return tr.t('direct.problem.sensitive');
-  if (STARTED.has(domain)) return step.action === 'turn_on' ? null : tr.t('direct.problem.startOnly');
+  if (UNSEEN.has(domain))
+    return opts.saved && step.action === 'turn_on' ? null : tr.t('direct.problem.unseen');
   if (!SWITCHED.has(domain)) return tr.t('direct.problem.notAllowed');
   return null;
 }
@@ -103,12 +114,21 @@ export function directDraftProblems(definition: unknown): string[] {
   });
 }
 
+/** Whether a step starts a Home Assistant scene or script, which asks the person each time it runs. */
+export function directActionAsksEachTime(step: Pick<RunActionStep, 'thing' | 'target'>): boolean {
+  return directTargetKind(step) === 'entity' && UNSEEN.has(entityDomain(step.target ?? ''));
+}
+
 /**
- * Whether a step left `running` by a process that stopped may simply run again: setting a state twice does no harm
- * (on, off, start, stop, shut down — a second ask finds it already so), a restart twice would restart twice.
+ * Whether a step left `running` by a process that stopped may simply run again: only when doing it twice comes out the
+ * same as once. Switching off, stopping and shutting down do; so do switching a light or a switch on and starting a
+ * machine, as Whombat finds them already so before it asks again. A restart would restart twice, and a scene or a
+ * script would run what is in it twice.
  */
-export function directActionRepeatable(action: DirectAction): boolean {
-  return action !== 'restart';
+export function directActionRepeatable(step: Pick<RunActionStep, 'thing' | 'target' | 'action'>): boolean {
+  if (step.action === 'restart') return false;
+  if (step.action !== 'turn_on') return true;
+  return directTargetKind(step) === 'entity' && SWITCHED.has(entityDomain(step.target ?? ''));
 }
 
 type Words = { thing: string; target: string };
@@ -132,7 +152,7 @@ function actionKey(step: RunActionStep, tense: 'do' | 'did') {
           ] ?? 'restartMachine')
         : kind === 'home'
           ? 'restartHome'
-          : STARTED.has(domain)
+          : UNSEEN.has(domain)
             ? 'run'
             : step.action === 'turn_off'
               ? 'turnOff'

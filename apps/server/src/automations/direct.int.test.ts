@@ -15,13 +15,21 @@ import {
   newId,
   UPS_ON_BATTERY_CHECK,
 } from '@whombat/core';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod';
 import { updatePreferences } from '../commands/account';
 import { decideApproval } from '../commands/approvals';
 import { syncTools } from '../connections/sync';
-import { approvals, automationWaits, incidents, quietWindows, vaultNetworks } from '../db/schema/index';
+import {
+  approvals,
+  automations,
+  automationVersions,
+  automationWaits,
+  incidents,
+  quietWindows,
+  vaultNetworks,
+} from '../db/schema/index';
 import { serversPrincipal } from '../hosts/principal';
 import { ensureServersConnection } from '../hosts/provision';
 import { FakeHostsService } from '../hosts/testing/fake';
@@ -71,6 +79,18 @@ const haServer = createServer((req: IncomingMessage, res: ServerResponse) => {
 let haId = '';
 let protectId = '';
 
+/** Home Assistant on the home network, as the person allowed it (again after a restart: it belongs to the services). */
+function homeNetwork() {
+  useVaultNetForTests(w.services, {
+    resolve: async (host) => {
+      if (host === 'homeassistant.example.com') return [{ address: '10.100.92.20', family: 4 }];
+      throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
+    },
+    dialAddress: (address) => (address === '10.100.92.20' ? '127.0.0.1' : address),
+    deadlineMs: 3000,
+  });
+}
+
 beforeAll(async () => {
   await fake.start();
   // The Servers connection, as the box makes it once the hosts service answers.
@@ -87,15 +107,7 @@ beforeAll(async () => {
 
   await new Promise<void>((r) => haServer.listen(0, '127.0.0.1', r));
   home.port = (haServer.address() as AddressInfo).port;
-  // Home Assistant on the home network, as the person allowed it.
-  useVaultNetForTests(w.services, {
-    resolve: async (host) => {
-      if (host === 'homeassistant.example.com') return [{ address: '10.100.92.20', family: 4 }];
-      throw Object.assign(new Error(`ENOTFOUND ${host}`), { code: 'ENOTFOUND' });
-    },
-    dialAddress: (address) => (address === '10.100.92.20' ? '127.0.0.1' : address),
-    deadlineMs: 3000,
-  });
+  homeNetwork();
   await w.services.db.insert(vaultNetworks).values({
     id: newId('vaultNetwork'),
     cidr: '10.100.92.0/24',
@@ -160,6 +172,67 @@ const step = (run: AutomationRun, id: string) => {
 
 const actions = (server: string) => fake.calls('POST', `/api/v1/servers/${server}/actions`);
 
+/** Says yes on the approval card a step waits on. */
+async function approve(run: AutomationRun, id: string) {
+  const waiting = step(run, id);
+  const [approval] = await w.services.db
+    .select()
+    .from(approvals)
+    .where(eq(approvals.id, waiting.approvalId as string));
+  if (!approval) throw new Error('no approval');
+  await w.ok(IDS.mara, decideApproval, { number: approval.number, decision: 'approve' });
+  await w.settle();
+}
+
+/**
+ * An automation saved before scenes and scripts were taken out of what runs without AI: published with a light, then
+ * its saved definition given the script step, as such an automation is stored.
+ */
+async function savedWithScript(name: string): Promise<string> {
+  const light = {
+    id: 'act',
+    kind: 'run_action' as const,
+    thing: `connection:${haId}`,
+    thingName: 'Home Assistant',
+    target: 'light.porch',
+    targetName: 'Porch light',
+    action: 'turn_on' as const,
+  };
+  const id = await w.publish(definition([light]), { name });
+  const [row] = await w.services.db.select().from(automations).where(eq(automations.id, id));
+  const [v] = await w.services.db
+    .select()
+    .from(automationVersions)
+    .where(and(eq(automationVersions.automationId, id), eq(automationVersions.n, row?.currentVersion ?? 0)));
+  if (!v) throw new Error('no version');
+  const steps = v.definition.steps.map((s) =>
+    s.kind === 'run_action' ? { ...s, target: 'script.good_night', targetName: 'Good night' } : s,
+  );
+  await w.services.db
+    .update(automationVersions)
+    .set({ definition: { ...v.definition, steps } })
+    .where(and(eq(automationVersions.automationId, id), eq(automationVersions.n, v.n)));
+  return id;
+}
+
+/** A run whose action step Whombat had marked running when it stopped, after the restart. */
+async function cutShort(automationId: string): Promise<string> {
+  const { runId } = await w.ok(IDS.mara, runAutomationNow, { automationId });
+  await w.services.db.execute(
+    sql`update automation_runs set status = 'running', started_at = now() where id = ${runId as string}`,
+  );
+  await w.services.db.execute(
+    sql`update automation_run_steps set state = 'running', attempt = 0, started_at = now(),
+      output = jsonb_build_object('approvalId', 'apr_cut_short', 'approvalAttempt', 0, 'callId', ${`call_${runId}`}::text)
+      where run_id = ${runId as string} and step_id = 'act'`,
+  );
+  await w.restart();
+  homeNetwork();
+  await w.services.automations.bootRecovery();
+  await w.settle();
+  return runId as string;
+}
+
 async function signSmartHome(input: z.input<typeof noteSmartHome.schema>) {
   const signer = await smartHomePrincipal.ensure(w.services, w.burrowId);
   return w.ok(signer, noteSmartHome, input);
@@ -184,13 +257,22 @@ describe('a run_action step', () => {
     expect(said.some((m) => m.text?.includes('granite'))).toBe(true);
   });
 
-  it('leaves a server that is already off alone, with a line that says so', async () => {
-    const id = await w.publish(definition([shutDown('marble'), tell('{{steps.off.text}}')]));
+  it('sends nothing to a server it can’t reach, says so, and doesn’t count it as done', async () => {
+    const id = await w.publish(
+      definition([shutDown('marble', { otherwise: 'skip' }), tell('{{steps.off.text}}')]),
+    );
     const run = await runNow(id);
     expect(run.status).toBe('succeeded');
-    expect(step(run, 'off').output).toMatchObject({ ran: false, noop: true });
-    expect(String((step(run, 'off').output as Json).text)).toContain('marble');
+    const off = step(run, 'off');
+    expect(off.state).toBe('skipped');
+    expect(off.output).toMatchObject({ ran: false });
+    expect((off.output as Json).noop).toBeUndefined();
+    expect(String((off.output as Json).text)).toContain('marble');
+    expect(String((off.output as Json).text)).toMatch(/reach/);
     expect(actions('marble')).toHaveLength(0);
+    // Without `skip`, it stops the run.
+    const strict = await w.publish(definition([shutDown('marble')]));
+    expect(step(await runNow(strict), 'off').state).toBe('failed');
   });
 
   it('says its line in Dutch for a person who reads Dutch', async () => {
@@ -202,7 +284,7 @@ describe('a run_action step', () => {
       const run = await runNow(id);
       const text = String((step(run, 'off').output as Json).text);
       expect(text).toContain('marble');
-      expect(text).toContain('niets gedaan');
+      expect(text).toContain('niet bereiken');
       expect(step(run, 'off').inputSummary).toContain('uitzetten');
     } finally {
       await updatePreferences(w.services, accountId, { locale: null });
@@ -218,16 +300,56 @@ describe('a run_action step', () => {
     expect(waiting.state).toBe('waiting');
     expect(waiting.approvalId).toBeTruthy();
     expect(actions('basalt')).toHaveLength(0);
-    const [approval] = await w.services.db
-      .select()
-      .from(approvals)
-      .where(eq(approvals.id, waiting.approvalId as string));
-    if (!approval) throw new Error('no approval');
-    await w.ok(IDS.mara, decideApproval, { number: approval.number, decision: 'approve' });
-    await w.settle();
+    await approve(run, 'off');
     run = await w.run(runId as string);
     expect(step(run, 'off').state).toBe('succeeded');
     expect(actions('basalt').at(-1)?.body).toMatchObject({ action: 'host_reboot' });
+  });
+
+  it('asks on the card in a test run, and acts only on the yes', async () => {
+    const id = await w.publish(definition([shutDown('granite'), tell('{{steps.off.text}}')]));
+    const before = actions('granite').length;
+    const { runId } = await w.ok(IDS.mara, runAutomationNow, { automationId: id, test: true });
+    await w.settle();
+    let run = await w.run(runId as string);
+    expect(step(run, 'off').state).toBe('waiting');
+    expect(step(run, 'off').approvalId).toBeTruthy();
+    expect(actions('granite')).toHaveLength(before);
+    const [card] = await w.services.db
+      .select()
+      .from(approvals)
+      .where(eq(approvals.id, step(run, 'off').approvalId as string));
+    expect(card?.summary).toMatch(/try/);
+    await approve(run, 'off');
+    run = await w.run(runId as string);
+    expect(run.status).toBe('succeeded');
+    expect(step(run, 'off').state).toBe('succeeded');
+    expect(actions('granite')).toHaveLength(before + 1);
+  });
+
+  it('never drafts a Home Assistant script, and one an automation saved before asks each time', async () => {
+    const script = {
+      id: 'act',
+      kind: 'run_action' as const,
+      thing: `connection:${haId}`,
+      thingName: 'Home Assistant',
+      target: 'script.good_night',
+      action: 'turn_on' as const,
+    };
+    await expect(w.publish(definition([script]))).rejects.toThrow();
+
+    const id = await savedWithScript('Saved good night');
+    const calls = home.calls.length;
+    let run = await runNow(id);
+    expect(step(run, 'act').state).toBe('waiting');
+    expect(home.calls).toHaveLength(calls);
+    await approve(run, 'act');
+    run = await w.run(run.id);
+    expect(step(run, 'act').state).toBe('succeeded');
+    expect(home.calls.at(-1)).toEqual({
+      path: '/api/services/script/turn_on',
+      body: { entity_id: 'script.good_night' },
+    });
   });
 
   it('turns a light off through Home Assistant, and leaves one that is already off', async () => {
@@ -254,6 +376,40 @@ describe('a run_action step', () => {
     const calls = home.calls.length;
     const again = await runNow(id);
     expect(step(again, 'off').output).toMatchObject({ ran: false, noop: true });
+    expect(home.calls).toHaveLength(calls);
+  });
+});
+
+describe('after Whombat stopped mid-action', () => {
+  it('does a light again, as twice comes out the same as once', async () => {
+    home.states.set('light.porch', 'off');
+    const id = await w.publish(
+      definition([
+        {
+          id: 'act',
+          kind: 'run_action' as const,
+          thing: `connection:${haId}`,
+          thingName: 'Home Assistant',
+          target: 'light.porch',
+          targetName: 'Porch light',
+          action: 'turn_on' as const,
+        },
+      ]),
+      { name: 'Porch on, cut short' },
+    );
+    const calls = home.calls.length;
+    const run = await w.run(await cutShort(id));
+    expect(step(run, 'act').state).toBe('succeeded');
+    expect(home.calls.slice(calls).map((c) => c.path)).toEqual(['/api/services/light/turn_on']);
+  });
+
+  it('doesn’t run a script again, which could do twice what is in it: a person checks', async () => {
+    const id = await savedWithScript('Good night, cut short');
+    const calls = home.calls.length;
+    const run = await w.run(await cutShort(id));
+    expect(run.status).toBe('needs_review');
+    expect(step(run, 'act').state).toBe('uncertain');
+    expect(step(run, 'act').error).toBeTruthy();
     expect(home.calls).toHaveLength(calls);
   });
 });

@@ -16,6 +16,7 @@ import {
   cooldownOf,
   DIRECT_COOLDOWN_DEFAULT_MINUTES,
   DIRECT_NOT_ALLOWED,
+  directActionAsksEachTime,
   directActionProblem,
   directActionRepeatable,
   directActionText,
@@ -84,11 +85,34 @@ describe('the run_action step', () => {
       );
     expect(entity('light.porch', 'turn_on')).toBeNull();
     expect(entity('switch.heater', 'turn_off')).toBeNull();
-    expect(entity('scene.movie_night', 'turn_on')).toBeNull();
-    expect(entity('scene.movie_night', 'turn_off')).not.toBeNull();
     expect(entity('climate.living', 'turn_off')).not.toBeNull();
     expect(entity('not an entity', 'turn_on')).not.toBeNull();
     expect(directActionProblem(step({ thing: 'device:printer' }))).not.toBeNull();
+  });
+
+  it('never drafts a scene or a script: what is in them can’t be seen', () => {
+    const home = (target: string, action: RunActionStep['action'] = 'turn_on') =>
+      step({ thing: `connection:${HA}`, target, action });
+    for (const target of ['scene.movie_night', 'script.good_night']) {
+      expect(directActionProblem(home(target)), target).not.toBeNull();
+      expect(directActionProblem(home(target), 'nl-NL'), target).not.toBe(directActionProblem(home(target)));
+      expect(validateDefinition(definition([home(target)])).ok, target).toBe(false);
+      expect(directActionAsksEachTime(home(target)), target).toBe(true);
+    }
+    expect(directActionAsksEachTime(home('light.porch'))).toBe(false);
+    expect(directActionAsksEachTime(step({}))).toBe(false);
+  });
+
+  it('still runs a scene or a script an automation saved before, asking each time', () => {
+    const home = (target: string, action: RunActionStep['action'] = 'turn_on') =>
+      step({ thing: `connection:${HA}`, target, action });
+    // An automation saved before scenes and scripts were taken out: its step may still run, with a yes each time.
+    expect(directActionProblem(home('scene.movie_night'), null, { saved: true })).toBeNull();
+    expect(directActionProblem(home('script.good_night'), null, { saved: true })).toBeNull();
+    expect(directActionProblem(home('scene.movie_night', 'turn_off'), null, { saved: true })).not.toBeNull();
+    // The safety words still refuse it.
+    expect(directActionProblem(home('script.unlock_front_door'), null, { saved: true })).toMatch(/ask/);
+    expect(directActionProblem(home('script.disarm_alarm'), null, { saved: true })).not.toBeNull();
   });
 
   it('never unlocks, opens or disarms, whatever it is called', () => {
@@ -165,10 +189,19 @@ describe('the run_action step', () => {
     expect(noop).toContain('niets gedaan');
   });
 
-  it('runs again after a crash unless doing it twice would do it twice', () => {
-    expect(directActionRepeatable('shut_down')).toBe(true);
-    expect(directActionRepeatable('turn_on')).toBe(true);
-    expect(directActionRepeatable('restart')).toBe(false);
+  it('runs again after a crash only when twice comes out the same as once', () => {
+    const home = (target: string, action: RunActionStep['action']) =>
+      step({ thing: `connection:${HA}`, target, action });
+    expect(directActionRepeatable(step({}))).toBe(true);
+    expect(directActionRepeatable(step({ target: '101', action: 'stop' }))).toBe(true);
+    expect(directActionRepeatable(step({ target: '101', action: 'start' }))).toBe(true);
+    expect(directActionRepeatable(home('light.porch', 'turn_on'))).toBe(true);
+    expect(directActionRepeatable(home('switch.heater', 'turn_off'))).toBe(true);
+    expect(directActionRepeatable(step({ action: 'restart' }))).toBe(false);
+    expect(directActionRepeatable(step({ target: '101', action: 'restart' }))).toBe(false);
+    expect(directActionRepeatable(step({ thing: `connection:${HA}`, action: 'restart' }))).toBe(false);
+    expect(directActionRepeatable(home('script.good_night', 'turn_on'))).toBe(false);
+    expect(directActionRepeatable(home('scene.movie_night', 'turn_on'))).toBe(false);
   });
 
   it('shows on the plan card as Whombat’s own, without AI', () => {

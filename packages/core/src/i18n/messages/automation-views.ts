@@ -466,8 +466,8 @@ export const AUTOMATION_VIEWS = splitPairs({
     'Alleen een server, een van zijn machines of Home Assistant kan direct worden aangestuurd.',
   ],
   'direct.problem.notAllowed': [
-    'Whombat only restarts, shuts down, starts or stops servers and their machines, restarts Home Assistant, switches lights, switches and fans on or off and runs scenes and scripts on its own. Deleting, unlocking, disarming, opening, restoring and updating always need you, so they can’t be a step.',
-    'Whombat doet zelf alleen dit: servers en hun machines herstarten, uitzetten, starten of stoppen, Home Assistant herstarten, lampen, schakelaars en ventilatoren aan- of uitzetten en scènes en scripts starten. Verwijderen, ontgrendelen, uitschakelen, openen, terugzetten en bijwerken hebben altijd jou nodig, dus dat kan geen stap zijn.',
+    'Whombat only restarts, shuts down, starts or stops servers and their machines, restarts Home Assistant and switches lights, switches and fans on or off on its own. Deleting, unlocking, disarming, opening, restoring and updating always need you, so they can’t be a step.',
+    'Whombat doet zelf alleen dit: servers en hun machines herstarten, uitzetten, starten of stoppen, Home Assistant herstarten en lampen, schakelaars en ventilatoren aan- of uitzetten. Verwijderen, ontgrendelen, uitschakelen, openen, terugzetten en bijwerken hebben altijd jou nodig, dus dat kan geen stap zijn.',
   ],
   'direct.problem.entity': [
     'target: a Home Assistant entity id such as light.porch.',
@@ -477,9 +477,9 @@ export const AUTOMATION_VIEWS = splitPairs({
     'Locks, alarms, gates and doors always ask you, so they can’t be a step that runs on its own.',
     'Sloten, alarmen, hekken en deuren vragen het altijd aan jou, dus ze kunnen geen stap zijn die vanzelf draait.',
   ],
-  'direct.problem.startOnly': [
-    'A scene or a script can only be started.',
-    'Een scène of een script kan alleen worden gestart.',
+  'direct.problem.unseen': [
+    'A scene or a script can do anything that’s in it, so Whombat doesn’t run one on its own. Name the lights or switches to turn on or off instead.',
+    'Een scène of een script kan alles doen wat erin staat, dus Whombat start er zelf geen. Noem in plaats daarvan de lampen of schakelaars die aan of uit moeten.',
   ],
   'flow.mark.withoutAi': ['Without AI', 'Zonder AI'],
 
