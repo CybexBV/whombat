@@ -96,6 +96,8 @@ export const AUTOMATION_VIEWS = splitPairs({
   'plan.stepKind.tracker_reply': ['Reply to the customer', 'De klant antwoorden'],
   'plan.stepKind.tracker_decision': ['Ask you about a feature request', 'Je vragen naar een functieverzoek'],
   'plan.stepKind.connection_actions': ['Run approved actions', 'Goedgekeurde acties uitvoeren'],
+  'plan.stepKind.run_action': ['Act without AI', 'Handelen zonder AI'],
+  'plan.section.whombat': ['WHOMBAT', 'WHOMBAT'],
 
   // Where it posts
   'plan.thread.per': ['One thread per {item} in {room}', 'Eén thread per {item} in {room}'],
@@ -109,6 +111,10 @@ export const AUTOMATION_VIEWS = splitPairs({
   'plan.thread.eachRun': [
     'A thread in {room} each time it runs',
     'Elke keer dat het draait een thread in {room}',
+  ],
+  'plan.thread.none': [
+    'Nothing in Chat: each run is on this automation’s page',
+    'Niets in Chat: elke run staat op de pagina van deze automatisering',
   ],
   'plan.posts.comment': ['Comments on GitHub on {repo}', 'Reageert op GitHub in {repo}'],
   'plan.posts.openPr': ['Opens a pull request on {repo}', 'Opent een pull request in {repo}'],
@@ -190,6 +196,16 @@ export const AUTOMATION_VIEWS = splitPairs({
     { one: 'Maximaal {count} oplossing per dag', other: 'Maximaal {count} oplossingen per dag' },
   ],
   'plan.limit.tokens': ['At most {tokens} tokens a day', 'Maximaal {tokens} tokens per dag'],
+  'plan.limit.cooldown': [
+    {
+      one: 'Waits {count} minute after a run before it starts again',
+      other: 'Waits {count} minutes after a run before it starts again',
+    },
+    {
+      one: 'Wacht na een run {count} minuut voordat het weer start',
+      other: 'Wacht na een run {count} minuten voordat het weer start',
+    },
+  ],
 
   // A change, the card's words, its state
   'plan.change.prompt': ['What {agent} is asked in “{step}”', 'Wat {agent} wordt gevraagd in “{step}”'],
@@ -275,6 +291,7 @@ export const AUTOMATION_VIEWS = splitPairs({
   'glance.does.fix_auto': ['Fixes when sure', 'Lost op als het zeker is'],
   'glance.does.merge': ['Merges when checks pass', 'Voegt samen als controles slagen'],
   'glance.does.reply': ['Replies to customers', 'Antwoordt klanten'],
+  'glance.does.act': ['Acts by itself', 'Handelt zelf'],
   'glance.writesBackTo': ['Writes back to {product}', 'Schrijft terug naar {product}'],
   'glance.github.issue_opened': ['New issue', 'Nieuwe issue'],
   'glance.github.pr_opened': ['New pull request', 'Nieuwe pull request'],
@@ -360,6 +377,91 @@ export const AUTOMATION_VIEWS = splitPairs({
     'When {target} has been having a problem for {duration}',
     'Als {target} al {duration} een probleem heeft',
   ],
+
+  // A UPS (a thing trigger on the server's UPS check)
+  'thingWhen.ups.onBattery': [
+    'When {target}’s UPS is on battery',
+    'Als de UPS van {target} op de accu draait',
+  ],
+  'thingWhen.ups.onBatteryFor': [
+    'When {target}’s UPS has been on battery for {duration}',
+    'Als de UPS van {target} al {duration} op de accu draait',
+  ],
+  'thingWhen.ups.back': ['When the power is back at {target}', 'Als de stroom bij {target} terug is'],
+
+  // A Home Assistant trigger
+  'homeWhen.to': ['When {entity} turns {state}', 'Als {entity} {state} wordt'],
+  'homeWhen.fromTo': [
+    'When {entity} goes from {from} to {state}',
+    'Als {entity} van {from} naar {state} gaat',
+  ],
+  'homeWhen.toFor': [
+    'When {entity} has been {state} for {duration}',
+    'Als {entity} al {duration} {state} is',
+  ],
+  'homeWhen.detail': ['In {connection}', 'In {connection}'],
+
+  // A UniFi Protect trigger
+  'protectWhen.camera': ['a camera', 'een camera'],
+  'protectWhen.ring': ['When someone rings the doorbell', 'Als iemand aanbelt'],
+  'protectWhen.ringAt': ['When someone rings the doorbell at {camera}', 'Als iemand aanbelt bij {camera}'],
+  'protectWhen.person': ['When {camera} sees a person', 'Als {camera} een persoon ziet'],
+  'protectWhen.vehicle': ['When {camera} sees a vehicle', 'Als {camera} een voertuig ziet'],
+  'protectWhen.animal': ['When {camera} sees an animal', 'Als {camera} een dier ziet'],
+  'protectWhen.package': ['When {camera} sees a package', 'Als {camera} een pakket ziet'],
+  'protectWhen.smoke': ['When {camera} hears a smoke alarm', 'Als {camera} een rookmelder hoort'],
+  'protectWhen.co': ['When {camera} hears a CO alarm', 'Als {camera} een CO-melder hoort'],
+  'protectWhen.glass': ['When {camera} hears glass breaking', 'Als {camera} glas hoort breken'],
+  'protectWhen.siren': ['When {camera} hears a siren', 'Als {camera} een sirene hoort'],
+  'protectWhen.detail': ['On {connection}', 'Via {connection}'],
+
+  // A step that acts without AI: what it does, and how it came out
+  'direct.detail': [
+    'Runs on this Whombat right away, without AI',
+    'Draait meteen op deze Whombat, zonder AI',
+  ],
+  'direct.do.restartServer': ['Restart {thing}', '{thing} herstarten'],
+  'direct.do.shutDownServer': ['Shut down {thing}', '{thing} uitzetten'],
+  'direct.do.startMachine': ['Start {target} on {thing}', '{target} op {thing} starten'],
+  'direct.do.stopMachine': ['Stop {target} on {thing}', '{target} op {thing} stoppen'],
+  'direct.do.shutDownMachine': ['Shut down {target} on {thing}', '{target} op {thing} uitzetten'],
+  'direct.do.restartMachine': ['Restart {target} on {thing}', '{target} op {thing} herstarten'],
+  'direct.do.restartHome': ['Restart {thing}', '{thing} herstarten'],
+  'direct.do.turnOn': ['Turn on {target}', '{target} aanzetten'],
+  'direct.do.turnOff': ['Turn off {target}', '{target} uitzetten'],
+  'direct.do.run': ['Run {target}', '{target} starten'],
+  'direct.did.restartServer': ['Restarted {thing}', '{thing} herstart'],
+  'direct.did.shutDownServer': ['Shut down {thing}', '{thing} uitgezet'],
+  'direct.did.startMachine': ['Started {target} on {thing}', '{target} op {thing} gestart'],
+  'direct.did.stopMachine': ['Stopped {target} on {thing}', '{target} op {thing} gestopt'],
+  'direct.did.shutDownMachine': ['Shut down {target} on {thing}', '{target} op {thing} uitgezet'],
+  'direct.did.restartMachine': ['Restarted {target} on {thing}', '{target} op {thing} herstart'],
+  'direct.did.restartHome': ['Restarted {thing}', '{thing} herstart'],
+  'direct.did.turnOn': ['Turned on {target}', '{target} aangezet'],
+  'direct.did.turnOff': ['Turned off {target}', '{target} uitgezet'],
+  'direct.did.run': ['Ran {target}', '{target} gestart'],
+  'direct.done': ['{what} at {time}.', '{what} om {time}.'],
+  'direct.doneWith': ['{what} at {time} — {result}', '{what} om {time} — {result}'],
+  'direct.result.switching_off': ['it’s switching off.', 'hij gaat uit.'],
+  'direct.result.restarting': ['it’s starting again.', 'hij start opnieuw op.'],
+  'direct.result.starting': ['it’s starting.', 'hij start op.'],
+  'direct.noop.off': [
+    '{name} was already off at {time}, so nothing was done.',
+    '{name} stond om {time} al uit, dus er is niets gedaan.',
+  ],
+  'direct.noop.on': [
+    '{name} was already on at {time}, so nothing was done.',
+    '{name} stond om {time} al aan, dus er is niets gedaan.',
+  ],
+  'direct.noop.running': [
+    '{name} was already running at {time}, so nothing was done.',
+    '{name} draaide om {time} al, dus er is niets gedaan.',
+  ],
+  'direct.noop.stopped': [
+    '{name} was already stopped at {time}, so nothing was done.',
+    '{name} was om {time} al gestopt, dus er is niets gedaan.',
+  ],
+  'flow.mark.withoutAi': ['Without AI', 'Zonder AI'],
 
   // A Find My trigger
   'findMyWhen.someone': ['someone', 'iemand'],

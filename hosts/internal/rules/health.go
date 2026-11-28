@@ -338,13 +338,21 @@ func healthConditions(r *proto.Report, limits LimitLookup) []Condition {
 			d += " · about " + FormatDuration(time.Duration(*u.RuntimeS)*time.Second)
 			params["runtimeSeconds"] = *u.RuntimeS
 		}
-		sev, title, forD := SevWarning, "Running on battery", UPSOnBatteryFor
-		if u.Status == "low_battery" {
-			sev, title, forD = SevCritical, "The battery is almost empty", 0
-		}
-		c := cond(RuleUPSOnBattery, "ups:"+u.Name, sev, LinkSystem, "on battery", title, d, "", forD, params)
+		// A power cut is critical once it has lasted UPSOnBatteryFor: the server's dot turns red and Whombat opens a
+		// problem that automations can act on (shut the servers down safely). An almost empty battery is its own alert
+		// on top, so it is told again even when the power cut was ignored.
+		c := cond(RuleUPSOnBattery, "ups:"+u.Name, SevCritical, LinkSystem, "on battery", "Running on battery", d, "", UPSOnBatteryFor, params)
 		c.ClearAfter = time.Minute
 		out = append(out, c)
+		if u.Status == "low_battery" {
+			low := map[string]any{"low": true}
+			for k, v := range params {
+				low[k] = v
+			}
+			lc := cond(RuleUPSOnBattery, "ups:"+u.Name+":low", SevCritical, LinkSystem, "battery low", "The battery is almost empty", d, "", 0, low)
+			lc.ClearAfter = time.Minute
+			out = append(out, lc)
+		}
 	}
 
 	// Network: configured links without carrier, bond members down.

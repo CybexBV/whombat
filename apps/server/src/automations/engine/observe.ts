@@ -127,6 +127,21 @@ export async function observeStep(
               from: ['waiting'],
             };
       });
+    case 'run_action':
+      // Waiting for a person's yes to an action their settings ask about.
+      return awaitingYes(db, row, step, now, (name) => {
+        const reason = `${name} said no, so it was left as it is.`;
+        return step.otherwise === 'fail'
+          ? { op: 'settle', idx: row.idx, state: 'failed', error: reason, from: ['waiting'] }
+          : {
+              op: 'settle',
+              idx: row.idx,
+              state: 'skipped',
+              error: reason,
+              output: { ran: false, text: reason, summary: reason },
+              from: ['waiting'],
+            };
+      });
     case 'request_approval':
     case 'open_pull_request':
       return observeRequest(db, run, row, step, now);

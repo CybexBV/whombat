@@ -305,6 +305,79 @@ export const ThingTrigger = z
   .refine((trigger) => trigger.event !== 'back' || trigger.forMinutes === undefined, 'A return cannot wait.');
 export type ThingTrigger = z.infer<typeof ThingTrigger>;
 
+/** A Home Assistant entity id: `binary_sensor.water_leak`. */
+export const HomeEntityId = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9_]{1,64}\.[a-z0-9_]{1,128}$/, {
+    message: 'Expected an entity id like binary_sensor.water_leak',
+  });
+
+/** A Home Assistant state as it reports it (`on`, `off`, `open`, `home`, `unavailable`). */
+export const HomeState = z.string().trim().min(1).max(64);
+
+/**
+ * A Home Assistant entity changing to a state (docs/decisions/direct-automations.md): `binary_sensor.water_leak` turning
+ * `on`, optionally only once it has stayed so for `forMinutes`. The box follows only the entities live automations name
+ * (`subscribe_entities` with their ids, never every entity) and signs `home.state_changed` for them.
+ */
+export const HomeStateTrigger = z
+  .object({
+    kind: z.literal('home_state'),
+    /** The Home Assistant connection (Settings → Connections). */
+    connectionId: ConnectionId,
+    entity: HomeEntityId,
+    /** The entity's name as Home Assistant showed it when the automation was made (“Water leak”), for its words. */
+    entityName: z.string().trim().min(1).max(120).optional(),
+    /** The state it changes to, compared without case. */
+    to: HomeState,
+    /** Only when it comes from this state. */
+    from: HomeState.optional(),
+    /** Only once it has stayed in `to` this long. */
+    forMinutes: z
+      .number()
+      .int()
+      .min(1)
+      .max(24 * 60)
+      .optional(),
+  })
+  .strict();
+export type HomeStateTrigger = z.infer<typeof HomeStateTrigger>;
+
+/** What UniFi Protect sees that can start an automation: a ring, a smart detection, an alarm it hears. */
+export const ProtectEvent = z.enum([
+  'ring',
+  'person',
+  'vehicle',
+  'animal',
+  'package',
+  'smoke',
+  'co',
+  'glass',
+  'siren',
+]);
+export type ProtectEvent = z.infer<typeof ProtectEvent>;
+
+/**
+ * Something UniFi Protect sees (docs/decisions/direct-automations.md): the doorbell rings, a camera sees a person, a
+ * camera hears a smoke or CO alarm. From the event stream the box already follows; signed as `protect.detected` only
+ * for connections a live automation listens to.
+ */
+export const ProtectTrigger = z
+  .object({
+    kind: z.literal('protect'),
+    /** The UniFi Protect connection (Settings → Connections). */
+    connectionId: ConnectionId,
+    event: ProtectEvent,
+    /** Only this camera or doorbell (Protect's id); every one when absent. */
+    camera: z.string().trim().min(1).max(200).optional(),
+    /** Its name as Protect showed it (“Front door”), for the words. */
+    cameraName: z.string().trim().min(1).max(120).optional(),
+  })
+  .strict();
+export type ProtectTrigger = z.infer<typeof ProtectTrigger>;
+
 /** An authenticated inbound webhook (off until an owner turns it on and a secret exists). */
 export const WebhookTrigger = z.object({ kind: z.literal('webhook') }).strict();
 
@@ -322,6 +395,8 @@ export const AutomationTrigger = z.discriminatedUnion('kind', [
   MailTrigger,
   FindMyTrigger,
   ThingTrigger,
+  HomeStateTrigger,
+  ProtectTrigger,
 ]);
 export type AutomationTrigger = z.infer<typeof AutomationTrigger>;
 export type AutomationTriggerInput = z.input<typeof AutomationTrigger>;
@@ -807,6 +882,41 @@ export const ConnectionActionsStep = z
   })
   .strict();
 
+/**
+ * What a `run_action` step may do on its own (docs/decisions/direct-automations.md): restart or shut down a server,
+ * start, stop, shut down or restart one of its machines, restart Home Assistant, switch a light, switch or fan on or
+ * off and run a scene or a script. Nothing that deletes, unlocks, disarms, opens, restores or updates is on the list.
+ */
+export const DIRECT_ACTIONS = ['restart', 'shut_down', 'start', 'stop', 'turn_on', 'turn_off'] as const;
+export const DirectAction = z.enum(DIRECT_ACTIONS);
+export type DirectAction = z.infer<typeof DirectAction>;
+
+/**
+ * Run one action directly, without an AI turn (docs/decisions/direct-automations.md): on a server (`server:<id>`), one
+ * of its machines (`target`: the machine's id), or a Home Assistant connection (`connection:<id>`, `target`: an entity
+ * such as `light.porch`; none: Home Assistant itself). Turning the automation on is the person's yes for exactly this;
+ * where the person's own rules say to ask first (a server set to “Ask me first”, the server this Whombat runs on) it
+ * asks on the approval card. Something already so (a server already off) is a quiet no-op.
+ */
+export const RunActionStep = z
+  .object({
+    ...StepBase,
+    kind: z.literal('run_action'),
+    /** The server or connection it acts on, by its page id. */
+    thing: ThingIncidentTarget,
+    /** Its name when the automation was made (“nas-01”), for the words. */
+    thingName: z.string().trim().min(1).max(120),
+    action: DirectAction,
+    /** A machine on the server (its id) or a Home Assistant entity (`light.porch`); the thing itself when absent. */
+    target: z.string().trim().min(1).max(200).optional(),
+    /** The machine's or entity's name (“Porch light”), for the words. */
+    targetName: z.string().trim().min(1).max(120).optional(),
+    /** It can't run (the thing is gone, set to Look only, said no): `skip` the step (the run goes on) or `fail` it. */
+    otherwise: z.enum(['skip', 'fail']).default('fail'),
+  })
+  .strict();
+export type RunActionStep = z.infer<typeof RunActionStep>;
+
 export const AutomationStep = z.discriminatedUnion('kind', [
   DispatchAgentStep,
   PostMessageStep,
@@ -821,6 +931,7 @@ export const AutomationStep = z.discriminatedUnion('kind', [
   TrackerReplyStep,
   TrackerDecisionStep,
   ConnectionActionsStep,
+  RunActionStep,
 ]);
 export type AutomationStep = z.infer<typeof AutomationStep>;
 export type AutomationStepKind = AutomationStep['kind'];
@@ -837,6 +948,7 @@ export const EXTERNAL_STEP_KINDS: readonly AutomationStepKind[] = [
   'merge_pull_request',
   'tracker_reply',
   'connection_actions',
+  'run_action',
 ];
 
 /**
@@ -869,6 +981,17 @@ export const AutomationLimits = z
     /** Tokens agents may use in one run / a day, when their provider reports usage. */
     maxTokensPerRun: z.number().int().min(1000).max(50_000_000).optional(),
     maxTokensPerDay: z.number().int().min(1000).max(500_000_000).optional(),
+    /**
+     * Minutes after a run starts before the next can (docs/decisions/direct-automations.md): a sensor that flaps or a
+     * doorbell rung three times starts one run. Absent: 10 for an automation started by Home Assistant or UniFi
+     * Protect, none otherwise (`cooldownOf`); 0: none.
+     */
+    cooldownMinutes: z
+      .number()
+      .int()
+      .min(0)
+      .max(24 * 60)
+      .optional(),
   })
   .strict();
 export type AutomationLimits = z.infer<typeof AutomationLimits>;
@@ -1210,6 +1333,8 @@ export const AutomationDoes = z.enum([
   'fix_auto',
   'merge',
   'reply',
+  /** A step that acts on a server or Home Assistant by itself, without AI (`run_action`). */
+  'act',
 ]);
 export type AutomationDoes = z.infer<typeof AutomationDoes>;
 
@@ -1355,6 +1480,8 @@ export const AutomationTriggerInfo = z.object({
     'mail',
     'findmy',
     'thing',
+    'home_state',
+    'protect',
   ]),
   /** “Mara in #bugs”, “Every day at 09:00”, “Webhook delivery 7f3c…”. */
   summary: z.string().max(200),
@@ -1385,6 +1512,7 @@ export const AutomationRunStep = z.object({
       'tracker_reply',
       'tracker_decision',
       'connection_actions',
+      'run_action',
       // A kind this version doesn't know (a finished run of an older version's step): shown as an earlier step.
       'unknown',
     ])
@@ -1473,6 +1601,7 @@ const STEP_KINDS = [
   'tracker_reply',
   'tracker_decision',
   'connection_actions',
+  'run_action',
 ] as const satisfies readonly AutomationStepKind[];
 
 /** Human-readable labels of the step kinds, in a locale (the plan's own words for them). */
@@ -1500,4 +1629,6 @@ export const TRIGGER_KIND_LABELS: Record<AutomationTriggerKind, string> = {
   mail: 'Matching mail arrives',
   findmy: 'Someone arrives or leaves',
   thing: 'A thing goes down, has a problem or comes back',
+  home_state: 'Something in Home Assistant changes',
+  protect: 'UniFi Protect sees something',
 };

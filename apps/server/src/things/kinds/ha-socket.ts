@@ -34,6 +34,24 @@ export interface HaCommands {
   close(): void;
 }
 
+/**
+ * A socket kept open (the automations' triggers follow entities on it): a subscription that lasts as long as the
+ * socket, a ping to tell a socket that went quiet from one that is gone, and the moment it closed.
+ */
+export interface HaLive extends HaCommands {
+  /** Subscribes: Home Assistant's answer, then every event to `onEvent` until the socket closes. */
+  subscribe(
+    type: string,
+    data: Record<string, unknown>,
+    onEvent: (event: unknown) => void,
+    timeoutMs?: number,
+  ): Promise<HaResult>;
+  /** Whether Home Assistant answers a ping in time. */
+  ping(timeoutMs?: number): Promise<boolean>;
+  /** Settles once the socket closed, whoever closed it. */
+  readonly closed: Promise<void>;
+}
+
 /** Home Assistant refused the token (`auth_invalid`). */
 export class HaAuthInvalid extends Error {
   override name = 'HaAuthInvalid';
@@ -124,7 +142,7 @@ export async function haSession(
   buffer: MessageBuffer,
   token: string,
   timeoutMs = COMMAND_MS,
-): Promise<HaCommands> {
+): Promise<HaLive> {
   const ws = buffer.ws;
   const hello = await buffer.next(timeoutMs);
   if (hello.type !== 'auth_required') throw new ReadProblem('This doesn’t answer like Home Assistant.');
@@ -136,6 +154,10 @@ export async function haSession(
 
   let nextId = 1;
   const pending = new Map<number, Pending>();
+  let ended: () => void = () => undefined;
+  const closed = new Promise<void>((resolve) => {
+    ended = resolve;
+  });
   buffer.each(
     (message) => {
       const id = typeof message.id === 'number' ? message.id : null;
@@ -144,6 +166,7 @@ export async function haSession(
     () => {
       for (const p of [...pending.values()]) p.onClose();
       pending.clear();
+      ended();
     },
   );
 
@@ -167,6 +190,45 @@ export async function haSession(
 
   return {
     haVersion,
+    closed,
+    subscribe(type, data, onEvent, ms = timeoutMs) {
+      const id = nextId++;
+      return new Promise<HaResult>((resolve) => {
+        let answered = false;
+        const answer = (r: HaResult) => {
+          if (answered) return;
+          answered = true;
+          clearTimeout(timer);
+          if (!r.success) pending.delete(id);
+          resolve(r);
+        };
+        const timer = setTimeout(() => answer({ success: false, code: 'timeout', message: '' }), ms);
+        pending.set(id, {
+          onMessage: (m) => {
+            if (m.type === 'result') answer(resultOf(m));
+            else if (m.type === 'event') {
+              answer({ success: true, result: null });
+              onEvent(m.event);
+            }
+          },
+          onClose: () => answer({ success: false, code: 'closed', message: '' }),
+        });
+        if (!send(id, type, data)) answer({ success: false, code: 'closed', message: '' });
+      });
+    },
+    ping(ms = timeoutMs) {
+      const id = nextId++;
+      return new Promise<boolean>((resolve) => {
+        const done = (ok: boolean) => {
+          clearTimeout(timer);
+          pending.delete(id);
+          resolve(ok);
+        };
+        const timer = setTimeout(() => done(false), ms);
+        pending.set(id, { onMessage: (m) => done(m.type === 'pong'), onClose: () => done(false) });
+        if (!send(id, 'ping', {})) done(false);
+      });
+    },
     call(type, data = {}, ms = timeoutMs) {
       const id = nextId++;
       return new Promise<HaResult>((resolve) => {
@@ -276,7 +338,7 @@ export async function openHomeAssistant(
   services: Services,
   row: CatalogConnectionRow,
   deadlineMs: number,
-): Promise<HaCommands> {
+): Promise<HaLive> {
   const attempt = async (force: boolean) => {
     const token = await tokenOf(services, row, force);
     let buffer: MessageBuffer;

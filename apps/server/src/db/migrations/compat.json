@@ -291,6 +291,12 @@
       "readers": "0000_baseline",
       "writers": "0000_baseline",
       "note": "What changed before it broke (docs/decisions/outside-changes.md): four new tables, thing_changes (the changes Whombat saw on a thing, 90 days), change_baselines (what it read last of a thing, to compare the next read), settings_copies (sealed copies of a few services' settings) and settings_copy_states (how their last tries went). The release before it never reads or writes them."
+    },
+    "0047_direct_automations": {
+      "class": "expand",
+      "readers": "0000_baseline",
+      "writers": "0000_baseline",
+      "note": "Automations that act without AI wait out a Home Assistant entity's state (docs/decisions/direct-automations.md): one new table, automation_waits (automation_id, key, burrow_id, version, event_id, due_at, first_due_at). The release before it never reads it; an automation that uses it is held back on that release, as the release gate holds every newer automation."
     }
   }
 }

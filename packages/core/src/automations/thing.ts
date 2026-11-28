@@ -2,6 +2,7 @@ import type { ThingTrigger } from '../domain/automation.js';
 import { catalogEntry } from '../domain/connections-catalog.js';
 import { THING_BACK, THING_DOWN, type ThingIncidentEvent } from '../domain/incidents.js';
 import { type CoreTranslator, coreTranslator } from '../i18n/catalog.js';
+import { upsWhenText } from './direct.js';
 
 export interface ThingTriggerFacts {
   kind: 'thing';
@@ -67,6 +68,9 @@ export function thingWhenText(trigger: ThingTrigger, locale?: string | null): st
   const tr = coreTranslator(locale);
   const kinds = trigger.kinds?.map((k) => kindName(k, tr)) ?? [];
   const target = trigger.name ?? (kinds.length ? kinds.join(tr.t('plan.orJoin')) : tr.t('thingWhen.watched'));
+  // A UPS on battery is a power cut: said so, not as a check's name.
+  const ups = upsWhenText(trigger, target, tr);
+  if (ups) return ups;
   const check = trigger.check && trigger.checkName ? `“${trigger.checkName}”` : null;
   if (!trigger.forMinutes) {
     if (trigger.event === 'problem' && check) return tr.t('thingWhen.reports', { target, check });

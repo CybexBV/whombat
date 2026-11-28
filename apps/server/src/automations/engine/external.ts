@@ -7,6 +7,7 @@
  */
 import {
   type AutomationStep,
+  directActionRepeatable,
   mailStepProblem,
   namesOrganization,
   REPEATABLE_EXTERNAL_STEP_KINDS,
@@ -18,6 +19,7 @@ import { type GhPullRequest, GitHubError, GitHubNotConnectedError } from '../../
 import { ApiError } from '../../lib/errors';
 import { OutboundError, outboundRequest } from '../../lib/outbound';
 import { githubScope } from '../../managed/providers/github-adapter';
+import { runDirectAction } from '../direct-action';
 import { MERGE_WORDS, mergeOutputOf } from '../merge';
 import { githubRetriesOf, openedPr, openPrStep } from '../steps';
 import { shotsBranch, shotsSection } from '../steps/shots';
@@ -74,6 +76,10 @@ export async function runExternal(
     await runConnectionActions(lease, row, step);
     return true;
   }
+  if (step.kind === 'run_action') {
+    await runDirectAction(lease, row, step);
+    return true;
+  }
   return false;
 }
 
@@ -92,6 +98,12 @@ async function recoverExternal(
   }
   if (REPEATABLE_EXTERNAL_STEP_KINDS.includes(step.kind) && step.kind === 'tracker_reply') {
     await replyOnTracker(lease, row, step);
+    return true;
+  }
+  // Setting a state again does no harm (a second shut down finds it off), so it is simply done now; a restart may have
+  // happened already, so a person checks that one.
+  if (step.kind === 'run_action' && directActionRepeatable(step.action)) {
+    await runDirectAction(lease, row, step);
     return true;
   }
   // Recovery: a step this process didn't start is from a crashed one, or one an update restarted. Reconcile from the

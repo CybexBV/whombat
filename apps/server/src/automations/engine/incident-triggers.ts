@@ -85,6 +85,11 @@ export async function claimIncidentTrigger(
   event: Event,
   now: Date,
   active: ActiveChecks,
+  /**
+   * A power cut an automation acts on (a UPS on battery, with steps that act by themselves): keeping the server quiet
+   * hushes its messages, never the shutdown (docs/decisions/direct-automations.md).
+   */
+  safety = false,
 ): Promise<boolean> {
   const dueAt = thingTriggerDueAt(triggers, facts);
   if (dueAt === null) return false;
@@ -97,7 +102,7 @@ export async function claimIncidentTrigger(
     : delayed && dueAt <= now.getTime()
       ? now
       : event.createdAt;
-  if (await holdsIncident(tx, event.burrowId, incident.thing, now, since)) return false;
+  if (!safety && (await holdsIncident(tx, event.burrowId, incident.thing, now, since))) return false;
 
   const [row] = await tx
     .select({ endedAt: incidents.endedAt, cause: incidents.causeThing })

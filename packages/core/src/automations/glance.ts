@@ -50,6 +50,7 @@ export const AUTOMATION_DOES_LABELS: Record<AutomationDoes, string> = {
   fix_auto: 'Fixes when sure',
   merge: 'Merges when checks pass',
   reply: 'Replies to customers',
+  act: 'Acts by itself',
 };
 
 const DOES_IDS = Object.keys(AUTOMATION_DOES_LABELS) as AutomationDoes[];
@@ -76,6 +77,7 @@ const TONES: Record<AutomationDoes, AutomationGlanceTag['tone']> = {
   fix_auto: 'changes',
   merge: 'merges',
   reply: 'changes',
+  act: 'changes',
 };
 
 const TONE_ORDER: readonly AutomationGlanceTag['tone'][] = ['plain', 'changes', 'merges'];
@@ -94,6 +96,9 @@ const SOURCES: Record<AutomationTrigger['kind'], AutomationSource> = {
   mail: 'mail',
   findmy: 'findmy',
   thing: 'thing',
+  // Home Assistant and UniFi Protect are things too: the tile's mark is a thing's.
+  home_state: 'thing',
+  protect: 'thing',
   schedule: 'schedule',
   message_posted: 'message',
   reaction_added: 'reaction',
@@ -223,6 +228,8 @@ function stepDoes(step: AutomationStep): AutomationDoes | null {
       return 'approval';
     case 'http_callback':
       return 'callback';
+    case 'run_action':
+      return 'act';
     case 'open_pull_request':
       return 'open_pr';
     case 'merge_pull_request':

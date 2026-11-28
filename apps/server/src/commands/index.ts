@@ -2,6 +2,7 @@
 
 import { COMMAND_APPROVAL_COMMANDS } from '../agent-commands/commands';
 import { AUTOMATION_COMMANDS } from '../automations/commands';
+import { SMART_HOME_COMMANDS } from '../automations/home-triggers';
 import { PLAN_COMMANDS } from '../automations/plans';
 import { automationStep, continueStep, mergePrStep, openPrStep } from '../automations/steps';
 import { BACKUP_COMMANDS } from '../backups/commands';
@@ -223,6 +224,8 @@ export const COMMANDS: CommandDef[] = [
   ...FOLLOWED_TASK_COMMANDS,
   // Where people are on Find My, kept for the automations that listen — findmy-connection.md.
   ...FIND_MY_COMMANDS,
+  // What Home Assistant and UniFi Protect saw, signed for the automations that listen — direct-automations.md.
+  ...SMART_HOME_COMMANDS,
   // Outages and their push — monitoring.md.
   ...INCIDENT_COMMANDS,
   // Where the people the person ticked were, 30 days — findmy-timeline.md.

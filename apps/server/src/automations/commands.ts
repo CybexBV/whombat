@@ -72,6 +72,7 @@ import { inBurrow, loadConversationRow } from '../read/conversations';
 import { engineActor, loadPrincipalRow, toActor } from '../read/principals';
 import { publishDispatch } from '../runtime/activity';
 import { outsidersTurn } from '../runtime/person';
+import type { Services } from '../services';
 import { trackerConnectionRow } from '../trackers/connection';
 import { driverIdOf, noDriverText, recipeWordsOf } from '../trackers/drivers';
 import { stopRunRequests } from '../trackers/features';
@@ -97,6 +98,14 @@ import {
 } from './store';
 import { type AgainMark, resetOutput, resetStepsFrom } from './tries';
 import { hasWebhookTrigger, NO_WEBHOOK_TRIGGER_TEXT, refuseWebhookTrigger } from './webhook-trigger';
+
+/**
+ * Follows the Home Assistant entities live automations name now. Loaded when needed, as `direct-action.ts` is: both reach
+ * the connection modules, which reach these commands, so a static import would be a cycle.
+ */
+function followSmartHome(services: Services): void {
+  void import('./home-triggers').then((m) => m.smartHomeTriggersFor(services).tick()).catch(() => {});
+}
 
 export const webhookSecretAad = (automationId: string) => `automation:${automationId}:webhook`;
 
@@ -169,6 +178,20 @@ export async function referenceProblems(
       problems.push(`There is no connected mailbox ${t.connectionId} on this Whombat.`);
     if (t.kind === 'findmy' && !(await findMyConnectionRow(ctx.tx, ctx.burrow.id, t.connectionId)))
       problems.push(`There is no Find My connection ${t.connectionId} on this Whombat.`);
+    // Home Assistant and UniFi Protect triggers name one of the person's connections of that kind.
+    if (t.kind === 'home_state' || t.kind === 'protect') {
+      const catalogId = t.kind === 'home_state' ? 'homeassistant' : 'unifi_protect';
+      const [row] = await ctx.tx
+        .select({ catalogId: catalogConnections.catalogId })
+        .from(catalogConnections)
+        .where(
+          and(eq(catalogConnections.id, t.connectionId), eq(catalogConnections.burrowId, ctx.burrow.id)),
+        );
+      if (row?.catalogId !== catalogId)
+        problems.push(
+          `There is no ${t.kind === 'home_state' ? 'Home Assistant' : 'UniFi Protect'} connection ${t.connectionId} on this Whombat.`,
+        );
+    }
   }
   for (const id of definitionConversations(def))
     if (!(await inBurrow(ctx.tx, ctx.burrow.id, id)))
@@ -188,6 +211,16 @@ export async function referenceProblems(
       !(await trackerConnectionRow(ctx.tx, ctx.burrow.id, s.connectionId))
     )
       problems.push(`Step “${s.id}”: there is no tracker connection ${s.connectionId} on this Whombat.`);
+    // A step that acts by itself names a thing this Whombat has, and a call it can make (`direct-action.ts`).
+    if (s.kind === 'run_action') {
+      // Something only out of reach now (a server's agent, a sign-in) doesn't stop it being drafted: it says so when
+      // it runs.
+      const { planDirectAction } = await import('./direct-action');
+      const plan = await planDirectAction(ctx.tx, ctx.services, ctx.burrow.id, s);
+      if (!plan.ok && (plan.fatal || plan.gone)) problems.push(`Step “${s.id}”: ${plan.reason}`);
+      else if (plan.ok && s.thing.startsWith('server:') && !plan.server)
+        problems.push(`Step “${s.id}”: there is no server ${s.thingName} on this Whombat.`);
+    }
     if (s.kind === 'http_callback') {
       try {
         checkOutboundUrl(s.url, { allowPrivate: ctx.services.config.WHOMBAT_OUTBOUND_ALLOW_PRIVATE });
@@ -571,11 +604,16 @@ export async function publishVersion(
   const services = ctx.services;
   const touchesMail = prevHadMail || def.triggers.some((t) => t.kind === 'mail');
   const touchesFindMy = [...(prevDef?.triggers ?? []), ...def.triggers].some((t) => t.kind === 'findmy');
+  const touchesHome = [...(prevDef?.triggers ?? []), ...def.triggers].some(
+    (t) => t.kind === 'home_state' || t.kind === 'protect',
+  );
   ctx.after(async () => {
     services.automations.nudge();
     if (touchesMail) services.mailTriggers.nudge();
     // A Find My connection an automation listens to reads at least every 15 minutes from now on, or no longer does.
     if (touchesFindMy) findMyBackgroundFor(services).nudge();
+    // Home Assistant's entities it names are followed from now on, or no longer are.
+    if (touchesHome) followSmartHome(services);
   });
   return n;
 }
@@ -910,6 +948,7 @@ export const setAutomationEnabled = defineCommand({
     const watchesMail = def.triggers.some((t) => t.kind === 'mail');
     const watchesThings = def.triggers.some((t) => t.kind === 'thing');
     const watchesFindMy = def.triggers.some((t) => t.kind === 'findmy');
+    const watchesHome = def.triggers.some((t) => t.kind === 'home_state' || t.kind === 'protect');
     // Switching on someone else's automation makes you its publisher (SUB-31): what it runs from now on runs with your
     // authority and for you, never again on the person who switched it off (to stop spending, say). Published as a
     // new version of the same definition, checked and signed the way publishing is.
@@ -958,6 +997,7 @@ export const setAutomationEnabled = defineCommand({
         services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
+        if (watchesHome) followSmartHome(services);
       });
       return { automationId: row.id };
     }
@@ -989,11 +1029,12 @@ export const setAutomationEnabled = defineCommand({
     await publishAutomation(ctx, ctx.burrow.id, row.id);
     // Its first fire (or the events it reads) on time, not at the engine's next safety tick (SV-03).
     const services = ctx.services;
-    if (input.enabled || watchesMail || watchesFindMy) {
+    if (input.enabled || watchesMail || watchesFindMy || watchesHome) {
       ctx.after(async () => {
         if (input.enabled) services.automations.nudge();
         if (watchesMail) services.mailTriggers.nudge();
         if (watchesFindMy) findMyBackgroundFor(services).nudge();
+        if (watchesHome) followSmartHome(services);
       });
     }
     return { automationId: row.id };
@@ -1343,6 +1384,7 @@ export async function removeAutomation(
   ctx.after(async () => {
     services.mailTriggers.nudge();
     findMyBackgroundFor(services).nudge();
+    followSmartHome(services);
   });
   return active.length;
 }

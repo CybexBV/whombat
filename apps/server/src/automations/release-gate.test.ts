@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ACTION_AUTOMATIONS_LATER,
   BEFORE_FIRST_RELEASE,
+  DIRECT_AUTOMATIONS_LATER,
+  DIRECT_SCHEMA,
   FIND_MY_AUTOMATIONS_LATER,
   FIND_MY_SCHEMA,
   laterWords,
@@ -11,6 +13,7 @@ import {
   newerDefinition,
   newerRun,
   rollbackTarget,
+  schemaKnowsDirect,
   schemaKnowsFindMy,
   schemaKnowsThings,
   THING_AUTOMATIONS_LATER,
@@ -260,5 +263,52 @@ describe('automations started by something going down or coming back', () => {
     }
     expect(schemaKnowsThings(null)).toBe(false);
     expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).thingsReady()).toBe(true);
+  });
+});
+
+describe('automations that act without AI or start on Home Assistant or Protect', () => {
+  const production = { NODE_ENV: 'production' as const, WHOMBAT_RELEASE_ID: NEXT };
+  const powerCut = {
+    triggers: [{ kind: 'thing', event: 'problem', thing: 'server:nas', check: 'host.ups.on_battery' }],
+    steps: [{ id: 'off', kind: 'run_action', thing: 'server:nas', action: 'shut_down' }],
+  };
+  const doorbell = {
+    triggers: [{ kind: 'protect', connectionId: 'con_protect0001', event: 'ring' }],
+    steps: [{ id: 'tell', kind: 'post_message', text: 'Someone rang.' }],
+  };
+  const schemas = (bySchema: Record<string, string | null>) => async (id: string) => bySchema[id] ?? null;
+  const update = facts({
+    current: NEXT,
+    lastUpdate: { release: NEXT, from: ME, at: '2026-11-28T06:00:00Z' },
+  });
+
+  it('are newer definitions and runs, refused with their own words', () => {
+    expect(newerDefinition(powerCut)).toBe(true);
+    expect(newerDefinition(doorbell)).toBe(true);
+    expect(newerRun({ trigger: { kind: 'home_state' }, definition: { triggers: [], steps: [] } })).toBe(true);
+    expect(laterWords(powerCut)).toBe(DIRECT_AUTOMATIONS_LATER);
+    expect(laterWords(doorbell)).toBe(DIRECT_AUTOMATIONS_LATER);
+  });
+
+  it('wait, and hold a run they started, until the release a box would go back to knows them', async () => {
+    const { lookup } = releases([ME]);
+    const before = new NewerAutomationsGate(production, lookup, schemas({ [ME]: THING_SCHEMA }));
+    before.follow(() => update);
+    expect(await before.thingsReady()).toBe(true);
+    expect(await before.directReady()).toBe(false);
+    await expect(before.refuse(doorbell)).rejects.toThrow(DIRECT_AUTOMATIONS_LATER);
+    expect(await before.holdsRun({ trigger: { kind: 'thing' }, definition: powerCut })).toBe(true);
+    expect(
+      await before.holdsRun({ trigger: { kind: 'protect' }, definition: { triggers: [], steps: [] } }),
+    ).toBe(true);
+    for (const schema of [DIRECT_SCHEMA, '0048_later']) {
+      const after = new NewerAutomationsGate(production, lookup, schemas({ [ME]: schema }));
+      after.follow(() => update);
+      expect(await after.directReady()).toBe(true);
+      expect(await after.holdsRun({ trigger: { kind: 'thing' }, definition: powerCut })).toBe(false);
+      await expect(after.refuse(doorbell)).resolves.toBeUndefined();
+    }
+    expect(schemaKnowsDirect(null)).toBe(false);
+    expect(await new NewerAutomationsGate({ NODE_ENV: 'test' }, lookup).directReady()).toBe(true);
   });
 });

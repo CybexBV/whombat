@@ -96,7 +96,9 @@ export type ProtocolVersion = z.infer<typeof ProtocolVersion>;
  * Docker container's `app` (what Whombat knows about updating it as a Compose app), an ended task's `apps`, the
  * `hosts.manage` op `app.update` and its answer's `approvalNumber` (Whombat app-updates.md); what changed on a thing in
  * its history (`ThingHistory.changes`) and settings copies (`ThingPage.settingsCopy`, `things.settingsCopy`; Whombat
- * outside-changes.md).
+ * outside-changes.md); automations that act without AI: the `run_action` step, the
+ * `home_state` and `protect` triggers and run triggers, `limits.cooldownMinutes` and the `act` tag, which a box sends
+ * as they are only to a session at minor 22 or later (Whombat direct-automations.md).
  */
 export const SESSION_PROTOCOL: ProtocolVersion = { major: 5, minor: 22 };
 
@@ -111,6 +113,13 @@ export const EXPOSURE_MINOR = 22;
  * (`ThingPage.settingsCopy`, `things.settingsCopy`); an app asks for a copy only from a box at this minor or later.
  */
 export const OUTSIDE_CHANGES_MINOR = 22;
+
+/**
+ * Session protocol minor (major 5) that reads automations acting without AI (`run_action`, the `home_state` and
+ * `protect` triggers, `limits.cooldownMinutes`, the glance's `act` tag). The box hides such definitions from an older
+ * session, says their runs' triggers as a message and drops the tag.
+ */
+export const AUTOMATIONS_WITHOUT_AI_MINOR = 22;
 
 /**
  * Session protocol minor (major 5) with multi-language support (`Preferences.locale` and optional `locale` on claim

@@ -31,6 +31,15 @@ import {
   tCore,
 } from '../i18n/catalog.js';
 import { formatLocaleNumber } from '../i18n/format.js';
+import {
+  cooldownOf,
+  directActionDetail,
+  directActionText,
+  homeTriggerDetail,
+  homeWhenText,
+  protectTriggerDetail,
+  protectWhenText,
+} from './direct.js';
 import { findMyTriggerDetail, findMyWhenText } from './findmy.js';
 import { mailTriggerDetail, mailWhenText } from './mail.js';
 import { recipeOf } from './recipes.js';
@@ -214,6 +223,16 @@ function whenLine(t: AutomationTrigger, names: PlanNames, tr: CoreTranslator): A
         findMyWhenText(t, locale),
         findMyTriggerDetail(names.connectionLabel?.(t.connectionId), locale),
       );
+    case 'home_state':
+      return line(
+        homeWhenText(t, locale),
+        homeTriggerDetail(names.connectionLabel?.(t.connectionId), locale),
+      );
+    case 'protect':
+      return line(
+        protectWhenText(t, locale),
+        protectTriggerDetail(names.connectionLabel?.(t.connectionId), locale),
+      );
     case 'webhook':
       return line(tr.t('plan.when.webhook'));
     case 'manual':
@@ -258,6 +277,9 @@ function doesLine(step: AutomationStep, names: PlanNames, tr: CoreTranslator): A
     }
     case 'wait':
       return line(step.name ?? tr.t('plan.does.wait', { span: minutes(tr, step.minutes) }));
+    // Said from the step itself, never from its name: the card must say exactly what runs.
+    case 'run_action':
+      return line(directActionText(step, tagOf(tr)), directActionDetail(tagOf(tr)));
     // A check named as a question (“Did the review approve it?”) is a gate between steps, not work the person reads.
     case 'condition':
       return step.name?.trim().endsWith('?')
@@ -270,6 +292,9 @@ function doesLine(step: AutomationStep, names: PlanNames, tr: CoreTranslator): A
 
 /** Where its runs go in Chat: a thread per item, under the message, or a new one each time. */
 function threadLine(definition: AutomationDefinition, names: PlanNames, tr: CoreTranslator): string {
+  // Steps that only act or wait post nothing: their runs are on the automation's page.
+  if (definition.steps.every((s) => s.kind === 'run_action' || s.kind === 'wait' || s.kind === 'condition'))
+    return tr.t('plan.thread.none');
   const room = names.conversationTitle(definition.conversationId) ?? tr.t('plan.chat');
   const kinds = new Set(definition.triggers.map((t) => t.kind));
   const github = definition.triggers.filter((t) => t.kind === 'github');
@@ -340,8 +365,13 @@ function postsLines(
         outside.push(line(tr.t('plan.posts.calls', { host: hostOf(step.url) })));
         break;
     }
+  // A step that acts on a server or Home Assistant reaches outside Whombat too; its own line is under DOES.
+  const acts = definition.steps.some((s) => s.kind === 'run_action');
   return [
-    line(threadLine(definition, names, tr), outside.length ? null : tr.t('plan.posts.nothingOutside')),
+    line(
+      threadLine(definition, names, tr),
+      outside.length || acts ? null : tr.t('plan.posts.nothingOutside'),
+    ),
     ...outside,
   ];
 }
@@ -415,6 +445,8 @@ function limitsLines(definition: AutomationDefinition, tr: CoreTranslator): Auto
     const tokens = formatLocaleNumber(l.maxTokensPerDay, tr.locale);
     lines.push(line(tr.t('plan.limit.tokens', { tokens })));
   }
+  const cooldown = cooldownOf(definition);
+  if (cooldown > 0) lines.push(line(tr.tp('plan.limit.cooldown', cooldown)));
   return lines;
 }
 
@@ -439,14 +471,21 @@ export function planSections(
   const label = (id: keyof typeof LABEL_KEYS) => tr.t(LABEL_KEYS[id]);
   const does = definition.steps.flatMap((s) => doesLine(s, names, tr) ?? []);
   const posts = postsLines(definition, names, tr);
-  const outside = posts.length > 1;
+  const outside = posts.length > 1 || definition.steps.some((s) => s.kind === 'run_action');
+  // An automation that acts without AI and has no agent step does what it does itself: Whombat's, not the agent's.
+  const ownly =
+    definition.steps.some((s) => s.kind === 'run_action') &&
+    !definition.steps.some((s) => s.kind === 'dispatch_agent');
+  const doer = ownly
+    ? tr.t('plan.section.whombat')
+    : clip(names.agent.toUpperCase(), 40) || tr.t('plan.section.does');
   const sections: AutomationPlanSection[] = [
     { id: 'when', label: label('when'), lines: definition.triggers.map((t) => whenLine(t, names, tr)) },
     ...(does.length
       ? [
           {
             id: 'does' as const,
-            label: clip(names.agent.toUpperCase(), 40) || tr.t('plan.section.does'),
+            label: doer,
             lines: does,
           },
         ]
@@ -647,7 +686,9 @@ export type AutomationFlowIcon =
   | 'comment'
   | 'report'
   | 'reply'
-  | 'call';
+  | 'call'
+  /** A step that acts on a server or Home Assistant by itself, without AI. */
+  | 'act';
 
 /**
  * A label on a step that reaches outside Whombat or changes code: the place it reaches (`plain`), “Changes code”
@@ -714,6 +755,8 @@ export function automationFlow(
         return tr.t('flow.title.decision');
       case 'connection_actions':
         return tr.t('flow.title.actions');
+      case 'run_action':
+        return directActionText(step, tagOf(tr));
       default:
         return doesLine(step, names, tr)?.text ?? step.name ?? tr.t(`plan.stepKind.${step.kind}`);
     }
@@ -839,6 +882,14 @@ export function automationFlow(
           icon: 'ask',
           details: [tr.t('flow.actionsDetail')],
           marks: [asking],
+        });
+        break;
+      case 'run_action':
+        items.push({
+          ...base,
+          icon: 'act',
+          details: [stop(directActionDetail(tagOf(tr)))],
+          marks: [{ label: tr.t('flow.mark.withoutAi'), tone: 'changes' }],
         });
         break;
       case 'http_callback': {

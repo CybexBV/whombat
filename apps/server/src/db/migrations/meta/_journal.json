@@ -330,6 +330,13 @@
       "when": 1795860336992,
       "tag": "0046_outside_changes",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1795861334365,
+      "tag": "0047_direct_automations",
+      "breakpoints": true
     }
   ]
 }

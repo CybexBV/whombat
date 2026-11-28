@@ -19,6 +19,7 @@
  */
 import { and, desc, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { WebSocket } from 'ws';
+import { smartHomeTriggersFor } from '../../../automations/home-triggers';
 import { resolveCredential } from '../../../connections/credentials';
 import { connectionPolicy } from '../../../connections/destination';
 import { pinOf } from '../../../connections/http';
@@ -303,7 +304,10 @@ class Follower {
     if (ring)
       emitDoorbellRing(this.services, { connectionId: this.row.id, burrowId: this.row.burrowId, ...ring });
     if (d.device && !this.#names.has(d.device)) await this.#cameraNames();
-    const title = (d.device && this.#names.get(d.device)) || 'A camera';
+    const name = (d.device && this.#names.get(d.device)) || null;
+    const title = name ?? 'A camera';
+    // Automations that start on what Protect sees hear it now (only those a live automation listens to are signed).
+    smartHomeTriggersFor(this.services).sighted(this.row, d, name);
     await recordDetection(this.services.db, this.row.id, d, title).catch((err: unknown) =>
       this.services.log.warn({ err: String(err), connectionId: this.row.id }, 'protect events: not kept'),
     );

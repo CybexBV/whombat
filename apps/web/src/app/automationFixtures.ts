@@ -63,6 +63,8 @@ import {
   definitionGrants,
   definitionHash,
   describeAutomation,
+  directActionText,
+  directDoneLine,
   type FeatureRequestView,
   FINISHED_RUN_STATUSES,
   featureValueText,
@@ -71,6 +73,8 @@ import {
   type MessageCard,
   type PlanFacts,
   planMessageText,
+  powerCutDefinition,
+  protectSightingSummary,
   recipeConditionStory,
   recipeDefinition,
   recipeInstructions,
@@ -355,7 +359,11 @@ const BILLING_FIX_ASK: AutomationRecipeInput = {
   instructions: recipeInstructions('assess', ASSESS.when),
   fix: { mode: 'ask', minImportance: 'high', merge: 'checks' },
 };
-export const PLAN_THREADS = { webPrs: 'msg_plan-web-prs', billing: 'msg_plan-billing' } as const;
+export const PLAN_THREADS = {
+  webPrs: 'msg_plan-web-prs',
+  billing: 'msg_plan-billing',
+  powerCut: 'msg_plan-power-cut',
+} as const;
 /** The feature requests' threads in Chat: report #21's waits for Mara, report #19's she declined. */
 export const FEATURE_THREADS = { waiting: 'msg_feature-21', decided: 'msg_feature-19' } as const;
 /** The feature requests' card messages in those threads. */
@@ -368,6 +376,7 @@ export const PLAN_IDS = {
   billingFirst: 'apl_billing-1',
   billingReplaced: 'apl_billing-2',
   billingChange: 'apl_billing-3',
+  powerCut: 'apl_power-cut-1',
 } as const;
 
 /** A recipe's definition as 0.70 wrote it: the bug-only check, its step names and the prompt without `recommends`. */
@@ -699,6 +708,63 @@ const SUSPECTED_BUG: AutomationDefinition = (() => {
   return parsed.definition;
 })();
 
+/**
+ * Automations that act without AI (docs/decisions/direct-automations.md): the ready-made power cut automation for the
+ * UPS on pve-01, waiting on its plan in Mara's Chat, and the porch light Home Assistant switches on when someone rings
+ * the front door, with a run that did it and one that found it already on.
+ */
+const POWER_CUT: AutomationDefinition = (() => {
+  const parsed = validateDefinition(
+    powerCutDefinition({
+      conversationId: CHAT,
+      ups: { thing: 'server:pve-01', name: 'pve-01' },
+      servers: [
+        { thing: 'server:pve-01', name: 'pve-01' },
+        { thing: 'server:pve-02', name: 'pve-02' },
+        { thing: 'server:pve-03', name: 'pve-03' },
+      ],
+    }),
+  );
+  if (!parsed.ok) throw new Error(`fixture definition: ${parsed.problems.join('; ')}`);
+  return parsed.definition;
+})();
+
+const POWER_CUT_DESCRIPTION =
+  'When pve-01’s UPS has been on battery for 10 minutes, Whombat shuts down pve-02, pve-03 and then pve-01 by itself, and tells you.';
+const PORCH_LIGHT_DESCRIPTION =
+  'When someone rings the front door, the porch light goes on right away, without AI.';
+
+const PORCH_STEP = {
+  id: 'light',
+  kind: 'run_action',
+  thing: 'connection:con_home-assistant',
+  thingName: 'Home Assistant',
+  target: 'light.porch',
+  targetName: 'Porch light',
+  action: 'turn_on',
+  otherwise: 'fail',
+  retries: 0,
+} as const;
+
+const PORCH_LIGHT: AutomationDefinition = (() => {
+  const parsed = validateDefinition({
+    version: 1,
+    conversationId: CHAT,
+    triggers: [
+      {
+        kind: 'protect',
+        connectionId: 'con_unifi',
+        event: 'ring',
+        camera: 'cam_front',
+        cameraName: 'Front door',
+      },
+    ],
+    steps: [PORCH_STEP],
+  });
+  if (!parsed.ok) throw new Error(`fixture definition: ${parsed.problems.join('; ')}`);
+  return parsed.definition;
+})();
+
 function makeAutomation(
   id: string,
   name: string,
@@ -906,6 +972,16 @@ export function createAutomationFixtures(
         'skipped',
         'succeeded',
       ]),
+    }),
+  );
+  add(
+    makeAutomation('aut_porch-light', 'Porch light when someone rings', PORCH_LIGHT, {
+      description: PORCH_LIGHT_DESCRIPTION,
+      lastRun: { ...runSummary(51, 'succeeded', at('11:05')), finishedAt: at('11:05') },
+      recentRuns: [
+        { ...runSummary(51, 'succeeded', at('11:05')), finishedAt: at('11:05') },
+        { ...runSummary(50, 'succeeded', at('10:52')), finishedAt: at('10:52') },
+      ],
     }),
   );
   add(
@@ -1713,7 +1789,44 @@ export function createAutomationFixtures(
     return json({ approval: a.approval, eventId: null });
   };
 
+  const porchRun = (number: number, time: string, outcome: Parameters<typeof directDoneLine>[1]) => {
+    const line = directDoneLine(PORCH_STEP, outcome, time);
+    return run({
+      number,
+      automationId: 'aut_porch-light',
+      automationName: 'Porch light when someone rings',
+      trigger: {
+        kind: 'protect',
+        summary: protectSightingSummary({ event: 'ring', cameraName: 'Front door' }),
+        actorId: null,
+        eventId: null,
+        messageId: null,
+        scheduledFor: null,
+      },
+      startedAt: at(time),
+      createdAt: at(time),
+      finishedAt: at(time),
+      steps: [
+        step({
+          stepId: 'light',
+          kind: 'run_action',
+          name: 'Act without AI',
+          startedAt: at(time),
+          finishedAt: at(time),
+          inputSummary: directActionText(PORCH_STEP),
+          output: {
+            ran: outcome.kind === 'done',
+            ...(outcome.kind === 'noop' ? { noop: true } : {}),
+            text: line,
+            summary: line,
+          },
+        }),
+      ],
+    });
+  };
   const runs: AutomationRun[] = [
+    porchRun(51, '11:05', { kind: 'noop', already: 'on' }),
+    porchRun(50, '10:52', { kind: 'done', result: null }),
     ...suggestionRuns,
     ...trackerRuns,
     ...fixRuns,
@@ -1939,6 +2052,24 @@ export function createAutomationFixtures(
         },
         PLAN_THREADS.billing,
       ),
+      plan(
+        {
+          planId: PLAN_IDS.powerCut,
+          automationId: 'aut_power-cut',
+          name: 'When the power goes out, shut down my servers safely',
+          description: POWER_CUT_DESCRIPTION,
+          state: 'waiting',
+          definition: POWER_CUT,
+          grants: definitionGrants(POWER_CUT),
+          base: null,
+          thinking: [
+            'pve-01 goes last, because the UPS is plugged into it.',
+            'This runs on your Whombat without AI, so it works when the internet is down too.',
+          ],
+          createdAt: at('11:13'),
+        },
+        PLAN_THREADS.powerCut,
+      ),
     ].map((p) => [p.facts.planId, p]),
   );
   // The billing automation's draft is its waiting change (a test run runs it); the new one is only a draft.
@@ -1951,6 +2082,15 @@ export function createAutomationFixtures(
     waitingPlanId: PLAN_IDS.billingChange,
     talk: { conversationId: CHAT, threadRootId: PLAN_THREADS.billing },
   };
+  add(
+    makeAutomation('aut_power-cut', 'When the power goes out, shut down my servers safely', POWER_CUT, {
+      status: 'draft',
+      description: POWER_CUT_DESCRIPTION,
+      createdAt: at('11:13'),
+      waitingPlanId: PLAN_IDS.powerCut,
+      talk: { conversationId: CHAT, threadRootId: PLAN_THREADS.powerCut },
+    }),
+  );
   add(
     makeAutomation('aut_web-prs', 'New pull requests on whombat/web', webPrsDef, {
       status: 'draft',
@@ -1981,6 +2121,9 @@ export function createAutomationFixtures(
         at: at('10:30'),
         text: 'Can you keep an eye on new pull requests on whombat/web and tell me which ones need me?',
       },
+    ],
+    [PLAN_THREADS.powerCut]: [
+      { at: at('11:12'), text: 'When the power goes out, shut down my servers safely.' },
     ],
     [PLAN_THREADS.billing]: [
       {

@@ -14,6 +14,7 @@ import {
   stepKindLabel,
 } from '../domain/automation.js';
 import { coreTranslator } from '../i18n/catalog.js';
+import { directActionProblem, directDraftProblems, homeWhenText, protectWhenText } from './direct.js';
 import { ExprError, parseExpr, referencedSteps } from './expr.js';
 import { findMyWhenText } from './findmy.js';
 import { mailTriggerProblems, mailWhenText } from './mail.js';
@@ -217,10 +218,19 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
             problems.push(`${at}.from: “${s.from}” isn’t an agent step that proposes actions.`);
         break;
       }
+      case 'run_action': {
+        const problem = directActionProblem(s);
+        if (problem) problems.push(`${at}: ${problem}`);
+        break;
+      }
       case 'wait':
         break;
     }
   });
+  if (
+    def.triggers.some((t) => t.kind === 'home_state' && t.from && t.from.toLowerCase() === t.to.toLowerCase())
+  )
+    problems.push('triggers: a change of state goes from one state to another.');
   problems.push(...mailDefinitionProblems(def));
   return problems;
 }
@@ -229,6 +239,9 @@ export function definitionProblems(def: AutomationDefinition, now = Date.now()):
 export function validateDefinition(value: unknown, now = Date.now()): ValidationResult {
   if (jsonBytes(value) > AUTOMATION_DEFINITION_MAX_BYTES)
     return { ok: false, definition: null, problems: ['This automation is too big (64 KB at most).'] };
+  // An action that is never a step on its own is said in plain words, not as an option the schema doesn't know.
+  const refused = directDraftProblems(value);
+  if (refused.length) return { ok: false, definition: null, problems: refused };
   const parsed = AutomationDefinition.safeParse(value);
   if (!parsed.success) return { ok: false, definition: null, problems: zodProblems(parsed.error) };
   const problems = definitionProblems(parsed.data, now);
@@ -313,6 +326,10 @@ export function triggerSummary(
           return thingWhenText(t, locale);
         case 'findmy':
           return findMyWhenText(t, locale);
+        case 'home_state':
+          return homeWhenText(t, locale);
+        case 'protect':
+          return protectWhenText(t, locale);
       }
       return '';
     })

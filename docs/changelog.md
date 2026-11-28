@@ -26,6 +26,9 @@ them once they have been tried on Beta.
   You can also ask it what changed on something.
 - Whombat keeps a copy of the settings of OPNsense, Pi-hole and Nginx Proxy Manager every night. Download the newest
   from the service’s page; History tells you what changed in them.
+- Automations can act without AI, right on your Whombat, even when the internet is down: ask your assistant to shut
+  your servers down safely when the power goes out, restart a server or machine, or switch a light when Home Assistant
+  sees something change or your doorbell rings.
 
 ## 27 November 2026
 

@@ -7,7 +7,13 @@ import {
   FindMyPlaceChanged,
   findMyTriggerFacts,
   type GitHubTriggerEvent,
+  HOME_STATE_CHANGED,
+  HomeStateChanged,
+  homeChangeSummary,
   type JsonObject,
+  PROTECT_DETECTED,
+  ProtectDetected,
+  protectSightingSummary,
   THING_INCIDENT_EVENTS,
   ThingIncidentEvent,
   type TriggerFacts,
@@ -51,6 +57,7 @@ import {
   itemKeyOf,
   pullRequestItem,
 } from '../github-items';
+import { smartHomePrincipal } from '../home-triggers';
 import { isAutomationPrincipal } from '../principal';
 import type { AutomationRunRow } from '../store';
 
@@ -79,6 +86,10 @@ export const EVENT_TYPES = [
   // Someone's place changed on a Find My connection a live automation listens to (findmy-connection.md).
   FIND_MY_PLACE_CHANGED,
   ...THING_INCIDENT_EVENTS,
+  // A Home Assistant entity a live automation names changed state, and Protect saw something on a connection one
+  // listens to (direct-automations.md).
+  HOME_STATE_CHANGED,
+  PROTECT_DETECTED,
 ];
 
 export interface EventFacts {
@@ -264,6 +275,65 @@ export async function eventFacts(tx: Db, event: EventRow): Promise<EventFacts | 
       info: (e) => ({
         kind: 'findmy',
         summary: placeChangeSummary(change).slice(0, 200),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  // A Home Assistant entity changed state, or Protect saw something (direct-automations.md): only the smart home
+  // signer's count.
+  if (event.type === HOME_STATE_CHANGED) {
+    const parsed = HomeStateChanged.safeParse(payload);
+    if (!parsed.success || !smartHomePrincipal.is(actor)) return null;
+    const c = parsed.data;
+    const summary = homeChangeSummary(c);
+    return {
+      facts: { kind: 'home_state', connectionId: c.connectionId, entity: c.entity, from: c.from, to: c.to },
+      conversationId: null,
+      threadRootId: null,
+      itemKey: null,
+      scope: {
+        kind: 'home_state',
+        connectionId: c.connectionId,
+        entity: c.entity,
+        name: c.name ?? c.entity,
+        from: c.from,
+        to: c.to,
+        text: `${summary}.`,
+      },
+      info: (e) => ({
+        kind: 'home_state',
+        summary: summary.slice(0, 200),
+        actorId: actor.id,
+        eventId: e.id,
+        messageId: null,
+        scheduledFor: null,
+      }),
+    };
+  }
+  if (event.type === PROTECT_DETECTED) {
+    const parsed = ProtectDetected.safeParse(payload);
+    if (!parsed.success || !smartHomePrincipal.is(actor)) return null;
+    const d = parsed.data;
+    const summary = protectSightingSummary(d);
+    return {
+      facts: { kind: 'protect', connectionId: d.connectionId, event: d.event, camera: d.camera },
+      conversationId: null,
+      threadRootId: null,
+      itemKey: null,
+      scope: {
+        kind: 'protect',
+        connectionId: d.connectionId,
+        event: d.event,
+        camera: d.camera,
+        name: d.cameraName ?? '',
+        text: `${summary}.`,
+      },
+      info: (e) => ({
+        kind: 'protect',
+        summary: summary.slice(0, 200),
         actorId: actor.id,
         eventId: e.id,
         messageId: null,

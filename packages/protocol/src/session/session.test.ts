@@ -24,6 +24,7 @@ import {
 import {
   ACCOUNT_PAGES_MINOR,
   APP_UPDATES_MINOR,
+  AUTOMATIONS_WITHOUT_AI_MINOR,
   BACKGROUND_MODEL_MINOR,
   DISK_USAGE_MINOR,
   EXPOSURE_MINOR,
@@ -103,6 +104,7 @@ describe('session codec', () => {
 describe('version negotiation', () => {
   it('speaks one major: the box’s, at the lower minor, or nothing (CT-1260, CT-1432, CT-1540, report trackers)', () => {
     expect(SESSION_PROTOCOL).toEqual({ major: 5, minor: EXPOSURE_MINOR });
+    expect(AUTOMATIONS_WITHOUT_AI_MINOR).toBe(22);
     expect(T3_REVIEW_MORE_ROUNDS_MINOR).toBe(20);
     expect(LOCALE_MINOR).toBe(21);
     expect(EXPOSURE_MINOR).toBe(22);

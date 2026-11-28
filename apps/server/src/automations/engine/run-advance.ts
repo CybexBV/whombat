@@ -68,7 +68,12 @@ export class RunAdvancer {
     // A run of an automation the release the box would go back to can't run waits, kept as it is, until it may.
     const gate = this.services.newerAutomations;
     if (
-      !((await gate.ready()) && (await gate.findMyReady()) && (await gate.thingsReady())) &&
+      !(
+        (await gate.ready()) &&
+        (await gate.findMyReady()) &&
+        (await gate.thingsReady()) &&
+        (await gate.directReady())
+      ) &&
       (await gate.holdsRun(await loadRunRow(this.services.db, runId)))
     )
       return;
