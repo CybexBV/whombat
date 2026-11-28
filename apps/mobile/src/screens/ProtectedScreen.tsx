@@ -217,7 +217,7 @@ function Row({ row, first, ask }: { row: ProtectedRow; first: boolean; ask: bool
           {line}
         </Text>
         {offsite ? (
-          <Text size={13.5} lh={1.4} color={theme.colors.ink2}>
+          <Text size={13.5} lh={1.4} color={row.offsite?.failedAt ? theme.colors.warn : theme.colors.ink2}>
             {offsite}
           </Text>
         ) : null}

@@ -45,6 +45,8 @@ describe('the bucket’s address', () => {
     expect(endpointOf('https://fsn1.your-objectstorage.com/')?.host).toBe('fsn1.your-objectstorage.com');
     expect(endpointOf('http://192.168.1.20:9000')?.protocol).toBe('http:');
     for (const bad of [
+      'http://s3.example.com',
+      'http://203.0.113.9:9000',
       'https://host/bucket',
       'https://key:secret@host',
       'ftp://host',

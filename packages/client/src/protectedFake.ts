@@ -3,7 +3,8 @@
  * demo world: Mara's world — this Whombat copied to blackbox and off site, pve-02's machines backed up to pbs-01 or only
  * to its own disks, the servers themselves unseen, Home Assistant with its own cloud copy, Plex unseen — and
  * `restoreTests.set` / `restoreTests.run` kept in memory (a run is over at once, as having worked). `tested` starts with
- * pve-02's tests on and three results, one that failed; `calm` with the tests off and no results.
+ * pve-02's tests on and three results, one that failed, and the off-site copy failing; `calm` with the tests off, no
+ * results and the off-site copy fine.
  */
 import type { ProtectedRow, ProtectedView, RestoreTestResult, RestoreTestServer } from '@whombat/core';
 
@@ -164,7 +165,12 @@ export function createFakeProtected({
           state: 'copied',
           lastAt: ago(3),
           where: 'blackbox',
-          offsite: { name: 'Backblaze', lastAt: ago(2) },
+          // `tested` shows the things that went wrong, the off-site copy failing among them.
+          offsite: {
+            name: 'Backblaze B2',
+            lastAt: ago(2),
+            ...(kind === 'tested' ? { failedAt: ago(1) } : {}),
+          },
         },
         ...MACHINES.map(machine),
         {

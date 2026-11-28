@@ -3,8 +3,9 @@
  * the heading, the line of what it holds, the `+` that adds one, then a row each: the logo, the name (a server's in the
  * row's sans face as the mock draws it), a server's processor at the end, and under the name how it is, with its status mark when it isn't fine.
  * A row is a link to its page (read while the pointer rests on it, page-speed.md); right-click offers Open and
- * Rename, F2 renames the row in focus (server-names.md). Under Servers' rows, a server that ran the install command and
- * waits to be added, with Review (Add a server's waiting list), and What's protected (backup-trust.md).
+ * Rename, F2 renames the row in focus (server-names.md). Under Servers' rows, the place's own rows side by side, Open
+ * to the internet (internet-exposure.md) and What's protected (backup-trust.md), then a server that ran the install
+ * command and waits to be added, with Review (Add a server's waiting list).
  */
 import { BrandMark } from '@whombat/brand/react';
 import {
@@ -19,7 +20,7 @@ import {
 import { useProtectedSupported, useSessionProtocol } from '@whombat/client/react';
 import { protectedPageWords } from '@whombat/core';
 import { EXPOSURE_MINOR, protocolAtLeast } from '@whombat/protocol/session';
-import { ChevronRight, Globe, Plus } from 'lucide-react';
+import { Globe, Plus, ShieldCheck } from 'lucide-react';
 import { Fragment, type KeyboardEvent, type MouseEvent } from 'react';
 import { useNavigateHref } from '../../../app/routing/navigation';
 import { useRowMenu } from '../../../app/shell/ContextMenu';
@@ -76,6 +77,11 @@ export function PlaceList({
   const rename = useThingRename(burrow);
   const Heading = alone ? 'h1' : 'h2';
   const headId = `place-${place}-title`;
+  // The place's own rows under Servers' rows: the first of them is set apart by a rule.
+  const protocol = useSessionProtocol();
+  const protectedSupported = useProtectedSupported();
+  const internet = place === 'servers' && protocolAtLeast(protocol, EXPOSURE_MINOR);
+  const protectedShown = protectedSupported && place === 'servers' && rows.length > 0;
   return (
     <div className={styles.list} data-place={place}>
       <div className={styles.head}>
@@ -133,7 +139,8 @@ export function PlaceList({
         ) : (
           <p className={styles.empty}>{words.empty}</p>
         )}
-        {place === 'servers' ? <InternetRow selected={selected === EXPOSURE_PATH} /> : null}
+        {internet ? <InternetRow selected={selected === EXPOSURE_PATH} /> : null}
+        {protectedShown ? <ProtectedRow first={!internet} /> : null}
         {pending && addHref ? (
           <div className={styles.waiting} data-server-waiting={pending}>
             <div className={styles.waitingText}>
@@ -145,7 +152,6 @@ export function PlaceList({
             </AppLink>
           </div>
         ) : null}
-        {place === 'servers' && rows.length ? <ProtectedLink /> : null}
       </nav>
       {menu.element}
     </div>
@@ -158,8 +164,6 @@ export function PlaceList({
  */
 function InternetRow({ selected }: { selected: boolean }) {
   const i18n = useWebI18n();
-  const supported = protocolAtLeast(useSessionProtocol(), EXPOSURE_MINOR);
-  if (!supported) return null;
   const words = exposureText(i18n.tag);
   return (
     <AppLink
@@ -181,19 +185,29 @@ function InternetRow({ selected }: { selected: boolean }) {
   );
 }
 
-/** Under the servers: what holds data and where its copies are, on a Whombat that has the page. */
-function ProtectedLink() {
+/**
+ * What's protected beside Open to the internet, the same kind of row: what holds data and where its copies are, on a
+ * Whombat that has the page. Set apart by the rule when it is the first of the place's own rows.
+ */
+function ProtectedRow({ first }: { first: boolean }) {
   const i18n = useWebI18n();
-  const supported = useProtectedSupported();
-  if (!supported) return null;
   const words = protectedPageWords(i18n.tag);
   return (
-    <AppLink href="/protected" className={styles.protected} data-protected-link="">
-      <span className={styles.waitingText}>
-        <span className={styles.waitingName}>{words.link}</span>
-        <span className={styles.waitingHint}>{words.linkHint}</span>
+    <AppLink
+      href="/protected"
+      className={cx(styles.row, first && styles.extra)}
+      aria-label={`${words.link}, ${words.linkHint}`}
+      data-row="protected"
+      data-protected-link=""
+    >
+      <span className={styles.logo} aria-hidden="true">
+        <Icon icon={ShieldCheck} size={20} />
       </span>
-      <Icon icon={ChevronRight} size={16} className={styles.protectedChevron} />
+      <span className={styles.name}>{words.link}</span>
+      <span />
+      <span className={styles.line}>
+        <span className={styles.lineText}>{words.linkHint}</span>
+      </span>
     </AppLink>
   );
 }

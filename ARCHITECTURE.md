@@ -322,7 +322,8 @@ a full set. The certificate watch judges every served host; Cloudflare's two cer
   `POST /v1/offsite/copy`): setting it writes, reads and deletes a small file with the key, then opens or makes the
   copy's repository with the main one's password and chunker; the key is sealed like the main destination's. After each
   backup that worked, and on a 15-minute timer while one is due, its own unit `whombat-backup-offsite` runs `restic copy`
-  of this Whombat's checkpoints not there yet (a failure waits 15 minutes, doubling to 6 hours) and clears old ones by
+  of this Whombat's checkpoints not in the bucket's own list, read on every run, which is also all its status says is
+  there (a failure waits 15 minutes, doubling to 6 hours), and clears its own old ones (its machines' snapshots only) by
   the same keep windows at most every 23 hours; nothing is copied during a restore. The runtime reads its document
   (kept a minute) into the backup summary as `offsite` (`withOffsite`; null: none, absent: a box from before) and says a
   failed step in the person's language; `backup.setOffsite` is a secret op. The recovery details carry an `offsite`
@@ -1658,7 +1659,7 @@ Setup and operation: `docs/github.md`.
 - **What's protected and restore tests** (`apps/server/src/backup-trust/`, [backup-trust.md](docs/decisions/backup-trust.md)):
   `protected.get` builds one row per thing that holds data from what Whombat already reads — Proxmox backup jobs and
   each machine's backups (a Backup Server or shared storage is a copy elsewhere), Incus snapshots and QEMU/KVM backups
-  (same machine), the box's backup status (with its off-site copy when the status has one) and each connection's own
+  (same machine), the box's backup status and its off-site copy's own status (`offsiteNow`) and each connection's own
   backup facts (`catalog_connections.protection`, written by the health pass from what its kind reads; a service
   without them takes its machine's from `glance.machine`) — cached a minute. Restore tests are a home job every minute
   (`runner.ts`): per Proxmox server switched on (`restore_test_servers`), once a week in the quiet hours it picks the

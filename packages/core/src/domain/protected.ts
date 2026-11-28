@@ -159,9 +159,12 @@ export const ProtectedRow = z.object({
   failedAt: Timestamp.nullable().optional(),
   /** Its facts are the machine's it runs on (“pve-02 · CT 131”): a service without backup facts of its own. */
   via: z.string().max(160).nullable().optional(),
-  /** A second copy somewhere else (this Whombat's off-site copy). */
+  /**
+   * A second copy somewhere else (this Whombat's off-site copy): the storage's name, the last copy the bucket's own list
+   * confirmed (null: none yet), and when copying there last failed while it is failing.
+   */
   offsite: z
-    .object({ name: z.string().max(160), lastAt: Timestamp.nullable() })
+    .object({ name: z.string().max(160), lastAt: Timestamp.nullable(), failedAt: Timestamp.optional() })
     .nullable()
     .optional(),
   /** The newest restore test of this machine. */
@@ -358,7 +361,10 @@ export function protectedRowOld(row: Pick<ProtectedRow, 'lastAt' | 'state'>, now
   );
 }
 
-/** The off-site line on this Whombat's row: “Off-site (Backblaze) · last copy 03:10 today”. */
+/**
+ * The off-site line on this Whombat's row: “Off-site (Backblaze B2) · last copy 03:10 today”, or that copying there
+ * failed (amber on the page).
+ */
 export function protectedOffsiteLine(
   offsite: NonNullable<ProtectedRow['offsite']>,
   now: Date,
@@ -366,6 +372,11 @@ export function protectedOffsiteLine(
   locale?: string | null,
 ): string {
   const tr = coreTranslator(locale);
+  if (offsite.failedAt)
+    return tr.t('protected.line.offsiteFailed', {
+      name: offsite.name,
+      ago: formatAgo(offsite.failedAt, now, timeZone, locale),
+    });
   return offsite.lastAt
     ? tr.t('protected.line.offsite', {
         name: offsite.name,

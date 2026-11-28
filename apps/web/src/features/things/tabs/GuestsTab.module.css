@@ -363,6 +363,22 @@ th[aria-sort="descending"] .sortBtn {
   }
 }
 
+/*
+ * A phone-wide card: the name keeps less room, and a row's actions wrap into two lines at the card's edge (Update over
+ * the console and ⋯), so none is cut off.
+ */
+@container card (max-width: 519px) {
+  .guestCell.guestCell {
+    min-width: 96px;
+  }
+
+  .tools {
+    flex-wrap: wrap;
+    row-gap: 4px;
+    max-width: 104px;
+  }
+}
+
 @container card (max-width: 559px) {
   .memCell.memCell {
     display: none;

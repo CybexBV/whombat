@@ -11,6 +11,9 @@ describe('the fake What’s protected', () => {
     const calm = ProtectedView.parse(createFakeProtected().call('protected.get', { params: {} })?.body);
     expect(calm.restoreTests[0]?.on).toBe(false);
     expect(calm.rows.some((r) => r.restoreTest)).toBe(false);
+    // The off-site copy is fine when calm and failing among the things that went wrong.
+    expect(calm.rows.find((r) => r.kind === 'whombat')?.offsite?.failedAt).toBeUndefined();
+    expect(view.rows.find((r) => r.kind === 'whombat')?.offsite?.failedAt).toBeTruthy();
   });
 
   it('turns tests on, runs one and shows it on the machine', () => {

@@ -624,7 +624,17 @@ func (r Repo) Copy(ctx context.Context, from, fromPasswordFile string, ids ...st
 // Forget removes the snapshots tagged tag that keep (restic's --keep-* flags) doesn't keep, across hosts and
 // paths (a replacement's checkpoints have another host), and prunes what nothing names any more.
 func (r Repo) Forget(ctx context.Context, tag string, keep []string) (string, error) {
-	args := append([]string{"forget", "--tag", tag, "--group-by", "", "--prune"}, keep...)
+	return r.ForgetHosts(ctx, tag, nil, keep)
+}
+
+// ForgetHosts is Forget over only the snapshots these hosts made (any of them, all when none is named): a repository
+// that holds other machines' snapshots too keeps theirs untouched.
+func (r Repo) ForgetHosts(ctx context.Context, tag string, hosts []string, keep []string) (string, error) {
+	args := []string{"forget", "--tag", tag, "--group-by", "", "--prune"}
+	for _, h := range hosts {
+		args = append(args, "--host", h)
+	}
+	args = append(args, keep...)
 	var out bytes.Buffer
 	_, err := r.unlocked(ctx, &out, args...)
 	return out.String(), err

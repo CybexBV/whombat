@@ -25,9 +25,12 @@ type Status struct {
 	LastFailure *Failure `json:"lastFailure,omitempty"`
 	// FailedAttempts since the last copy that worked.
 	FailedAttempts int `json:"failedAttempts"`
-	// Copied are the checkpoints (ids) of the main place that are in the copy, kept while the main place still has
-	// them: a checkpoint the copy cleared earlier than the main place isn't copied again.
+	// Copied are the checkpoints (ids) of the main place that the copy's own list showed at the last copy that worked:
+	// what is in the bucket, never what was sent there once (a bucket emptied or pruned by hand shows as such).
 	Copied []string `json:"copied,omitempty"`
+	// Cleared are checkpoints this box's own clearing took out of the copy while the main place still had them (the two
+	// places clear at different times): they aren't copied again. Kept while the main place still has them.
+	Cleared []string `json:"cleared,omitempty"`
 	// Head is the newest of this box's own checkpoints in the copy: a bring back from the copy alone checks it.
 	Head     *kit.Head `json:"head,omitempty"`
 	Clearing *Clearing `json:"clearing,omitempty"`
@@ -256,26 +259,16 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 	if err != nil {
 		return nil, stepErr(StepMain, err)
 	}
+	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Time.Before(snaps[j].Time) })
+	// What is in the copy is read from the bucket itself every time: a bucket emptied, pruned or replaced by someone
+	// else is copied into again, and the status never says more is there than the bucket's own list shows.
 	there, err := target.Snapshots(ctx, manifest.TagProduct)
 	if err != nil {
 		return nil, err
 	}
-	have := map[string]bool{}
-	for _, id := range st.Copied {
-		have[id] = true
-	}
-	for _, sn := range there {
-		if id := sn.Tag(manifest.TagIDPrefix); id != "" {
-			have[id] = true
-		}
-	}
-	sort.Slice(snaps, func(i, j int) bool { return snaps[i].Time.Before(snaps[j].Time) })
-	var pick []restic.Snapshot
-	for _, sn := range snaps {
-		if id := sn.Tag(manifest.TagIDPrefix); id != "" && !have[id] {
-			pick = append(pick, sn)
-		}
-	}
+	inCopy := checkpointIDs(there)
+	st.Cleared = stillAtMain(st.Cleared, snaps)
+	pick := missing(snaps, inCopy, st.Cleared)
 	res := &Result{}
 	if len(pick) > 0 {
 		ids := make([]string, len(pick))
@@ -290,46 +283,121 @@ func copyOnce(ctx context.Context, c *state.Config, p *Place, main *state.Destin
 		if err != nil {
 			return nil, err
 		}
-		arrived := map[string]bool{}
-		for _, sn := range after {
-			arrived[sn.Tag(manifest.TagIDPrefix)] = true
-		}
+		inCopy = checkpointIDs(after)
 		for _, sn := range pick {
-			if !arrived[sn.Tag(manifest.TagIDPrefix)] {
+			if !inCopy[sn.Tag(manifest.TagIDPrefix)] {
 				return nil, stepErr(StepCopy, errors.New("not every backup arrived in the copy"))
 			}
-			have[sn.Tag(manifest.TagIDPrefix)] = true
 		}
 		res.Copied, res.Newest = len(pick), pick[len(pick)-1].Tag(manifest.TagIDPrefix)
 	}
-	// What the copy has of the main place's backups now (only those the main place still has: the list stays short).
-	st.Copied = st.Copied[:0]
-	var newest *restic.Snapshot
-	for i, sn := range snaps {
-		id := sn.Tag(manifest.TagIDPrefix)
-		if !have[id] {
-			continue
-		}
-		st.Copied = append(st.Copied, id)
-		// A backup dated ahead of the clock (a forged one) doesn't stand for the newest in the copy.
-		if !sn.Time.After(now.Add(time.Hour)) {
-			newest = &snaps[i]
+	if st.Clearing == nil || now.Sub(st.Clearing.At) >= ClearEvery || now.Before(st.Clearing.At) {
+		st.Clearing = clearCopy(ctx, c, target, forgetHosts(c, snaps), now)
+		if !st.Clearing.OK {
+			logf("offsite: clearing old copies failed: %s", st.Clearing.Error)
+		} else {
+			after, err := target.Snapshots(ctx, manifest.TagProduct)
+			if err != nil {
+				return nil, err
+			}
+			left := checkpointIDs(after)
+			st.Cleared = stillAtMain(append(st.Cleared, gone(inCopy, left)...), snaps)
+			inCopy = left
 		}
 	}
+	// The status says what the bucket's list showed just now.
+	var newest *restic.Snapshot
+	st.Copied, newest = confirmed(snaps, inCopy, now)
 	if res.Copied > 0 || st.LastCopy == nil {
 		st.LastCopy = &Copied{At: now, Count: res.Copied}
 	}
+	st.LastCopy.CheckpointID, st.LastCopy.CheckpointAt = "", time.Time{}
 	if newest != nil {
 		st.LastCopy.CheckpointID, st.LastCopy.CheckpointAt = newest.Tag(manifest.TagIDPrefix), newest.Time.UTC()
 	}
-	st.Head = headOf(c, have)
-	if st.Clearing == nil || now.Sub(st.Clearing.At) >= ClearEvery || now.Before(st.Clearing.At) {
-		st.Clearing = clearCopy(ctx, c, target, now)
-		if !st.Clearing.OK {
-			logf("offsite: clearing old copies failed: %s", st.Clearing.Error)
+	st.Head = headOf(c, inCopy)
+	return res, nil
+}
+
+// checkpointIDs are the checkpoints a list of snapshots holds.
+func checkpointIDs(snaps []restic.Snapshot) map[string]bool {
+	ids := map[string]bool{}
+	for _, sn := range snaps {
+		if id := sn.Tag(manifest.TagIDPrefix); id != "" {
+			ids[id] = true
 		}
 	}
-	return res, nil
+	return ids
+}
+
+// missing are the main place's checkpoints (oldest first) the copy doesn't hold and this box didn't clear from it.
+func missing(main []restic.Snapshot, inCopy map[string]bool, cleared []string) []restic.Snapshot {
+	var pick []restic.Snapshot
+	for _, sn := range main {
+		if id := sn.Tag(manifest.TagIDPrefix); id != "" && !inCopy[id] && !contains(cleared, id) {
+			pick = append(pick, sn)
+		}
+	}
+	return pick
+}
+
+// confirmed are the main place's checkpoints the copy holds, and the newest of them (one dated ahead of the clock, a
+// forged one, doesn't stand for the newest).
+func confirmed(main []restic.Snapshot, inCopy map[string]bool, now time.Time) ([]string, *restic.Snapshot) {
+	var ids []string
+	var newest *restic.Snapshot
+	for i, sn := range main {
+		id := sn.Tag(manifest.TagIDPrefix)
+		if id == "" || !inCopy[id] {
+			continue
+		}
+		ids = append(ids, id)
+		if !sn.Time.After(now.Add(time.Hour)) && (newest == nil || !sn.Time.Before(newest.Time)) {
+			newest = &main[i]
+		}
+	}
+	return ids, newest
+}
+
+// gone are the checkpoints in before that aren't in after.
+func gone(before, after map[string]bool) []string {
+	var out []string
+	for id := range before {
+		if !after[id] {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// stillAtMain keeps the ids the main place still has, once each (the list stays as short as the main place).
+func stillAtMain(ids []string, main []restic.Snapshot) []string {
+	at := checkpointIDs(main)
+	var out []string
+	for _, id := range ids {
+		if at[id] && !contains(out, id) {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// forgetHosts are the machines whose snapshots clearing may touch in the copy: this box and the boxes it was brought
+// back from (their checkpoints are in its main place). A bucket folder that another Whombat copies into too keeps
+// that Whombat's backups.
+func forgetHosts(c *state.Config, main []restic.Snapshot) []string {
+	var hosts []string
+	if c.ApplianceID != "" {
+		hosts = append(hosts, c.ApplianceID)
+	}
+	for _, sn := range main {
+		if sn.Hostname != "" && !contains(hosts, sn.Hostname) {
+			hosts = append(hosts, sn.Hostname)
+		}
+	}
+	sort.Strings(hosts)
+	return hosts
 }
 
 // headOf is the newest of this box's own checkpoints that is in the copy (nil when none is).
@@ -345,10 +413,14 @@ func headOf(c *state.Config, have map[string]bool) *kit.Head {
 }
 
 // clearCopy applies the person's keep windows to the copy: it keeps what the main place keeps, by the same rule (the
-// space limit is the main place's alone; the bucket's size is the person's bill there).
-func clearCopy(ctx context.Context, c *state.Config, target restic.Repo, now time.Time) *Clearing {
+// space limit is the main place's alone; the bucket's size is the person's bill there). Only the snapshots of hosts
+// are touched; without a host to name nothing is cleared (it would be everyone's).
+func clearCopy(ctx context.Context, c *state.Config, target restic.Repo, hosts []string, now time.Time) *Clearing {
+	if len(hosts) == 0 {
+		return &Clearing{At: now, OK: false, Error: "no machine name to clear by"}
+	}
 	p := state.LoadPolicy(c)
-	if _, err := target.Forget(ctx, manifest.TagProduct, p.Keep.ForgetArgs()); err != nil {
+	if _, err := target.ForgetHosts(ctx, manifest.TagProduct, hosts, p.Keep.ForgetArgs()); err != nil {
 		return &Clearing{At: now, OK: false, Error: state.OneLine(err.Error(), 300)}
 	}
 	return &Clearing{At: now, OK: true}

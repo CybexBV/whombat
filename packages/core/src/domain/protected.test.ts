@@ -6,6 +6,7 @@ import {
   protectedAskSubject,
   protectedAskText,
   protectedGroupOf,
+  protectedOffsiteLine,
   protectedRowLine,
   protectedRowOld,
   protectedRowsOf,
@@ -79,6 +80,23 @@ describe('the page’s groups and lines', () => {
     ).toContain('pve-02 · CT 131');
     expect(protectedRowOld({ state: 'copied', lastAt: '2026-11-10T00:00:00Z' }, now)).toBe(true);
     expect(protectedRowOld({ state: 'copied', lastAt: '2026-11-27T00:00:00Z' }, now)).toBe(false);
+  });
+
+  it('says the off-site copy, none yet, or that copying there fails', () => {
+    const ok = protectedOffsiteLine({ name: 'Backblaze B2', lastAt: '2026-11-28T03:10:00Z' }, now, tz);
+    expect(ok).toContain('Backblaze B2');
+    const none = protectedOffsiteLine({ name: 'Backblaze B2', lastAt: null }, now, tz);
+    expect(none).not.toBe(ok);
+    const failing = protectedOffsiteLine(
+      { name: 'Backblaze B2', lastAt: '2026-11-28T03:10:00Z', failedAt: '2026-11-28T09:00:00Z' },
+      now,
+      tz,
+    );
+    expect(failing).toContain('Backblaze B2');
+    expect(failing).toContain('failed');
+    expect(
+      protectedOffsiteLine({ name: 'x', lastAt: null, failedAt: '2026-11-28T09:00:00Z' }, now, tz, 'nl'),
+    ).toContain('mislukt');
   });
 
   it('asks in the thing’s own thread, naming it', () => {

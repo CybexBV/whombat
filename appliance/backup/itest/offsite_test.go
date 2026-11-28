@@ -194,6 +194,42 @@ func TestOffsiteFailureAndBackoff(t *testing.T) {
 	}
 }
 
+// What is in the copy is read from the copy itself on every run: backups taken out of the bucket by someone else are
+// copied again, and until then the status doesn't say they are there.
+func TestOffsiteFollowsTheBucketsOwnList(t *testing.T) {
+	ctx := context.Background()
+	w := NewWorld(t)
+	w.Configure()
+	ck1 := w.Checkpoint()
+	copyDir := filepath.Join(t.TempDir(), "copy")
+	if _, err := offsite.Set(ctx, w.Cfg, offsite.Request{Provider: "s3", Repository: copyDir, AllowLocal: true}); err != nil {
+		t.Fatal(err)
+	}
+	copyNow(t, w, 1)
+	// Someone empties the copy's snapshots by hand (a lifecycle rule, a prune of their own).
+	copyRepo := offsite.Repo(w.Cfg, mustPlace(t, w.Cfg))
+	snaps, err := copyRepo.Snapshots(ctx, manifest.TagProduct)
+	if err != nil || len(snaps) != 1 {
+		t.Fatalf("the copy holds %d backups: %v", len(snaps), err)
+	}
+	if _, err := copyRepo.Run(ctx, nil, "forget", snaps[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	ck2 := w.Checkpoint()
+	res, err := offsite.Copy(ctx, w.Cfg, t.Logf)
+	if err != nil || res.Copied != 2 {
+		t.Fatalf("after the bucket was pruned: %+v %v", res, err)
+	}
+	doc := offsite.Doc(w.Cfg)
+	if doc.State != offsite.StateOK || doc.BackupsInCopy != 2 || doc.LastCopy == nil ||
+		doc.LastCopy.CheckpointID != ck2.Manifest.ID {
+		t.Fatalf("after copying again: %+v", doc)
+	}
+	if after, _ := copyRepo.Snapshots(ctx, manifest.TagProduct); len(after) != 2 {
+		t.Fatalf("the copy holds %d backups, want %s and %s", len(after), ck1.Manifest.ID, ck2.Manifest.ID)
+	}
+}
+
 // A real S3 storage (MinIO): the place is checked with a signed write, read and delete before it is saved, made with
 // the main place's chunker parameters, copied into, and its secret is in no state file, status or kit section but
 // the kit's own field.

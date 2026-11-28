@@ -1,6 +1,6 @@
 // Package offsite keeps a second copy of this Whombat's backups somewhere else (Whombat docs/decisions/offsite-copy.md):
-// a bucket the person owns, on top of the one destination the backups go to (BK-09, BK-18…BK-20). A fire, theft or
-// flood takes the box and the NAS together; the copy in the bucket survives them.
+// a bucket the person owns, on top of the one place the backups go to (a NAS, a disk, a server or a bucket). A fire,
+// theft or flood takes the box and the NAS together; the copy in the bucket survives them.
 //
 // The second place is an S3-compatible bucket, checked before it is saved (a small file written, read back and
 // deleted with the person's key), its secret kept like the destination's (sealed, never in a state file, the status or
@@ -144,7 +144,9 @@ func (req Request) validate() error {
 	return nil
 }
 
-// plainHTTPAllowed: plain http only to a literal address on the owner's own network (BK-29's rule).
+// plainHTTPAllowed: plain http only to a literal address on the owner's own network, where a storage at home may
+// have no certificate; anywhere else the key and the backups would cross the internet unprotected (the main place's
+// rule too).
 func plainHTTPAllowed(host string) bool {
 	h := host
 	if i := strings.LastIndex(h, ":"); i >= 0 && !strings.HasSuffix(h, "]") {
@@ -223,7 +225,7 @@ func Set(ctx context.Context, c *state.Config, req Request) (*Place, error) {
 		}
 	}
 	source := c.Repo(main)
-	// The seal unit may seal and remove a plain password file while this runs (BK-80): both repositories read one copy.
+	// The seal unit may seal and remove a plain password file while this runs: both repositories read one pinned copy.
 	unpin, err := c.PinSecrets(&source)
 	if err != nil {
 		return nil, err
