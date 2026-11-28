@@ -128,7 +128,10 @@ export function newOpeningNotices(
 /** What the health pass adds to a connection's lines: its new openings, or that the check wasn't read this time. */
 export interface ExposureSeen {
   notices: KindNotice[];
-  /** The openings were read: an Ignore of a line that went may end. */
+  /**
+   * The openings were read, so a line that went has closed and its Ignore may end. Not when the read failed, or missed
+   * a list while a new opening wasn't in what it read: that one may still be open.
+   */
   read: boolean;
 }
 
@@ -141,11 +144,11 @@ export async function exposureSeen(
   if (!isExposureSource(row.catalogId)) return { notices: [], read: true };
   try {
     const read = await readOpenings(services, row, 'pass');
-    const ids = read.openings.map((o) => openingId(row.id, o));
-    const kept = await recordOpenings(services, row.id, ids, read.complete, now);
+    const seen = read.openings.map((o) => ({ id: openingId(row.id, o), part: o.part }));
+    const { kept, unsure } = await recordOpenings(services, row.id, seen, read.parts, read.complete, now);
     const fresh = [...kept.values()].some((k) => isNewOpening(k, now));
     const links = fresh ? await buildLinks(services, row.burrowId).catch(() => NO_LINKS) : NO_LINKS;
-    return { notices: newOpeningNotices(row.id, read.openings, kept, links, now), read: true };
+    return { notices: newOpeningNotices(row.id, read.openings, kept, links, now), read: !unsure };
   } catch (err) {
     services.log.debug({ err: String(err), connectionId: row.id }, 'exposure: openings not read');
     return { notices: [], read: false };
